@@ -68,6 +68,7 @@ describe("Application run commands", () => {
       const payload = start.validate({
         request: {
           text: "파일 검토",
+          outputLocale: "ko",
           workspaceId: "workspace-1",
           workspacePaths: ["src/index.ts", "src//index.ts"],
         },
@@ -83,7 +84,10 @@ describe("Application run commands", () => {
         },
         payload,
       );
-      expect(requests).toEqual([{ text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["src/index.ts"] }]);
+      expect(requests).toEqual([
+        { text: "파일 검토", outputLocale: "ko", workspaceId: "workspace-1", workspacePaths: ["src/index.ts"] },
+      ]);
+      expect(() => start.validate({ request: { text: "파일 검토", outputLocale: "ja" } })).toThrow("output locale");
       expect(() =>
         start.validate({
           request: {

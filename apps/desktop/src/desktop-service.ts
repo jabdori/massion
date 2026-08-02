@@ -65,6 +65,7 @@ export interface WorkIndexInput {
 
 export interface StartWorkInput {
   readonly text: string;
+  readonly outputLocale?: "en" | "ko";
   readonly workspaceId?: string;
   readonly workspacePaths?: readonly string[];
 }
@@ -1954,6 +1955,7 @@ export function createApplicationDesktopService(
         request: {
           text: input.text,
           surface: "desktop",
+          outputLocale: input.outputLocale ?? "en",
           ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
           ...(input.workspacePaths === undefined ? {} : { workspacePaths: input.workspacePaths }),
         },

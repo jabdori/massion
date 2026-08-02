@@ -40,6 +40,7 @@ export interface CursorPageV1<T> {
 export interface StartRunRequestV1 {
   readonly text: string;
   readonly surface?: string;
+  readonly outputLocale?: "en" | "ko";
   readonly projectId?: string;
   readonly workspaceId?: string;
   readonly workspacePaths?: readonly string[];

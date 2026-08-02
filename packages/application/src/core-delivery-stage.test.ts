@@ -990,6 +990,7 @@ describe("CoreDeliveryStage", () => {
       },
       recoverWork: async () => ({
         request: {
+          outputLocale: "ko",
           text: "A안 1,000명 중 100명과 B안 1,000명 중 130명의 차이를 분석해 주세요.",
           surface: "test",
         },
@@ -1096,6 +1097,7 @@ describe("CoreDeliveryStage", () => {
         estimatedTokens: expect.any(Number),
         input: expect.objectContaining({
           operation: "execute_work_task",
+          responseLanguage: "Korean (ko)",
           sourceRequest: expect.objectContaining({
             text: "A안 1,000명 중 100명과 B안 1,000명 중 130명의 차이를 분석해 주세요.",
           }),
@@ -1428,6 +1430,7 @@ describe("CoreDeliveryStage", () => {
       acceptanceCriteria: [],
       allowedPaths: ["packages/software"],
       instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
+      responseLanguage: "English (en)",
       directives: deliveryDirectives,
     };
     const expectedKnowledgeBudget =

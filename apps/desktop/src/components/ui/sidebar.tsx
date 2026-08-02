@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { translate } from "@/i18n/context";
 
 type SidebarProps = React.ComponentProps<"aside"> & {
   collapsed?: boolean;
@@ -38,7 +39,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
       data-slot="sidebar-content"
-      aria-label="주요 탐색"
+      aria-label={translate("주요 탐색")}
       className={cn("min-h-0 flex-1 overflow-y-auto px-2 py-3 group-data-[collapsed=true]/sidebar:px-2", className)}
       {...props}
     />

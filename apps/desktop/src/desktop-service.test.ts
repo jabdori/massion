@@ -2180,6 +2180,7 @@ describe("Application desktop service", () => {
         operation: "run.start",
         payload: {
           request: {
+            outputLocale: "en",
             text: "파트너 계약 위험을 검토해줘",
             surface: "desktop",
             workspaceId: "workspace-0001",

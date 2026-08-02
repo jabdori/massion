@@ -15,6 +15,25 @@ const APPLICATION_RUN_CANCELLED = "Application run cancelled";
 const MAX_KNOWLEDGE_TOKENS = 24_000;
 const STAGE_OUTPUT_RESERVE_TOKENS = 4_000;
 
+const DELIVERY_OUTPUT_CONTRACT = {
+  en: "The complete final response is saved automatically as the Task output ArtifactVersion, then Assurance verifies its acceptance evidence. Before returning, check it against every applicable acceptance criterion and verify internal consistency across applicable times, numbers, weights, tie-break inputs, completion conditions, follow-up actions, and remediation rules. Do not invent facts, evidence, measurements, or field observations. Mark unresolved items explicitly as assumptions, unknown, incomplete, or requiring field input. Do not claim to have passed Assurance or verification. Include only the user's Work result in the final response; do not mention internal execution or evaluation procedures, and do not distort facts or wording to pass a later evaluation. Do not look for or invoke Artifact creation or submission tools. Return only the final result body, making each acceptance criterion's fulfillment and unresolved state clear. Never hide an unmet criterion when facts or evidence are missing.",
+  ko: "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. 반환 전에 해당하는 모든 acceptance criteria와 대조하고, 해당하는 시간·수치·가중치·동률 결정 입력·완료 조건·후속 조치 및 보완 규칙 사이의 내부 일관성을 자체 점검하세요. 사실·근거·측정값·현장 관찰을 지어내지 말고, 해결되지 않은 항목은 가정·알 수 없음·미완료·현장 입력 필요 중 해당 상태로 명시하세요. Assurance 또는 검증을 통과했다고 주장하지 마세요. 최종 결과에는 사용자 업무 결과만 포함하고 내부 실행 과정이나 평가 절차를 언급하지 않으며, 후속 평가를 통과하려고 사실이나 표현을 왜곡하지 마세요. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria별 충족 여부와 미해결 상태가 드러나는 최종 결과 본문만 반환하세요. 사실이나 근거가 없는 기준은 미충족 상태를 숨기지 마세요.",
+} as const;
+
+function outputLocale(request: unknown): "en" | "ko" {
+  return request &&
+    typeof request === "object" &&
+    !Array.isArray(request) &&
+    ((request as { outputLocale?: unknown }).outputLocale === "ko" ||
+      (request as { output_locale?: unknown }).output_locale === "ko")
+    ? "ko"
+    : "en";
+}
+
+function responseLanguage(request: unknown): "English (en)" | "Korean (ko)" {
+  return outputLocale(request) === "ko" ? "Korean (ko)" : "English (en)";
+}
+
 function requestedTokenBudget(request: unknown): number {
   const value = request && typeof request === "object" && !Array.isArray(request) ? request : {};
   const tokenBudget = (value as { tokenBudget?: unknown }).tokenBudget ?? 32_000;
@@ -43,6 +62,7 @@ function softwarePrompt(task: WorkTask, request: unknown, directives: CoreWorkSt
       : [];
   return {
     objective: task.objective,
+    responseLanguage: responseLanguage(request),
     acceptanceCriteria:
       typeof task.acceptance_criteria_json === "string" ? (JSON.parse(task.acceptance_criteria_json) as unknown) : [],
     allowedPaths,
@@ -90,11 +110,13 @@ function recoveredArtifact(
 function sourceRequest(request: unknown): Readonly<Record<string, unknown>> | undefined {
   if (!request || typeof request !== "object" || Array.isArray(request)) return undefined;
   const input = request as Record<string, unknown>;
+  const locale = input.outputLocale ?? input.output_locale;
   const context = Object.fromEntries(
-    ["text", "scopeIn", "scopeOut", "constraints", "assumptions", "unknowns", "decisions"].flatMap((key) =>
-      input[key] === undefined ? [] : [[key, input[key]]],
+    ["text", "outputLocale", "scopeIn", "scopeOut", "constraints", "assumptions", "unknowns", "decisions"].flatMap(
+      (key) => (input[key] === undefined ? [] : [[key, input[key]]]),
     ),
   );
+  if (locale === "en" || locale === "ko") context.outputLocale = locale;
   return Object.keys(context).length === 0 ? undefined : context;
 }
 
@@ -415,19 +437,20 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         return { outcome: "blocked", reason: "software-delivery-not-configured" };
       }
       const recovery = softwareTask ? undefined : await this.dependencies.works.recoverWork(context, input.workId);
-      const requestContext = sourceRequest(recovery?.request ?? input.request);
+      const request = recovery?.request ?? input.request;
+      const requestContext = sourceRequest(request);
       const priorOutputs = recovery ? dependencyOutputs(task, recovery) : [];
       this.throwIfCancelled(input);
       const runtimeInput = {
         operation: "execute_work_task",
+        responseLanguage: responseLanguage(request),
         title: task.title,
         objective: task.objective,
         acceptanceCriteria:
           typeof task.acceptance_criteria_json === "string"
             ? (JSON.parse(task.acceptance_criteria_json) as unknown)
             : [],
-        outputContract:
-          "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. 반환 전에 해당하는 모든 acceptance criteria와 대조하고, 해당하는 시간·수치·가중치·동률 결정 입력·완료 조건·후속 조치 및 보완 규칙 사이의 내부 일관성을 자체 점검하세요. 사실·근거·측정값·현장 관찰을 지어내지 말고, 해결되지 않은 항목은 가정·알 수 없음·미완료·현장 입력 필요 중 해당 상태로 명시하세요. Assurance 또는 검증을 통과했다고 주장하지 마세요. 최종 결과에는 사용자 업무 결과만 포함하고 내부 실행 과정이나 평가 절차를 언급하지 않으며, 후속 평가를 통과하려고 사실이나 표현을 왜곡하지 마세요. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria별 충족 여부와 미해결 상태가 드러나는 최종 결과 본문만 반환하세요. 사실이나 근거가 없는 기준은 미충족 상태를 숨기지 마세요.",
+        outputContract: DELIVERY_OUTPUT_CONTRACT[outputLocale(request)],
         ...(requestContext === undefined ? {} : { sourceRequest: requestContext }),
         ...(priorOutputs.length === 0 ? {} : { dependencyOutputs: priorOutputs }),
         ...(input.directives === undefined || input.directives.length === 0 ? {} : { directives: input.directives }),

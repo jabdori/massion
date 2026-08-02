@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { KnowledgeGraphView, KnowledgeNodeView } from "@/desktop-service";
+import { translate } from "@/i18n/context";
 
 /**
  * 옵시디언 그래프 뷰. **ReactFlow를 쓰지 않습니다** — 그건 노드 에디터(상자·핸들·직교 간선)라
@@ -781,12 +782,13 @@ export function KnowledgeGraphCanvas({
         tabIndex={0}
       />
       <p className="sr-only" id="knowledge-graph-help">
-        드래그로 이동, 휠로 확대·축소. 방향키로 이동하고 Shift로 빠르게. 더하기·빼기로 확대·축소, 0으로 전체 보기. 점을
-        누르거나 왼쪽의 노드 탐색 목록에서 이름을 선택하면 오른쪽에 자세히 나옵니다.
+        {translate(
+          "드래그로 이동, 휠로 확대·축소. 방향키로 이동하고 Shift로 빠르게. 더하기·빼기로 확대·축소, 0으로 전체 보기. 점을 누르거나 왼쪽의 노드 탐색 목록에서 이름을 선택하면 오른쪽에 자세히 나옵니다.",
+        )}
       </p>
       {settling > 0 ? (
         <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 rounded-[5px] border border-border bg-chrome px-2.5 py-1.5">
-          <span className="text-[11px] text-muted">자리를 잡는 중</span>
+          <span className="text-[11px] text-muted">{translate("자리를 잡는 중")}</span>
           <span className="h-0.5 w-16 overflow-hidden rounded-full bg-bg-3">
             <span
               className="block h-0.5 bg-fg-3"
@@ -858,13 +860,13 @@ export function KnowledgeNodeExplorer({
         }}
         tabIndex={0}
       >
-        <span className="min-w-0 flex-1 font-medium">노드 탐색</span>
+        <span className="min-w-0 flex-1 font-medium">{translate("노드 탐색")}</span>
         <span className="shrink-0 tabular-nums text-muted">{nodes.length.toLocaleString()}</span>
         <span aria-hidden="true" className="text-muted group-open:rotate-90">
           ›
         </span>
       </summary>
-      <ul aria-label="지도 노드" className="max-h-52 overflow-y-auto border-t border-border py-1">
+      <ul aria-label={translate("지도 노드")} className="max-h-52 overflow-y-auto border-t border-border py-1">
         {nodes.map((node) => {
           const selected = node.nodeId === selectedId;
           return (
@@ -900,7 +902,7 @@ export function KnowledgeGroupLegend({ graph }: { graph: KnowledgeGraphView }) {
   if (rows.length < 2) return null;
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">색은 폴더</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">{translate("색은 폴더")}</p>
       <ul className="mt-1.5 space-y-1">
         {rows.map(([group, count]) => (
           <li className="flex items-center gap-2 text-[11px]" key={group}>

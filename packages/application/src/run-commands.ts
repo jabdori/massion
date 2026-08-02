@@ -52,6 +52,7 @@ function runRequest(value: unknown): Record<string, unknown> {
   const input = object(value, [
     "text",
     "surface",
+    "outputLocale",
     "projectId",
     "workspaceId",
     "workspacePaths",
@@ -66,6 +67,8 @@ function runRequest(value: unknown): Record<string, unknown> {
   ]);
   if (typeof input.text !== "string" || input.text.trim().length === 0)
     throw new Error("run request text가 유효하지 않습니다");
+  if (input.outputLocale !== undefined && input.outputLocale !== "en" && input.outputLocale !== "ko")
+    throw new Error("run request output locale이 유효하지 않습니다");
   if (input.workspacePaths === undefined) return input;
   if (typeof input.workspaceId !== "string" || input.workspaceId.trim().length === 0)
     throw new Error("workspace file 경로에는 workspaceId가 필요합니다");

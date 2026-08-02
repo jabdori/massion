@@ -199,6 +199,7 @@ describe("actual Core Work pipeline adapters", () => {
       surface: "test",
       workspaceId: "pipeline-workspace-0001",
       workspacePaths: ["src/pipeline.ts"],
+      outputLocale: "ko" as const,
     };
     const first = await stages.intake.execute(context, {
       runId: "pipeline-knowledge-run-0001",
@@ -243,6 +244,7 @@ describe("actual Core Work pipeline adapters", () => {
         estimatedTokens: expect.any(Number),
         input: {
           operation: "coordinate_work",
+          responseLanguage: "Korean (ko)",
           knowledgeSources: [materialized],
           coordinationContract: expect.stringContaining("Task·Artifact 도구를 직접 호출하지 않습니다"),
         },

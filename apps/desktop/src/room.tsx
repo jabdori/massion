@@ -16,6 +16,7 @@ import type {
   RoomQuote,
   SpeakerView,
 } from "@/model";
+import { translate } from "@/i18n/context";
 
 /**
  * 협업방 문법. 메시지 타입 10종은 색이 아니라 배치와 표기로 구분합니다.
@@ -109,7 +110,7 @@ export function OpenButton({ label, onOpen, small = false }: { label: string; on
       onClick={onOpen}
       type="button"
     >
-      열기 ›
+      {translate("열기 ›")}
     </button>
   );
 }
@@ -180,7 +181,7 @@ function SpeakerModel({ speaker }: { speaker: SpeakerView }) {
   return speaker.modelId ? (
     <span
       className="min-w-0 max-w-full break-words font-mono text-[10px] text-muted [overflow-wrap:anywhere]"
-      title="이 발화를 만든 모델"
+      title={translate("이 발화를 만든 모델")}
     >
       {speaker.modelId}
     </span>
@@ -478,7 +479,7 @@ export function AgentMessageContent({
           ),
           img: ({ alt, src, title }) => <img alt={alt ?? ""} src={src || undefined} title={title} />,
           table: ({ children }) => (
-            <div aria-label="협업 메시지 표" className="my-2 overflow-x-auto" role="region" tabIndex={0}>
+            <div aria-label={translate("협업 메시지 표")} className="my-2 overflow-x-auto" role="region" tabIndex={0}>
               <table className="w-full min-w-[36rem] border-collapse text-left [&_tr>*:first-child]:min-w-16 [&_tr>*:first-child]:whitespace-nowrap">
                 {children}
               </table>
@@ -538,7 +539,7 @@ export function RoomHandoff({
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
           <p className="font-mono text-[11px] text-muted">
-            인계 · <span className={speakerText(from)}>{from.name}</span>
+            {translate("인계 ·")} <span className={speakerText(from)}>{from.name}</span>
             {/* 과거 메시지처럼 받는 쪽을 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
             {to ? (
               <>
@@ -596,7 +597,7 @@ export function RoomMessage({
           {/* 최종 응답은 칩 하나로 줄 세우지 않습니다. 이 방에서 하나뿐인 줄이라 먼저 섭니다. */}
           {final ? (
             <span className="rounded-[3px] bg-fg px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-canvas">
-              최종 응답
+              {translate("최종 응답")}
             </span>
           ) : null}
           <SpeakerName speaker={speaker} />
@@ -624,7 +625,7 @@ export function RoomMessage({
             <span
               className={`rounded-[3px] border border-current px-1.5 text-[10px] font-semibold tracking-[0.06em] ${speakerText(speaker)}`}
             >
-              근거
+              {translate("근거")}
             </span>
             <span className="text-[12px] text-secondary">{evidence.label}</span>
             <span className="font-mono text-[11px] text-muted">checksum {evidence.checksum}</span>
@@ -632,7 +633,7 @@ export function RoomMessage({
         ) : null}
         {signature ? (
           <p className="mt-1.5 font-mono text-[11px] text-muted">
-            서명 {signature.by} · 개정 {signature.revision}
+            {translate("서명")} {signature.by} {translate("· 개정")} {signature.revision}
           </p>
         ) : null}
       </div>
@@ -678,7 +679,7 @@ export function ProposalActivity({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <SpeakerName speaker={speaker} />
           <span className="rounded-[3px] border border-gate px-1.5 text-[10px] font-semibold tracking-[0.06em] text-gate">
-            제안
+            {translate("제안")}
           </span>
           <time className="font-mono text-[11px] text-muted">{time}</time>
         </div>
@@ -689,7 +690,9 @@ export function ProposalActivity({
           className={`mt-2 rounded-[7px] border ${decided ? "border-border bg-surface-1" : "border-gate-border bg-gate-wash"}`}
         >
           <header className="flex items-center border-b border-gate-border px-3.5 py-2.5">
-            <h4 className="min-w-0 flex-1 text-[13px] font-medium">{proposalName} 신설</h4>
+            <h4 className="min-w-0 flex-1 text-[13px] font-medium">
+              {proposalName} {translate("신설")}
+            </h4>
             <span className="text-[11px] font-medium text-gate">{decided ? "처리됨" : "승인 필요"}</span>
           </header>
 
@@ -709,10 +712,12 @@ export function ProposalActivity({
                 <div className="min-w-0 flex-1">
                   <h5 className="text-[13px] font-medium">{node.name}</h5>
                   <p className="text-[11px] text-muted">
-                    {agentIdentityToken(node.parentHandle).name} 아래 · {nodeRoleLabel[node.role]} 역할 ·{" "}
-                    {scopeLabel[node.scope]}
+                    {agentIdentityToken(node.parentHandle).name} {translate("아래 ·")} {nodeRoleLabel[node.role]}{" "}
+                    {translate("역할 ·")} {scopeLabel[node.scope]}
                   </p>
-                  <p className="mt-1 text-[10px] font-semibold tracking-[0.08em] text-muted">추가되는 역량</p>
+                  <p className="mt-1 text-[10px] font-semibold tracking-[0.08em] text-muted">
+                    {translate("추가되는 역량")}
+                  </p>
                   <p className="mt-0.5 text-[12px] text-secondary">{node.capabilities.join(" · ")}</p>
                 </div>
               </div>
@@ -721,9 +726,11 @@ export function ProposalActivity({
 
           <div className="grid gap-x-6 gap-y-3 px-3.5 py-3 min-[900px]:grid-cols-2">
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">영향</p>
+              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">{translate("영향")}</p>
               <p className="mt-1 text-[12px] text-secondary">
-                노드 {change.impactNodes}개 · 참조 {change.impactReferences}건
+                {translate("노드")} {change.impactNodes}
+                {translate("개 · 참조")} {change.impactReferences}
+                {translate("건")}
               </p>
               {change.impactHandles.length === 0 ? null : (
                 <p className="text-[11px] text-muted">
@@ -732,20 +739,22 @@ export function ProposalActivity({
               )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">조직 버전</p>
+              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">{translate("조직 버전")}</p>
               <p className="mt-1 font-mono text-[11px] text-muted">
-                조직 버전 {change.fromVersion} → {change.toVersion}
+                {translate("조직 버전")} {change.fromVersion} → {change.toVersion}
               </p>
             </div>
             {change.lifetime === undefined ? null : (
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 업무가 끝나면</p>
+                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">
+                  {translate("이 업무가 끝나면")}
+                </p>
                 <p className="mt-1 text-[12px] text-secondary">{change.lifetime}</p>
               </div>
             )}
             {change.revertable === undefined ? null : (
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">되돌리기</p>
+                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">{translate("되돌리기")}</p>
                 <p className="mt-1 font-mono text-[11px] text-muted">
                   {change.revertable ? "Revert 가능" : "Revert 불가"}
                 </p>
@@ -759,7 +768,7 @@ export function ProposalActivity({
                 <span className="flex-1" />
               ) : (
                 <p className="flex-1 text-[11px] text-muted">
-                  조직 검사 통과 · {change.compliance.map((code) => complianceLabel[code]).join(" · ")}
+                  {translate("조직 검사 통과 ·")} {change.compliance.map((code) => complianceLabel[code]).join(" · ")}
                 </p>
               )}
               {decided ? null : (
@@ -810,9 +819,9 @@ export function RoomReference({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-medium">{name}</span>
           <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
-            갈라진 방 · {messageCount}
+            {translate("갈라진 방 ·")} {messageCount}
           </span>
-          {waiting ? <span className="text-[11px] text-gate">◇ 확인 필요</span> : null}
+          {waiting ? <span className="text-[11px] text-gate">{translate("◇ 확인 필요")}</span> : null}
         </div>
         <p className="mt-0.5 truncate text-[12px] text-muted">{lastLine}</p>
       </div>

@@ -659,3 +659,11 @@ export const WORK_HANDOFF_RECIPIENT_MIGRATION = defineMigration(
 DEFINE FIELD recipient_agent_id ON collaboration_message TYPE option<string>;
 `,
 );
+
+export const WORK_OUTPUT_LOCALE_MIGRATION = defineMigration(
+  "0118-work-output-locale",
+  `
+DEFINE FIELD output_locale ON work_request TYPE option<string>
+  ASSERT $value = NONE OR $value IN ['en', 'ko'];
+`,
+);

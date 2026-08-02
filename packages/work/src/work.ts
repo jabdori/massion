@@ -16,6 +16,7 @@ import {
   WORK_CORE_MIGRATION,
   WORK_DELIVERY_MIGRATION,
   WORK_HANDOFF_RECIPIENT_MIGRATION,
+  WORK_OUTPUT_LOCALE_MIGRATION,
   WORK_RECORDS_MIGRATION,
   WORK_PROMPT_VERSION_MIGRATION,
   WORK_STRATEGY_PROJECTION_MIGRATION,
@@ -42,6 +43,7 @@ export interface WorkRequest {
   readonly requester_user_id: string;
   readonly text: string;
   readonly surface: string;
+  readonly output_locale?: "en" | "ko";
   readonly created_at: unknown;
 }
 
@@ -101,6 +103,7 @@ export interface CreateWorkInput {
   readonly commandId: string;
   readonly text: string;
   readonly surface: string;
+  readonly outputLocale?: "en" | "ko";
   readonly organizationVersionId: string;
   readonly projectId?: string;
   readonly workspaceId?: string;
@@ -892,6 +895,7 @@ export class WorkService {
       WORK_WORKSPACE_MIGRATION,
       WORK_AUTONOMY_LINEAGE_MIGRATION,
       WORK_HANDOFF_RECIPIENT_MIGRATION,
+      WORK_OUTPUT_LOCALE_MIGRATION,
     ]);
     await database.query(WORK_ASSURANCE_FAIL_CLOSED_GUARD);
     return new WorkService(database, organizations, graph, governance, promptVersions, autonomy);
@@ -933,13 +937,14 @@ export class WorkService {
         await this.promptVersions?.verify(context, resolvedPrompt.promptVersionId, transaction);
       }
       const [requests] = await transaction.query<[WorkRequest[]]>(
-        "CREATE work_request CONTENT { request_id: $request_id, organization_id: $organization_id, requester_user_id: $requester_user_id, text: $text, surface: $surface, created_at: time::now() } RETURN AFTER;",
+        "CREATE work_request CONTENT { request_id: $request_id, organization_id: $organization_id, requester_user_id: $requester_user_id, text: $text, surface: $surface, output_locale: $output_locale, created_at: time::now() } RETURN AFTER;",
         {
           request_id: requestId,
           organization_id: context.organizationId,
           requester_user_id: context.userId,
           text,
           surface: input.surface,
+          output_locale: input.outputLocale,
         },
       );
       const [works] = await transaction.query<[Work[]]>(

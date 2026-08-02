@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app";
 import { createApplicationDesktopService, createFixtureDesktopService } from "./desktop-service";
+import { I18nProvider } from "./i18n/context";
 import { createTauriNativeTransport, isTauriRuntime } from "./native-transport";
 import "./styles.css";
 
@@ -17,6 +18,8 @@ const service = isTauriRuntime()
 
 createRoot(root).render(
   <StrictMode>
-    <App service={service} />
+    <I18nProvider>
+      <App service={service} />
+    </I18nProvider>
   </StrictMode>,
 );

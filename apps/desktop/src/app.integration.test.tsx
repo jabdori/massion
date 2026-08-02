@@ -3034,6 +3034,7 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
     expect(startWork).toHaveBeenCalledWith({
+      outputLocale: "ko",
       text: "파트너 계약 위험을 검토해줘",
       workspaceId: "workspace-0001",
       workspacePaths: ["src/contract.ts"],

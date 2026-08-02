@@ -27,10 +27,12 @@ describe("Request와 Work 상태 머신", () => {
       commandId: crypto.randomUUID(),
       text: "제품을 구현해주세요",
       surface: "cli",
+      outputLocale: "ko",
       organizationVersionId: "organization-version-1",
     });
 
     expect(result.request.text).toBe("제품을 구현해주세요");
+    expect(result.request.output_locale).toBe("ko");
     expect(result.work).toMatchObject({ status: "draft", revision: 1 });
     expect(result.event).toMatchObject({ sequence: 1, event_type: "work_created" });
   });

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
 import { createFixtureDesktopService } from "./desktop-service";
+import { I18nProvider } from "./i18n/context";
 import type { WorkView } from "./model";
 
 function renderApp() {
@@ -11,6 +12,27 @@ function renderApp() {
 }
 
 describe("AgentOS 데스크톱", () => {
+  it("영어 설정에서 언어를 한국어로 즉시 전환한다", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("massion.language.v1", "en");
+    render(
+      <I18nProvider>
+        <App service={createFixtureDesktopService()} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const settings = await screen.findByRole("main", { name: "Settings" });
+    expect(within(settings).getByRole("region", { name: "Language" })).toBeInTheDocument();
+    expect(
+      within(settings).getByText("Use English for the interface and responses from Agents in new Work."),
+    ).toBeInTheDocument();
+
+    await user.click(within(settings).getByRole("button", { name: "한국어" }));
+    expect(await screen.findByRole("main", { name: "설정" })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("ko-KR");
+  });
+
   it("네 개의 독립 영역과 선택한 Work 활동을 표시한다", () => {
     renderApp();
 

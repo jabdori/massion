@@ -31,7 +31,7 @@ const SELECTED_WORK_RECONCILE_MS = 1_000;
 const TERMINAL_STABILIZATION_PASSES = 3;
 const PENDING_CREATION_RECONCILE_PASSES = 3;
 
-export function useDesktopController(service: DesktopService) {
+export function useDesktopController(service: DesktopService, outputLocale: "en" | "ko" = "en") {
   const initialWorks = service.initialSnapshot?.works ?? [];
   const initialWork = initialWorks[0];
   const [phase, setPhase] = useState<DesktopPhase>(service.initialSnapshot ? "ready" : "loading");
@@ -779,6 +779,7 @@ export function useDesktopController(service: DesktopService) {
     setNewWorkError("");
     const input: StartWorkInput = {
       text,
+      outputLocale,
       ...(newWorkWorkspace === undefined ? {} : { workspaceId: newWorkWorkspace.workspaceId }),
       ...(newWorkWorkspacePaths.length === 0 ? {} : { workspacePaths: newWorkWorkspacePaths }),
     };
