@@ -432,6 +432,20 @@ describe("CoreDeliveryStage", () => {
     });
   });
 
+  const commandOnlyWorkspaceEvidence = normalizeCodexExecutionEvidence(
+    [
+      {
+        id: "outside-workspace-command",
+        type: "command_execution",
+        command: "/bin/zsh -c '/bin/pwd; /bin/echo ok'",
+        aggregated_output: "/private/tmp\nok\n",
+        exit_code: 0,
+        status: "completed",
+      },
+    ],
+    "/workspace",
+  );
+
   it.each([
     ["workspace dependency missing", undefined],
     ["archived workspace", { get: async () => ({ status: "archived", trust: "trusted" }) }],
@@ -979,18 +993,43 @@ describe("CoreDeliveryStage", () => {
           text: "A안 1,000명 중 100명과 B안 1,000명 중 130명의 차이를 분석해 주세요.",
           surface: "test",
         },
-        work: { artifact_version_ids: ["artifact-prior"] },
+        work: { artifact_version_ids: ["artifact-prior", "artifact-prior-evidence"] },
         messages: [
           {
             sequence: 1,
+            message_type: "evidence",
             task_id: "task-prior",
             artifact_version_id: "artifact-prior",
+            execution_id: "execution-prior",
           },
+        ],
+        artifacts: [
+          { artifact_id: "artifact-prior-output", kind: "task-output" },
+          { artifact_id: "artifact-prior-evidence-record", kind: "execution-evidence" },
         ],
         artifactVersions: [
           {
             artifact_version_id: "artifact-prior",
+            artifact_id: "artifact-prior-output",
             content_json: '{"absoluteLift":0.03,"pValue":0.036}',
+          },
+          {
+            artifact_version_id: "artifact-prior-evidence",
+            artifact_id: "artifact-prior-evidence-record",
+            creator_execution_id: "execution-prior",
+            content_json: JSON.stringify(
+              normalizeCodexExecutionEvidence(
+                [
+                  {
+                    id: "file-prior-1",
+                    type: "file_change",
+                    changes: [{ path: "output/analysis.md", kind: "add" }],
+                    status: "completed",
+                  },
+                ],
+                "/workspace",
+              ),
+            ),
           },
         ],
       }),
@@ -1013,12 +1052,6 @@ describe("CoreDeliveryStage", () => {
                   command: "pnpm test",
                   aggregated_output: "Tests passed",
                   exit_code: 0,
-                  status: "completed",
-                },
-                {
-                  id: "file-delivery-1",
-                  type: "file_change",
-                  changes: [{ path: "output/analysis.md", kind: "add" }],
                   status: "completed",
                 },
               ],
@@ -1132,82 +1165,141 @@ describe("CoreDeliveryStage", () => {
     },
     {
       label: "workspace 파일 변경 근거",
-      executionEvidence: normalizeCodexExecutionEvidence(
-        [
-          {
-            id: "outside-workspace-command",
-            type: "command_execution",
-            command: "/bin/zsh -c '/bin/pwd; /bin/echo ok'",
-            aggregated_output: "/private/tmp\nok\n",
-            exit_code: 0,
-            status: "completed",
-          },
-        ],
-        "/workspace",
-      ),
+      executionEvidence: commandOnlyWorkspaceEvidence,
       reason: "delivery-workspace-change-missing",
     },
-  ])("workspace delivery는 $label 없이는 완료하지 않는다", async ({ executionEvidence, reason }) => {
-    let taskStatus = "ready";
-    let revision = 1;
-    const runtimeInputs: unknown[] = [];
-    const artifactInputs: unknown[] = [];
-    const task = () => ({
-      task_id: "task-workspace-evidence",
-      title: "코드 수정",
-      objective: "작업공간의 오류를 수정한다",
-      acceptance_criteria_json: "[]",
-      status: taskStatus,
-      required_capabilities: ["workspace-analysis"],
-      recommended_agent_handles: ["workspace-agent"],
-      revision,
-    });
-    const stage = deliveryStage({
-      works: {
-        listTasks: async () => [task()],
-        listAssignments: async () => [{ task_id: task().task_id, agent_handle: "workspace-agent", status: "assigned" }],
-        getWork: async () => ({ revision, status: "running", workspace_id: "workspace-evidence" }),
-        transitionTask: async (_context: unknown, value: { target: string }) => {
-          taskStatus = value.target;
-          revision += 1;
-          return { work: { revision }, task: task() };
+    {
+      label: "evidence message로 연결된 의존 변경 근거",
+      executionEvidence: commandOnlyWorkspaceEvidence,
+      dependencyMessageType: "answer",
+      dependencyOutputAllowed: true,
+      reason: "delivery-workspace-change-missing",
+    },
+    {
+      label: "허용된 output으로 연결된 의존 변경 근거",
+      executionEvidence: commandOnlyWorkspaceEvidence,
+      dependencyMessageType: "evidence",
+      dependencyOutputAllowed: false,
+      reason: "delivery-workspace-change-missing",
+    },
+  ])(
+    "workspace delivery는 $label 없이는 완료하지 않는다",
+    async ({ executionEvidence, dependencyMessageType, dependencyOutputAllowed, reason }) => {
+      let taskStatus = "ready";
+      let revision = 1;
+      const runtimeInputs: unknown[] = [];
+      const artifactInputs: unknown[] = [];
+      const task = () => ({
+        task_id: "task-workspace-evidence",
+        title: "코드 수정",
+        objective: "작업공간의 오류를 수정한다",
+        acceptance_criteria_json: "[]",
+        dependency_ids: dependencyMessageType === undefined ? [] : ["task-prior"],
+        status: taskStatus,
+        required_capabilities: ["workspace-analysis"],
+        recommended_agent_handles: ["workspace-agent"],
+        revision,
+      });
+      const stage = deliveryStage({
+        works: {
+          listTasks: async () => [task()],
+          listAssignments: async () => [
+            { task_id: task().task_id, agent_handle: "workspace-agent", status: "assigned" },
+          ],
+          getWork: async () => ({ revision, status: "running", workspace_id: "workspace-evidence" }),
+          transitionTask: async (_context: unknown, value: { target: string }) => {
+            taskStatus = value.target;
+            revision += 1;
+            return { work: { revision }, task: task() };
+          },
+          recoverWork: async () => ({
+            request: { text: "코드를 수정해 주세요" },
+            work: {
+              artifact_version_ids:
+                dependencyMessageType === undefined
+                  ? []
+                  : ["dependency-execution-evidence", ...(dependencyOutputAllowed ? ["dependency-task-output"] : [])],
+            },
+            messages:
+              dependencyMessageType === undefined
+                ? []
+                : [
+                    {
+                      message_type: dependencyMessageType,
+                      task_id: "task-prior",
+                      execution_id: "execution-prior",
+                      artifact_version_id: "dependency-task-output",
+                    },
+                  ],
+            artifacts:
+              dependencyMessageType === undefined
+                ? []
+                : [{ artifact_id: "dependency-evidence-artifact", kind: "execution-evidence" }],
+            artifactVersions:
+              dependencyMessageType === undefined
+                ? []
+                : [
+                    {
+                      artifact_version_id: "dependency-task-output",
+                      artifact_id: "dependency-output-artifact",
+                      content_json: '"완료"',
+                    },
+                    {
+                      artifact_version_id: "dependency-execution-evidence",
+                      artifact_id: "dependency-evidence-artifact",
+                      creator_execution_id: "execution-prior",
+                      content_json: JSON.stringify(
+                        normalizeCodexExecutionEvidence(
+                          [
+                            {
+                              id: "dependency-file-change",
+                              type: "file_change",
+                              changes: [{ path: "src/fix.ts", kind: "update" }],
+                              status: "completed",
+                            },
+                          ],
+                          "/workspace",
+                        ),
+                      ),
+                    },
+                  ],
+          }),
+          createArtifactVersion: async (_context: unknown, value: unknown) => {
+            artifactInputs.push(value);
+            throw new Error("근거 없는 workspace 실행은 Artifact를 만들면 안 됩니다");
+          },
         },
-        recoverWork: async () => ({ request: { text: "코드를 수정해 주세요" }, messages: [], artifactVersions: [] }),
-        createArtifactVersion: async (_context: unknown, value: unknown) => {
-          artifactInputs.push(value);
-          throw new Error("근거 없는 workspace 실행은 Artifact를 만들면 안 됩니다");
+        runner: {
+          execute: async (_context: unknown, value: unknown) => {
+            runtimeInputs.push(value);
+            return {
+              executionId: "execution-workspace-evidence",
+              status: "succeeded",
+              output: "완료했습니다",
+              executionEvidence,
+            };
+          },
+          recover: async () => {
+            throw new Error("not used");
+          },
+          cancel: async () => undefined,
         },
-      },
-      runner: {
-        execute: async (_context: unknown, value: unknown) => {
-          runtimeInputs.push(value);
-          return {
-            executionId: "execution-workspace-evidence",
-            status: "succeeded",
-            output: "완료했습니다",
-            executionEvidence,
-          };
-        },
-        recover: async () => {
-          throw new Error("not used");
-        },
-        cancel: async () => undefined,
-      },
-      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
-      workspaces: { get: async () => ({ status: "active", trust: "trusted" }) },
-      evidence: { materializeActive: async () => [] },
-    } as never);
+        runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+        workspaces: { get: async () => ({ status: "active", trust: "trusted" }) },
+        evidence: { materializeActive: async () => [] },
+      } as never);
 
-    await expect(stage.execute(context, input)).resolves.toMatchObject({
-      outcome: "blocked",
-      reason,
-    });
-    expect(runtimeInputs).toEqual([
-      expect.objectContaining({ workspaceAccess: "workspace-write", requiredExecutionKind: "agent-runtime" }),
-    ]);
-    expect(artifactInputs).toEqual([]);
-    expect(taskStatus).toBe("running");
-  });
+      await expect(stage.execute(context, input)).resolves.toMatchObject({
+        outcome: "blocked",
+        reason,
+      });
+      expect(runtimeInputs).toEqual([
+        expect.objectContaining({ workspaceAccess: "workspace-write", requiredExecutionKind: "agent-runtime" }),
+      ]);
+      expect(artifactInputs).toEqual([]);
+      expect(taskStatus).toBe("running");
+    },
+  );
 
   it("동적 Staffing이 만든 활성 Assignment를 덮어쓰지 않고 같은 Agent로 실행·산출한다", async () => {
     let taskStatus = "ready";

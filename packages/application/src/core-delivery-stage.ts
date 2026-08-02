@@ -128,6 +128,48 @@ function dependencyOutputs(task: WorkTask, recovery: WorkRecoveryBundle): readon
     });
 }
 
+function hasFileChangeEvidence(value: unknown): boolean {
+  return executionEvidenceIsSafe(value) && value.items.some((item) => item.kind === "file");
+}
+
+function dependencyHasFileChangeEvidence(task: WorkTask, recovery: WorkRecoveryBundle): boolean {
+  const dependencyIds = new Set(task.dependency_ids);
+  if (dependencyIds.size === 0) return false;
+  const allowedVersionIds = new Set(recovery.work.artifact_version_ids);
+  const dependencyExecutionIds = new Set(
+    recovery.messages.flatMap((message) =>
+      message.message_type === "evidence" &&
+      message.task_id !== undefined &&
+      dependencyIds.has(message.task_id) &&
+      message.execution_id !== undefined &&
+      message.artifact_version_id !== undefined &&
+      allowedVersionIds.has(message.artifact_version_id)
+        ? [message.execution_id]
+        : [],
+    ),
+  );
+  const evidenceArtifactIds = new Set(
+    recovery.artifacts
+      .filter((artifact) => artifact.kind === "execution-evidence")
+      .map((artifact) => artifact.artifact_id),
+  );
+  return recovery.artifactVersions.some((version) => {
+    if (
+      !allowedVersionIds.has(version.artifact_version_id) ||
+      !evidenceArtifactIds.has(version.artifact_id) ||
+      version.creator_execution_id === undefined ||
+      !dependencyExecutionIds.has(version.creator_execution_id)
+    ) {
+      return false;
+    }
+    try {
+      return hasFileChangeEvidence(JSON.parse(version.content_json) as unknown);
+    } catch {
+      return false;
+    }
+  });
+}
+
 export interface CoreSoftwareTaskPort {
   inspectTask?(
     context: TenantContext,
@@ -552,7 +594,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       }
       if (
         initial.workspace_id !== undefined &&
-        !execution.executionEvidence?.items.some((item) => item.kind === "file")
+        !hasFileChangeEvidence(execution.executionEvidence) &&
+        !dependencyHasFileChangeEvidence(task, recovery as WorkRecoveryBundle)
       ) {
         return { outcome: "blocked", reason: "delivery-workspace-change-missing" };
       }
