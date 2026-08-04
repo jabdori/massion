@@ -235,7 +235,7 @@ function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageTy
     type === "challenge" && speaker ? `${speakerText(speaker)} border-current` : "text-muted border-control";
   return (
     <span className={`rounded-[3px] border px-1.5 text-[10px] font-semibold tracking-[0.06em] ${toned}`}>
-      {typeLabel[type]}
+      {translate(typeLabel[type])}
     </span>
   );
 }
@@ -712,8 +712,8 @@ export function ProposalActivity({
                 <div className="min-w-0 flex-1">
                   <h5 className="text-[13px] font-medium">{node.name}</h5>
                   <p className="text-[11px] text-muted">
-                    {agentIdentityToken(node.parentHandle).name} {translate("아래 ·")} {nodeRoleLabel[node.role]}{" "}
-                    {translate("역할 ·")} {scopeLabel[node.scope]}
+                    {agentIdentityToken(node.parentHandle).name} {translate("아래 ·")}{" "}
+                    {translate(nodeRoleLabel[node.role])} {translate("역할 ·")} {translate(scopeLabel[node.scope])}
                   </p>
                   <p className="mt-1 text-[10px] font-semibold tracking-[0.08em] text-muted">
                     {translate("추가되는 역량")}
@@ -768,7 +768,8 @@ export function ProposalActivity({
                 <span className="flex-1" />
               ) : (
                 <p className="flex-1 text-[11px] text-muted">
-                  {translate("조직 검사 통과 ·")} {change.compliance.map((code) => complianceLabel[code]).join(" · ")}
+                  {translate("조직 검사 통과 ·")}{" "}
+                  {change.compliance.map((code) => translate(complianceLabel[code])).join(" · ")}
                 </p>
               )}
               {decided ? null : (

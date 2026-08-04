@@ -3,6 +3,9 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useRef, 
 import { englishMessages } from "./messages";
 import {
   effectiveLocale,
+  formatCompactNumber,
+  formatDateTime,
+  formatNumber,
   LANGUAGE_STORAGE_KEY,
   languagePreference,
   localeTag,
@@ -34,6 +37,18 @@ let activeLocale: AppLocale = effectiveLocale(readPreference(), browserLanguage(
 
 export function translate(message: string): string {
   return activeLocale === "ko" ? message : (englishMessages[message] ?? message);
+}
+
+export function formatLocalizedNumber(value: number): string {
+  return formatNumber(value, activeLocale);
+}
+
+export function formatLocalizedCompactNumber(value: number): string {
+  return formatCompactNumber(value, activeLocale);
+}
+
+export function formatLocalizedDateTime(value: string | Date): string {
+  return formatDateTime(value, activeLocale);
 }
 
 const I18nContext = createContext<I18nValue>({

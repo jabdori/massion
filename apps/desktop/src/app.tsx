@@ -143,7 +143,14 @@ import {
 import { agentIdentityToken, growthTargetToken } from "@massion/application/client";
 
 import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
-import { translate, useI18n } from "@/i18n/context";
+import {
+  formatLocalizedCompactNumber,
+  formatLocalizedDateTime,
+  formatLocalizedNumber,
+  translate,
+  useI18n,
+} from "@/i18n/context";
+import { normalizeSearch } from "@/i18n/locale";
 import {
   AgentAvatar,
   AgentMessageContent,
@@ -665,7 +672,7 @@ function GlobalRail({
           Massion
         </span>
         <button
-          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+          aria-label={translate(collapsed ? "사이드바 펼치기" : "사이드바 접기")}
           className="ml-auto rounded p-1 text-muted hover:text-primary group-data-[collapsed=true]/sidebar:ml-0"
           onClick={onToggle}
           type="button"
@@ -679,7 +686,11 @@ function GlobalRail({
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
-                aria-label={notificationCount === 0 ? "수신함" : `수신함, 미해결 ${String(notificationCount)}개`}
+                aria-label={
+                  notificationCount === 0
+                    ? translate("수신함")
+                    : `${translate("수신함, 미해결 ")}${String(notificationCount)}${translate("개")}`
+                }
                 onClick={onOpenNotifications}
               >
                 <Bell aria-hidden="true" size={21} weight="regular" />
@@ -704,13 +715,13 @@ function GlobalRail({
                   <SidebarMenuItem key={label}>
                     <SidebarMenuButton
                       active={current}
-                      aria-label={label}
+                      aria-label={translate(label)}
                       onClick={() => {
                         onSelect(surface);
                       }}
                     >
                       <Icon aria-hidden="true" size={21} weight="regular" />
-                      <span className="flex-1 text-left">{label}</span>
+                      <span className="flex-1 text-left">{translate(label)}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -740,7 +751,7 @@ function GlobalRail({
         <div className="mt-2 flex items-center gap-2 border-t border-border px-2.5 pt-2.5">
           <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-fg-3" />
           <span className="text-[12px] text-secondary group-data-[collapsed=true]/sidebar:hidden">
-            {connection === "local" ? "로컬" : "원격"}
+            {translate(connection === "local" ? "로컬" : "원격")}
           </span>
         </div>
       </SidebarFooter>
@@ -1557,8 +1568,8 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
              * 색인 규모는 아래 배경 열이 소유합니다.
              */
             <span className="shrink-0 text-[11px] text-muted">
-              <span className="tabular-nums">{graph.nodes.length.toLocaleString()}</span>
-              {translate("개 ·")} <span className="tabular-nums">{graph.edges.length.toLocaleString()}</span>
+              <span className="tabular-nums">{formatLocalizedNumber(graph.nodes.length)}</span>
+              {translate("개 ·")} <span className="tabular-nums">{formatLocalizedNumber(graph.edges.length)}</span>
               {translate("개 연결")}
             </span>
           ) : null}
@@ -1566,9 +1577,9 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
           {index?.status === "ready" ? (
             <span
               className="shrink-0 text-[11px] text-fg-3"
-              title={`이 워크스페이스 색인 — 파일 ${index.fileCount.toLocaleString()} · 심볼 ${index.symbolCount.toLocaleString()} · 관계 ${index.relationCount.toLocaleString()}${index.excluded.length ? ` · 제외 ${index.excluded.join(" · ")}` : ""}`}
+              title={`${translate("이 워크스페이스 색인 — 파일 ")}${formatLocalizedNumber(index.fileCount)}${translate(" · 심볼 ")}${formatLocalizedNumber(index.symbolCount)}${translate(" · 관계 ")}${formatLocalizedNumber(index.relationCount)}${index.excluded.length ? `${translate(" · 제외 ")}${index.excluded.join(" · ")}` : ""}`}
             >
-              {translate("색인")} <span className="tabular-nums">{index.fileCount.toLocaleString()}</span>
+              {translate("색인")} <span className="tabular-nums">{formatLocalizedNumber(index.fileCount)}</span>
               {translate("개 파일")}
             </span>
           ) : null}
@@ -1659,7 +1670,7 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
           <div className="min-h-0 space-y-4 overflow-y-auto px-3 py-3">
             <section>
               <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
-                {knowledgeNodeKindLabel[selected.kind]}
+                {translate(knowledgeNodeKindLabel[selected.kind])}
               </span>
               {selected.detail === undefined ? null : (
                 <p className="mt-1.5 break-words font-mono text-[11px] text-muted">{selected.detail}</p>
@@ -1740,7 +1751,7 @@ function KnowledgeLinkList({
                       )}
                     </span>
                     <span className="shrink-0 rounded-[3px] border border-control px-1 text-[10px] text-muted">
-                      {knowledgeNodeKindLabel[link.node.kind]}
+                      {translate(knowledgeNodeKindLabel[link.node.kind])}
                     </span>
                     <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
                   </button>
@@ -1920,33 +1931,33 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
                 <AgentAvatar speaker={speakerOf(selected)} />
                 <span className="text-[13px] font-medium">{identity.name}</span>
                 <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
-                  {roleTextOf(selected)}
+                  {translate(roleTextOf(selected))}
                 </span>
-                <span className="ml-auto text-[11px] text-muted">{nodeStatusLabel(selected.status)}</span>
+                <span className="ml-auto text-[11px] text-muted">{translate(nodeStatusLabel(selected.status))}</span>
               </div>
-              <p className="mt-2 text-[12px] leading-5 text-secondary">{selected.responsibility}</p>
+              <p className="mt-2 text-[12px] leading-5 text-secondary">{translate(selected.responsibility)}</p>
               <ul className="mt-3 divide-y divide-border border-y border-border">
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">{translate("직책")}</span>
-                  <span className="text-[12px] text-primary">{nodeRoleTextOf(selected.role)}</span>
+                  <span className="text-[12px] text-primary">{translate(nodeRoleTextOf(selected.role))}</span>
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">{translate("위")}</span>
                   <span className="text-[12px] text-primary">
-                    {parent === undefined ? "없음 — 꼭대기" : agentIdentityToken(parent.handle).name}
+                    {parent === undefined ? translate("없음 — 꼭대기") : agentIdentityToken(parent.handle).name}
                   </span>
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">{translate("아래")}</span>
                   <span className="text-[12px] text-primary">
                     {children.length === 0
-                      ? "없음"
+                      ? translate("없음")
                       : children.map((child) => agentIdentityToken(child.handle).name).join(" · ")}
                   </span>
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">{translate("기간")}</span>
-                  <span className="text-[12px] text-primary">{scopeTextOf(selected.scope)}</span>
+                  <span className="text-[12px] text-primary">{translate(scopeTextOf(selected.scope))}</span>
                 </li>
               </ul>
               {extraCapabilitiesOf(selected).length > 0 ? (
@@ -2019,12 +2030,14 @@ function OrgUnit({
         >
           <AgentAvatar speaker={speakerOf(node)} />
           <span className="text-[13px] font-medium">{token.name}</span>
-          <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{unitWordOf(node)}</span>
-          <span className="truncate text-[11px] text-muted">{roleTextOf(node)}</span>
+          <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
+            {translate(unitWordOf(node))}
+          </span>
+          <span className="truncate text-[11px] text-muted">{translate(roleTextOf(node))}</span>
           <span className="ml-auto shrink-0 text-[11px] text-muted">
             {[
-              members.length > 0 ? `구성원 ${String(members.length)}` : "",
-              subUnits.length > 0 ? `하위 단위 ${String(subUnits.length)}` : "",
+              members.length > 0 ? `${translate("구성원 ")}${formatLocalizedNumber(members.length)}` : "",
+              subUnits.length > 0 ? `${translate("하위 단위 ")}${formatLocalizedNumber(subUnits.length)}` : "",
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -2033,7 +2046,7 @@ function OrgUnit({
         {children.length > 0 ? (
           <button
             aria-expanded={!collapsed}
-            aria-label={`${token.name} 하위 ${collapsed ? "펼치기" : "접기"}`}
+            aria-label={`${translate(collapsed ? "하위 펼치기" : "하위 접기")}: ${token.name}`}
             className="mx-1 my-1 flex w-7 shrink-0 items-center justify-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-primary"
             onClick={() => {
               onToggle(node.handle);
@@ -2061,7 +2074,7 @@ function OrgUnit({
               >
                 <AgentAvatar speaker={speakerOf(member)} />
                 <span className="font-medium">{agentIdentityToken(member.handle).name}</span>
-                <span className="text-[11px] text-muted">{roleTextOf(member)}</span>
+                <span className="text-[11px] text-muted">{translate(roleTextOf(member))}</span>
               </button>
             );
           })}
@@ -2377,6 +2390,7 @@ function ExtensionSurface({
   onDecideApproval: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   service: DesktopService;
 }) {
+  const { locale } = useI18n();
   const [entries, setEntries] = useState<readonly ExtensionEntryView[]>();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"installed" | "all">("all");
@@ -2405,12 +2419,12 @@ function ExtensionSurface({
 
   const all = entries ?? [];
   const installedCount = all.filter((item) => item.installed).length;
-  const normalized = query.trim().toLocaleLowerCase("ko");
+  const normalized = normalizeSearch(query, locale);
   const visible = all.filter(
     (item) =>
       (filter === "all" || item.installed) &&
       (normalized.length === 0 ||
-        `${item.packageName} ${item.description}`.toLocaleLowerCase("ko").includes(normalized)),
+        normalizeSearch(`${item.packageName} ${item.description}`, locale).includes(normalized)),
   );
   const selected = all.find((item) => item.id === selectedId);
 
@@ -2595,7 +2609,7 @@ function ExtensionSurface({
                   <ul className="divide-y divide-border border-y border-border">
                     {declarations.contributions.map((entry) => (
                       <li className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-2 py-2" key={entry.kind}>
-                        <span className="text-[12px] text-muted">{contributionLabel[entry.kind]}</span>
+                        <span className="text-[12px] text-muted">{translate(contributionLabel[entry.kind])}</span>
                         <span className="min-w-0 text-[12px] text-primary">{entry.items.join(" · ")}</span>
                       </li>
                     ))}
@@ -2614,7 +2628,7 @@ function ExtensionSurface({
                   <ul className="divide-y divide-border border-y border-border">
                     {declarations.permissions.map((entry) => (
                       <li className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-2 py-2" key={entry.kind}>
-                        <span className="text-[12px] text-muted">{permissionLabel[entry.kind]}</span>
+                        <span className="text-[12px] text-muted">{translate(permissionLabel[entry.kind])}</span>
                         <span className="min-w-0 font-mono text-[11px] text-primary">
                           {entry.items.filter((item) => item.length > 0).join(" · ") || "사용함"}
                         </span>
@@ -3306,7 +3320,7 @@ function GrowthSurface({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[12px] font-medium">{memory.key}</span>
                       <span className="rounded-[3px] border border-control px-1 text-[10px] text-muted">
-                        {explicitMemoryKindLabel[memory.kind]}
+                        {translate(explicitMemoryKindLabel[memory.kind])}
                       </span>
                       <span className="font-mono text-[10px] text-muted">v{memoryRevision}</span>
                     </div>
@@ -3474,7 +3488,9 @@ function GrowthSourceRow({ onOpenWork, reference }: { onOpenWork: (workId: strin
   const display = kind === "organization" ? agentIdentityToken(id).name : id;
   return (
     <li className="grid grid-cols-[76px_minmax(0,1fr)_auto] items-baseline gap-2 py-2">
-      <span className="text-[12px] text-muted">{growthSourceLabel[kind] ?? (kind === "" ? "근거" : kind)}</span>
+      <span className="text-[12px] text-muted">
+        {translate(growthSourceLabel[kind] ?? (kind === "" ? "근거" : kind))}
+      </span>
       <span className="min-w-0 truncate font-mono text-[11px] text-primary" title={reference}>
         {display}
       </span>
@@ -3525,7 +3541,7 @@ function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
     <li className="grid grid-cols-[76px_minmax(0,1fr)_78px_44px] items-baseline gap-2 py-2 text-[12px]">
       {/* 반대 근거는 색으로도 구분합니다. 통과 여부와 다른 축입니다. */}
       <span className={signal.group === "conflict" ? "text-danger" : "text-muted"}>
-        {growthSignalGroupLabel[signal.group]}
+        {translate(growthSignalGroupLabel[signal.group])}
       </span>
       <span className="min-w-0">
         <span className="block leading-5 text-primary">{signal.note}</span>
@@ -3534,7 +3550,7 @@ function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
         </span>
       </span>
       <span className={signal.origin === "model-self" ? "text-[11px] italic text-muted" : "text-[11px] text-muted"}>
-        {growthSignalOriginLabel[signal.origin]}
+        {translate(growthSignalOriginLabel[signal.origin])}
       </span>
       <span
         className={`text-right font-mono text-[11px] ${signal.outcome === "failed" ? "text-danger" : "text-secondary"}`}
@@ -3659,13 +3675,8 @@ const FAILURE_LABEL: Record<string, string> = {
 
 /** 호출 한 건은 몇 센트라 소수점 둘로는 전부 $0.00이 됩니다. 합계는 둘, 행은 넷. */
 const microText = (micros: number): string => `$${(micros / 1_000_000).toFixed(4)}`;
-const countText = (value: number): string => value.toLocaleString("ko-KR");
-const tokenText = (value: number): string =>
-  value >= 100_000_000
-    ? `${(value / 100_000_000).toFixed(1)}억`
-    : value >= 10_000
-      ? `${(value / 10_000).toFixed(1)}만`
-      : countText(value);
+const countText = formatLocalizedNumber;
+const tokenText = (value: number): string => (value >= 10_000 ? formatLocalizedCompactNumber(value) : countText(value));
 
 const RANGES = [
   { value: 0, label: "전체" },
@@ -4130,7 +4141,7 @@ function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (a
       tabIndex={0}
     >
       <td className="whitespace-nowrap py-1.5 pl-5 pr-3 font-mono text-[12px] tabular-nums text-muted">
-        {attempt.at.slice(5, 16).replace("T", " ")}
+        {formatLocalizedDateTime(attempt.at)}
       </td>
       <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
         {failed ? "—" : countText(tokensOf(attempt))}
@@ -4400,7 +4411,9 @@ function BudgetAlerts({
                 <span className="shrink-0 font-mono text-[12px] tabular-nums text-secondary">
                   {costText(alert.thresholdMicros)}
                 </span>
-                <span className={`w-7 shrink-0 text-right text-[11px] ${tone}`}>{alertActionLabel[alert.action]}</span>
+                <span className={`w-7 shrink-0 text-right text-[11px] ${tone}`}>
+                  {translate(alertActionLabel[alert.action])}
+                </span>
                 <button
                   aria-label={`${scopeLabel(alert.scope)} ${costText(alert.thresholdMicros)} 알림 삭제`}
                   className="shrink-0 rounded-[5px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
@@ -4514,12 +4527,12 @@ function ChoiceGroup<T extends string>({
               }}
               type="button"
             >
-              {option.label}
+              {translate(option.label)}
             </button>
           );
         })}
       </div>
-      {locked === undefined ? null : <span className="text-[11px] text-muted">{locked}</span>}
+      {locked === undefined ? null : <span className="text-[11px] text-muted">{translate(locked)}</span>}
     </div>
   );
 }
@@ -4562,15 +4575,17 @@ function GrowthAdoptionBoundary({
             : { onSelect })}
       />
       <p className="mt-2 text-[11px] text-muted">
-        {autonomy.growthReflectionEnabled === undefined
-          ? "자가개선 설정을 읽을 수 없습니다."
-          : autonomy.growthReflectionEnabled
-            ? "완료된 실행에서 개선 후보를 찾습니다."
-            : "개선 후보 찾기가 꺼져 있습니다."}
+        {translate(
+          autonomy.growthReflectionEnabled === undefined
+            ? "자가개선 설정을 읽을 수 없습니다."
+            : autonomy.growthReflectionEnabled
+              ? "완료된 실행에서 개선 후보를 찾습니다."
+              : "개선 후보 찾기가 꺼져 있습니다.",
+        )}
       </p>
       {error ? (
         <p className="mt-2 text-[11px] text-danger" role="alert">
-          {error}
+          {translate(error)}
         </p>
       ) : null}
     </GrowthSection>
@@ -4754,6 +4769,7 @@ function ProviderAddForm({
 }
 
 function ProviderSurface({ service }: { service: DesktopService }) {
+  const { locale } = useI18n();
   const [settings, setSettings] = useState<SettingsView>();
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -4887,11 +4903,12 @@ function ProviderSurface({ service }: { service: DesktopService }) {
 
   const connections = settings ? projectProviderConnections(settings.catalog, settings.providers) : [];
   const accounts = settings ? projectSubscriptionAccounts(settings.accounts) : [];
+  const normalizedQuery = normalizeSearch(query, locale);
   const matched = connections.filter(
     (connection) =>
-      query.trim() === "" ||
-      connection.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) ||
-      connection.providerId.includes(query.trim().toLocaleLowerCase()),
+      normalizedQuery === "" ||
+      normalizeSearch(connection.displayName, locale).includes(normalizedQuery) ||
+      normalizeSearch(connection.providerId, locale).includes(normalizedQuery),
   );
   // 그룹은 사용자가 켜고 끈 것으로만 가릅니다. 회로 상태는 분류가 아니라 그 항목의 상태입니다.
   const groups = [
@@ -5340,7 +5357,7 @@ function AccountCard({ account }: { account: SubscriptionAccountView }) {
               <>
                 <span>·</span>
                 <span className="font-mono">
-                  {account.earliestResetAt.slice(5, 16).replace("T", " ")} {translate("리셋")}
+                  {formatLocalizedDateTime(account.earliestResetAt)} {translate("리셋")}
                 </span>
               </>
             )}
@@ -5631,11 +5648,13 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
                                 : "text-fg-3"
                           }`}
                         >
-                          {workspace.trust === "pending"
-                            ? "신뢰 대기 (pending)"
-                            : workspace.trust === "blocked"
-                              ? "차단됨 (blocked)"
-                              : "신뢰됨 (trusted)"}
+                          {translate(
+                            workspace.trust === "pending"
+                              ? "신뢰 대기 (pending)"
+                              : workspace.trust === "blocked"
+                                ? "차단됨 (blocked)"
+                                : "신뢰됨 (trusted)",
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 font-mono text-[11px] text-muted">
                           {translate("개정")} {workspace.revision}
@@ -5643,7 +5662,7 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
                         <td className="px-2 py-1.5 text-right">
                           {workspace.trust === "trusted" ? (
                             <Button
-                              aria-label={`${workspace.name} 신뢰 회수`}
+                              aria-label={`${workspace.name} ${translate("신뢰 회수")}`}
                               className="h-7 px-2.5"
                               disabled={workspaceSavingId !== undefined}
                               onClick={() => {
@@ -5656,7 +5675,7 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
                             </Button>
                           ) : (
                             <Button
-                              aria-label={`${workspace.name} 신뢰`}
+                              aria-label={`${workspace.name} ${translate("신뢰")}`}
                               className="h-7 px-2.5"
                               disabled={workspaceSavingId !== undefined}
                               onClick={() => {
@@ -5785,7 +5804,7 @@ function SurfaceLoading() {
 function SurfaceError({ message }: { message: string }) {
   return (
     <p role="alert" className="mb-4 text-sm text-danger">
-      {message}
+      {translate(message)}
     </p>
   );
 }
@@ -5904,7 +5923,7 @@ function WorkList({
                   <span className="mt-1 flex items-center justify-between gap-2 text-[11px]">
                     <span className={`flex items-center gap-2 ${workRowTone(work)}`}>
                       <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-                      {workRowLabel(work)}
+                      {translate(workRowLabel(work))}
                     </span>
                     <time className="font-mono text-muted">{work.updatedAt}</time>
                   </span>
@@ -6066,7 +6085,7 @@ function WorkActivity({
                     : "accent"
             }
           >
-            {workRowLabel(work)}
+            {translate(workRowLabel(work))}
           </Badge>
           {work.modelId ? <span className="shrink-0 font-mono text-[11px] text-muted">{work.modelId}</span> : null}
           {room ? (
@@ -6529,7 +6548,7 @@ function PlanActivity({ steps, title }: { steps: TaskView[]; title: string }) {
               {step.state === "done" ? <CheckCircle aria-hidden="true" size={14} weight="fill" /> : index + 1}
             </span>
             <span className="flex-1 text-secondary">{step.title}</span>
-            <span className={`text-xs ${stateClass[step.state]}`}>{stateLabel[step.state]}</span>
+            <span className={`text-xs ${stateClass[step.state]}`}>{translate(stateLabel[step.state])}</span>
           </li>
         ))}
       </ol>
@@ -7238,7 +7257,9 @@ function InspectorTasks({ progress, tasks }: { progress: number; tasks: TaskView
             <li className="flex min-h-10 items-center gap-2 text-xs" key={task.id}>
               <StateIcon state={task.state} />
               <span className="min-w-0 flex-1 truncate text-secondary">{task.title}</span>
-              <span className={`shrink-0 ${stateClass[task.state]}`}>{task.time ?? stateLabel[task.state]}</span>
+              <span className={`shrink-0 ${stateClass[task.state]}`}>
+                {task.time ?? translate(stateLabel[task.state])}
+              </span>
               <CaretRight aria-hidden="true" className="text-muted" size={13} />
             </li>
           ))}
@@ -7307,7 +7328,7 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
               <StateIcon state={verification.state} />
               <span className="text-muted">{translate("판정")}</span>
               <span className="min-w-0 flex-1 truncate text-secondary">{verification.verifier}</span>
-              <span className={stateClass[verification.state]}>{stateLabel[verification.state]}</span>
+              <span className={stateClass[verification.state]}>{translate(stateLabel[verification.state])}</span>
               <CaretRight aria-hidden="true" className="text-muted" size={13} />
             </div>
             {verification.criteria.length === 0 ? null : (
@@ -7315,10 +7336,10 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
                 {verification.criteria.map((criterion) => (
                   <li className="flex items-center gap-2 text-[11px]" key={criterion.key}>
                     <span className="min-w-0 flex-1 truncate text-muted" title={criterion.key}>
-                      {criterionLabel[criterion.key] ?? criterion.key}
+                      {translate(criterionLabel[criterion.key] ?? criterion.key)}
                     </span>
                     <span className={criterionStatusClass[criterion.status]}>
-                      {criterionStatusLabel[criterion.status]}
+                      {translate(criterionStatusLabel[criterion.status])}
                     </span>
                   </li>
                 ))}
@@ -7456,7 +7477,7 @@ function InspectorRecords({
                   {record.documents.map((document) => (
                     <li className="flex items-baseline gap-3 text-[11px]" key={document.id}>
                       <span className="w-24 shrink-0 font-mono text-secondary">
-                        {recordDocumentLabel[document.kind]}
+                        {translate(recordDocumentLabel[document.kind])}
                       </span>
                       <span className="font-mono text-muted">markdown {document.checksum}</span>
                     </li>
@@ -7510,7 +7531,7 @@ function InspectorRecords({
               <li className="flex items-center gap-3 px-4 py-2.5 text-[12px]" key={approval.id}>
                 <span className="min-w-0 flex-1 truncate text-secondary">{approval.title}</span>
                 <span className={`shrink-0 text-[11px] ${approval.status === "pending" ? "text-gate" : "text-muted"}`}>
-                  {approvalStatusLabel[approval.status] ?? approval.status}
+                  {translate(approvalStatusLabel[approval.status] ?? approval.status)}
                 </span>
               </li>
             ))}
@@ -7528,7 +7549,7 @@ function StateIcon({ state }: { state: StepState }) {
     return <WarningCircle aria-label={translate("실패")} className="shrink-0 text-danger" size={16} weight="fill" />;
   return (
     <span
-      aria-label={stateLabel[state]}
+      aria-label={translate(stateLabel[state])}
       className={`size-4 shrink-0 rounded-full border ${state === "active" ? "border-accent" : "border-muted"}`}
       role="img"
     />

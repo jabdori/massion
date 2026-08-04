@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { KnowledgeGraphView, KnowledgeNodeView } from "@/desktop-service";
-import { translate } from "@/i18n/context";
+import { formatLocalizedNumber, translate, useI18n } from "@/i18n/context";
+import { localeTag } from "@/i18n/locale";
 
 /**
  * 옵시디언 그래프 뷰. **ReactFlow를 쓰지 않습니다** — 그건 노드 에디터(상자·핸들·직교 간선)라
@@ -844,8 +845,14 @@ export function KnowledgeNodeExplorer({
   onSelect: (nodeId: string) => void;
   selectedId: string | undefined;
 }) {
+  const { locale } = useI18n();
+  const collator = new Intl.Collator(localeTag(locale));
   const nodes = [...graph.nodes]
-    .sort((left, right) => left.label.localeCompare(right.label) || left.nodeId.localeCompare(right.nodeId))
+    .sort(
+      (left, right) =>
+        collator.compare(left.label, right.label) ||
+        (left.nodeId < right.nodeId ? -1 : left.nodeId > right.nodeId ? 1 : 0),
+    )
     .slice(0, 200);
   if (nodes.length === 0) return null;
   return (
@@ -861,7 +868,7 @@ export function KnowledgeNodeExplorer({
         tabIndex={0}
       >
         <span className="min-w-0 flex-1 font-medium">{translate("노드 탐색")}</span>
-        <span className="shrink-0 tabular-nums text-muted">{nodes.length.toLocaleString()}</span>
+        <span className="shrink-0 tabular-nums text-muted">{formatLocalizedNumber(nodes.length)}</span>
         <span aria-hidden="true" className="text-muted group-open:rotate-90">
           ›
         </span>
@@ -872,7 +879,7 @@ export function KnowledgeNodeExplorer({
           return (
             <li key={node.nodeId}>
               <button
-                aria-label={`${node.label} 선택`}
+                aria-label={`${translate("지도에서 선택:")} ${node.label}`}
                 aria-pressed={selected}
                 className={`relative flex w-full items-center px-3 py-1.5 text-left text-[11px] outline-none hover:bg-surface-1 hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-fg-2 ${
                   selected

@@ -29,6 +29,10 @@ export function formatNumber(value: number, locale: AppLocale): string {
   return new Intl.NumberFormat(localeTag(locale)).format(value);
 }
 
+export function formatCompactNumber(value: number, locale: AppLocale): string {
+  return new Intl.NumberFormat(localeTag(locale), { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
 export function formatDateTime(value: string | Date, locale: AppLocale): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";

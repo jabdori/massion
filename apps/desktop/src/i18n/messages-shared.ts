@@ -1,4 +1,5 @@
 export const sharedEnglishMessages = {
+  "지도에서 선택:": "Select in graph:",
   총괄: "Orchestrator",
   조율: "Coordination",
   실행: "Execution",

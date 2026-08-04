@@ -50,6 +50,7 @@ import {
   type WorkView,
 } from "./model";
 import type { NativeTransport } from "./native-transport";
+import { normalizeSearch, type AppLocale } from "./i18n/locale";
 
 export type DesktopBootstrapState = "ready";
 export type DesktopStreamHandler = (payload: unknown) => void;
@@ -60,6 +61,7 @@ export type DesktopFilter = "active" | "complete";
 
 export interface WorkIndexInput {
   readonly filter: DesktopFilter;
+  readonly locale?: AppLocale;
   readonly search: string;
 }
 
@@ -1491,8 +1493,9 @@ export function createApplicationDesktopService(
     bootstrap,
 
     async loadIndex(input) {
+      const search = normalizeSearch(input.search, input.locale ?? "en");
       const page = await client.query("work.index", {
-        search: input.search,
+        search,
         limit: 50,
       });
       return page.items.map(projectWorkSummary).filter((work) => workStatusFilter(work.status) === input.filter);
@@ -3005,11 +3008,12 @@ export function createFixtureDesktopService(): DesktopService {
     loadIndex: (input) =>
       fixturePromise(() => {
         const { filter, search } = input;
-        const normalizedSearch = search.trim().toLocaleLowerCase("ko");
+        const locale = input.locale ?? "en";
+        const normalizedSearch = normalizeSearch(search, locale);
         return initialSnapshot.works.filter(
           (work) =>
             workStatusFilter(work.status) === filter &&
-            (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
+            (normalizedSearch.length === 0 || normalizeSearch(work.title, locale).includes(normalizedSearch)),
         );
       }),
     loadWork: (workId) =>

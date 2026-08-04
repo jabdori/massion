@@ -23,12 +23,29 @@ describe("AgentOS 데스크톱", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     const settings = await screen.findByRole("main", { name: "Settings" });
+    expect(screen.getByRole("button", { name: "Work" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Organization" })).toBeInTheDocument();
     expect(within(settings).getByRole("region", { name: "Language" })).toBeInTheDocument();
+    expect(within(settings).getAllByRole("button", { name: "Automatic" }).length).toBeGreaterThan(0);
+    expect(within(settings).getByText("Trusted (trusted)")).toBeInTheDocument();
+    expect(within(settings).getByText("Finds Growth candidates in completed runs.")).toBeInTheDocument();
     expect(
       within(settings).getByText("Use English for the interface and responses from Agents in new Work."),
     ).toBeInTheDocument();
 
-    await user.click(within(settings).getByRole("button", { name: "한국어" }));
+    await user.click(screen.getByRole("button", { name: "Provider" }));
+    const providers = await screen.findByRole("main", { name: "Provider overview" });
+    await user.type(within(providers).getByRole("textbox", { name: "Search Providers" }), "ＣＯＤＥＸ");
+    expect(within(providers).getAllByText("OpenAI Codex").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Organization" }));
+    const organization = await screen.findByRole("main", { name: "Organization" });
+    expect(within(organization).getAllByText("Request coordination").length).toBeGreaterThan(0);
+    expect(within(organization).queryByText("사용자 요청 접수")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const reopenedSettings = await screen.findByRole("main", { name: "Settings" });
+    await user.click(within(reopenedSettings).getByRole("button", { name: "한국어" }));
     expect(await screen.findByRole("main", { name: "설정" })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("ko-KR");
   });

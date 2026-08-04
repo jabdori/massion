@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState } from "reac
 
 import type { DesktopFilter, DesktopService, DesktopWorkspaceView, StartWorkInput } from "@/desktop-service";
 import type { ApprovalView, WorkView } from "@/model";
+import { normalizeSearch } from "@/i18n/locale";
 
 export type DesktopPhase = "loading" | "ready" | "error";
 
@@ -407,7 +408,11 @@ export function useDesktopController(service: DesktopService, outputLocale: "en"
     async (options: { preserveSelection?: boolean; surfaceError?: boolean } = {}): Promise<WorkView[] | undefined> => {
       const request = ++indexRequestRef.current;
       try {
-        const next = await service.loadIndex({ filter: filterRef.current, search: queryRef.current });
+        const next = await service.loadIndex({
+          filter: filterRef.current,
+          locale: outputLocale,
+          search: queryRef.current,
+        });
         if (request !== indexRequestRef.current) return undefined;
         return applyIndex([...next], options.preserveSelection);
       } catch (error) {
@@ -417,7 +422,7 @@ export function useDesktopController(service: DesktopService, outputLocale: "en"
         return undefined;
       }
     },
-    [applyIndex, service],
+    [applyIndex, outputLocale, service],
   );
 
   useEffect(() => {
@@ -909,10 +914,10 @@ export function useDesktopController(service: DesktopService, outputLocale: "en"
   };
 
   const visibleWorks = works.filter((value) => {
-    const search = query.trim().toLocaleLowerCase("ko");
+    const search = normalizeSearch(query, outputLocale);
     return (
       (filter === "active" ? value.status === "active" : value.status !== "active") &&
-      (!search || value.title.toLocaleLowerCase("ko").includes(search))
+      (!search || normalizeSearch(value.title, outputLocale).includes(search))
     );
   });
 

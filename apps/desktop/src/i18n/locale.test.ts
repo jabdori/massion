@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   effectiveLocale,
+  formatCompactNumber,
   formatDateTime,
   formatNumber,
   languagePreference,
@@ -35,6 +36,8 @@ describe("Desktop locale contract", () => {
     expect(localeTag("ko")).toBe("ko-KR");
     expect(formatNumber(1234567, "en")).toBe("1,234,567");
     expect(formatNumber(1234567, "ko")).toBe("1,234,567");
+    expect(formatCompactNumber(100_000_000, "en")).toBe("100M");
+    expect(formatCompactNumber(100_000_000, "ko")).toBe("1억");
     expect(formatDateTime("2026-08-03T00:30:00.000Z", "en")).toContain("2026");
     expect(formatDateTime("not-a-date", "ko")).toBe("");
     expect(normalizeSearch("  Ａgent  ", "en")).toBe("agent");

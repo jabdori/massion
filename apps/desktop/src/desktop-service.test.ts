@@ -791,14 +791,15 @@ describe("Application desktop service", () => {
 
   it("fixture startWork는 입력별 Work·실행 계보를 만들고 목록과 상세에서 다시 읽는다", async () => {
     const service = createFixtureDesktopService();
-    const first = await service.startWork({ text: "첫 번째 계약 검토", workspaceId: "workspace-analytics" });
+    const first = await service.startWork({ text: "ABC 첫 번째 계약 검토", workspaceId: "workspace-analytics" });
     const second = await service.startWork({ text: "두 번째 계약 검토", workspaceId: "workspace-ops" });
 
     expect(first.runId).not.toBe(second.runId);
     const works = await service.loadIndex({ filter: "active", search: "계약 검토" });
     expect(works.map((work) => work.id)).toEqual(["work-fixture-0001", "work-fixture-0002"]);
+    await expect(service.loadIndex({ filter: "active", locale: "en", search: "ＡＢＣ" })).resolves.toHaveLength(1);
     await expect(service.loadWork("work-fixture-0001")).resolves.toMatchObject({
-      title: "첫 번째 계약 검토",
+      title: "ABC 첫 번째 계약 검토",
       workspace: { name: "workspace-analytics", trusted: true },
       run: { runId: first.runId, status: "ready", stage: "intake", leaseGeneration: 0 },
       activeExecutionId: "execution-fixture-0001",
@@ -952,14 +953,14 @@ describe("Application desktop service", () => {
     );
   });
 
-  it("bootstrap 뒤 search를 work.index payload에 전달하고 종료 Work를 완료 목록으로 분류한다", async () => {
+  it("bootstrap 뒤 정규화한 search를 work.index payload에 전달하고 종료 Work를 완료 목록으로 분류한다", async () => {
     const native = transport();
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     await expect(service.bootstrap()).resolves.toBe("ready");
-    const [work] = await service.loadIndex({ filter: "active", search: "이탈" });
+    const [work] = await service.loadIndex({ filter: "active", locale: "en", search: "ＡＧＥＮＴ" });
 
-    expect(native.query).toHaveBeenCalledWith("work.index", { search: "이탈", limit: 50 });
+    expect(native.query).toHaveBeenCalledWith("work.index", { search: "agent", limit: 50 });
     expect(work).toMatchObject({ updatedAt: "09:24", updatedAtIso: detail.updatedAt });
   });
 
