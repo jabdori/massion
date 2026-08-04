@@ -12,6 +12,7 @@ interface RuntimeState {
   readonly endpoint: string;
   readonly executable: string;
   readonly startedAt: string;
+  readonly memoryProfile?: string;
 }
 
 interface RuntimeManagerDependencies {
@@ -115,7 +116,13 @@ describe("local SurrealDB sidecar lifecycle", () => {
       ],
       expect.objectContaining({
         cwd: "/Users/massion/.local/share/massion/surrealdb/3/database",
-        env: expect.objectContaining({ SURREAL_USER: "massion", SURREAL_PASS: credential.password }),
+        env: expect.objectContaining({
+          SURREAL_USER: "massion",
+          SURREAL_PASS: credential.password,
+          SURREAL_ROCKSDB_BLOCK_CACHE_SIZE: "268435456",
+          SURREAL_ROCKSDB_WRITE_BUFFER_SIZE: "67108864",
+          SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER: "2",
+        }),
       }),
     );
     expect(spawn.mock.calls[0]?.[1]).not.toContain(credential.password);
@@ -145,6 +152,7 @@ describe("local SurrealDB sidecar lifecycle", () => {
           endpoint: "http://127.0.0.1:17431",
           executable,
           startedAt: "2026-07-19T00:00:00.000Z",
+          memoryProfile: "rocksdb-256m-64m-2",
         }),
         processCommand: async () => `${executable} start --bind 127.0.0.1:17431`,
         spawn,
@@ -165,6 +173,39 @@ describe("local SurrealDB sidecar lifecycle", () => {
     expect(signal).not.toHaveBeenCalled();
   });
 
+  it("상한 적용 전에 시작한 소유 sidecar를 종료하고 제한된 설정으로 다시 시작한다", async () => {
+    const executable = "/Users/massion/.local/share/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal";
+    let legacyAlive = true;
+    const signal = vi.fn<RuntimeManagerDependencies["signal"]>((pid) => {
+      if (pid === 812) legacyAlive = false;
+    });
+    const removeState = vi.fn<RuntimeManagerDependencies["removeState"]>(async () => undefined);
+    const spawn = vi.fn<RuntimeManagerDependencies["spawn"]>(() => ({ pid: 741, unref() {} }));
+    const writeState = vi.fn<RuntimeManagerDependencies["writeState"]>(async () => undefined);
+    const manager = createManager(
+      dependencies({
+        readState: async () => ({
+          pid: 812,
+          endpoint: "http://127.0.0.1:17431",
+          executable,
+          startedAt: "2026-07-19T00:00:00.000Z",
+        }),
+        processExists: (pid) => (pid === 812 ? legacyAlive : true),
+        processCommand: async () => `${executable} start --bind 127.0.0.1:17431`,
+        signal,
+        removeState,
+        spawn,
+        writeState,
+      }),
+    );
+
+    await expect(manager.start()).resolves.toMatchObject({ status: "started", pid: 741 });
+    expect(signal).toHaveBeenCalledWith(812, "SIGTERM");
+    expect(removeState).toHaveBeenCalledOnce();
+    expect(spawn).toHaveBeenCalledOnce();
+    expect(writeState).toHaveBeenCalledWith(expect.objectContaining({ memoryProfile: "rocksdb-256m-64m-2" }));
+  });
+
   it("소유한 sidecar가 시작 중이면 준비될 때까지 기다린 뒤 재사용한다", async () => {
     const executable = "/Users/massion/.local/share/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal";
     let readyChecks = 0;
@@ -179,6 +220,7 @@ describe("local SurrealDB sidecar lifecycle", () => {
           endpoint: "http://127.0.0.1:17431",
           executable,
           startedAt: "2026-07-19T00:00:00.000Z",
+          memoryProfile: "rocksdb-256m-64m-2",
         }),
         processCommand: async () => `${executable} start --bind 127.0.0.1:17431`,
         ready: async () => {
@@ -214,6 +256,7 @@ describe("local SurrealDB sidecar lifecycle", () => {
           endpoint: "http://127.0.0.1:17431",
           executable,
           startedAt: "2026-07-19T00:00:00.000Z",
+          memoryProfile: "rocksdb-256m-64m-2",
         }),
         processCommand: async () => `${executable} start --bind 127.0.0.1:17431`,
         ready: async () => false,

@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 const executeFile = promisify(execFile);
 export const LOCAL_SURREAL_VERSION = "3.2.1";
+const LOCAL_SURREAL_MEMORY_PROFILE = "rocksdb-256m-64m-2";
 const MAXIMUM_RUNTIME_BYTES = 1024 * 1024 * 1024;
 const VERSION = /(?:^|[^0-9])(?:surreal(?:db)?\s+)?v?(3\.2\.1)(?=$|[^0-9A-Za-z.+-])/iu;
 
@@ -37,6 +38,7 @@ export interface LocalSurrealRuntimeState {
   readonly endpoint: string;
   readonly executable: string;
   readonly startedAt: string;
+  readonly memoryProfile?: string;
 }
 
 interface LocalSurrealRuntimeProcess {
@@ -227,6 +229,9 @@ function credentialEnvironment(credential: LocalSurrealRuntimeManagerDependencie
     SURREAL_USER: credential.user,
     SURREAL_PASS: credential.password,
     SURREAL_LOG: "warn",
+    SURREAL_ROCKSDB_BLOCK_CACHE_SIZE: "268435456",
+    SURREAL_ROCKSDB_WRITE_BUFFER_SIZE: "67108864",
+    SURREAL_ROCKSDB_MAX_WRITE_BUFFER_NUMBER: "2",
   };
 }
 
@@ -290,7 +295,19 @@ export class LocalSurrealRuntimeManager {
     const existing = await this.#dependencies.readState();
     if (existing) {
       const ownedExisting = existing.endpoint === sidecarEndpoint && (await this.#owned(existing, attested.executable));
-      if (ownedExisting) {
+      if (ownedExisting && existing.memoryProfile !== LOCAL_SURREAL_MEMORY_PROFILE) {
+        this.#dependencies.signal(existing.pid, "SIGTERM");
+        for (
+          let attempt = 0;
+          attempt < START_ATTEMPTS && this.#dependencies.processExists(existing.pid);
+          attempt += 1
+        ) {
+          await this.#dependencies.wait(START_INTERVAL_MS);
+        }
+        if (this.#dependencies.processExists(existing.pid)) {
+          throw new Error("기존 local SurrealDB sidecar의 메모리 설정 교체 시간이 초과했습니다");
+        }
+      } else if (ownedExisting) {
         for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
           if (await this.#dependencies.ready(existing.endpoint)) {
             await this.#dependencies.provision(existing.endpoint);
@@ -330,6 +347,7 @@ export class LocalSurrealRuntimeManager {
       endpoint: sidecarEndpoint,
       executable: attested.executable,
       startedAt: new Date().toISOString(),
+      memoryProfile: LOCAL_SURREAL_MEMORY_PROFILE,
     };
     try {
       await this.#dependencies.writeState(state);

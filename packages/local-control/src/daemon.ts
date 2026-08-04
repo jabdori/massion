@@ -598,7 +598,8 @@ function validateSurrealPidRecord(value: unknown): LocalSurrealRuntimeState {
     typeof value.executable !== "string" ||
     !isAbsolute(value.executable) ||
     !("startedAt" in value) ||
-    typeof value.startedAt !== "string"
+    typeof value.startedAt !== "string" ||
+    ("memoryProfile" in value && typeof value.memoryProfile !== "string")
   )
     throw new Error("local SurrealDB process state가 유효하지 않습니다");
   return value as LocalSurrealPidRecord;
