@@ -551,28 +551,33 @@ describe("Massion server product", () => {
       await expect(readyResponse.json()).resolves.toMatchObject({
         components: { "application-run-recovery": "ready" },
       });
-      const [records] = await seedDatabase.query<
-        [{ run_id: string; organization_id: string; status: string; lease_generation: number; work_id?: string }[]]
-      >(
-        "SELECT run_id, organization_id, status, lease_generation, work_id FROM application_run WHERE run_id IN $run_ids;",
-        { run_ids: [ready.runId, expired.runId, active.runId] },
+      await vi.waitFor(
+        async () => {
+          const [records] = await seedDatabase.query<
+            [{ run_id: string; organization_id: string; status: string; lease_generation: number; work_id?: string }[]]
+          >(
+            "SELECT run_id, organization_id, status, lease_generation, work_id FROM application_run WHERE run_id IN $run_ids;",
+            { run_ids: [ready.runId, expired.runId, active.runId] },
+          );
+          const byId = new Map(records.map((record) => [record.run_id, record]));
+          expect(byId.get(ready.runId)).toMatchObject({
+            organization_id: ownerContext.organizationId,
+            status: "blocked",
+            lease_generation: 1,
+          });
+          expect(byId.get(expired.runId)).toMatchObject({
+            organization_id: memberContext.organizationId,
+            status: "blocked",
+            lease_generation: expiredClaim.leaseGeneration + 1,
+          });
+          expect(byId.get(active.runId)).toMatchObject({
+            organization_id: ownerPersonalContext.organizationId,
+            status: "running",
+            lease_generation: activeClaim.leaseGeneration,
+          });
+        },
+        { timeout: 5_000 },
       );
-      const byId = new Map(records.map((record) => [record.run_id, record]));
-      expect(byId.get(ready.runId)).toMatchObject({
-        organization_id: ownerContext.organizationId,
-        status: "blocked",
-        lease_generation: 1,
-      });
-      expect(byId.get(expired.runId)).toMatchObject({
-        organization_id: memberContext.organizationId,
-        status: "blocked",
-        lease_generation: expiredClaim.leaseGeneration + 1,
-      });
-      expect(byId.get(active.runId)).toMatchObject({
-        organization_id: ownerPersonalContext.organizationId,
-        status: "running",
-        lease_generation: activeClaim.leaseGeneration,
-      });
       const [requests] = await seedDatabase.query<[{ requester_user_id: string; text: string }[]]>(
         "SELECT requester_user_id, text FROM work_request WHERE text IN $texts ORDER BY text ASC;",
         { texts: ["재시작 전에 준비된 실행", "재시작 전에 lease가 만료된 실행"] },

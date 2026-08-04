@@ -39,7 +39,7 @@ function pagedSource(...pages: readonly (readonly Candidate[])[]) {
 }
 
 describe("ApplicationRun 시작 복구 서비스", () => {
-  it("모든 복구가 끝날 때까지 start를 완료하지 않고 한 번만 시작할 수 있다", async () => {
+  it("후보 스캔 뒤 복구가 계속되어도 start와 readiness를 열고 한 번만 시작할 수 있다", async () => {
     let release: (() => void) | undefined;
     const candidate: Candidate = {
       runId: "run-1",
@@ -64,19 +64,76 @@ describe("ApplicationRun 시작 복구 서비스", () => {
     const starting = service.start().then(() => {
       started = true;
     });
+    await starting;
     await vi.waitFor(() => expect(release).toEqual(expect.any(Function)));
-    await Promise.resolve();
-    expect(started).toBe(false);
-    expect(service.ready()).toBe(false);
+    await vi.waitFor(() => expect(started).toBe(true));
+    expect(service.ready()).toBe(true);
 
     release?.();
-    await starting;
+    await vi.waitFor(() => expect(source.listStartupRecoverable).toHaveBeenCalledTimes(2));
     expect(service.ready()).toBe(true);
     await expect(service.start()).rejects.toThrow("이미");
 
     await service.close();
     expect(service.ready()).toBe(false);
     await expect(service.start()).rejects.toThrow("종료");
+  });
+
+  it("최초 후보 스캔이 끝나기 전에도 start는 반환하되 readiness는 닫아 둔다", async () => {
+    let release: (() => void) | undefined;
+    const service = new ApplicationRunStartupRecoveryService(
+      {
+        listStartupRecoverable: async () =>
+          await new Promise<readonly Candidate[]>((resolve) => {
+            release = () => resolve([]);
+          }),
+      },
+      { resolveTenantContext: vi.fn() },
+      { recover: vi.fn() },
+    );
+
+    await expect(service.start()).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(release).toEqual(expect.any(Function)));
+    expect(service.ready()).toBe(false);
+
+    release?.();
+    await vi.waitFor(() => expect(service.ready()).toBe(true));
+    await service.close();
+  });
+
+  it("후보 실패 뒤 다음 page 복구가 대기해도 readiness를 다시 열지 않는다", async () => {
+    let release: (() => void) | undefined;
+    const first: Candidate = {
+      runId: "run-without-lineage",
+      organizationId: "organization-1",
+      createdAt: "2026-07-11T06:00:00.000Z",
+    };
+    const second: Candidate = {
+      runId: "run-pending",
+      organizationId: "organization-1",
+      actorUserId: "user-1",
+      createdAt: "2026-07-11T06:00:01.000Z",
+    };
+    const source = pagedSource([first], [second], []);
+    const service = new ApplicationRunStartupRecoveryService(
+      source,
+      { resolveTenantContext: async () => context(second) },
+      {
+        recover: async () =>
+          await new Promise((resolve) => {
+            release = () => resolve(undefined);
+          }),
+      },
+    );
+
+    await service.start();
+    await vi.waitFor(() => expect(release).toEqual(expect.any(Function)));
+    expect(service.ready()).toBe(false);
+
+    release?.();
+    await vi.waitFor(() => expect(source.listStartupRecoverable).toHaveBeenCalledTimes(3));
+    expect(service.ready()).toBe(false);
+    await service.close();
   });
 
   it("입력 순서대로 원래 사용자·조직 문맥을 해석해 순차 복구한다", async () => {
@@ -117,6 +174,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await service.start();
 
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
     expect(calls).toEqual(["user-1:organization-1:run-1", "user-2:organization-2:run-2"]);
     expect(maximumActive).toBe(1);
     expect(source.listStartupRecoverable).toHaveBeenCalledTimes(2);
@@ -239,10 +297,12 @@ describe("ApplicationRun 시작 복구 서비스", () => {
       expect(replayed).toMatchObject({ outcome: "succeeded" });
       expect(replayVote).not.toHaveBeenCalled();
       expect(replaySchedule).not.toHaveBeenCalled();
-      await expect(runs.get(contextAfter, runId)).resolves.toMatchObject({
-        status: "completed",
-        stage: "terminal",
-        workId: "work-after-approval-startup-recovery",
+      await vi.waitFor(async () => {
+        await expect(runs.get(contextAfter, runId)).resolves.toMatchObject({
+          status: "completed",
+          stage: "terminal",
+          workId: "work-after-approval-startup-recovery",
+        });
       });
       expect(stageCalls).toHaveLength(APPLICATION_RUN_STAGES.length);
       expect(stageCalls[0]).toEqual({ stage: "intake", resumeInput: { approvalId } });
@@ -299,6 +359,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await service.start();
 
+    await vi.waitFor(() => expect(recovered).toHaveLength(candidates.length));
     expect(recovered).toEqual(candidates.map((candidate) => candidate.runId));
     expect(new Set(recovered).size).toBe(201);
     expect(listStartupRecoverable.mock.calls).toEqual([
@@ -339,6 +400,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await service.start();
 
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
     expect(listStartupRecoverable).toHaveBeenCalledTimes(2);
     expect(recover.mock.calls.map(([, runId]) => runId)).toEqual([firstRunId]);
     expect(failures).toEqual([expect.objectContaining({ reason: "candidate_list_failed", cause: expect.any(Error) })]);
@@ -403,6 +465,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await expect(service.start()).resolves.toBeUndefined();
 
+    await vi.waitFor(() => expect(source.listStartupRecoverable).toHaveBeenCalledTimes(3));
     expect(failures).toEqual([
       {
         reason: "legacy_actor_lineage_missing",
@@ -451,6 +514,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await expect(service.start()).resolves.toBeUndefined();
 
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
     expect(failures).toEqual([{ reason: "candidate_list_failed", cause: listError }]);
     expect(resolveTenantContext).not.toHaveBeenCalled();
     expect(recover).not.toHaveBeenCalled();
@@ -484,6 +548,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
 
     await service.start();
 
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
     expect(recover).toHaveBeenCalledTimes(100);
     expect(listStartupRecoverable).toHaveBeenCalledTimes(2);
     expect(failures).toEqual([{ reason: "candidate_list_failed", cause: listError }]);

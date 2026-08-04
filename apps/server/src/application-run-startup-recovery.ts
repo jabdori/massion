@@ -75,22 +75,28 @@ export class ApplicationRunStartupRecoveryService {
     private readonly options: ApplicationRunStartupRecoveryOptions = {},
   ) {}
 
-  public async start(): Promise<void> {
-    if (this.closed) throw new Error("종료된 ApplicationRun 시작 복구 서비스는 다시 시작할 수 없습니다");
-    if (this.started) throw new Error("ApplicationRun 시작 복구 서비스가 이미 실행됐습니다");
+  public start(): Promise<void> {
+    if (this.closed)
+      return Promise.reject(new Error("종료된 ApplicationRun 시작 복구 서비스는 다시 시작할 수 없습니다"));
+    if (this.started) return Promise.reject(new Error("ApplicationRun 시작 복구 서비스가 이미 실행됐습니다"));
     this.started = true;
     this.healthy = false;
     const active = this.recoverAll();
     this.active = active;
-    try {
-      await active;
-    } finally {
-      if (this.active === active) this.active = undefined;
-    }
+    void active.then(
+      () => {
+        if (this.active === active) this.active = undefined;
+      },
+      () => {
+        this.healthy = false;
+        if (this.active === active) this.active = undefined;
+      },
+    );
+    return Promise.resolve();
   }
 
   public ready(): boolean {
-    return this.started && !this.closed && !this.active && this.healthy;
+    return this.started && !this.closed && this.healthy;
   }
 
   public async close(): Promise<void> {
@@ -111,11 +117,13 @@ export class ApplicationRunStartupRecoveryService {
       try {
         candidates = await this.source.listStartupRecoverable(STARTUP_RECOVERY_PAGE_SIZE, cursor);
       } catch (error) {
+        this.healthy = false;
         await this.report({ reason: "candidate_list_failed", cause: error });
         return;
       }
 
       if (this.isClosed()) return;
+      this.healthy = healthy;
       if (candidates.length === 0) break;
 
       let nextCursor: ApplicationRunStartupRecoveryCursor;
@@ -132,6 +140,7 @@ export class ApplicationRunStartupRecoveryService {
         }
       } catch (error) {
         healthy = false;
+        this.healthy = false;
         await this.report({ reason: "candidate_list_failed", cause: error });
         break;
       }
@@ -143,6 +152,7 @@ export class ApplicationRunStartupRecoveryService {
         }
         if (!candidate.actorUserId) {
           healthy = false;
+          this.healthy = false;
           await this.report({
             reason: "legacy_actor_lineage_missing",
             runId: candidate.runId,
@@ -156,6 +166,7 @@ export class ApplicationRunStartupRecoveryService {
           context = await this.contexts.resolveTenantContext(candidate.actorUserId, candidate.organizationId);
         } catch (error) {
           healthy = false;
+          this.healthy = false;
           await this.report({
             reason: "membership_unavailable",
             runId: candidate.runId,
@@ -173,6 +184,7 @@ export class ApplicationRunStartupRecoveryService {
           await this.target.recover(context, candidate.runId);
         } catch (error) {
           healthy = false;
+          this.healthy = false;
           await this.report({
             reason: "recovery_failed",
             runId: candidate.runId,
