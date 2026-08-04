@@ -9,7 +9,9 @@ async function cancelBestEffort(transaction: SurrealTransaction): Promise<void> 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      transaction.cancel(),
+      Promise.resolve().then(async () => {
+        await transaction.cancel();
+      }),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, ROLLBACK_TIMEOUT_MS);
         timer.unref();
@@ -69,8 +71,7 @@ export class MassionDatabase implements QueryExecutor, AsyncDisposable {
 
   public async transaction<T>(operation: (transaction: QueryExecutor) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt += 1) {
-      const session = await this.client.forkSession();
-      const transaction = await session.beginTransaction();
+      const transaction = await this.client.beginTransaction();
       try {
         const result = await operation(new TransactionExecutor(transaction));
         await transaction.commit();
@@ -78,8 +79,6 @@ export class MassionDatabase implements QueryExecutor, AsyncDisposable {
       } catch (error) {
         await cancelBestEffort(transaction);
         if (!isCompatibleRetryableConflict(error) || attempt >= 3) throw error;
-      } finally {
-        await session.closeSession();
       }
     }
   }

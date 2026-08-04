@@ -31,14 +31,8 @@ describe("SurrealDB 연결", () => {
   });
 
   it("원격 rollback이 응답하지 않아도 원래 transaction 오류를 보존한다", async () => {
-    let sessionClosed = false;
     const database = new MassionDatabase({
-      forkSession: async () => ({
-        beginTransaction: async () => ({ cancel: async () => await new Promise(() => {}) }),
-        closeSession: async () => {
-          sessionClosed = true;
-        },
-      }),
+      beginTransaction: async () => ({ cancel: async () => await new Promise(() => {}) }),
     } as never);
 
     await expect(
@@ -46,10 +40,71 @@ describe("SurrealDB 연결", () => {
         throw new Error("원래 transaction 오류");
       }),
     ).rejects.toThrow("원래 transaction 오류");
-    expect(sessionClosed).toBe(true);
   });
 
-  it("동시 transaction을 서로 독립된 session에서 commit한다", async () => {
+  it("rollback 호출 자체가 실패해도 commit의 원래 오류를 보존한다", async () => {
+    const commitError = new Error("원래 commit 오류");
+    const database = new MassionDatabase({
+      beginTransaction: async () => ({
+        query: async () => [],
+        commit: async () => {
+          throw commitError;
+        },
+        cancel: () => {
+          throw new Error("rollback 연결 오류");
+        },
+      }),
+    } as never);
+
+    await expect(database.transaction(async () => undefined)).rejects.toBe(commitError);
+  });
+
+  it("retry 가능한 conflict는 새 transaction으로 세 번만 재시도한다", async () => {
+    const conflict = new Error("Transaction conflict: Write conflict can be retried");
+    let attempts = 0;
+    let cancellations = 0;
+    const database = new MassionDatabase({
+      beginTransaction: async () => {
+        attempts += 1;
+        return {
+          query: async () => [],
+          commit: async () => {
+            throw conflict;
+          },
+          cancel: async () => {
+            cancellations += 1;
+          },
+        };
+      },
+    } as never);
+
+    await expect(database.transaction(async () => undefined)).rejects.toBe(conflict);
+    expect(attempts).toBe(4);
+    expect(cancellations).toBe(4);
+  });
+
+  it("transaction은 응답을 막을 수 있는 별도 session 수명주기를 만들지 않는다", async () => {
+    let committed = false;
+    const database = new MassionDatabase({
+      beginTransaction: async () => ({
+        query: async () => [[1]],
+        commit: async () => {
+          committed = true;
+        },
+        cancel: async () => undefined,
+      }),
+      forkSession: async () => {
+        throw new Error("별도 session을 만들면 안 됩니다");
+      },
+    } as never);
+
+    await expect(database.transaction(async (transaction) => await transaction.query("RETURN 1;"))).resolves.toEqual([
+      [1],
+    ]);
+    expect(committed).toBe(true);
+  });
+
+  it("동시 transaction을 서로 독립된 transaction ID로 commit한다", async () => {
     await using db = await createDatabase({ url: "mem://", namespace: "massion", database: "concurrent_transactions" });
     await db.query("DEFINE TABLE concurrent_probe SCHEMAFULL; DEFINE FIELD payload ON concurrent_probe TYPE int;");
 
