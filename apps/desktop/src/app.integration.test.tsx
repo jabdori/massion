@@ -1331,7 +1331,7 @@ describe("AgentOS native data flow", () => {
     const explorer = screen.getByText("노드 탐색").closest("details");
     if (!explorer) throw new Error("노드 탐색 구역이 없습니다");
     await user.click(within(explorer).getByText("노드 탐색"));
-    await user.click(within(explorer).getByRole("button", { name: "A 전용 노드 선택" }));
+    await user.click(within(explorer).getByRole("button", { name: "지도에서 선택: A 전용 노드" }));
     expect(screen.getByRole("complementary", { name: "노드 상세" })).toHaveTextContent("A 전용 노드");
 
     await user.selectOptions(screen.getByLabelText("워크스페이스"), workspaceB.workspaceId);
@@ -1415,7 +1415,7 @@ describe("AgentOS native data flow", () => {
     const explorer = screen.getByText("노드 탐색").closest("details");
     if (!explorer) throw new Error("노드 탐색 구역이 없습니다");
     await user.click(within(explorer).getByText("노드 탐색"));
-    await user.click(within(explorer).getByRole("button", { name: "이전 업무 노드 선택" }));
+    await user.click(within(explorer).getByRole("button", { name: "지도에서 선택: 이전 업무 노드" }));
     expect(screen.getByRole("complementary", { name: "노드 상세" })).toHaveTextContent("이전 업무 노드");
     await user.click(screen.getByRole("button", { name: "파일별 지도" }));
     await waitFor(() => expect(loadKnowledgeGraph).toHaveBeenCalledWith(workspace.workspaceId, "file"));
@@ -1467,7 +1467,7 @@ describe("AgentOS native data flow", () => {
     const details = (await screen.findByText("노드 탐색")).closest("details");
     if (!details) throw new Error("노드 탐색 구역이 없습니다");
     expect(details).not.toHaveAttribute("open");
-    expect(within(details).getByRole("button", { name: "Alpha 노드 선택" })).not.toBeVisible();
+    expect(within(details).getByRole("button", { name: "지도에서 선택: Alpha 노드" })).not.toBeVisible();
 
     screen.getByRole("button", { name: "담당별 지도" }).focus();
     await user.tab();
@@ -1476,8 +1476,8 @@ describe("AgentOS native data flow", () => {
     expect(details).toHaveAttribute("open");
 
     await user.tab();
-    const alphaButton = within(details).getByRole("button", { name: "Alpha 노드 선택" });
-    const zetaButton = within(details).getByRole("button", { name: "Zeta 노드 선택" });
+    const alphaButton = within(details).getByRole("button", { name: "지도에서 선택: Alpha 노드" });
+    const zetaButton = within(details).getByRole("button", { name: "지도에서 선택: Zeta 노드" });
     expect(alphaButton).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(alphaButton).toHaveAttribute("aria-pressed", "true");
