@@ -322,17 +322,60 @@ describe("ApplicationProduct", () => {
     };
     const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
     await expect(client.status()).resolves.toMatchObject({ data: { status: "ready" } });
-    const started = (await client.command({
+    let releaseProjection: () => void = () => undefined;
+    const projectionGate = new Promise<void>((resolve) => {
+      releaseProjection = resolve;
+    });
+    let activeProjections = 0;
+    let maximumActiveProjections = 0;
+    const projectPending = vi.spyOn(product.projector, "projectPending").mockImplementation(async () => {
+      activeProjections += 1;
+      maximumActiveProjections = Math.max(maximumActiveProjections, activeProjections);
+      try {
+        await projectionGate;
+        return 0;
+      } finally {
+        activeProjections -= 1;
+      }
+    });
+    const command = {
       schemaVersion: "massion.application.v1",
       commandId: "product-run-command-0001",
       correlationId: "product-run-correlation-0001",
       operation: "run.start",
       payload: { request: { text: "제품 경계 검증" } },
-    })) as { readonly outcome: string; readonly data?: { readonly runId?: string; readonly status?: string } };
+    } as const;
+    const startCommand = client.command(command);
+    await vi.waitFor(() => expect(projectPending).toHaveBeenCalledOnce());
+    const responseBeforeProjection = await Promise.race([
+      startCommand.then(() => "settled" as const),
+      new Promise<"pending">((resolve) => {
+        setTimeout(() => resolve("pending"), 100);
+      }),
+    ]);
+    const replayedCommand = client.command(command);
+    const replayBeforeProjection = await Promise.race([
+      replayedCommand.then(() => "settled" as const),
+      new Promise<"pending">((resolve) => {
+        setTimeout(() => resolve("pending"), 100);
+      }),
+    ]);
+    expect(projectPending).toHaveBeenCalledOnce();
+    releaseProjection();
+    const started = (await startCommand) as {
+      readonly outcome: string;
+      readonly data?: { readonly runId?: string; readonly status?: string };
+    };
+    await replayedCommand;
+    await product.drain();
+    expect(responseBeforeProjection).toBe("settled");
+    expect(replayBeforeProjection).toBe("settled");
+    expect(projectPending.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(maximumActiveProjections).toBe(1);
+    projectPending.mockRestore();
     expect(started).toMatchObject({ outcome: "accepted", data: { status: "ready", runId: expect.any(String) } });
     const runId = started.data?.runId;
     if (!runId) throw new Error("run.start가 runId를 반환하지 않았습니다");
-    await product.drain();
     await expect(client.query("run.get", { runId })).resolves.toMatchObject({
       operation: "run.get",
       data: { runId, workId: "product-work-0001", status: "completed", stage: "terminal" },

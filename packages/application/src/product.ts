@@ -78,6 +78,8 @@ export interface ApplicationProductDependencies {
 export class ApplicationProduct implements AsyncDisposable {
   private readonly background = new Set<Promise<void>>();
   private readonly failures: unknown[] = [];
+  private readonly activeProjectionOrganizations = new Set<string>();
+  private readonly pendingProjectionContexts = new Map<string, TenantContext>();
 
   private constructor(
     public readonly server: ApplicationHttpServer,
@@ -128,7 +130,7 @@ export class ApplicationProduct implements AsyncDisposable {
           if (!product) throw new Error("Application product 조립이 완료되지 않았습니다");
           product.track(async () => {
             await continuation();
-            await product.projector.projectPending(context, 1_000);
+            product.scheduleProjection(context);
           });
         },
       });
@@ -247,7 +249,8 @@ export class ApplicationProduct implements AsyncDisposable {
                 result: output.outcome,
               },
             });
-            await projector.projectPending(context, 1_000);
+            if (!productReference.current) throw new Error("Application product 조립이 완료되지 않았습니다");
+            productReference.current.scheduleProjection(context);
             return output;
           },
         },
@@ -324,7 +327,27 @@ export class ApplicationProduct implements AsyncDisposable {
         value: 1,
         dimensions: { stage: run.stage, result: run.status },
       });
-      await this.projector.projectPending(context, 1_000);
+      this.scheduleProjection(context);
+    });
+  }
+
+  private scheduleProjection(context: TenantContext): void {
+    const organizationId = context.organizationId;
+    this.pendingProjectionContexts.set(organizationId, context);
+    if (this.activeProjectionOrganizations.has(organizationId)) return;
+    this.activeProjectionOrganizations.add(organizationId);
+    this.track(async () => {
+      try {
+        let pending: TenantContext | undefined;
+        while ((pending = this.pendingProjectionContexts.get(organizationId)) !== undefined) {
+          this.pendingProjectionContexts.delete(organizationId);
+          await this.projector.projectPending(pending, 1_000);
+        }
+      } finally {
+        this.activeProjectionOrganizations.delete(organizationId);
+        const pending = this.pendingProjectionContexts.get(organizationId);
+        if (pending) this.scheduleProjection(pending);
+      }
     });
   }
 
@@ -332,6 +355,7 @@ export class ApplicationProduct implements AsyncDisposable {
     const task = Promise.resolve()
       .then(operation)
       .catch((error: unknown) => {
+        if (this.failures.length >= 32) this.failures.shift();
         this.failures.push(error);
       })
       .finally(() => {
