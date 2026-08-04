@@ -362,7 +362,10 @@ function verificationMaterial(
           (left.sortKey < right.sortKey ? -1 : left.sortKey > right.sortKey ? 1 : 0) ||
           left.artifactVersionId.localeCompare(right.artifactVersionId),
       )
-      .map(({ sortKey: _sortKey, ...version }) => version),
+      .map(({ sortKey, ...version }) => {
+        void sortKey;
+        return version;
+      }),
   );
   return {
     request: verificationRequest(candidate.request, fallbackRequest),

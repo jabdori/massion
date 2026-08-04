@@ -12,7 +12,7 @@ async function cancelBestEffort(transaction: SurrealTransaction): Promise<void> 
       transaction.cancel(),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, ROLLBACK_TIMEOUT_MS);
-        timer.unref?.();
+        timer.unref();
       }),
     ]).catch(() => undefined);
   } finally {

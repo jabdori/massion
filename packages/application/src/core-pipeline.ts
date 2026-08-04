@@ -384,7 +384,7 @@ export function createCoreWorkPipelineExecutors(
             query: value.text,
             ...(value.workspacePaths.length === 0 ? {} : { relativePaths: value.workspacePaths }),
           });
-        } catch (error) {
+        } catch {
           await cancelAndThrowIfCancelled(context, input, workId);
           return { outcome: "blocked", reason: "evidence-invalid", workId };
         }
