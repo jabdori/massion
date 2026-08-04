@@ -77,6 +77,114 @@ function databaseFor(records: readonly ProviderCredential[], codexAccounts: read
 }
 
 describe("구독 할당량 자동 동기화", () => {
+  it("초기 Codex 관측이 지연돼도 서버 시작과 readiness를 막지 않는다", async () => {
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-startup-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    let release: (() => void) | undefined;
+    const fetchCodexQuota = vi.fn(
+      async () =>
+        await new Promise<readonly []>((resolve) => {
+          release = () => resolve([]);
+        }),
+    );
+    const transition = vi.fn();
+    const service = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      {
+        resolveTenantContext: vi.fn().mockResolvedValue({
+          organizationId: codexAccount.organization_id,
+          userId: codexAccount.owner_user_id,
+          membershipId: "membership-12345678",
+          role: "owner",
+        }),
+      } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn().mockResolvedValue({}) } as never,
+      { intervalMs: 60_000, fetchCodexQuota, onTransition: transition },
+    );
+
+    const startup = service.start();
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledOnce());
+    const outcome = await Promise.race([
+      startup.then(() => "started" as const),
+      new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 25)),
+    ]);
+    expect(outcome).toBe("started");
+    expect(service.ready()).toBe(true);
+    release?.();
+    await vi.waitFor(() => expect(transition).toHaveBeenCalledOnce());
+    await service.close();
+  });
+
+  it("scan 실패 뒤 DB가 회복되면 지연된 Provider와 무관하게 readiness를 복구한다", async () => {
+    vi.useFakeTimers();
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-recovery-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    const recovered = databaseFor([], [codexAccount]);
+    let scanQueries = 0;
+    const database = {
+      query: vi.fn((statement: string, bindings?: Record<string, unknown>) => {
+        if (
+          (statement.includes("FROM provider_credential") ||
+            (statement.includes("FROM subscription_account") && statement.includes("ORDER BY"))) &&
+          scanQueries++ < 2
+        ) {
+          return Promise.reject(new Error("raw database secret"));
+        }
+        return recovered.query(statement, bindings);
+      }),
+    };
+    let release: (() => void) | undefined;
+    const fetchCodexQuota = vi.fn(
+      async () =>
+        await new Promise<readonly []>((resolve) => {
+          release = () => resolve([]);
+        }),
+    );
+    const unavailable = vi.fn();
+    const service = new SubscriptionQuotaSynchronizationService(
+      database as never,
+      {
+        resolveTenantContext: vi.fn().mockResolvedValue({
+          organizationId: codexAccount.organization_id,
+          userId: codexAccount.owner_user_id,
+          membershipId: "membership-12345678",
+          role: "owner",
+        }),
+      } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn().mockResolvedValue({}) } as never,
+      { intervalMs: 1_000, fetchCodexQuota, onUnavailable: unavailable },
+    );
+
+    await service.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(service.ready()).toBe(false);
+    expect(unavailable).toHaveBeenCalledWith({ category: "scan-unavailable" });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchCodexQuota).toHaveBeenCalledOnce();
+    expect(service.ready()).toBe(true);
+
+    release?.();
+    await service.close();
+    vi.useRealTimers();
+  });
+
   it("진행 중인 주기 동기화가 멈춰도 종료는 Database close 단계로 진행한다", async () => {
     vi.useFakeTimers();
     const database = {
@@ -140,6 +248,7 @@ describe("구독 할당량 자동 동기화", () => {
     );
 
     await service.start();
+    await vi.waitFor(() => expect(transitions).toHaveLength(1));
 
     expect(service.ready()).toBe(true);
     expect(providers.resolveExecutionSecretVersion).toHaveBeenCalledWith(context, credential, 1, database);
@@ -201,6 +310,7 @@ describe("구독 할당량 자동 동기화", () => {
     );
 
     await service.start();
+    await vi.waitFor(() => expect(transitions).toHaveLength(1));
 
     expect(fetchCodexQuota).toHaveBeenCalledWith({
       organizationId: codexAccount.organization_id,
@@ -534,6 +644,7 @@ describe("구독 할당량 자동 동기화", () => {
     );
 
     await service.start();
+    await vi.waitFor(() => expect(transitions).toHaveLength(1));
 
     expect(service.ready()).toBe(true);
     expect(failures).toEqual([{ category: "authentication" }, { category: "owner-context-unavailable" }]);
@@ -549,15 +660,20 @@ describe("구독 할당량 자동 동기화", () => {
           intervalMs: 999,
         }),
     ).toThrow("주기");
+    const unavailable: unknown[] = [];
     const service = new SubscriptionQuotaSynchronizationService(
       { query: vi.fn().mockRejectedValue(new Error("raw database secret")) } as never,
       {} as never,
       {} as never,
       {} as never,
-      { intervalMs: 60_000 },
+      { intervalMs: 60_000, onUnavailable: (failure) => unavailable.push(failure) },
     );
-    await expect(service.start()).rejects.toThrow("초기 동기화");
+    await service.start();
+    await expect(service.start()).rejects.toThrow("이미 시작");
+    await vi.waitFor(() => expect(unavailable).toHaveLength(1));
     expect(service.ready()).toBe(false);
+    expect(unavailable).toEqual([{ category: "scan-unavailable" }]);
+    expect(JSON.stringify(unavailable)).not.toContain("raw database secret");
     await expect(service.close()).resolves.toBeUndefined();
   });
 });

@@ -118,23 +118,16 @@ export class SubscriptionQuotaSynchronizationService {
     this.onCodexAuthenticationRequired = options.onCodexAuthenticationRequired;
   }
 
-  public async start(): Promise<void> {
-    if (this.closed) throw new Error("종료된 구독 할당량 동기화 서비스는 다시 시작할 수 없습니다");
-    if (this.running) throw new Error("구독 할당량 동기화 서비스가 이미 시작됐습니다");
+  public start(): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("종료된 구독 할당량 동기화 서비스는 다시 시작할 수 없습니다"));
+    if (this.running) return Promise.reject(new Error("구독 할당량 동기화 서비스가 이미 시작됐습니다"));
     this.running = true;
-    try {
-      await this.synchronize();
-      this.healthy = true;
-    } catch {
-      this.running = false;
-      this.healthy = false;
-      await this.reportUnavailable("scan-unavailable");
-      throw new Error("구독 할당량 초기 동기화에 실패했습니다");
-    }
     this.timer = setInterval(() => {
       void this.sweep();
     }, this.intervalMs);
     this.timer.unref();
+    void this.sweep();
+    return Promise.resolve();
   }
 
   public ready(): boolean {
@@ -212,6 +205,7 @@ export class SubscriptionQuotaSynchronizationService {
          ORDER BY organization_id ASC, account_id ASC;`,
       ),
     ]);
+    this.healthy = true;
     const jobs: readonly (
       | { readonly kind: "minimax"; readonly credential: ProviderCredential }
       | { readonly kind: "codex"; readonly account: CodexQuotaAccountRecord }
