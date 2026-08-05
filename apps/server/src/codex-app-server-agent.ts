@@ -6,6 +6,7 @@ import {
   inspectBundledSubscriptionRuntime,
   managedCodexCredentialState,
   normalizeCodexExecutionEvidence,
+  SubscriptionStructuredOutputError,
   type StructuredOutputSpec,
   type SubscriptionAgentAdapter,
   type SubscriptionAgentInput,
@@ -530,15 +531,21 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
     }
     let result: unknown = active.finalText ?? "";
     if (active.output) {
+      const outputFailure = (message: string, cause: unknown): SubscriptionStructuredOutputError =>
+        new SubscriptionStructuredOutputError(message, {
+          cause,
+          sideEffectsStarted: active.sideEffectsStarted,
+          emittedTokens: Math.max(active.emittedTokens, active.usage?.outputTokens ?? 0),
+        });
       try {
         result = JSON.parse(active.finalText ?? "") as unknown;
       } catch (error) {
-        active.completion.reject(new Error("Codex app-server 구조화 출력 JSON이 유효하지 않습니다", { cause: error }));
+        active.completion.reject(outputFailure("Codex app-server 구조화 출력 JSON이 유효하지 않습니다", error));
         return;
       }
       const validation = active.output.validate?.(result);
       if (validation && !validation.success) {
-        active.completion.reject(validation.error);
+        active.completion.reject(outputFailure("Codex app-server 구조화 출력 검증에 실패했습니다", validation.error));
         return;
       }
       if (validation?.success) result = validation.value;

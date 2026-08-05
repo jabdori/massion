@@ -19,6 +19,7 @@ import type {
   RoutedModelLease,
 } from "./model-factory.js";
 import { RuntimeRecovery } from "./recovery.js";
+import { SubscriptionStructuredOutputError } from "./subscriptions/agent-runtime.js";
 import { normalizeVoltAgentStreamPart, RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
 
 const USAGE = {
@@ -1336,6 +1337,68 @@ describe("VoltAgent AgentRunner", () => {
     for (const call of executionContext.resolve.mock.calls) {
       expect(call[1]).toMatchObject({ taskId: "task-1", workspaceAccess: "workspace-write" });
     }
+  });
+
+  it("Agent runtime의 구조화 출력 실패는 부작용이 없으면 동급 모델로 fallback한다", async () => {
+    const first = agentLease(
+      { outcome: "completed", executionId: "provider-execution-output", sessionId: "session-1", value: "쓰이지 않음" },
+      "agent-output-attempt-1",
+      "agent-output-lease-1",
+      true,
+    );
+    first.executor.execute = vi.fn(async () => {
+      throw new SubscriptionStructuredOutputError("Codex app-server 구조화 출력 검증에 실패했습니다", {
+        sideEffectsStarted: false,
+        emittedTokens: 0,
+      });
+    });
+    // Router는 실제 부작용 여부로 fallback을 판정하므로 mock도 같은 계약을 따릅니다.
+    first.fail = vi.fn(async (usage) => ({ status: "failed", fallbackAllowed: !usage.sideEffectsStarted }));
+    const second = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: "fallback after output failure" }],
+          finishReason: "stop",
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+      "model-attempt-output-2",
+    );
+    const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.execute(context, input());
+
+    expect(result).toMatchObject({ status: "succeeded", output: "fallback after output failure" });
+    expect(first.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "output" }, sideEffectsStarted: false }),
+    );
+    expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "agent-output-attempt-1" });
+  });
+
+  it("Agent runtime의 구조화 출력 실패도 부작용이 관측됐으면 fallback하지 않는다", async () => {
+    const routed = agentLease(
+      { outcome: "completed", executionId: "provider-execution-output", sessionId: "session-1", value: "쓰이지 않음" },
+      "agent-output-attempt-2",
+      "agent-output-lease-2",
+      true,
+    );
+    routed.executor.execute = vi.fn(async () => {
+      throw new SubscriptionStructuredOutputError("Codex app-server 구조화 출력 검증에 실패했습니다", {
+        sideEffectsStarted: true,
+        emittedTokens: 3,
+      });
+    });
+    routed.fail = vi.fn(async (usage) => ({ status: "failed", fallbackAllowed: !usage.sideEffectsStarted }));
+    const acquire = vi.fn().mockResolvedValue(routed);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.execute(context, input());
+
+    expect(result.status).not.toBe("succeeded");
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ sideEffectsStarted: true }));
+    expect(acquire).toHaveBeenCalledTimes(1);
   });
 
   it("Agent runtime이 출력을 만든 뒤 실패하면 자동 fallback하지 않고 interrupted로 종료한다", async () => {

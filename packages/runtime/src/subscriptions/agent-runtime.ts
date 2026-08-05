@@ -7,6 +7,26 @@ export type SubscriptionAgentFailureSignal =
   | { readonly kind: "http"; readonly statusCode: number; readonly retryAfter?: string }
   | { readonly kind: "timeout" | "network" | "input" | "policy" | "cancelled" | "unknown" };
 
+/**
+ * Provider가 turn을 끝냈지만 구조화 출력만 사용할 수 없을 때 adapter가 던집니다.
+ * 호출자가 부작용 관측 사실을 잃지 않고 fallback 여부를 판단할 수 있도록
+ * adapter가 실제로 관측한 값을 함께 전달합니다.
+ */
+export class SubscriptionStructuredOutputError extends Error {
+  public readonly sideEffectsStarted: boolean;
+  public readonly emittedTokens: number;
+
+  public constructor(
+    message: string,
+    options: { readonly cause?: unknown; readonly sideEffectsStarted: boolean; readonly emittedTokens: number },
+  ) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    this.name = "SubscriptionStructuredOutputError";
+    this.sideEffectsStarted = options.sideEffectsStarted;
+    this.emittedTokens = options.emittedTokens;
+  }
+}
+
 export interface SubscriptionAgentInput {
   readonly executionId: string;
   readonly workId: string;

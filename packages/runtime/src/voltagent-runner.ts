@@ -42,6 +42,7 @@ import type {
   SubscriptionReceiptLineage,
 } from "./subscriptions/execution-receipt.js";
 import type { ExecutionEvidence } from "./subscriptions/execution-evidence.js";
+import { SubscriptionStructuredOutputError } from "./subscriptions/agent-runtime.js";
 
 const MAX_FALLBACKS = 16;
 const MODEL_ROUTE_EVENT_CAS_RETRIES = 3;
@@ -205,7 +206,16 @@ function nonNativeStructuredGenerationOptions(lease: RoutedLanguageModelLease) {
   };
 }
 
+/**
+ * adapter가 부작용 관측 사실을 실어 보낸 경우 그 값을 쓰고,
+ * 그렇지 않으면 lease 종류에 따라 fail-closed로 가정합니다.
+ */
+function observedSideEffects(error: unknown, fallbackAssumption: boolean): boolean {
+  return error instanceof SubscriptionStructuredOutputError ? error.sideEffectsStarted : fallbackAssumption;
+}
+
 export function failureSignal(error: unknown): FailureSignal {
+  if (error instanceof SubscriptionStructuredOutputError) return { kind: "output" };
   if (
     error instanceof Error &&
     (error.message.startsWith("No object generated:") ||
@@ -551,7 +561,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
                 commandId: `${executionId}:model:${String(attempt)}:fail`,
                 signal: failureSignal(error),
                 emittedTokens,
-                sideEffectsStarted: lease.kind === "agent-runtime" || emittedTokens > 0,
+                sideEffectsStarted: observedSideEffects(error, lease.kind === "agent-runtime") || emittedTokens > 0,
                 inputTokens: 0,
                 outputTokens: emittedTokens,
               });
@@ -835,7 +845,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             commandId: `${running.execution_id}:model:${String(attempt)}:fail`,
             signal: failureSignal(error),
             emittedTokens: 0,
-            sideEffectsStarted: lease.kind === "agent-runtime",
+            sideEffectsStarted: observedSideEffects(error, lease.kind === "agent-runtime"),
             inputTokens: 0,
             outputTokens: 0,
           });
@@ -984,7 +994,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             commandId: `${running.execution_id}:model:${String(attempt)}:fail`,
             signal: failureSignal(error),
             emittedTokens: 0,
-            sideEffectsStarted: lease.kind === "agent-runtime",
+            sideEffectsStarted: observedSideEffects(error, lease.kind === "agent-runtime"),
             inputTokens: 0,
             outputTokens: 0,
           });
