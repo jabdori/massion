@@ -4974,8 +4974,8 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                       >
                         <span
                           aria-hidden="true"
-                          className={`size-1.5 shrink-0 rounded-full ${
-                            connection.connected && connection.enabled ? "bg-fg-3" : "border border-fg-4"
+                          className={`size-2 shrink-0 rounded-full ${
+                            !connection.connected ? "border border-fg-4" : connection.enabled ? "bg-fg-3" : "bg-fg-4/40"
                           }`}
                         />
                         <span className="min-w-0 flex-1 truncate text-body text-secondary">
@@ -5431,7 +5431,7 @@ function ProviderOverviewTab({
 function AccountCard({ account }: { account: SubscriptionAccountView }) {
   const used = account.minimumRemainingRatio === undefined ? undefined : 1 - account.minimumRemainingRatio;
   return (
-    <li className="rounded-[5px] border border-border px-3 py-2.5">
+    <li className="border-b border-border px-3 py-2.5 last:border-b-0">
       <div className="flex items-baseline gap-2">
         <span className="shrink-0 text-[11px]">
           {account.quotaExhausted === true ? (
@@ -5447,9 +5447,11 @@ function AccountCard({ account }: { account: SubscriptionAccountView }) {
         <p className="mt-1.5 text-[11px] text-muted">{translate("사용량을 아직 모릅니다.")}</p>
       ) : (
         <>
-          <div className="mt-2 h-px w-full bg-border">
+          <div className="mt-2 h-[3px] w-full rounded-full bg-bg-3">
             <div
-              className={`h-px transition-[width] duration-[250ms] ease-linear ${used >= 0.8 ? "bg-danger" : "bg-fg-3"}`}
+              className={`h-[3px] rounded-full transition-[width] duration-[250ms] ease-linear ${
+                used >= 0.8 ? "bg-danger" : "bg-fg-3"
+              }`}
               style={{ width: `${String(Math.round(used * 100))}%` }}
             />
           </div>
