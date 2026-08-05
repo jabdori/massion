@@ -23,7 +23,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationCommandRegistry } from "../command-registry.js";
 import { ApplicationCommandStore } from "../command-store.js";
-import { ApplicationError } from "../errors.js";
 import { registerApplicationDomainCommands } from "./domain.js";
 
 describe("Application domain adapters", () => {
@@ -839,6 +838,37 @@ describe("Application domain adapters", () => {
         }),
       ).resolves.toMatchObject({ outcome: "succeeded" });
     }
+  });
+
+  it("Provider 제거 거부는 사용자가 조치할 수 있는 사유로 전달한다", async () => {
+    const registry = new ApplicationCommandRegistry(
+      new (class {
+        public begin = async () => ({ outcome: "claimed", commandRecordId: "record-1", leaseGeneration: 1 });
+        public complete = async () => undefined;
+        public fail = async () => undefined;
+      })() as never,
+    );
+    registerApplicationDomainCommands(registry, {
+      providers: {
+        removeProvider: async () => {
+          throw new Error("구독으로 연결한 Provider는 구독 해제로만 정리할 수 있습니다");
+        },
+      },
+    } as never);
+
+    await expect(
+      registry.dispatch({ organizationId: "org-1", userId: "user-1", role: "owner" } as never, ["application:*"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "remove-blocked-command",
+        correlationId: "remove-blocked-correlation",
+        operation: "router.provider.remove",
+        payload: { providerId: "openai-codex" },
+      }),
+    ).rejects.toMatchObject({
+      category: "conflict",
+      operatorCode: "APP_PROVIDER_REMOVE_BLOCKED",
+      userMessage: "구독으로 연결한 Provider는 구독 해제로만 정리할 수 있습니다",
+    });
   });
 
   it("Assurance binding 제안과 정책 승인 재개를 공개 command로 제공한다", async () => {

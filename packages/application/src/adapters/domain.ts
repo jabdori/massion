@@ -314,6 +314,18 @@ function domainError(error: unknown, correlationId: string): never {
   }
   if (error instanceof ApplicationError) throw error;
   const message = error instanceof Error ? error.message : String(error);
+  // 제거 거부는 사용자가 직접 조치할 수 있는 사유이므로 도메인 문구를 그대로 전달합니다.
+  if (/구독으로 연결한 Provider|실행 계보가 남아 있어/u.test(message)) {
+    throw new ApplicationError({
+      category: "conflict",
+      severity: "warning",
+      retryable: false,
+      userMessage: message,
+      operatorCode: "APP_PROVIDER_REMOVE_BLOCKED",
+      correlationId,
+      cause: error,
+    });
+  }
   if (/revision|generation|동시성|stale|같은 commandId/iu.test(message)) {
     throw new ApplicationError({
       category: "conflict",
@@ -1632,15 +1644,19 @@ function registerRouter(registry: ApplicationCommandRegistry, dependencies: Appl
       retryFailedCommand: true,
       validate: (value) => payload(value, ["providerId"], ["providerId"]),
       async handle(context, command, value) {
-        const removed = await dependencies.providers?.removeProvider(context, {
-          commandId: command.commandId,
-          providerId: string(value.providerId, "providerId"),
-        });
-        if (!removed) throw new Error("Provider service가 구성되지 않았습니다");
-        return result(command, {
-          resource: { type: "ModelProvider", id: removed.providerId },
-          data: { providerId: removed.providerId },
-        });
+        try {
+          const removed = await dependencies.providers?.removeProvider(context, {
+            commandId: command.commandId,
+            providerId: string(value.providerId, "providerId"),
+          });
+          if (!removed) throw new Error("Provider service가 구성되지 않았습니다");
+          return result(command, {
+            resource: { type: "ModelProvider", id: removed.providerId },
+            data: { providerId: removed.providerId },
+          });
+        } catch (error) {
+          return domainError(error, command.correlationId);
+        }
       },
     });
     register(registry, {
