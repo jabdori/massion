@@ -4604,7 +4604,8 @@ function ProviderField({ children, label }: { children: ReactNode; label: string
 
 function adapterLabel(adapterKind: string): string {
   if (adapterKind === "subscription-connector") return translate("구독 로그인");
-  return PROVIDER_ADAPTERS.find((adapter) => adapter.value === adapterKind)?.label ?? adapterKind;
+  const matched = PROVIDER_ADAPTERS.find((adapter) => adapter.value === adapterKind)?.label;
+  return matched ? translate(matched) : adapterKind;
 }
 
 const PROVIDER_ADAPTERS = [
@@ -4662,7 +4663,7 @@ function ProviderAddForm({
         >
           {PROVIDER_ADAPTERS.map((adapter) => (
             <option key={adapter.value} value={adapter.value}>
-              {adapter.label}
+              {translate(adapter.label)}
             </option>
           ))}
         </select>
@@ -5301,7 +5302,7 @@ function ProviderOverviewTab({
         <p className="mb-4 rounded-[5px] border border-gate-border bg-gate-wash px-3 py-2 text-[12px] text-secondary">
           {/* 이름을 문장에 이어붙이면 조사와 어순이 번역을 막습니다. 이름은 헤더가 이미 보여줍니다. */}
           {translate(
-            "이 Provider는 공식 구독 Provider와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.",
+            "이 프로바이더는 공식 구독 프로바이더와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.",
           )}
         </p>
       ) : null}
@@ -7705,7 +7706,7 @@ function NewWorkDialog({
       }}
       open={open}
     >
-      <DialogContent aria-label={translate("새 Work")}>
+      <DialogContent aria-label={translate("새 Work")} className="w-[520px]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <DialogTitle className="text-lg font-semibold">{translate("새 Work")}</DialogTitle>

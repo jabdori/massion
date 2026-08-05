@@ -426,7 +426,6 @@ export const appEnglishMessages = {
   "자가개선 설정을 읽을 수 없어 변경할 수 없습니다": "Unavailable because self-improvement settings couldn't be loaded",
   "자가개선 설정을 읽을 수 없습니다.": "Couldn't load self-improvement settings.",
   "개선 후보 찾기가 꺼져 있습니다.": "Growth candidate discovery is off.",
-  "OpenAI 호환": "OpenAI-compatible",
   "검증 중…": "Checking…",
   "정말 제거할까요? 되돌릴 수 없습니다.": "Remove it? This can't be undone.",
   "제거 확인": "Confirm removal",
@@ -447,7 +446,8 @@ export const appEnglishMessages = {
   "구독 로그인": "Subscription login",
   "사용 중": "In use",
   미사용: "Not in use",
-  "이 Provider는 공식 구독 Provider와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.":
+  "OpenAI 호환": "OpenAI-compatible",
+  "이 프로바이더는 공식 구독 프로바이더와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.":
     "This provider shares an ID with an official subscription provider but is registered with a different adapter. Remove it and connect again.",
   제거: "Remove",
   "프로바이더 제거": "Remove Provider",
