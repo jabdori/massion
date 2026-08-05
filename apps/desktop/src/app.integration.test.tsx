@@ -1525,6 +1525,8 @@ describe("AgentOS native data flow", () => {
   it("Provider 인증 연결을 순서대로 저장하고 secret을 다시 표시하지 않는다", async () => {
     const user = userEvent.setup();
     const calls: string[] = [];
+    // 서버는 base_url을 정규화해 저장하므로 catalog의 주소가 입력 원문과 달라도
+    // 등록 응답의 endpointId를 그대로 써야 합니다.
     const loadSettings = vi.fn(async () => ({
       catalog: {
         endpoints: [
@@ -1543,6 +1545,7 @@ describe("AgentOS native data flow", () => {
     });
     const registerEndpoint = vi.fn(async () => {
       calls.push("endpoint");
+      return { endpointId: "endpoint-1" };
     });
     const addCredential = vi.fn(async () => {
       calls.push("credential");
@@ -1554,7 +1557,7 @@ describe("AgentOS native data flow", () => {
     const form = await screen.findByRole("form", { name: "프로바이더 추가" });
     // 사람이 대는 것은 넷뿐이고 내부 id·endpoint 이름·자격 종류는 도출합니다.
     await user.type(within(form).getByRole("textbox", { name: "이름" }), "OpenAI");
-    await user.type(within(form).getByRole("textbox", { name: "Base URL" }), "https://api.openai.com/v1");
+    await user.type(within(form).getByRole("textbox", { name: "Base URL" }), "https://api.openai.com/v1/");
     const secret = within(form).getByLabelText(/키/);
     await user.type(secret, "never-render-this");
     await user.click(within(form).getByRole("button", { name: "추가" }));
@@ -1566,65 +1569,6 @@ describe("AgentOS native data flow", () => {
     );
     expect(secret).toHaveValue("");
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
-  });
-
-  it("DeepSeek 무료 커뮤니티 모델은 외부 전송 동의 뒤에만 연결한다", async () => {
-    const user = userEvent.setup();
-    const connectDeepSeekCommunity = vi.fn(async () => undefined);
-    const loadSettings = vi.fn(async () => ({
-      catalog: { providers: [], endpoints: [], models: [], credentials: [] },
-      credentials: [],
-      routes: [],
-      providers: [],
-      accounts: [],
-      quota: [],
-      policy: [],
-    }));
-    render(<App service={service({ connectDeepSeekCommunity, loadSettings })} />);
-
-    await user.click(screen.getByRole("button", { name: "프로바이더" }));
-    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "프로바이더 추가" });
-    expect(within(dialog).getByText("DeepSeek V4 Flash 0731")).toBeInTheDocument();
-    expect(within(dialog).getByText(/공개 커뮤니티 endpoint/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/요청 제한/)).toBeInTheDocument();
-    const connect = within(dialog).getByRole("button", { name: "무료 모델 연결" });
-    expect(connect).toBeDisabled();
-
-    await user.click(within(dialog).getByRole("checkbox", { name: /외부 전송.*동의/ }));
-    await user.click(connect);
-
-    expect(connectDeepSeekCommunity).toHaveBeenCalledWith({ acceptCommunityDataTransfer: true });
-    expect(loadSettings).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("DeepSeek 무료 모델을 연결했습니다.")).toBeInTheDocument();
-  }, 15_000);
-
-  it("DeepSeek 연결 실패는 dialog 카드 안에서 알리고 재시도할 때 초기화한다", async () => {
-    const user = userEvent.setup();
-    let releaseRetry: (() => void) | undefined;
-    const connectDeepSeekCommunity = vi
-      .fn<() => Promise<void>>()
-      .mockRejectedValueOnce(new Error("무료 모델이 잠시 응답하지 않습니다. 다시 시도해 주세요."))
-      .mockImplementationOnce(
-        async () =>
-          await new Promise<void>((resolve) => {
-            releaseRetry = resolve;
-          }),
-      );
-    render(<App service={service({ connectDeepSeekCommunity })} />);
-
-    await user.click(screen.getByRole("button", { name: "프로바이더" }));
-    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
-    const dialog = await screen.findByRole("dialog", { name: "프로바이더 추가" });
-    await user.click(within(dialog).getByRole("checkbox", { name: /외부 전송.*동의/ }));
-    const connect = within(dialog).getByRole("button", { name: "무료 모델 연결" });
-    await user.click(connect);
-
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("무료 모델이 잠시 응답하지 않습니다");
-    await user.click(connect);
-    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
-    releaseRetry?.();
   });
 
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {

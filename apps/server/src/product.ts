@@ -172,7 +172,6 @@ import { RuntimeStartupRecoveryService } from "./runtime-startup-recovery.js";
 import { ServerConnectorLifecycleService } from "./server-connector-lifecycle.js";
 import { ServerConnectorStartupRecoveryService } from "./server-connector-startup-recovery.js";
 import { BUILTIN_CORE_MODEL_ROUTES, BuiltinModelRouteAssembler } from "./server-model-route-assembler.js";
-import { DeepSeekCommunityProviderService } from "./deepseek-community-provider.js";
 import { BundledServerConnectorRuntimeAttestor } from "./server-runtime-attestor.js";
 import { ServerSubscriptionConnectionService } from "./server-subscription-connection.js";
 import { StrategyStartupRecoveryService } from "./strategy-startup-recovery.js";
@@ -586,7 +585,6 @@ export async function createMassionDaemon(
       },
     );
     const builtinModelRoutes = new BuiltinModelRouteAssembler(router);
-    const deepSeekCommunityProvider = new DeepSeekCommunityProviderService(database, organizations, providers, router);
     const serverSubscriptionConnections = new ServerSubscriptionConnectionService(
       serverConnectors,
       subscriptionConnections,
@@ -1274,7 +1272,6 @@ export async function createMassionDaemon(
         growth,
         providers,
         router,
-        communityModels: { connectDeepSeek: deepSeekCommunityProvider.connect.bind(deepSeekCommunityProvider) },
         optimization: { evaluations: optimizationEvaluations, batches: optimizationBatches },
         subscriptionAccounts,
         subscriptionServerConnections: serverSubscriptionConnections,

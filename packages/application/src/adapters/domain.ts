@@ -8,7 +8,6 @@ import {
   type ApprovalStore,
 } from "@massion/governance";
 import type { GrowthGateway } from "@massion/growth";
-import type { TenantContext } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import type { AgentRunner } from "@massion/runtime";
@@ -93,18 +92,6 @@ export interface ApplicationDomainDependencies {
     "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
   >;
   readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
-  readonly communityModels?: {
-    readonly connectDeepSeek: (
-      context: TenantContext,
-      input: { readonly commandId: string; readonly acceptCommunityDataTransfer: boolean },
-    ) => Promise<{
-      readonly providerId: string;
-      readonly modelId: string;
-      readonly modelProfileId: string;
-      readonly routeNames: readonly string[];
-      readonly verification: Readonly<Record<string, unknown>>;
-    }>;
-  };
   readonly optimization?: {
     readonly evaluations: Pick<
       ModelOptimizationStore,
@@ -1617,27 +1604,6 @@ function registerGrowth(
 }
 
 function registerRouter(registry: ApplicationCommandRegistry, dependencies: ApplicationDomainDependencies): void {
-  if (dependencies.communityModels) {
-    register(registry, {
-      operation: "router.community.deepseek.connect",
-      requiredScopes: ["router:write"],
-      allowedRoles: ["owner", "admin"],
-      recovery: "replay-domain",
-      retryFailedCommand: true,
-      validate: (value) => payload(value, ["acceptCommunityDataTransfer"], ["acceptCommunityDataTransfer"]),
-      async handle(context, command, value) {
-        const connected = await dependencies.communityModels?.connectDeepSeek(context, {
-          commandId: command.commandId,
-          acceptCommunityDataTransfer: boolean(value.acceptCommunityDataTransfer, "acceptCommunityDataTransfer"),
-        });
-        if (!connected) throw new Error("DeepSeek 커뮤니티 Provider 연결 서비스가 구성되지 않았습니다");
-        return result(command, {
-          resource: { type: "ModelProfile", id: connected.modelProfileId },
-          data: connected,
-        });
-      },
-    });
-  }
   if (dependencies.providers) {
     register(registry, {
       operation: "router.provider.register",

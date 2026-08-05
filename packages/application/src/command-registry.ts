@@ -9,6 +9,25 @@ import {
 import { ApplicationError } from "./errors.js";
 import type { ApplicationCommandStore } from "./command-store.js";
 
+/**
+ * 사용자에게는 고정된 내부 오류 문구만 나가므로 운영자가 원인을 볼 통로가 필요합니다.
+ * 로그는 owner-only 파일로만 흐르고, 인증 헤더나 payload는 담지 않습니다.
+ */
+function logInternalCommandFailure(operation: string, error: ApplicationError, cause: unknown): void {
+  const detail = cause instanceof Error ? cause : undefined;
+  process.stdout.write(
+    `${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "error",
+      event: "application.command.internal_failure",
+      operation,
+      errorId: error.errorId,
+      category: detail?.name ?? typeof cause,
+      reason: detail?.message ?? "",
+    })}\n`,
+  );
+}
+
 export interface ApplicationCommandDescriptor<Payload = unknown> {
   readonly operation: string;
   readonly requiredScopes: readonly string[];
@@ -158,6 +177,9 @@ export class ApplicationCommandRegistry {
     } catch (error) {
       const applicationError =
         error instanceof ApplicationError ? error : ApplicationError.internal(error, command.correlationId);
+      // 내부 오류는 사용자에게 고정 문구로만 나가므로, 원인을 남기지 않으면 어떤 500도 진단할 수 없습니다.
+      if (applicationError.category === "internal")
+        logInternalCommandFailure(command.operation, applicationError, error);
       await this.store
         .fail(context, claim.commandRecordId, claim.leaseGeneration, applicationError.publicView())
         .catch(() => undefined);

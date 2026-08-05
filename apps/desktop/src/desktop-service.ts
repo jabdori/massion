@@ -1391,9 +1391,8 @@ export interface DesktopService {
   loadSettings(): Promise<SettingsView>;
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
-  connectDeepSeekCommunity(input: { readonly acceptCommunityDataTransfer: true }): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
-  registerEndpoint(input: Record<string, unknown>): Promise<void>;
+  registerEndpoint(input: Record<string, unknown>): Promise<{ readonly endpointId: string }>;
   addCredential(input: Record<string, unknown>): Promise<void>;
   disableCredential(credentialId: string, expectedVersion: number): Promise<void>;
   registerModel(input: Record<string, unknown>): Promise<void>;
@@ -1760,14 +1759,15 @@ export function createApplicationDesktopService(
         secret: input.secret,
       });
     },
-    async connectDeepSeekCommunity(input) {
-      await command("router.community.deepseek.connect", input);
-    },
     async registerProvider(input) {
       await command("router.provider.register", input);
     },
     async registerEndpoint(input) {
-      await command("router.endpoint.register", input);
+      // 서버가 base_url을 정규화해 저장하므로 입력 원문으로 endpoint를 되찾으면 안 됩니다.
+      const response = await command("router.endpoint.register", input);
+      const endpointId = object(response.data)?.endpointId;
+      if (typeof endpointId !== "string" || !endpointId) throw new Error("생성된 endpoint ID가 유효하지 않습니다");
+      return { endpointId };
     },
     async addCredential(input) {
       await command("router.credential.add", input);
@@ -3385,74 +3385,6 @@ export function createFixtureDesktopService(): DesktopService {
           credentialVersions.set(credentialId, 1);
         }
       }),
-    connectDeepSeekCommunity: () =>
-      fixturePromise(() => {
-        const providerId = "huggingface-deepseek-community";
-        const endpointId = "deepseek-v4-flash-community-api";
-        const modelProfileId = "deepseek-v4-flash-0731-community";
-        const catalog = settingsState.catalog as {
-          providers: Array<Record<string, unknown>>;
-          endpoints: Array<Record<string, unknown>>;
-          models: Array<Record<string, unknown>>;
-          credentials: Array<Record<string, unknown>>;
-        };
-        if (!catalog.providers.some((row) => row.providerId === providerId)) {
-          catalog.providers.push({
-            providerId,
-            displayName: "DeepSeek V4 Flash 0731 · Community",
-            adapterKind: "openai-compatible",
-            enabled: true,
-          });
-        }
-        if (!catalog.endpoints.some((row) => row.endpointId === endpointId)) {
-          catalog.endpoints.push({
-            endpointId,
-            providerId,
-            name: "Hugging Face public endpoint",
-            baseUrl: "https://q5dh1rfszfym23hj.us-east-2.aws.endpoints.huggingface.cloud/v1",
-            local: false,
-          });
-        }
-        if (!catalog.credentials.some((row) => row.providerId === providerId)) {
-          catalog.credentials.push({ providerId, endpointId, label: "공개 endpoint", secretVersion: 1 });
-        }
-        if (!catalog.models.some((row) => row.modelProfileId === modelProfileId)) {
-          catalog.models.push({
-            modelProfileId,
-            providerId,
-            endpointId,
-            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
-            routeKind: "chat",
-            contextWindow: 393_216,
-            supportsTools: true,
-            supportsStructuredOutput: false,
-            supportsVision: false,
-            supportsStreaming: true,
-            equivalenceGroup: "massion-core-general",
-            evalScore: 1,
-            inputCostMicrosPerMillion: 0,
-            outputCostMicrosPerMillion: 0,
-            verified: true,
-            enabled: true,
-          });
-        }
-        const credentials = settingsState.credentials as Array<Record<string, unknown>>;
-        if (!credentials.some((row) => row.providerId === providerId)) {
-          credentials.push({
-            credentialId: "credential-huggingface-deepseek-community",
-            providerId,
-            endpointId,
-            label: "공개 endpoint",
-            status: "active",
-            priority: 100,
-            weight: 1,
-          });
-        }
-      }),
-    /*
-     * 픽스처는 등록을 실제로 반영합니다. no-op이면 추가 흐름이 화면에서 끝까지 서지 않고,
-     * 무엇이 빠졌는지도 드러나지 않습니다(PRODUCT.md 2026-07-23: 화면은 완성본 기준).
-     */
     registerProvider: (input) =>
       fixturePromise(() => {
         const catalog = settingsState.catalog as { providers: Record<string, unknown>[] };
@@ -3473,15 +3405,21 @@ export function createFixtureDesktopService(): DesktopService {
         };
         if (!catalog.providers.some((row) => row.providerId === input.providerId))
           throw new Error("Fixture Provider를 찾을 수 없습니다");
-        if (!catalog.endpoints.some((row) => row.providerId === input.providerId && row.baseUrl === input.baseUrl)) {
+        const endpointId = `ep-${String(input.providerId)}${input.name === "api" ? "" : `-${String(input.name)}`}`;
+        const existing = catalog.endpoints.find(
+          (row) => row.providerId === input.providerId && row.baseUrl === input.baseUrl,
+        );
+        if (!existing) {
           catalog.endpoints.push({
-            endpointId: `ep-${String(input.providerId)}${input.name === "api" ? "" : `-${String(input.name)}`}`,
+            endpointId,
             providerId: input.providerId,
             name: input.name,
             baseUrl: input.baseUrl,
             local: input.local,
           });
         }
+        const existingId = existing?.endpointId;
+        return { endpointId: typeof existingId === "string" ? existingId : endpointId };
       }),
     addCredential: (input) =>
       fixturePromise(() => {

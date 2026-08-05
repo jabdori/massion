@@ -472,6 +472,18 @@ export class ProviderService {
       "provider_registered",
       canonicalJson(input),
       async (tx) => {
+        // 같은 Provider를 다시 등록하는 것은 사용자가 폼을 다시 제출한 경우이므로
+        // UNIQUE 충돌로 내부 오류를 내지 않고 기존 등록을 그대로 돌려줍니다.
+        const [existing] = await tx.query<[ModelProvider[]]>(
+          "SELECT * OMIT id FROM model_provider WHERE organization_id = $organization_id AND provider_id = $provider_id LIMIT 1;",
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        const current = existing[0];
+        if (current) {
+          if (current.adapter_kind !== input.adapterKind)
+            throw new Error("이미 등록된 Provider와 어댑터 종류가 다릅니다");
+          return { provider: current };
+        }
         const [providers] = await tx.query<[ModelProvider[]]>(
           "CREATE model_provider CONTENT { provider_id: $provider_id, organization_id: $organization_id, display_name: $display_name, adapter_kind: $adapter_kind, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
           {
@@ -509,14 +521,25 @@ export class ProviderService {
           throw new Error("external-gateway Provider에는 gatewayKind가 필요합니다");
         if (provider.adapter_kind !== "external-gateway" && input.gatewayKind)
           throw new Error("gatewayKind는 external-gateway Provider에만 사용할 수 있습니다");
+        const name = input.name.trim();
+        const baseUrl = url.toString().replace(/\/$/, "");
+        const [existing] = await tx.query<[ProviderEndpoint[]]>(
+          "SELECT * OMIT id FROM provider_endpoint WHERE organization_id = $organization_id AND provider_id = $provider_id AND name = $name LIMIT 1;",
+          { organization_id: context.organizationId, provider_id: input.providerId, name },
+        );
+        const current = existing[0];
+        if (current) {
+          if (current.base_url !== baseUrl) throw new Error("같은 이름의 endpoint가 다른 주소로 등록돼 있습니다");
+          return { endpoint: current };
+        }
         const [endpoints] = await tx.query<[ProviderEndpoint[]]>(
           "CREATE provider_endpoint CONTENT { endpoint_id: $endpoint_id, organization_id: $organization_id, provider_id: $provider_id, name: $name, base_url: $base_url, local: $local, gateway_kind: $gateway_kind, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
           {
             endpoint_id: randomUUID(),
             organization_id: context.organizationId,
             provider_id: input.providerId,
-            name: input.name.trim(),
-            base_url: url.toString().replace(/\/$/, ""),
+            name,
+            base_url: baseUrl,
             local: input.local,
             gateway_kind: input.gatewayKind,
           },
