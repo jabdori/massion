@@ -4723,6 +4723,8 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [keyTarget, setKeyTarget] = useState<string>();
   const [keySecret, setKeySecret] = useState("");
 
+  const [reloadToken, setReloadToken] = useState(0);
+
   useEffect(() => {
     let disposed = false;
     void service
@@ -4736,7 +4738,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
     return () => {
       disposed = true;
     };
-  }, [service]);
+  }, [service, reloadToken]);
 
   const submitProvider = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -5036,6 +5038,18 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           {error && keyTarget === undefined && !confirmRemoval ? (
             <p className="mb-3 text-speaker text-danger" role="alert">
               {translate(error)}
+              {settings === undefined ? (
+                <button
+                  className="ml-2 underline underline-offset-2 hover:text-primary"
+                  onClick={() => {
+                    setError("");
+                    setReloadToken((token) => token + 1);
+                  }}
+                  type="button"
+                >
+                  {translate("다시 시도")}
+                </button>
+              ) : null}
             </p>
           ) : null}
           {notice ? (

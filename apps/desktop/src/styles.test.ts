@@ -170,15 +170,17 @@ describe("스타일 의미 토큰", () => {
     expect(end).toBeGreaterThan(start);
     const surface = app.slice(start, end);
     // 삼항을 통째로 감싼 translate(a ? "A" : "B")도 인정하려면 괄호 범위를 봐야 합니다.
+    // 문자열 안의 괄호가 깊이를 흔들지 않도록 인덱스를 보존한 채 마스킹합니다.
+    const masked = surface.replace(/"[^"\n]*"/gu, (literal) => `"${" ".repeat(literal.length - 2)}"`);
     const covered = (opener: RegExp): Set<number> => {
       const inside = new Set<number>();
-      for (const call of surface.matchAll(opener)) {
+      for (const call of masked.matchAll(opener)) {
         const from = (call.index ?? 0) + call[0].length - 1;
         let depth = 0;
         let cursor = from;
-        for (; cursor < surface.length; cursor += 1) {
-          if (surface[cursor] === "(") depth += 1;
-          else if (surface[cursor] === ")") {
+        for (; cursor < masked.length; cursor += 1) {
+          if (masked[cursor] === "(") depth += 1;
+          else if (masked[cursor] === ")") {
             depth -= 1;
             if (depth === 0) break;
           }
@@ -197,15 +199,20 @@ describe("스타일 의미 토큰", () => {
         (match) => (match.index ?? 0) + match[0].indexOf('"'),
       ),
     );
-    // 화면에 나가지 않는 리터럴만 예외입니다. 늘리지 마십시오 — 늘리는 대신 코드를 고칩니다.
-    const offScreen = new Set(["기본 키", "OpenAI 호환"]);
     const raw = [...surface.matchAll(/"([^"\n]*[가-힣][^"\n]*)"/gu)]
       .filter(
         (match) => !wrapped.has(match.index ?? 0) && !routed.has(match.index ?? 0) && !deferred.has(match.index ?? 0),
       )
-      .map((match) => match[1] ?? "")
-      .filter((message) => !offScreen.has(message));
+      .map((match) => match[1] ?? "");
     expect(raw).toEqual([]);
+    // 감싸기만 확인하면 삼항 분기를 늘리며 등록을 빠뜨려도 두 가드가 모두 통과합니다.
+    const catalog = new Set(
+      [...messages.matchAll(/^\s*(?:"([^"]+)"|([^\s":]+)):/gmu)].map((match) => match[1] ?? match[2] ?? ""),
+    );
+    const inside = [...surface.matchAll(/"([^"\n]*[가-힣][^"\n]*)"/gu)]
+      .filter((match) => wrapped.has(match.index ?? 0))
+      .map((match) => match[1] ?? "");
+    expect(inside.filter((message) => !catalog.has(message))).toEqual([]);
   });
 
   it("scope work·미승인 표기를 점선 토큰 하나로 고정합니다", () => {

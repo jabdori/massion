@@ -1687,6 +1687,34 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("등록된 키가 없습니다.")).not.toBeInTheDocument();
   });
 
+  it("프로바이더를 불러오지 못하면 같은 자리에서 다시 시도할 수 있다", async () => {
+    const user = userEvent.setup();
+    let attempt = 0;
+    const loadSettings = vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error("불러오지 못했습니다.");
+      return {
+        catalog: { providers: [], endpoints: [], models: [], candidates: [] },
+        credentials: [],
+        routes: [],
+        providers: [],
+        accounts: [],
+        quota: [],
+        policy: [],
+      };
+    });
+    render(<App service={service({ loadSettings })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("불러오지 못했습니다.");
+    await user.click(screen.getByRole("button", { name: "다시 시도" }));
+
+    await waitFor(() => {
+      expect(loadSettings).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);
