@@ -34,7 +34,7 @@ export function DialogContent({ className, sheet = false, viewportClassName, ...
           className={cn(
             sheet
               ? "h-full bg-chrome text-primary outline-none"
-              : "w-full max-w-md rounded-lg border border-line-strong bg-chrome p-5 text-primary outline-none",
+              : "w-full rounded-lg border border-line-strong bg-chrome p-5 text-primary outline-none",
             className,
           )}
           {...props}

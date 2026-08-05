@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import alertDialog from "./components/ui/alert-dialog.tsx?raw";
 import app from "./app.tsx?raw";
 import badge from "./components/ui/badge.tsx?raw";
+import button from "./components/ui/button.tsx?raw";
+import dialog from "./components/ui/dialog.tsx?raw";
+import messages from "./i18n/messages-app.ts?raw";
 import room from "./room.tsx?raw";
 import styles from "./styles.css?raw";
 
@@ -105,15 +109,33 @@ describe("스타일 의미 토큰", () => {
     const defined = new Set([...styles.matchAll(/--color-([a-z0-9-]+):/gu)].map((match) => match[1]));
     // Tailwind 기본 팔레트가 아니라 이 제품이 정의한 이름만 검사합니다.
     const builtin = /^(?:transparent|current|inherit|black|white|popover|border|input|ring|background|foreground)/u;
+    // 같은 접두사를 쓰지만 색이 아닌 유틸리티입니다 — 방향·크기·선 스타일·타이포 토큰·줄바꿈.
+    const nonColor =
+      /^(?:[tblrxyse](?:-\d+)?|left|right|top|bottom|center|inset|xs|sm|md|lg|xl|full|none|auto|dashed|dotted|solid|double|collapse|separate|balance|pretty|wrap|nowrap|clip|ellipsis|color|figure|title|label|body|speaker)$/u;
     const used = new Set(
-      [...`${app}${room}${badge}`.matchAll(/\b(?:text|bg|border|ring|fill|stroke|divide)-([a-z][a-z0-9-]*)/gu)]
+      [
+        ...`${app}${room}${badge}${alertDialog}${dialog}${button}`.matchAll(
+          /\b(?:text|bg|border|ring|fill|stroke|divide)-([a-z][a-z0-9-]*)/gu,
+        ),
+      ]
         .map((match) => match[1] ?? "")
-        .filter((name) => name !== "" && !builtin.test(name)),
+        .filter((name) => name !== "" && !builtin.test(name) && !nonColor.test(name)),
     );
     const missing = [...used].filter((name) => !defined.has(name) && !defined.has(name.replace(/-\d+$/u, "")));
-    expect(
-      missing.filter((name) => /^(?:success|danger|gate|halt|emergency|agent|fg|bg|line|muted)/u.test(name)),
-    ).toEqual([]);
+    // 접두사로 거르면 새 이름이 빠져나갑니다. bg-warning은 그렇게 네 라운드를 살아남았습니다.
+    expect(missing).toEqual([]);
+  });
+
+  /*
+   * translate()는 미등록 키를 한국어 원문으로 폴백합니다. sr-only 안에서 이 일이 나면
+   * 영어 스크린리더 사용자가 한국어를 듣습니다 — 타입도 lint도 잡지 못합니다.
+   */
+  it("화면이 부르는 translate 문구는 전부 영어 카탈로그에 있어야 합니다", () => {
+    const catalog = new Set(
+      [...messages.matchAll(/^\s*(?:"([^"]+)"|([^\s":]+)):/gmu)].map((match) => match[1] ?? match[2] ?? ""),
+    );
+    const called = new Set([...app.matchAll(/\btranslate\(\s*"([^"]+)"/gu)].map((match) => match[1] ?? ""));
+    expect([...called].filter((message) => !catalog.has(message))).toEqual([]);
   });
 
   it("scope work·미승인 표기를 점선 토큰 하나로 고정합니다", () => {

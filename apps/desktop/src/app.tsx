@@ -4596,7 +4596,7 @@ function GrowthAdoptionBoundary({
 function ProviderField({ children, label }: { children: ReactNode; label: string }) {
   return (
     <div className="grid grid-cols-[104px_minmax(0,1fr)] items-baseline gap-3 py-1.5">
-      <dt className="text-[12px] text-muted">{label}</dt>
+      <dt className="text-figure text-fg-4">{label}</dt>
       <dd className="min-w-0 text-[13px] text-secondary">{children}</dd>
     </div>
   );
@@ -5299,9 +5299,9 @@ function ProviderOverviewTab({
     <>
       {connection.connectionConflict ? (
         <p className="mb-4 rounded-[5px] border border-gate-border bg-gate-wash px-3 py-2 text-[12px] text-secondary">
-          {connection.displayName}
+          {/* 이름을 문장에 이어붙이면 조사와 어순이 번역을 막습니다. 이름은 헤더가 이미 보여줍니다. */}
           {translate(
-            "는 공식 구독 Provider와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.",
+            "이 Provider는 공식 구독 Provider와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.",
           )}
         </p>
       ) : null}
