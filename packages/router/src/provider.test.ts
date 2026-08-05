@@ -618,6 +618,18 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       { attempt_id: crypto.randomUUID(), organization_id: context.organizationId, model_profile_id: modelProfileId },
     );
 
+    // 검증 근거는 immutable입니다. 있는 채로도 제거가 끝까지 가야 합니다.
+    await database.query(
+      "CREATE model_verification_evidence CONTENT { evidence_id: $evidence_id, organization_id: $organization_id, model_profile_id: $model_profile_id, model_id: 'retired-twice', evidence_kind: 'runtime-availability', source: 'test', source_version: 'v1', claim_json: '{}', claim_digest: $digest, observed_at: time::now(), created_by: $actor, created_at: time::now() };",
+      {
+        evidence_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        model_profile_id: modelProfileId,
+        digest: "a".repeat(64),
+        actor: context.userId,
+      },
+    );
+
     const first = await service.removeProvider(context, {
       commandId: crypto.randomUUID(),
       providerId: provider.provider_id,
@@ -631,6 +643,12 @@ describe("Provider와 암호화 Credential lifecycle", () => {
 
     expect(second.removed).toBe(true);
     expect(await service.listProviders(context)).toHaveLength(0);
+    // 검증 근거는 immutable이라 삭제 대상이 아닙니다.
+    const [evidence] = await database.query<[{ readonly count: number }[]]>(
+      "SELECT count() FROM model_verification_evidence WHERE organization_id = $organization_id GROUP ALL;",
+      { organization_id: context.organizationId },
+    );
+    expect(evidence[0]?.count ?? 0).toBe(1);
     // 실행 기록 자체는 지우지 않습니다.
     const [attempts] = await database.query<[{ readonly count: number }[]]>(
       "SELECT count() FROM route_attempt WHERE organization_id = $organization_id GROUP ALL;",

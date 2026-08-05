@@ -603,8 +603,10 @@ export class ProviderService {
             { organization_id: context.organizationId, profile_ids: profileIds },
           );
           if (!retired) {
+            // 검증 근거는 스키마가 immutable로 못 박았습니다. 모델이 실재했다는 기록은
+            // Provider 등록보다 오래 살아야 하므로 지우지 않고 남깁니다.
             await tx.query(
-              "DELETE model_verification_evidence WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_profile WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
+              "DELETE model_profile WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
               { organization_id: context.organizationId, profile_ids: profileIds },
             );
           }
