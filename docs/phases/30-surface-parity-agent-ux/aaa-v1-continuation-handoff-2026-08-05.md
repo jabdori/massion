@@ -1,12 +1,516 @@
-# Massion AgentOS AAA v1 작업 인계서
+# Massion AgentOS AAA v1 Master Handoff
 
 > 기준 시각: 2026-08-05 (Asia/Seoul)  
 > 저장소: `/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/phase-30-reconciled`  
 > 브랜치: `feat/phase-30-reconciled`  
-> 기준 커밋: `f8ce0368da6a391c2e246fad6b0729482650554a`  
+> Master 보강 시작 source HEAD: `92ed55d5d06145947b1598c4f7a112311692b7bc`
+> Master 보강 commit: `git log -1 --oneline -- docs/phases/30-surface-parity-agent-ux/aaa-v1-continuation-handoff-2026-08-05.md`로 확인
 > 제품 상태: **완료 아님 — 목표 일시 정지(paused), 아래 임계 경로부터 재개 필요**
 
-이 문서는 다음 구현 에이전트가 이전 채팅 전체를 읽지 않고도 작업을 안전하게 이어가기 위한 실행 인계서입니다. 오래된 계획 문서나 fixture와 충돌할 때는 현재 소스 코드, Git 상태, 실제 데이터베이스와 런타임 증거를 우선합니다.
+이 문서는 다음 구현 에이전트가 이전 채팅 전체를 읽지 않고도 프로젝트의 배경·의도·의사결정·구현 과정·실패·검증·현재 상태를 복원하고 작업을 안전하게 이어가기 위한 master handoff입니다. 오래된 계획 문서나 fixture와 충돌할 때는 현재 소스 코드, Git 상태, 실제 데이터베이스와 런타임 증거를 우선합니다.
+
+## 0. 문서의 역할과 근거 우선순위
+
+### 0.1 이 문서가 답해야 하는 질문
+
+다음 에이전트는 이 문서만으로 다음을 설명하고 실행할 수 있어야 합니다.
+
+1. Massion이 무엇이며 왜 단순한 multi-agent chat이 아닌가?
+2. 어떤 시스템 경계와 도메인이 이미 만들어졌는가?
+3. 왜 완성된 것처럼 보이는 fixture와 실제 Work가 다르게 동작하는가?
+4. 어떤 사용자 피드백이 범위와 운영 방식을 바꿨는가?
+5. 무엇을 구현·검증·커밋했고 무엇은 아직 증거가 없는가?
+6. 어떤 접근이 실패했으며 왜 반복하면 안 되는가?
+7. 현재 Git·DB·프로세스·Work·Provider 상태는 무엇인가?
+8. 다음 한 묶음을 어디서 시작하고 어떤 증거로 닫아야 하는가?
+9. 첫 실제 Work 이정표와 전체 AAA v1 완료는 어떻게 다른가?
+
+### 0.2 정본과 증거의 우선순위
+
+제품 요구와 현재 구현 사실은 서로 다른 우선순위를 사용합니다.
+
+제품 요구·출시 계약:
+
+1. 현재 사용자의 명시적 결정
+2. `PRODUCT.md`
+3. `docs/product/constitution.md`와 승인된 ADR
+4. 현재 architecture·phase delivery 문서
+
+현재 구현 사실과 검증 상태:
+
+1. 현재 실행 결과와 저장된 DB 상태
+2. 현재 source code와 executable test
+3. 현재 Git commit과 diff
+4. `docs/evidence/phase-30/`의 동일 SHA 실제 증거
+5. 현재 architecture·phase delivery의 구현 진단
+6. 개별 handoff·design·plan 문서
+7. fixture와 mock data
+
+fixture는 제품 기대 상태와 visual contract를 고정하는 자료입니다. 실제 Runtime·DB·UI가 그 상태를 만들었다는 증거는 아닙니다. 오래된 evidence도 당시 SHA의 사실일 뿐 현재 HEAD의 출시 증거로 자동 승격되지 않습니다.
+
+### 0.3 독자와 사용 방법
+
+주 독자는 현재 저장소를 처음 넘겨받은 senior implementation agent와 독립 verifier입니다.
+
+- 배경과 결정 이유가 필요하면 0.A–0.F를 읽습니다.
+- 현재 제품 상태는 1–9를 읽습니다.
+- 바로 실행하려면 10의 순서를 따릅니다.
+- 완료 선언 전에는 11의 Definition of Done을 전부 확인합니다.
+- 전체 active development commit은 16의 ledger와 Git 명령으로 재현합니다.
+
+## 0.A 제품의 출발점과 최종 의도
+
+### 0.A.1 출발점
+
+저장소의 최초 commit은 `e9504a0f7 build(massion): establish the phase 1 monorepo quality foundation`입니다. 이어서 SurrealDB 단일 정본, tenant 격리, Core Office 조직 그래프, Work·협업·Records, 모델 Router, Runtime, Governance, Context Strategy, Evidence, Software Engineering delivery, Assurance, Growth, Extension, Application API가 순서대로 구축됐습니다.
+
+초기 구현은 domain/package별 계약이 매우 넓었습니다. 이 때문에 package test는 통과하지만 실제 개인용 데스크톱 Work가 끝까지 연결되지 않는 문제가 뒤늦게 드러났습니다. Phase 30의 핵심은 새 도메인을 더 만드는 것이 아니라 이미 있는 계약과 실제 Tauri 사용자 경로를 연결하고, fixture가 약속한 풍부함을 제품 데이터로 증명하는 것입니다.
+
+### 0.A.2 제품이 만들려는 것
+
+Massion은 사용자가 하나의 Mission을 맡기면 영속 Work를 만들고, 조직이 맥락을 읽어 Task와 책임을 나누고, Provider·모델을 동적으로 선택하며, 사람이 선택한 권한 경계 안에서 실제 산출물을 만들고 독립 Assurance와 Records까지 완료하는 개인용 macOS AgentOS입니다.
+
+핵심 차별점은 다음과 같습니다.
+
+- 모델 transcript가 아니라 Work와 불변 event가 정본입니다.
+- 모델이 “완료”라고 말해도 독립 Assurance가 통과하지 않으면 완료가 아닙니다.
+- Provider가 없어도 조회·승인·취소·진단은 제한 모드로 동작합니다.
+- 동적 Agent와 모델 할당은 사용자가 매번 지정하지 않고 OS가 업무·capability·policy·budget을 보고 결정합니다.
+- 자가개선은 모델의 즉시 자기수정이 아니라 Reflection → evidence → evaluation → review/auto adoption → measured effect → revert의 보수적 경로입니다.
+- 로컬 workspace, SurrealDB, daemon과 macOS desktop이 개인용 v1의 정본 실행 환경입니다.
+
+### 0.A.3 현재 목표가 AAA v1로 확장된 이유
+
+초기에는 package 구현과 fixture 화면이 빠르게 넓어졌지만 실제 사용자 경로에서 다음 문제가 나타났습니다.
+
+- 실제 협업방은 사용자 질문과 Representative handoff만 기록했습니다.
+- fixture는 Work activity 전체를 방 대화처럼 보여 실제 연결보다 풍부했습니다.
+- 동적 Agent proposal·승인·조직 변경이 화면에는 있으나 실제 Work 경로와 부분적으로만 연결됐습니다.
+- 예산·Growth·Provider·Knowledge의 화면과 도메인 사이에 command/query wiring GAP이 남았습니다.
+- 실제 run은 모델 실패, startup recovery, transaction teardown, projection backlog에서 멈췄습니다.
+- UI에는 UUID, raw timestamp, 내부 activity 이름, 과도한 divider, 스크롤·Markdown 문제와 잘못된 Provider 오류 문구가 나타났습니다.
+- 40.99GB 메모리 사용이 실제 Activity Monitor에서 제보됐습니다.
+
+따라서 성공 기준은 “화면이 존재한다”에서 “실제 데이터·실제 Provider·실제 파일을 사용하는 다양한 Work가 데이터 손실 없이 완료되고 재시작 뒤 보존된다”로 강화됐습니다.
+
+## 0.B 시스템 구조와 실행 경계
+
+### 0.B.1 런타임 구성
+
+```text
+React/Vite renderer
+  → Tauri host
+    → Node desktop bridge sidecar
+      → Massion server/Application API
+        → domain packages
+          → SurrealDB 3.2.1 single source of truth
+        → model router/runtime
+          → Codex app-server / Z.AI / configured providers
+```
+
+- renderer는 daemon URL·access token·범용 filesystem/shell capability를 소유하지 않습니다.
+- Tauri가 native picker와 Codex login wrapper를 소유합니다.
+- bridge가 renderer와 authenticated daemon 사이 capability boundary입니다.
+- Application은 typed command/query/event stream을 제공합니다.
+- domain commit과 outbox projection은 분리됐으며 command 응답은 historical projection backlog를 기다리지 않아야 합니다.
+- SurrealDB는 모든 영속 상태의 정본입니다. 장수 daemon 재사용이 구현돼 있으므로 PPID 1만으로 shutdown bug라고 단정하지 않습니다.
+
+### 0.B.2 Work의 의도된 세로 흐름
+
+```text
+사용자 자연어 요청
+  → Intake / workspace trust / knowledge materialization
+  → Representative 분석과 실제 협업방 handoff
+  → Context & Strategy 계획
+  → capability gap 판단
+  → 필요 시 dynamic staffing proposal·approval·organization version
+  → Task / Assignment / RuntimeExecution
+  → Provider·model route attempt와 safe fallback
+  → Delivery / 실제 workspace side effect
+  → ArtifactVersion
+  → 독립 Assurance
+  → Records / final response
+  → Reflection / Growth suggestion / adoption / effect / revert
+```
+
+각 화살표는 같은 Work·organization·correlation·causation lineage를 보존해야 합니다. UI에서 보이는 단계만 존재하고 실제 command나 stored event가 없으면 미구현입니다.
+
+### 0.B.3 주요 저장소 영역
+
+| 영역 | 책임 |
+|---|---|
+| `apps/desktop` | 실제 React UI와 Tauri macOS 앱 |
+| `apps/desktop-bridge` | renderer와 daemon 사이 local bridge |
+| `apps/server` | production composition, Provider adapter, startup/recovery |
+| `packages/application` | public product command/query/event, Work orchestration |
+| `packages/work` | Work·Task·room·message·Artifact lineage |
+| `packages/runtime` | execution·lease·model attempt·VoltAgent topology |
+| `packages/router` | capability·policy·budget·credential-aware model routing |
+| `packages/organization` | versioned organization과 dynamic staffing |
+| `packages/evidence` | workspace index·search·graph·EvidenceBrief |
+| `packages/assurance` | 독립 verification과 verdict |
+| `packages/records` | 완료 기록과 문서 ledger |
+| `packages/growth` | memory·prompt·policy·organization 개선 loop |
+| `packages/governance` | policy·approval·permit·fail-closed boundary |
+| `packages/local-control` | daemon·Surreal runtime·access token lifecycle |
+
+`apps/web`과 `apps/tui`는 `7a68eef6e`에서 제거됐습니다. `apps/studio`는 Nimbalyst 기반의 독립 npm workspace가 디렉터리로 남아 있지만 `pnpm-workspace.yaml`에서 명시적으로 제외돼 있으며 Massion v1 제품 표면이 아닙니다. 현재 임계 경로에서 실행·빌드·수정하지 마세요. 이를 저장소에서 완전히 제거할지는 별도 정책 결정이며, 실제 Tauri Work 완주를 방해하지 않는 한 지금 범위를 열지 않습니다.
+
+## 0.C 전체 작업 연혁
+
+### 0.C.1 2026-07-10~07-12 — AgentOS 도메인 기반 구축
+
+- SurrealDB 단일 정본과 tenant 격리를 세웠습니다.
+- Core Office 조직 그래프, Work·Delivery·협업 lineage·Records를 만들었습니다.
+- credential-aware Router, quota·health, RuntimeExecution·memory·topology·fallback 기반을 만들었습니다.
+- Cedar Governance, 승인 inbox, single-use permit, policy versioning을 연결했습니다.
+- Context Strategy, Evidence index/search/brief, Software Engineering TDD delivery를 만들었습니다.
+- 독립 Assurance와 Records completion, Growth, Extension SDK/host, Application API를 연결했습니다.
+- TUI·Web·self-hosting·registry·subscription·optimization까지 넓은 제품 축을 만들었습니다.
+
+이 단계의 성과는 domain depth입니다. 한계는 package별 GREEN이 실제 desktop vertical completion을 보장하지 않았다는 점입니다.
+
+### 0.C.2 2026-07-13~07-15 — 공개 이력 정리와 잘못된 v1 출시 시도
+
+- clean repository·CI·subscription connector·model optimization·release pipeline을 정리했습니다.
+- 2026-07-15 `v1.0.0` release가 게시됐지만 개인용 desktop 완료·실제 UAT·설치 게이트를 충족하지 못했습니다.
+- 이후 release와 원격 tag를 삭제했습니다. 현재 tag는 없어야 합니다.
+- 이 사건 이후 “빌드 가능”과 “출시 가능”을 분리하고 실제 evidence 없는 완료 주장을 금지했습니다.
+
+### 0.C.3 2026-07-16~07-19 — Phase 30 기준선과 로컬 SurrealDB
+
+- baseline/query session safety와 clean-base full verification을 기록했습니다.
+- remote SurrealDB와 local SurrealDB 3.2.1 runtime boundary를 조사·구현했습니다.
+- 로컬 daemon·database·access capability 기반을 만들었습니다.
+- 이 시점에는 Tauri 개인용 v1 주 표면이 아직 확정되지 않았습니다.
+
+### 0.C.4 2026-07-20~07-24 — 실제 Provider dogfooding과 UI 완성본 기준
+
+- 개인 소유 Z.AI GLM Coding Plan으로 실제 Work·Core Office·Assurance를 검증했습니다.
+- local access refresh, 협업방 9명 참가, Representative handoff의 실제 증거를 남겼습니다.
+- 2026-07-21 `9740b16a3`에서 Tauri shell이 처음 추가됐고, 2026-07-24 `1932fb700`에서 개인용 macOS Desktop을 1.0 목표로 명시했습니다.
+- 프론트엔드는 현재 Runtime 데이터에 맞춰 축소하지 않고 완성본 fixture를 먼저 만들기로 결정했습니다.
+- 홈·업무·지식·조직·개선·확장·설정과 수신함의 역할을 재정리했습니다.
+- fixture가 Runtime보다 앞선 곳은 handoff로 명시하고, fixture를 실제 제품 증거로 사용하지 않기로 했습니다.
+- 잘못된 `v1.0.0` release와 tag 제거를 문서화했습니다.
+
+### 0.C.5 2026-07-25~07-27 — Tauri 증분 UAT와 지식·Growth·릴리스 증거
+
+- Playwright UI, Tauri release build, native folder/file picker, workspace trust를 검증했습니다.
+- 실제 Provider Work에서 workspace file knowledge와 Evidence reference, restart persistence를 증분 확인했습니다.
+- Growth approve/effect loop를 증분 검증했습니다.
+- artifact signing probe도 존재하지만 개인용 v1 임계 경로보다 앞세우지 않기로 했습니다.
+- 전체 K01–K04, VoiceOver, clean Mac install/update/remove, 모든 surface의 실제 product UAT는 여전히 남았습니다.
+
+### 0.C.6 2026-07-28~07-29 — 설계·fixture·정본 reconciliation
+
+- 완성본 desktop fixture와 실제 계약 사이 GAP을 문서로 분리했습니다.
+- knowledge surface/graph, agent collaboration runtime, Growth adoption, Extension capability, settings/provider/budget handoff가 작성됐습니다.
+- 디자인은 무채색 기반, Agent별 identity color, 노랑은 사람의 결정, 점선은 work-scoped/미승인으로 고정했습니다.
+- 이 시기의 중요한 결과는 화면 추가가 아니라 “도메인은 있으나 제품 경로가 버리는 것”을 명시적으로 드러낸 것입니다.
+
+### 0.C.7 2026-07-30 — AAA 기반 결함과 공식 Codex 연결
+
+- strict type/lint와 bootstrap 경계를 복구했습니다.
+- delivery lease ownership, local Surreal runtime 교체, Codex schema turn stall과 retry/recovery를 수정했습니다.
+- Work detail·Records·증거 표기를 사람이 읽을 수 있게 바꿨습니다.
+- self-improvement setting persistence와 공식 Codex account login을 연결했습니다.
+- 이 날부터 검증된 원자 변경마다 즉시 commit·push하고 영어 Conventional Commit을 공개 이력 규칙으로 고정했습니다.
+
+### 0.C.8 2026-07-31 — dynamic staffing과 fixture 수준 Work UX 연결
+
+- Work-scoped Agent 격리·승격, dynamic task assignment, atomic staffing, governed organization continuation을 연결했습니다.
+- live Work conversation과 participant identity, Work lineage를 복구했습니다.
+- 실제 화면을 fixture 수준에 가깝게 만들기 위해 이름·handoff·Markdown·Records·activity projection을 수정했습니다.
+- 과도한 divider, Provider 내부 용어, Markdown emphasis/table/math 등 대화 가독성 결함을 줄였습니다.
+- 그러나 Runtime Agent의 실제 delegate/answer를 collaboration room에 저장하는 생산 경로는 여전히 없습니다.
+
+### 0.C.9 2026-08-01 — 완료 주장·retry·Assurance 정합성
+
+- timeout lineage, blocked retry, approval continuation을 복구했습니다.
+- 검증 불가능한 Task completion claim을 막고 Assurance rejection detail을 제한적으로 노출했습니다.
+- live Work projection과 terminal work-scoped Agent retirement를 맞췄습니다.
+- 이 과정에서 “검증에서 보완 필요”가 정상적인 change request인지, 근거 없이 무한 반복되는 verifier 결함인지 분리해야 한다는 요구가 생겼습니다.
+
+### 0.C.10 2026-08-02 — 제품 범위 정리와 실제 workspace delivery
+
+- `apps/web`과 `apps/tui`를 제거하고 Tauri를 개인용 v1 표면으로 고정했습니다.
+- Work controls, queued directives, durable event lineage를 연결했습니다.
+- trusted workspace를 Runtime task에 묶고 actual path resolution, external Codex workspace authorization, change evidence, Delivery crash recovery를 보강했습니다.
+- 공식 Codex onboarding과 spawn failure containment을 추가했습니다.
+- Assurance가 실제 code/file change evidence를 요구하도록 연결했습니다.
+- Hugging Face DeepSeek community endpoint를 route에 추가했지만, 2026-08-05 현재 무료 endpoint는 폐기됐습니다.
+
+### 0.C.11 2026-08-03 — Assurance·Provider·i18n 기반
+
+- community model cold start, optimization approval, managed default policy를 보강했습니다.
+- workspace knowledge execution과 Assurance evidence chronology·persisted stream·recovery snapshot을 수정했습니다.
+- failed transaction rollback을 bounded하게 만들었습니다.
+- 영어(en)·한국어(ko) locale 기반을 추가했습니다.
+
+### 0.C.12 2026-08-04 — 메모리·보안·startup·command 응답 임계 묶음
+
+- dynamic desktop content i18n, local SurrealDB memory bound, lint, graph accessibility, vulnerable transitive dependency를 수정했습니다.
+- quota polling과 Work recovery가 HTTP readiness를 막지 않게 분리했습니다.
+- transaction session teardown stall과 synchronous historical projection backlog를 command 응답에서 제거했습니다.
+- 최신 bundle artifact는 생성됐지만 shell exit code가 보존되지 않았고, 새 bundle의 실제 command HTTP/UI 재검증 전에 작업이 중단됐습니다.
+- 40.99GB 제보는 fresh 15분에서 재현되지 않았지만 raw sample evidence와 장시간 soak가 없어 해결 완료가 아닙니다.
+
+### 0.C.13 2026-08-05 — 목표 상태 복구와 인계
+
+- 전체 목표가 완료되지 않았는데 완료 처리됐던 판단을 철회했습니다.
+- root task의 goal objective는 다시 저장됐지만 현재 도구 상태는 `paused`입니다. goal은 task/thread별이므로 새 task에서는 `null`일 수 있습니다.
+- 첫 인계서는 실행 runbook 중심으로 작성됐고, 전체 배경·결정·연혁이 부족하다는 사용자 지적을 받았습니다.
+- 본 master handoff는 그 누락을 보완한 것입니다.
+
+## 0.D 사용자 결정 로그와 범위 변화
+
+다음 결정은 채팅 과정에서 반복적으로 확정됐습니다. 다음 에이전트는 오래된 plan보다 이를 우선합니다.
+
+| 순서 | 사용자 결정 | 실행 의미 |
+|---:|---|---|
+| 1 | `design.md`에 억눌리지 말고 필요하면 페이지·계약을 변경 | 기존 문서는 제약이 아니라 출발점; 실제 제품 판단과 일관성 우선 |
+| 2 | 아름다움과 일관된 경험을 함께 요구 | visual polish만으로 완료 금지; 같은 정보·행동·언어가 모든 surface에서 일치해야 함 |
+| 3 | 질문하지 말고 승인된 범위에서 진행 | 발견 가능한 사실을 사용자에게 되묻지 말고 source/runtime에서 확인 |
+| 4 | 검증된 원자 변경마다 commit | 추적·복구 가능한 작은 commit과 즉시 push |
+| 5 | 하위 에이전트 과잉 확장과 반복 대기를 중단 | 축당 구현자 1·검수자 1, 재귀 금지, 첫 검수에서 동일 계열 전체 조사 |
+| 6 | build는 root 단일 직렬 큐 | 공유 `dist` 경쟁으로 생기는 거짓 실패 방지 |
+| 7 | RED → 최소 구현 → 표적 테스트·포맷 → 통합 검수 → 일괄 수정 → 재검수 → commit | package 단위 조사보다 실제 product vertical 우선 |
+| 8 | 첫 전체 검증과 실제 Codex Work 완주가 다음 이정표 | 내부 함수 수나 fixture 완성도를 진척으로 대체하지 않음 |
+| 9 | TUI·레거시 Web을 v1 임계 경로에서 제외하고 결국 제거 | `apps/web`, `apps/tui` 삭제; Tauri 집중 |
+| 10 | fixture의 풍부함을 범위에서 버리지 말 것 | fixture는 기대 기능 계약, 실제 증거는 별도 |
+| 11 | 실제 협업방·handoff·graph·Task·dynamic Agent/model을 모두 검증 | 두 메시지짜리 room이나 단일 representative 응답으로 성공 금지 |
+| 12 | 내부 UAT 절차를 시작 프롬프트에 직접 쓰지 말 것 | 자연어 업무만 주고 OS의 자율 계획·배치·검증을 관찰 |
+| 13 | 근거 없는 가상 출시 판단·워크숍 문서 UAT 폐기 | 실제 파일이 있는 synthetic project 또는 새 실제 project 사용 |
+| 14 | 공개 commit은 영어 Conventional Commits | 이전 혼합 언어 이력은 재작성됐고 이후 subject 규칙 유지 |
+| 15 | 잘못된 `v1.0.0` tag는 존재하면 안 됨 | local/remote tag 0 확인; 새 tag는 전체 release gate 뒤에만 |
+| 16 | UUID·raw timestamp·내부 activity·과도한 divider를 사용자 경험으로 인정하지 않음 | 사람 이름, locale time, model name, Markdown, scroll, 자연스러운 handoff 필요 |
+| 17 | OpenCodex 등 fixture에 없는 Provider를 UI에 임의 노출하지 않음 | Provider는 실제 route/계보에서만 표시; Work prompt에 Provider를 지시하지 않음 |
+| 18 | 시스템 기본 + 설정 가능한 en/ko를 v1 계약으로 복원 | static/dynamic copy, 날짜·숫자·검색·오류·Agent output language까지 적용 |
+| 19 | 40.99GB 실행 중 메모리 문제를 실제 결함 후보로 취급 | 단기 sample로 완료 금지; 장시간 component별 evidence 필요 |
+| 20 | 전체 목표가 완료되지 않았으므로 되살릴 것 | 두 Work 이정표 뒤 9개 surface·negative matrix·release gate까지 완료해야 함 |
+| 21 | 오래된 `Massion.app`으로 현재 작업을 검증하지 말 것 | bundle에 source 수정이 포함됐는지 hash/content와 build exit를 확인하고 같은 candidate만 UAT |
+
+### 0.D.1 현재 동결된 임계 순서
+
+1. 새 bundle에서 command 응답 수정 검증
+2. Codex failure classification·safe fallback·queued orphan·model lineage
+3. Runtime Agent collaboration room durability wiring
+4. 직렬 Tauri rebuild
+5. 실제 환불 Work 완주
+6. 별도 capability-gap Work에서 자연스러운 dynamic Agent 완주
+7. restart·memory lifecycle
+8. 이후에만 9개 surface 잔여 계약과 negative matrix
+
+예산·Growth·Knowledge·추가 UI는 v1에서 제거된 것이 아닙니다. 첫 실제 Work 임계 이정표 전에는 새 축으로 열지 말라는 순서 제약입니다.
+
+## 0.E 실패했던 접근과 반복 금지 이유
+
+### 0.E.1 package GREEN을 제품 완료로 간주
+
+동적 배치 package test 38개가 통과한 뒤 실제 product wiring과 6개 경계 결함이 발견됐습니다. package 단위 GREEN은 필요하지만 Application·Work·Organization·Server·Desktop이 연결됐다는 증거가 아닙니다.
+
+### 0.E.2 fixture activity를 실제 협업처럼 투영
+
+fixture는 풍부한 Work activity를 room timeline에 넣어 완성된 협업처럼 보였습니다. 실제 pipeline은 사용자 질문과 Representative handoff만 저장합니다. fixture를 줄이는 것이 아니라 Runtime이 실제 메시지를 만들도록 연결해야 합니다.
+
+### 0.E.3 한두 문제씩 순차 검수
+
+ownership, ownerless lease, TOCTOU가 여러 차례 순차 발견돼 같은 bundle이 반복됐습니다. 첫 RED/review에서 같은 실패 family의 truth table을 전부 조사해야 합니다.
+
+### 0.E.4 여러 agent의 동시 build/typecheck
+
+공유 `dist`가 삭제·재생성돼 실제 source와 무관한 거짓 실패가 발생했습니다. source 수정과 target test만 병렬화하고 build는 root 직렬 큐에서만 수행합니다.
+
+### 0.E.5 가짜 UAT 프롬프트
+
+실제 데이터가 없는 beta 출시 판단·워크숍 운영안은 모델이 문장을 잘 만드는지만 측정했습니다. `CODEX WORK UAT PASS`, “단계를 완료하세요”, “사실을 만들지 마세요”도 내부 동작을 직접 지시하므로 AgentOS 자율성을 증명하지 못합니다.
+
+### 0.E.6 첫 실제 Work 전에 범위를 다시 넓힘
+
+TUI·Web·광범위 미관·서명·모든 UAT를 동시에 열면 사용자에게 완주가 보이지 않았습니다. 현재는 command/fallback/collaboration/첫 Work vertical을 먼저 닫고 그 뒤 전체 surface를 순차 폐쇄합니다.
+
+### 0.E.7 검증 실패를 모두 “구조화 응답 실패”로 표시
+
+실제 Codex transport·quota·schema·side-effect 실패를 하나의 UI 문구로 뭉개 모델 lineage와 해결 조건이 사라졌습니다. 내부 secret은 숨기되 failure category와 retry/fallback 가능성은 사실대로 보여야 합니다.
+
+### 0.E.8 단기 메모리 sample로 40GB 문제 완료 선언
+
+15분 fresh run에서 재현하지 못한 것은 좋은 표적 신호일 뿐 장시간 누수 부재의 증거가 아닙니다. raw sample, slope, peak, 반복 Work와 component별 RSS가 필요합니다.
+
+## 0.F Git 이력·rebase·브랜치·tag 사실
+
+### 0.F.1 현재 관계
+
+2026-08-05 기준:
+
+```text
+source baseline HEAD: 92ed55d5d06145947b1598c4f7a112311692b7bc
+source baseline origin feat: same
+main HEAD:   cb909f3431e5adfacbd68c8c76dfc05ff6a5313d
+merge-base:  4ae8650deec7f1668b09997d257b6f6f26ec7f79
+main-only:   3 commits
+feature-only before this master update: 147 commits
+tags:        none
+```
+
+즉 현재 feature branch는 원격과 일치하지만 `main`에 병합된 상태가 아닙니다. 사용자가 전체 이력의 영어 Conventional Commit 통일을 요청한 뒤 2026-08-02 rebase와 force update가 있었고, 한글 subject였던 commit도 영어로 amend/rebase됐습니다. 그러나 현재 `main`은 feature의 147개 commit을 포함하지 않습니다. 다음 에이전트는 이 차이를 숨기거나 main 통합이 끝났다고 주장하면 안 됩니다.
+
+### 0.F.2 commit 규칙
+
+- subject: English Conventional Commits
+- body: 변경 이유·계약·검증을 상세히 기록
+- 원자 변경 target test와 format/review 뒤 commit
+- commit 즉시 `origin/feat/phase-30-reconciled` push
+- 전체 성공 전 tag 생성 금지
+- main rewrite/force push는 사용자의 별도 명시적 승인 없이는 수행하지 않음
+
+### 0.F.3 이력 재현 명령
+
+```bash
+git log --reverse --date=iso-strict --format='%h|%ad|%s' HEAD
+git log --reverse --date=short --format='%h|%ad|%s' "$(git merge-base HEAD main)"..HEAD
+git rev-list --left-right --count main...HEAD
+git reflog --date=iso --all
+```
+
+source baseline HEAD에는 874개 commit이 있으며 active branch delta는 147개입니다. 이 master handoff commit은 그 뒤 하나 더 추가됩니다. 0.C는 전체 제품 이력을 domain·사용자 결과 기준으로 요약하고, 16에는 master 보강 직전 active delta 전체를 순서대로 보존합니다.
+
+## 0.G 자격 증명과 데이터 안전 경계
+
+- 현재 Mac의 Codex 인증은 제품의 공식 Tauri login/app-server 경로로 사용합니다.
+- access token은 `~/.config/massion-v1/access.token`에서 참조하되 값을 terminal·문서·채팅에 출력하지 않습니다.
+- Provider key·account·quota는 개인 소유이며 공유·대여·proxy·재판매하지 않습니다.
+- renderer에 daemon token이나 raw credential을 전달하지 않습니다.
+- `/tmp/massion-refund-project-20260804`는 synthetic actual-file UAT project이며 production/customer data가 아닙니다.
+- 현재 SurrealDB data directory를 삭제·초기화하지 않습니다. migration과 recovery는 보존 상태에서 검증합니다.
+- workspace 밖 write, symlink escape, untrusted workspace execution은 fail-closed여야 합니다.
+- 로그·evidence에는 secret, raw authorization header, 사용자 절대 경로를 불필요하게 남기지 않습니다.
+
+## 0.H 전체 요구사항 상태표
+
+상태 의미:
+
+- `implemented`: 실제 command/query/runtime 배선과 영속 증거가 모두 있음
+- `partial`: 일부 생산 배선·과거 실제 증거가 있으나 계약이나 최신 UAT가 남음
+- `fixture-only`: 목표 UI는 있으나 핵심 제품 command/query가 없음
+- `unverified`: 수정은 있으나 재현 가능한 최신 증거가 없음
+- `blocked`: 알려진 결함이 핵심 사용자 흐름을 막음
+
+현재 9개 surface의 shell은 존재하지만 제품 단위로 완전히 `implemented`라고 판정할 surface는 없습니다.
+
+### 0.H.1 아홉 surface와 전역 utility
+
+| Surface | 상태 | 구현된 것 | 남은 출시 증거·GAP |
+|---|---|---|---|
+| 홈 | `partial` | Dashboard와 단일 `InboxItem` projection | 승인·차단·Growth 대기가 홈·badge·수신함·소유 화면에서 같은 상태로 생성·해소되는 실제 UAT |
+| 업무 | `blocked` | Work detail, room, Task, Artifact, Assurance, Records shell과 과거 실제 증거 | 최신 bundle 자연어 Work 완주 0건; fallback·orphan·Runtime 협업 기록 차단 |
+| 지식 | `partial` | workspace index, EvidenceBrief, prompt citation, memory lineage, 일부 Tauri 증거 | 관계 graph projection, K01–K04 전체 UAT, memory 적용·해제 전체 시나리오 |
+| 조직 | `partial` | hierarchy·scope·work ID·staffing proposal의 contract→Desktop wiring | fixture 없는 proposal 승인·거절, Organization Version, revert, restart UAT |
+| 개선(Growth) | `partial` | domain, 상세 evidence·signal·effect query, typed configure/approve/reject, Desktop 실제 버튼, 일부 adoption/effect cohort | 최신 candidate의 review/auto 실제 UAT, follow-up effect, revert 제품 경로와 restart 보존 |
+| 확장 | `partial` | install·inspect·approval·worker·health·rollback | 설치 Capability를 Agent Runtime이 소비해 실제 Work에 기여하는 경로 |
+| 프로바이더 | `blocked` | connection·account·key·Router·Codex login | model on/off contract, Codex 오류 분류·fallback·lineage, retired HF unavailable 처리 |
+| 예산 | `fixture-only` | Router 내부 reservation/cost object와 목표 UI | guard command, `route_attempt` query, threshold persistence, actual hard limit block |
+| 설정 | `partial` | execution policy, Growth mode UI 일부, en/ko 기반 | policy 실제 행동 변화, system locale, restart, Agent output language 전체 UAT |
+| 전역 수신함 | `partial` | approval·blocked·Growth review를 하나의 view로 투영하는 shell | 실제 single-state-source 생성·해소·badge 일치 UAT |
+
+### 0.H.2 핵심 제품 축
+
+| 요구사항 | 상태 | 엄격한 판단 |
+|---|---|---|
+| Work lifecycle | `blocked` | Request→Context→Task→Artifact→Assurance→Records domain은 있으나 최신 candidate 완주·restart가 없음 |
+| 동적 Agent·model 배치 | `partial` | staffing·route 구성요소와 과거 data는 있으나 자연스러운 capability-gap Work가 없음 |
+| 협업방·handoff | `blocked` | room·participant·user request·Representative handoff는 있으나 Runtime delegate/answer 영속 0 |
+| Knowledge·RAG·Memory | `partial` | production knowledge·citation·memory lineage 일부 동작; 관계 graph와 전체 K UAT 미완 |
+| Growth 자가개선 | `partial` | 상세 조회와 review command·Desktop 연결 및 일부 effect 증거; 최신 review/auto·follow-up effect·revert·restart UAT 미완 |
+| Provider·fallback | `blocked` | router gate는 안전하지만 adapter/runner 분류와 queued 보상이 실제 fallback을 막음 |
+| Budget | `fixture-only` | 실제 limit command/query가 없음 |
+| Settings·i18n | `partial` | locale foundation과 일부 persistence; 전체 UX/runtime language contract 미검증 |
+| Extension | `partial` | 안전한 install lifecycle은 있으나 Capability→Runtime Work 연결 없음 |
+| Security | `partial` | tenant·scope·replay·outbox·credential·extension isolation 기반과 dependency patch; 최신 전체 gate 미실행 |
+| Memory·process lifecycle | `unverified` | 40.99GB 실제 제보와 bound commit은 있으나 raw long soak·lifecycle evidence 없음 |
+| Personal release | `blocked` | `.app` artifact는 있으나 build exit와 최신 live UAT·clean install·accessibility·security gate 없음 |
+
+### 0.H.3 fixture와 실제 제품의 차이
+
+| 기대 기능 | fixture | 실제 제품 | 판정 |
+|---|---|---|---|
+| 풍부한 협업 대화 | Work activity를 다수 대화처럼 표현 | user question + Representative handoff 중심 | Runtime wiring 차단 |
+| Agent 이름·색 | Atlas·Lyra 등 완성 | identity token과 participant projection 일부 연결 | 최신 blind visual UAT 필요 |
+| 모델 이름·계보 | 완성된 label | representative model과 실제 strategy model이 다르게 보일 수 있음 | route attempt chain 필요 |
+| 동적 staffing proposal | scope·impact·compliance·revert card | 주요 contract wiring은 있으나 실제 승인/거절 UAT 없음 | partial |
+| Task | 계획·실행 card 존재 | 환불 run context-strategy에서 0/0 | Work 완주 필요 |
+| Artifact·Assurance·Records | 완료 상태 풍부 | 과거 증분은 있으나 최신 run 미완 | 최신 actual evidence 필요 |
+| Budget | 한도·alert·calls UI | local screen state/계약 부재 | fixture-only |
+| Knowledge graph | 3-column graph·relation | index/evidence 일부, relation projection GAP | partial |
+| Growth | review→adopt→effect→revert | domain·상세 query·review button과 일부 cohort 연결, 최신 auto/effect/revert/restart UAT 미완 | partial |
+| Extension capability | installed capability 표시 | declaration이 contract/runtime에서 버려짐 | partial |
+
+fixture의 항목을 삭제해 parity를 맞추지 않습니다. 실제 제품 계약을 연결하고, 업무상 필요하지 않은 dynamic staffing을 특정 Work에 억지로 발생시키지도 않습니다.
+
+## 0.I 증거 색인과 신뢰 수준
+
+### 0.I.1 현재 HEAD에서 직접 확인된 사실
+
+| 근거 | 상태 | 해석 |
+|---|---|---|
+| Git HEAD/upstream | 이 문서 보강 전 `92ed55d5d`, 동일 SHA, clean | 현재 commit 뒤 새 문서 commit으로 갱신해야 함 |
+| tag | local·remote 모두 없음 | PASS, 유지 |
+| 최신 `.app` | mtime 2026-08-04 12:24:23 +0900 | artifact emitted, build exit 미보존 |
+| bundle source | storage direct transaction과 async projection 수정 포함 | 두 최신 수정 포함 |
+| app/bridge/server | 실행 프로세스 없음 | launch 전 기준선 |
+| SurrealDB | PID 68252, PPID 1, RSS 85,312 KiB, 1일 4시간 이상 장수 daemon | 수명주기 계약 미확정, attested reuse 가능 |
+| DB | 약 402 MiB, 보존 대상 | 삭제·초기화 금지 |
+| runtime orphan | queued 2건, running 0건 | Growth 1건·환불 context-strategy 1건을 audit-preserving terminal convergence 필요 |
+| application outbox | pending 6,076, projected 20,954 | 새 async projector의 bounded drain·freshness 재검증 필요 |
+| transaction warning | 누적 1,462, 마지막 2026-08-04T03:13:47Z | 새 bundle 실행 전 baseline |
+| `server.shutdown.failed` | 누적 10 | 재검증 필요 |
+| 무료 DeepSeek endpoint | HTTP 404 retired | unavailable, 성공 후보 아님 |
+
+프로세스 RSS는 조회 시점에 변합니다. 본문 5.2의 값은 그 시점 snapshot이며 새 에이전트는 시작 즉시 다시 기록해야 합니다.
+
+### 0.I.2 역사적 실제 제품 증거 — 유효하지만 현재 HEAD 회귀 증거는 아님
+
+| 문서 | 실제로 증명한 것 | 한계 |
+|---|---|---|
+| `docs/evidence/phase-30/desktop-live-workspace-file-knowledge-uat-2026-07-27.md` | native picker, 실제 OpenRouter Work, 선택 파일 색인, EvidenceBrief, ArtifactVersion, Assurance passed, Records | 이전 candidate, 현재 fallback/dynamic staffing 미증명 |
+| `docs/evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md` | 실제 Z.AI Work, execution 5건, artifact 2개, app/server/DB restart 보존 | 현재 Codex·최신 bundle 미증명 |
+| `docs/evidence/phase-30/desktop-core-uat-2026-07-26.md` | 실제 GLM Work, Core 참가자 9명, representative handoff, Task·Assurance·Records·restart | Runtime delegate/answer room 영속화 미증명 |
+| `docs/evidence/phase-30/emergency-release-flow-2026-07-27.md` | 실제 OpenRouter timeout/output fallback, Growth review/adoption, 3 Assurance sample, stable/retained | 현재 Codex app-server truth table과 다른 경계; 문서의 `f233800...`은 executable SHA-256 |
+| `docs/evidence/phase-30/glm-dogfooding-uat-2026-07-20.md`·`2026-07-21.md` | 개인 Z.AI 모델의 실제 개발·Work 사용 | 단일 account, 복수 Provider fallback 미증명 |
+
+### 0.I.3 현재 HEAD의 중간 강도 증거
+
+- `11ec0954a`: server 359 passed, 2 skipped와 독립 검수
+- `bde95f8b1`: storage 21 passed, 1 skipped와 독립 검수
+- `f8ce0368d`: application 533 passed, 1 skipped와 독립 검수
+- `b2ac33644`, `2b45860e5`: en/ko foundation과 dynamic localization
+- `d3e38c4c7`: local Surreal memory profile `rocksdb-256m-64m-2`
+- `5996ac182`: vulnerable transitive dependency patch
+
+이 근거는 각 원자 변경에는 유효하지만 현재 release candidate 전체나 실제 Work 완주로 확대할 수 없습니다.
+
+### 0.I.4 stale·부분·출시 증거에서 제외할 자료
+
+| 자료 | 제외 이유 |
+|---|---|
+| `uat-full-verification-2026-07-25.md` | fixture Playwright와 backend automation이며 실제 Tauri 23개 UAT가 아님 |
+| `clean-base-full-verification-2026-07-18.md` | 오래된 `65922bd...` 기준선 |
+| `desktop-artifact-signing-2026-07-27-573297642.md` | codesign·spctl·stapler 실패의 역사 기록; 성공 증거 아님 |
+| 15분 메모리 수치 | raw timestamp sample artifact 없음 |
+| UI의 `Umbra`·`Brook` 관측 | 일부 staffing projection 근거일 뿐 capability-gap 완주 증거 아님 |
+| Hugging Face Space 페이지 | 실제 endpoint가 retired이므로 model availability 증거 아님 |
+| fixture의 room·budget·Growth·Knowledge | 기대 UI 계약일 뿐 production command/query/runtime 증거 아님 |
+
+### 0.I.5 새 evidence 작성 규칙
+
+- 동일 candidate SHA·bundle hash·실행 시각을 기록합니다.
+- 실제 파일, Work/run/execution/attempt/task/artifact/assurance/records ID를 secret 없이 기록합니다.
+- 실행 명령과 exit code, 자동 test count, UI 관측을 분리합니다.
+- expected와 actual을 나란히 적습니다.
+- 실패도 삭제하지 말고 최초 공통 원인과 해결 commit에 연결합니다.
+- fixture·mock·direct API·actual Tauri를 명확히 구분합니다.
+- memory는 raw timestamp sample artifact를 함께 저장합니다.
 
 ## 1. 한눈에 보는 현재 상황
 
@@ -72,13 +576,13 @@ Massion은 개인용 macOS 데스크톱 AgentOS를 만들고 있습니다. 사�
 
 ## 3. Git과 작업 트리 상태
 
-2026-08-05 이 문서를 추가하기 직전 재확인 결과:
+2026-08-05 master 보강을 시작하기 직전 재확인 결과:
 
 ```text
 branch: feat/phase-30-reconciled
-HEAD:   f8ce0368da6a391c2e246fad6b0729482650554a
-origin: f8ce0368da6a391c2e246fad6b0729482650554a
-status: clean (이후 이 인계서 1개만 추가)
+HEAD:   92ed55d5d06145947b1598c4f7a112311692b7bc
+origin: 92ed55d5d06145947b1598c4f7a112311692b7bc
+status: clean (이후 master handoff 문서만 수정)
 tags:   none
 ```
 
@@ -145,19 +649,21 @@ apps/desktop/src-tauri/target/release/bundle/macos/Massion.app
 
 따라서 상태는 **artifact emitted / build exit 미확인**입니다. 완전한 build PASS로 기록하면 안 됩니다. 최신 명령 응답 수정이 포함된 이 번들을 아직 실행·검증하지 않았습니다.
 
-### 5.2 현재 프로세스
+### 5.2 프로세스 snapshot 경과
 
-마지막 확인 당시 Massion 앱·server·bridge는 종료된 상태였습니다. SurrealDB만 부모 프로세스가 1인 orphan으로 남아 있었습니다.
+초기 handoff 확인 당시 Massion 앱·server·bridge는 종료된 상태였습니다. SurrealDB만 부모 프로세스가 1인 장수 daemon으로 남아 있었습니다.
 
 ```text
 PID 68252
 PPID 1
-RSS 123,456 KiB (약 120.6 MiB)
+RSS 123,456 KiB (초기 handoff snapshot)
 elapsed 1일 3시간 35분 이상
 command ~/.local/share/massion-v1/runtime/surrealdb/3.2.1/darwin-arm64/surreal start ... --bind 127.0.0.1:7330
 ```
 
 이 프로세스는 앱이 종료된 뒤에도 장시간 남는 daemon이라는 관측 증거입니다. 다만 `packages/local-control/src/local-surreal-runtime.ts`는 state·PID·실행 파일을 검증한 기존 프로세스를 `already-running`으로 재사용하도록 구현돼 있습니다. 따라서 이것만으로 shutdown 결함이라고 단정할 수 없습니다. Cmd-Q 시 종료가 계약인지 장수 daemon 재사용이 계약인지 정본화하고, 재실행의 attestation·attach/reuse·포트 동작을 검증한 뒤 판정하세요. 영속 DB를 맹목적으로 kill하거나 삭제하지 마세요.
+
+2026-08-05 master 검수 중 같은 PID의 RSS는 85,312–85,552 KiB로 변했습니다. timestamp 없는 두 RSS를 누수 추세로 비교하지 않습니다. 다음 agent는 시작 시각과 함께 새 raw sample을 기록합니다.
 
 ## 6. 실제 사용 시나리오와 남은 Work
 
@@ -168,6 +674,14 @@ command ~/.local/share/massion-v1/runtime/surrealdb/3.2.1/darwin-arm64/surreal s
 ```text
 /tmp/massion-refund-project-20260804
 ```
+
+재부팅·정리로 `/tmp`가 사라져도 동일 입력을 복원할 수 있도록 durable source와 checksum manifest를 저장소에 보존했습니다.
+
+```text
+docs/evidence/phase-30/fixtures/refund-delay-project/
+```
+
+Work를 다시 실행하기 전에 네 input file의 SHA-256을 `MANIFEST.md`와 비교하고, output이 없는 새 임시 디렉터리에 복사합니다. 저장소의 durable source 자체를 Work workspace로 사용해 산출물로 오염시키지 않습니다.
 
 파일:
 
@@ -218,7 +732,16 @@ ApplicationRun
   retry_attempt_id: 7ebb440a-a4bc-41d8-8dde-f7f9ef77d17b
 ```
 
-마지막 확인 당시 pending outbox는 6,076건이었습니다. Surreal의 `transaction not found` warning 누적은 1,462건이고 새 번들 검증 직전 기준값을 다시 기록해야 합니다.
+마지막 확인 당시 application outbox는 pending 6,076건, projected 20,954건이었습니다. Surreal의 `transaction not found` warning 누적은 1,462건이고 새 번들 검증 직전 기준값을 다시 기록해야 합니다.
+
+전역 `runtime_execution`에는 환불 Work 외에도 terminalize되지 않은 실행이 하나 더 있어 queued/running이 총 2건입니다.
+
+| execution | Work | Agent | route | status | created |
+|---|---|---|---|---|---|
+| `1232d0b0-e1ea-422c-855c-75ced5144505` | `34d46e96-6326-459b-ad10-2878085198e8` | `growth` | `planning-quality` | queued | 2026-07-26T06:43:12.272605Z |
+| `e0543772-fb45-42f8-8d0b-0888cc2a839c` | `88aab4fe-f02b-42e4-b2d6-2327e5d43cf7` | `context-strategy` | `planning-quality` | queued | 2026-08-04T02:39:34.479189Z |
+
+두 실행 모두 task ID는 없습니다. fallback/queued 보상 묶음은 환불 Work만 보지 말고 전역 queued/running을 0으로 수렴시키되, 오래된 실행을 삭제하지 않고 원인에 맞는 terminal event와 audit lineage를 남겨야 합니다.
 
 ### 6.3 실제 UI에서 확인된 것
 
@@ -384,6 +907,8 @@ open -n '/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/p
 - DB command가 final인지 확인
 - warning 증가량 0 확인
 - UI의 register/trust/run/resume에 무한 spinner가 없는지 확인
+- pending outbox 6,076 기준에서 idle 중 backlog가 bounded하게 감소하는지 확인
+- replay command로 생긴 최신 outbox가 30초 안에 projected되고 UI read-model이 갱신되는지 확인
 
 이전 idempotent replay 식별자:
 
@@ -481,7 +1006,7 @@ pnpm --filter @massion/desktop tauri:build
 |---|---|---|---|
 | 지식 | K03·K04 화면 UAT, 관계 graph 계약 투영 미완료 | `v1-delivery/phase-03-knowledge-memory.md`, `knowledge-surface-handoff.md`, `knowledge-graph-handoff.md` | 실제 workspace 검색·1-hop 관계·Work citation·memory 적용/해제·재시작 보존 |
 | 조직 | 계층·scope·work ID와 staffing proposal은 계약부터 Desktop까지 연결됨; fixture 없는 승인/거절·version·revert 실제 UAT가 미완료 | 현재 source contract/read-model/query/desktop projection, `agent-collaboration-runtime-handoff.md` | 실제 조직 snapshot·proposal·승인/거절·version/revert가 fixture 없이 일치 |
-| 개선(Growth) | 근거·평가·신호·효과 조회와 typed 명령, review/auto 채택 미연결 | `growth-adoption-handoff.md` | 완료 Work → Reflection/Suggestion → 근거·반대 증거 → review 또는 auto 채택 → 후속 효과 → revert |
+| 개선(Growth) | 상세 근거·신호·효과 query와 typed configure/approve/reject, Desktop review button은 연결됨; 최신 review/auto UAT·후속 효과·revert·restart 미완료 | `growth-adoption-handoff.md`, current application/desktop source | 완료 Work → Reflection/Suggestion → 근거·반대 증거 → review 또는 auto 채택 → 후속 효과 → revert |
 | 확장 | 설치 Capability 선언을 Application 계약과 Agent Runtime이 소비하지 않음 | `extension-capability-handoff.md` | 설치된 Skill/Tool Capability가 조직과 실제 Work에 기여하고 권한·제거가 보존 |
 | Provider | 연결·계정·키는 동작하지만 모델 개별 on/off 계약 미완료; 등록된 무료 HF endpoint retired | 제품 헌법 §6·§9.1, server provider tests | 실제 연결·모델 공급 목록·enable/disable·unavailable·fallback이 secret 없이 일치 |
 | 예산 | guard 명령과 route_attempt 조회가 없어 한도·알림·호출 기록이 제품 경로에 미연결 | `settings-contract-handoff.md`, 제품 헌법 §9.1 | route별 한도·임계값 저장/재시작, 호출·비용·fallback 계보 관측, 실제 hard limit 차단 |
@@ -529,13 +1054,26 @@ happy path 두 건만으로 AAA v1을 판정하지 않습니다. 다음 경계 �
 
 전체 결과와 실제 Tauri 증거를 기록한 뒤에만 목표 완료 여부를 판단합니다.
 
+### 단계 13 — 설치·접근성·서명 최종 release gate
+
+이 단계는 첫 실제 Work 임계 경로를 닫은 뒤에만 수행합니다. 개인용 v1 최종 계약에서 삭제된 것이 아닙니다.
+
+- clean Mac 또는 동등한 격리 환경에서 설치·첫 실행·Codex login
+- 기존 설치 위 update와 rollback, 제거 뒤 사용자 데이터 처리 계약
+- codesign·notarization·Gatekeeper·stapling의 실제 성공 증거
+- keyboard-only 전체 핵심 흐름과 VoiceOver 실측
+- 앱 교체·restart 뒤 Work·DB·credential reference 보존
+- 공개 artifact hash·SBOM·security 결과와 같은 candidate 일치
+
 ## 11. 완료 정의(Definition of Done)
 
 아래 항목이 모두 실제 증거로 충족되기 전에는 “AAA v1 완료” 또는 목표 `complete`를 선언하지 않습니다.
 
 - [ ] 최신 번들의 command HTTP/UI 응답이 3초 이내이며 transaction warning 회귀 없음
 - [ ] Codex 안전 fallback truth table 전체 통과
+- [ ] 공식 Tauri login으로 현재 Codex 인증을 사용한 실제 attempt가 저장되고, 성공 또는 안전한 fallback 계보가 DB·UI에서 일치
 - [ ] queued/running orphan execution 없음
+- [ ] 전역 pending outbox가 idle에서 0 또는 명시적 degraded/poison 상태로 bounded 수렴하고 최신 command projection이 30초 안에 UI에 반영
 - [ ] 실제 환불 Work가 자연어 요청 하나로 완료
 - [ ] Runtime Agent의 실제 위임·답변이 협업방에 인과·실행 계보와 함께 기록
 - [ ] 별도 capability-gap Work가 명시적 배치 지시 없이 동적 Agent를 제안·승인·참여시킴
@@ -554,6 +1092,9 @@ happy path 두 건만으로 AAA v1을 판정하지 않습니다. 다음 경계 �
 - [ ] 정상 종료 시 app/bridge/server와 Surreal 재사용·종료 수명주기 계약 통과
 - [ ] bounded negative scenario matrix 전체 통과
 - [ ] 실제 Tauri 화면이 fixture에 준하는 풍부함·일관성·접근성 확보
+- [ ] clean install·update·rollback·remove와 데이터 보존 계약 통과
+- [ ] VoiceOver와 keyboard-only 핵심 흐름 실측 통과
+- [ ] codesign·notarization·Gatekeeper·stapling이 동일 release candidate에서 통과
 - [ ] root 직렬 전체 build/test/lint/security 통과
 - [ ] 모든 원자 변경이 영어 Conventional Commit으로 커밋·푸시됨
 - [ ] tag 없음
@@ -598,9 +1139,391 @@ happy path 두 건만으로 AAA v1을 판정하지 않습니다. 다음 경계 �
 아래 문구를 그대로 전달해도 됩니다.
 
 ```text
-이 저장소의 docs/phases/30-surface-parity-agent-ux/aaa-v1-continuation-handoff-2026-08-05.md를 정본 인계서로 읽고 Massion AgentOS AAA v1 목표를 재개하세요. 목표는 완료가 아니라 paused 상태입니다. 질문하지 말고 먼저 Git·runtime 기준선을 검증한 뒤, 문서의 단계 1인 최신 Tauri 번들의 command 응답 재검증부터 시작하세요. 그 결과가 통과하면 새 범위를 열지 말고 Codex fallback·queued orphan·실제 모델 계보 묶음과 Runtime Agent 협업방 배선 묶음을 각각 RED→최소 구현→표적 테스트·포맷→통합 독립 검수→일괄 수정→최종 재검수→영어 Conventional Commit·push 순으로 닫으세요. build는 root 단일 직렬 큐에서만 실행하고 TUI·레거시 Web·비차단 미관 작업은 제외하세요. 이후 /tmp/massion-refund-project-20260804의 자연스러운 요청으로 Task·Artifact·Assurance·Records 완주를 검증하고, 별도 실제 파일 프로젝트에서 조직 capability gap을 먼저 증명한 뒤 명시적 배치 지시 없이 동적 Agent의 제안·승인·협업 참여·기여 계보를 검증하세요. 이것은 첫 임계 이정표일 뿐 전체 완료가 아닙니다. 이후 단계 9의 지식·조직·Growth·확장·Provider·예산·설정 계약과 단계 10의 negative matrix까지 실제 증거로 닫으세요. fixture는 기대 품질 기준이지 실제 증거가 아닙니다. 전체 완료 전 goal을 complete로 바꾸지 마세요.
+이 저장소의 docs/phases/30-surface-parity-agent-ux/aaa-v1-continuation-handoff-2026-08-05.md를 정본 인계서로 읽고 Massion AgentOS AAA v1 목표를 재개하세요. root task의 goal은 완료가 아니라 paused 상태이며 새 task에서 goal이 null이면 이 문서 15절의 objective로 새 goal을 생성하세요. 질문하지 말고 먼저 Git·runtime 기준선을 검증한 뒤, 문서의 단계 1인 최신 Tauri 번들의 command 응답 재검증부터 시작하세요. 그 결과가 통과하면 새 범위를 열지 말고 Codex fallback·queued orphan·실제 모델 계보 묶음과 Runtime Agent 협업방 배선 묶음을 각각 RED→최소 구현→표적 테스트·포맷→통합 독립 검수→일괄 수정→최종 재검수→영어 Conventional Commit·push 순으로 닫으세요. build는 root 단일 직렬 큐에서만 실행하고 TUI·레거시 Web·비차단 미관 작업은 제외하세요. 이후 /tmp/massion-refund-project-20260804의 자연스러운 요청으로 Task·Artifact·Assurance·Records 완주를 검증하고, 별도 실제 파일 프로젝트에서 조직 capability gap을 먼저 증명한 뒤 명시적 배치 지시 없이 동적 Agent의 제안·승인·협업 참여·기여 계보를 검증하세요. 이것은 첫 임계 이정표일 뿐 전체 완료가 아닙니다. 이후 단계 9의 지식·조직·Growth·확장·Provider·예산·설정 계약, 단계 10의 negative matrix, 단계 13의 설치·VoiceOver·서명 gate까지 실제 증거로 닫으세요. fixture는 기대 품질 기준이지 실제 증거가 아닙니다. 전체 완료 전 goal을 complete로 바꾸지 마세요.
 ```
 
 ## 15. 인계 시점의 목표 상태
 
-현재 goal 도구에 저장된 목표는 복구되어 있지만 상태 값은 `paused`입니다. 제품 완료 조건이 충족된 것이 아니며, 다음 에이전트는 같은 objective를 활성 상태로 재개해야 합니다. 이 인계서는 작업을 종료하는 문서가 아니라 같은 목표를 다른 에이전트가 손실 없이 이어받기 위한 checkpoint입니다.
+현재 root task의 goal 도구에는 목표가 저장되어 있고 상태 값은 `paused`입니다. goal은 task/thread별이므로 인계받은 새 task에서는 `null`일 수 있습니다. 그 경우 아래 objective로 새 goal을 만들고 진행합니다.
+
+```text
+Massion AgentOS를 실제 사용 가능한 AAA급 개인용 macOS v1로 완성한다. i18n 전체 제품 배선, 40GB급 메모리 증가 원인과 수정, 실제 Codex 기반 Work의 동적 Agent/모델 할당·협업방·인계·Task·Artifact·Assurance·Records 완주, Knowledge·Growth·Extension·Provider·Budget·Settings의 실제 제품 계약, 재시작 보존, Tauri 시각·접근성·설치 UAT, 직렬 전체 build/security와 서명 release gate를 실제 근거로 통과시키고, 검증된 원자 변경마다 영어 Conventional Commit으로 커밋·푸시한다. TUI·레거시 Web·비차단 미관 확장은 임계 경로에서 제외하며 fixture 풍부함은 기대 기능 계약으로 사용하되 실제 제품 증거와 구분한다.
+```
+
+제품 완료 조건이 충족된 것이 아닙니다. 이 인계서는 작업을 종료하는 문서가 아니라 같은 목표를 다른 에이전트가 손실 없이 이어받기 위한 checkpoint입니다.
+
+## 16. Active development commit ledger
+
+아래는 현재 `main`과의 merge-base `4ae8650deec7f1668b09997d257b6f6f26ec7f79` 이후 `92ed55d5d`까지 feature branch의 147개 commit 전체입니다. 날짜는 author date의 일자이며, 순서는 ancestry의 오래된 것부터입니다. amend/rebase 전 SHA가 아니라 현재 공개 feature history의 SHA를 사용합니다.
+
+```text
+5a5ade5a6|2026-07-30|fix(application): restore strict type boundaries for the full build
+c9406ab61|2026-07-30|fix(server): restore bootstrap file metadata types
+a084c4060|2026-07-30|fix(server): pass startup recovery and bootstrap lint gates
+06cfb8553|2026-07-30|fix(application): pass lint gates for core execution paths
+2877c118c|2026-07-30|fix(desktop): pass lint gates for UI execution paths
+320109b85|2026-07-30|fix(recovery): enforce atomic delivery lease ownership
+9440f21a9|2026-07-30|fix(recovery): satisfy strict ownership types
+86f59444f|2026-07-30|fix(desktop): omit absent growth adoption data
+a3294d6ec|2026-07-30|test(runtime): align connector fixtures with trust lineage
+2eb67c934|2026-07-30|test(engineering): enforce explicit lease release before handoff
+8e898ec58|2026-07-30|test(runtime): wait for provider start before shutdown settlement
+3f91a59f6|2026-07-30|test(application): align cancellation coverage with atomic convergence
+76eb63dc2|2026-07-30|fix(runtime): trust managed Codex workspaces
+b924a521b|2026-07-30|fix(local): replace Surreal runtime atomically
+fa5a0465c|2026-07-30|fix(strategy): emit valid Codex output schema
+f72820d98|2026-07-30|fix(runtime): avoid Codex schema turn stalls
+bd09f52cf|2026-07-30|fix(application): normalize Surreal attempt timestamps
+a5dfa152e|2026-07-30|fix(desktop): reconcile work details with filters
+51226e096|2026-07-30|fix(desktop): show finalized work records
+646f17191|2026-07-30|fix(desktop): humanize live Work evidence
+d748101a7|2026-07-30|fix(desktop): report subscription authentication
+0bf28ee95|2026-07-30|fix(desktop): persist self-improvement settings
+439bc3617|2026-07-30|fix(server): retain startup recovery telemetry
+956af2af2|2026-07-30|fix(desktop): humanize Work record references
+c9b5fb87f|2026-07-30|feat(desktop): connect Codex account login
+0d2dda0d3|2026-07-30|test(server): align shutdown telemetry contract
+d7a375406|2026-07-30|fix(server): honor repeated shutdown signals
+c1f74226f|2026-07-30|fix(runtime): expose deterministic result recovery contract
+3e2539704|2026-07-30|fix(core): harden runtime boundary validation
+b9ef0cb9f|2026-07-30|style(code): apply pending formatting
+d0c45a182|2026-07-31|fix(desktop): recover expired local access
+40619ceed|2026-07-31|fix(runtime): isolate work-scoped agents
+159e5c02a|2026-07-31|fix(desktop): restore live Work conversations
+c49d133e9|2026-07-31|fix(application): persist Work collaboration lineage
+586bb28ad|2026-07-31|feat(organization): promote Work-scoped agents
+64c153729|2026-07-31|fix(application): honor dynamic task assignments
+9225823de|2026-07-31|fix(strategy): enforce atomic staffing boundaries
+001a73f0a|2026-07-31|fix(runtime): preserve retryable failure lineage
+205bb8ee4|2026-07-31|feat(application): activate atomic dynamic staffing
+d0a80e6ce|2026-07-31|test(context-strategy): restore runtime lineage fixture
+85d233759|2026-07-31|test(evidence): stabilize workspace knowledge integration
+e48d86dce|2026-07-31|fix(application): resume governed organization changes
+71acbe255|2026-07-31|test(server): stabilize integration timing gates
+8dfe7f197|2026-07-31|test(cli): bound child process integration
+9aaa49795|2026-07-31|test(security): isolate filesystem access logging
+d857e4c14|2026-07-31|fix(application): align agents with automatic Work projection
+111271a5e|2026-07-31|fix(desktop): align actual Work collaboration with fixture
+f32e36944|2026-07-31|fix(desktop): polish completed Work presentation
+33547e292|2026-07-31|fix(work): restore autonomous collaboration flow
+200da18b1|2026-07-31|fix(work): preserve collaboration migration upgrades
+ce5f9ca7b|2026-07-31|fix(application): preserve context across Work tasks
+e1ed5168e|2026-07-31|fix(assurance): enforce semantic Work verification
+ef6b1db1f|2026-07-31|fix(strategy): preserve specialist staffing requirements
+dd801b906|2026-07-31|test(application): compile Delivery recovery fixtures
+c5ed778b7|2026-07-31|fix(strategy): enforce critical risk output contracts
+25969d136|2026-07-31|fix(desktop): recover bundled frontend navigation
+4b531a245|2026-07-31|fix(desktop): navigate after WebView creation
+5c4eaf6f4|2026-07-31|fix(application): project governed approval semantics
+ef155513b|2026-07-31|fix(application): preserve Work lineage in run events
+e9b5a7924|2026-07-31|fix(desktop): restore natural Work conversation flow
+3301503ed|2026-07-31|fix(application): satisfy release lint contracts
+28f17a451|2026-07-31|fix(application): type recovery material safely
+05dbc8d82|2026-07-31|test(strategy): align staffing fixtures with capability contracts
+f1661d539|2026-07-31|feat(desktop): render agent conversations as Markdown
+286fd7690|2026-07-31|fix(core): preserve software delivery provenance
+600889dd4|2026-07-31|fix(application): stabilize startup recovery timestamps
+482e90af1|2026-07-31|fix(desktop): preserve meaningful Work activities
+5039d7820|2026-07-31|fix(desktop): pass explicit Markdown emphasis state
+a36b2dd2e|2026-07-31|fix(desktop): hide provider terminology from Work errors
+0fd07fcde|2026-07-31|fix(desktop): keep Markdown tables readable
+e6cdfeccd|2026-07-31|fix(server): recover connectors across runtime releases
+d668c6d26|2026-07-31|fix(desktop): render fallback agent messages as Markdown
+2f3250336|2026-07-31|feat(desktop): typeset agent math safely
+48e921cc6|2026-07-31|fix(desktop): preserve emphasis before word suffixes
+6967849b7|2026-07-31|fix(work): preserve Markdown-safe final results
+8b6072840|2026-07-31|fix(desktop): repair incomplete agent emphasis
+2c6ea17f9|2026-08-01|fix(runtime): preserve agent timeout lineage
+d03af4484|2026-08-01|fix(application): schedule blocked retries asynchronously
+1c5341be1|2026-08-01|fix(application): recover approval continuations safely
+e93bbe610|2026-08-01|fix(application): prevent unverifiable task completion claims
+8cc9d5dc7|2026-08-01|fix(work): surface bounded assurance rejection details
+4f6b03f73|2026-08-01|fix(application): validate blocked details without control regex
+2da934af5|2026-08-01|fix(application): align run scheduling with async boundaries
+afd60edd6|2026-08-01|fix(desktop): reconcile live work projections
+05c07df14|2026-08-01|fix(organization): retire terminal work agents
+043b1ba65|2026-08-01|test(application): respect package boundaries in lifecycle coverage
+e0388c935|2026-08-01|test(desktop): preserve concrete run fixture typing
+0a0f41158|2026-08-02|test(server): align staffing lifecycle product contract
+56cf176ec|2026-08-02|fix(collaboration): preserve participant identities across projections
+41fcedbee|2026-08-02|fix(desktop): reconcile newly created works
+16c801469|2026-08-02|fix(desktop): bind created works from durable lineage
+3da62b5db|2026-08-02|fix(application): preserve durable event lineage
+7a68eef6e|2026-08-02|refactor!: remove legacy web and tui surfaces
+21c8d7fb5|2026-08-02|fix(desktop): wire durable work controls
+d05ab4cd8|2026-08-02|fix(desktop): satisfy strict release types
+90f7caa87|2026-08-02|fix(application): deliver queued work directives
+d29c2e2bd|2026-08-02|test(application): satisfy strict directive types
+a363fa651|2026-08-02|docs(agent): document explicit intervention contract
+bede6e87d|2026-08-02|fix(runtime): bind trusted workspaces to task execution
+067bb4a7f|2026-08-02|chore(git): exclude Superpowers documents from tracking
+eb91c26d4|2026-08-02|fix(evidence): resolve exact workspace paths from requests
+bcb9edc08|2026-08-02|feat(runtime): preserve provider execution evidence
+6bbd542e0|2026-08-02|fix(evidence): narrow path token character access
+fcb506254|2026-08-02|fix(runtime): validate evidence byte count types
+62efb5fed|2026-08-02|test(application): cover delivery crash recovery
+699cc477b|2026-08-02|docs(release): replace removed contract references
+1c6f3d22d|2026-08-02|fix(application): route directives by executor capability
+7490c7231|2026-08-02|fix(desktop): clarify directive update timing
+5f5227949|2026-08-02|test(server): bind fallback fixture workspace access
+4498c6907|2026-08-02|fix(application): include code change assurance evidence
+b8ab09889|2026-08-02|fix(server): contain Codex spawn failures
+a5b5c186d|2026-08-02|fix(desktop): expose official Codex onboarding
+7ddcef9ba|2026-08-02|fix(runtime): require executable workspace delivery
+ac4154dbd|2026-08-02|fix(runtime): preserve bounded failure semantics
+4567c0894|2026-08-02|fix(server): preserve remote workspace execution context
+944565c4d|2026-08-02|fix(application): bound workspace knowledge intake
+7713219bb|2026-08-02|fix(runtime): authorize external Codex workspaces
+ac29f2898|2026-08-02|fix(application): require workspace change evidence
+7dac42911|2026-08-02|fix(application): inherit dependency change evidence
+0b9c56999|2026-08-02|fix(application): accept fenced assurance decisions
+0deca9851|2026-08-02|fix(application): preserve assurance evidence across work retries
+523c4857b|2026-08-02|fix(application): refresh stale automatic assurance bindings
+2b9da9dfd|2026-08-02|fix(assurance): unify verifier decision parsing
+30545f7cd|2026-08-02|feat(router): connect verified DeepSeek community model
+787a344fc|2026-08-03|test(assurance): align work gate runtime envelope
+115cfa008|2026-08-03|fix(router): tolerate DeepSeek community cold starts
+43aa0fb95|2026-08-03|fix(desktop): allow long-running application commands
+a71fd284a|2026-08-03|fix(optimization): bound and classify model evaluations
+0ab7d1273|2026-08-03|fix(optimization): govern recommendation approval
+bada3f015|2026-08-03|fix(governance): upgrade managed default policies
+abb01d3cf|2026-08-03|fix(evidence): preserve workspace knowledge execution
+a5fe245e1|2026-08-03|fix(assurance): preserve execution evidence chronology
+4cd9da547|2026-08-03|fix(assurance): narrow validated artifact timestamps
+01c0b2cba|2026-08-03|fix(assurance): finish persisted verifier streams
+2bbf57839|2026-08-03|fix(assurance): reuse persisted recovery snapshots
+29d5bef35|2026-08-03|fix(storage): bound failed transaction rollback
+b2ac33644|2026-08-03|feat(i18n): add English and Korean locale foundations
+2b45860e5|2026-08-04|fix(i18n): localize dynamic desktop content
+d3e38c4c7|2026-08-04|fix(runtime): bound local SurrealDB memory
+be31ca517|2026-08-04|fix(quality): clear release lint blockers
+1c0cebff0|2026-08-04|test(desktop): align graph accessibility assertions
+5996ac182|2026-08-04|fix(security): patch vulnerable transitive dependencies
+ed63a141a|2026-08-04|fix(server): decouple startup from quota polling
+11ec0954a|2026-08-04|fix(server): keep startup available during work recovery
+bde95f8b1|2026-08-04|fix(storage): avoid transaction session teardown stalls
+f8ce0368d|2026-08-04|fix(application): return commands before event projection
+92ed55d5d|2026-08-05|docs(handoff): capture AAA v1 continuation state
+```
+
+## 17. 실행 명령·DB 조회·보존 위치 Reference
+
+명령은 다음 에이전트가 현재 source와 package script를 다시 확인한 뒤 실행합니다. secret 파일의 값은 출력하지 않습니다.
+
+### 17.1 시작 기준선
+
+```bash
+git status --short --branch
+git rev-parse HEAD
+git rev-parse '@{u}'
+git rev-list --left-right --count main...HEAD
+git tag --list
+git ls-remote --tags origin
+ps -axo pid,ppid,rss,etime,command \
+  | rg 'Massion.app|massion-desktop|desktop-bridge|/massion-v1/runtime/surrealdb|server/dist/main.js' \
+  | rg -v 'rg '
+```
+
+### 17.2 최신 bundle 실행과 readiness
+
+```bash
+open -n '/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/phase-30-reconciled/apps/desktop/src-tauri/target/release/bundle/macos/Massion.app'
+curl --fail --silent --show-error --max-time 30 \
+  http://127.0.0.1:7331/health/ready
+```
+
+### 17.3 안전한 idempotent workspace command replay
+
+```bash
+set +x
+TOKEN="$(<"$HOME/.config/massion-v1/access.token")"
+{
+  printf 'header = "authorization: Bearer %s"\n' "$TOKEN"
+  printf 'header = "accept: application/json"\n'
+  printf 'header = "content-type: application/json"\n'
+  printf 'url = "http://127.0.0.1:7331/api/v1/commands"\n'
+  printf 'data = "{\\"schemaVersion\\":\\"massion.application.v1\\",\\"commandId\\":\\"0c04deb0-3014-4dea-a4c5-9aba6459592c\\",\\"correlationId\\":\\"cdc7bdf4-b0f0-4d8b-9e90-50999679a763\\",\\"operation\\":\\"workspace.register\\",\\"payload\\":{\\"path\\":\\"/private/tmp/massion-refund-project-20260804\\"}}"\n'
+} | /usr/bin/time -p curl --config - \
+  --fail --silent --show-error --max-time 3
+unset TOKEN
+```
+
+Authorization 값은 curl argv에 넣지 않습니다. 위 stdin config를 사용하거나 제품의 `ApplicationHttpClient` 기반 작은 harness를 재사용합니다. shell tracing이 켜진 terminal에서는 실행하지 않습니다.
+
+합격 기준:
+
+- 3초 이내 JSON response
+- operation·outcome·data가 기존 idempotent command와 일치
+- UI spinner 종료
+- DB command final
+- transaction warning 증가 0
+
+warning 기준값:
+
+```bash
+rg -c 'Transaction .* not found in WebSocket transactions map' \
+  "$HOME/.local/state/massion-v1/surrealdb.log"
+```
+
+### 17.4 SurrealDB read-only 계보 확인
+
+```bash
+SURREAL_PASS="$(<"$HOME/.config/massion-v1/database-password")"
+SURREAL_BIN="$HOME/.local/share/massion-v1/runtime/surrealdb/3.2.1/darwin-arm64/surreal"
+
+SURREAL_PASS="$SURREAL_PASS" "$SURREAL_BIN" sql \
+  --endpoint ws://127.0.0.1:7330 \
+  --username massion \
+  --auth-level root \
+  --namespace massion \
+  --database massion \
+  --json --hide-welcome
+unset SURREAL_PASS
+```
+
+REPL에서 현재 저장된 환불 Work 계보를 확인합니다.
+
+```sql
+SELECT command_id, operation, state, result_json != NONE AS has_result, updated_at
+FROM application_command
+WHERE command_id = '0c04deb0-3014-4dea-a4c5-9aba6459592c';
+
+SELECT work_id, status, revision, artifact_version_ids
+FROM work
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7';
+
+SELECT run_id, work_id, status, stage, retry_attempt_id
+FROM application_run
+WHERE run_id = 'f904035a-8764-41d6-b7be-198f087fcf1a';
+
+SELECT execution_id, task_id, agent_handle, model_route, status,
+       created_at, started_at, ended_at
+FROM runtime_execution
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7'
+ORDER BY created_at ASC;
+
+SELECT execution_id, work_id, task_id, agent_handle, model_route, status, created_at
+FROM runtime_execution
+WHERE status IN ['queued', 'running']
+ORDER BY created_at ASC;
+
+SELECT attempt_id, execution_id, model_profile_id, status, selection_sequence,
+       fallback_from_attempt_id, failure_class, emitted_tokens,
+       side_effects_started, fallback_allowed, created_at
+FROM route_attempt
+WHERE execution_id IN (
+  SELECT VALUE execution_id FROM runtime_execution
+  WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7'
+)
+ORDER BY created_at ASC;
+
+SELECT message_id, sequence, message_type, author_kind, author_id,
+       reply_to_message_id, caused_by_message_id, task_id,
+       execution_id, artifact_version_id, created_at
+FROM collaboration_message
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7'
+ORDER BY sequence ASC;
+
+SELECT state, count() AS count
+FROM application_outbox
+GROUP BY state;
+
+SELECT outbox_id, source_kind, source_id, correlation_id,
+       state, public_event_id, occurred_at, updated_at
+FROM application_outbox
+WHERE state = 'pending'
+ORDER BY occurred_at ASC, outbox_id ASC
+LIMIT 20;
+
+SELECT task_id, status, recommended_agent_handles
+FROM work_task
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7';
+
+SELECT artifact_version_id, artifact_id, checksum, creator_agent_handle,
+       creator_execution_id, created_at
+FROM artifact_version
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7';
+
+SELECT assurance_run_id, status, verifier_handle, verifier_execution_id, completed_at
+FROM assurance_run
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7';
+
+SELECT records_run_id, status, completed_at
+FROM records_run
+WHERE work_id = '88aab4fe-f02b-42e4-b2d6-2327e5d43cf7';
+```
+
+테이블·필드가 migration으로 달라졌다면 `INFO FOR DB`와 current repository query를 먼저 확인하고 read-only query를 맞춥니다. 확인 없이 write query를 실행하지 않습니다.
+
+### 17.5 fallback 묶음 표적 검증
+
+```bash
+pnpm --filter @massion/server exec vitest run \
+  src/codex-app-server-agent.test.ts --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/runtime exec vitest run \
+  src/voltagent-runner.test.ts src/execution-store.test.ts \
+  --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/router exec vitest run \
+  src/model-router.test.ts --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/router build
+pnpm --filter @massion/runtime build
+pnpm exec vitest run \
+  apps/server/src/edge-runtime-fallback.integration.test.ts \
+  --no-file-parallelism --maxWorkers=1
+```
+
+마지막 integration test는 package export의 `dist/index.js`를 읽습니다. 따라서 바로 앞의 Router·Runtime build도 root 단일 직렬 큐에서 실행해야 하며, source test만 통과한 오래된 dist로 integration PASS를 만들면 안 됩니다.
+
+### 17.6 협업·지식·i18n 표적 검증
+
+```bash
+pnpm --filter @massion/application exec vitest run \
+  src/core-pipeline.test.ts --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/work exec vitest run \
+  src/collaboration.test.ts --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/evidence exec vitest run \
+  src/scanner.test.ts src/indexer.test.ts src/workspace-knowledge.test.ts \
+  src/repository-store.test.ts --no-file-parallelism --maxWorkers=1
+pnpm --filter @massion/application build
+pnpm --filter @massion/desktop exec vitest run \
+  src/i18n/locale.test.ts src/i18n/context.test.tsx src/room.test.tsx \
+  src/desktop-service.test.ts src/app.integration.test.tsx \
+  --no-file-parallelism --maxWorkers=1
+```
+
+Desktop test가 변경된 workspace package export를 import하면 해당 package를 root 직렬 큐에서 먼저 build합니다. 어떤 test가 source alias를 쓰고 어떤 test가 package `dist`를 쓰는지는 import와 package export를 확인해 명령 인계에 적습니다.
+
+### 17.7 단일 직렬 build와 최종 gate
+
+다른 agent가 build/typecheck를 실행하지 않는 root queue에서만 실행합니다.
+
+```bash
+pnpm --filter @massion/desktop tauri:build
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+pnpm verify
+pnpm verify:security
+pnpm verify:hardening
+git status --short
+```
+
+실제 package scripts와 CI가 변경됐으면 `package.json`과 workflow를 먼저 읽고 canonical command를 갱신합니다.
+
+### 17.8 보존 위치
+
+| 대상 | 위치 |
+|---|---|
+| durable 환불 input 정본 | `docs/evidence/phase-30/fixtures/refund-delay-project/` |
+| 실행용 환불 project | `/tmp/massion-refund-project-20260804` |
+| 기대 산출물 | `/tmp/massion-refund-project-20260804/refund-delay-report.md` |
+| 현재 bundle | `apps/desktop/src-tauri/target/release/bundle/macos/Massion.app` |
+| SurrealDB data | `~/.local/share/massion-v1/surrealdb/3/database` |
+| server log | `~/.local/state/massion-v1/server.log` |
+| Surreal log | `~/.local/state/massion-v1/surrealdb.log` |
+| server state | `~/.local/state/massion-v1/server.json` |
+| Surreal state | `~/.local/state/massion-v1/surrealdb.json` |
+| access token reference | `~/.config/massion-v1/access.token` |
+| database password reference | `~/.config/massion-v1/database-password` |
+
+state file의 PID가 실제 process와 다를 수 있습니다. 마지막 조사에서 server PID record `68257`은 stale이었고 SurrealDB PID `68252`만 살아 있었습니다. 새 에이전트는 state file을 사실로 믿지 말고 `ps`·attestation·readiness를 함께 확인합니다.
+
+실행용 `/tmp` project가 없거나 이전 output으로 오염됐으면 durable source의 네 input file을 새 임시 디렉터리에 복사하고 `MANIFEST.md`의 SHA-256을 확인합니다. 기존 실패 Work의 path를 재현할 때만 동일 `/tmp/massion-refund-project-20260804`를 사용하고, fresh Work 증거에는 새 path와 checksum을 기록합니다.
