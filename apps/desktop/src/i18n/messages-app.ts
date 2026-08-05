@@ -428,6 +428,11 @@ export const appEnglishMessages = {
   "개선 후보 찾기가 꺼져 있습니다.": "Growth candidate discovery is off.",
   "OpenAI 호환": "OpenAI-compatible",
   "검증 중…": "Checking…",
+  "정말 제거할까요? 되돌릴 수 없습니다.": "Remove it? This can't be undone.",
+  "제거 확인": "Confirm removal",
+  "제거하는 중…": "Removing…",
+  "실행 기록이 있어 제거 대신 비활성화하고 라우팅에서 뺐습니다.":
+    "Execution history exists, so it was disabled and taken out of routing instead of removed.",
   "프로바이더 제거": "Remove Provider",
   "프로바이더를 제거했습니다.": "Provider removed.",
   "프로바이더를 제거하지 못했습니다.": "Couldn't remove the provider.",

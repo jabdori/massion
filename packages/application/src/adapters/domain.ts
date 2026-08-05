@@ -1652,7 +1652,7 @@ function registerRouter(registry: ApplicationCommandRegistry, dependencies: Appl
           if (!removed) throw new Error("Provider service가 구성되지 않았습니다");
           return result(command, {
             resource: { type: "ModelProvider", id: removed.providerId },
-            data: { providerId: removed.providerId },
+            data: { providerId: removed.providerId, removed: removed.removed },
           });
         } catch (error) {
           return domainError(error, command.correlationId);

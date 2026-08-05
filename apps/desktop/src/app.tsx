@@ -4718,6 +4718,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [notice, setNotice] = useState("");
   const [secret, setSecret] = useState("");
   const [draft, setDraft] = useState({ displayName: "", adapterKind: "openai-compatible", baseUrl: "" });
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -4831,7 +4832,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       items: matched.filter((connection) => connection.connectionConflict),
     },
     {
-      title: "활성",
+      title: "",
       items: matched.filter(
         (connection) => !connection.connectionConflict && connection.connected && connection.enabled,
       ),
@@ -4853,10 +4854,13 @@ function ProviderSurface({ service }: { service: DesktopService }) {
     setError("");
     setNotice("");
     try {
-      await service.removeProvider(providerId);
+      const outcome = await service.removeProvider(providerId);
       setSettings(await service.loadSettings());
       setSelectedId(undefined);
-      setNotice("프로바이더를 제거했습니다.");
+      setConfirmRemoval(false);
+      setNotice(
+        outcome.removed ? "프로바이더를 제거했습니다." : "실행 기록이 있어 제거 대신 비활성화하고 라우팅에서 뺐습니다.",
+      );
     } catch (cause) {
       setError(surfaceErrorMessage(cause, "프로바이더를 제거하지 못했습니다."));
     } finally {
@@ -4894,9 +4898,11 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           ) : (
             groups.map((group) => (
               <div className="mb-3 last:mb-0" key={group.title}>
-                <div className="mb-1 border-b border-border px-2.5 pb-1.5">
-                  <span className="text-[11px] text-muted">{group.title}</span>
-                </div>
+                {group.title ? (
+                  <div className="mb-1 border-b border-border px-2.5 pb-1.5">
+                    <span className="text-[11px] text-muted">{translate(group.title)}</span>
+                  </div>
+                ) : null}
                 {/* 행은 전폭이고 사이는 여백이 아니라 선으로 가릅니다. 둥근 인셋은 카드라는 다른 뜻을 갖습니다. */}
                 <ul className="divide-y divide-border">
                   {group.items.map((connection) => (
@@ -4910,6 +4916,9 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                         }`}
                         onClick={() => {
                           setSelectedId(connection.providerId);
+                          setNotice("");
+                          setError("");
+                          setConfirmRemoval(false);
                         }}
                         type="button"
                       >
@@ -4983,16 +4992,48 @@ function ProviderSurface({ service }: { service: DesktopService }) {
               />
               {selected.connected && selected.adapterKind !== "subscription-connector" ? (
                 <div className="mt-5 border-t border-border pt-4">
-                  <button
-                    className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-danger hover:text-danger active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-                    disabled={saving}
-                    onClick={() => {
-                      void removeProvider(selected.providerId);
-                    }}
-                    type="button"
-                  >
-                    {translate("프로바이더 제거")}
-                  </button>
+                  {confirmRemoval ? (
+                    <>
+                      <p className="text-[12px] leading-4 text-danger">
+                        {translate("정말 제거할까요? 되돌릴 수 없습니다.")}
+                      </p>
+                      <div className="mt-2.5 flex gap-2">
+                        <button
+                          className="rounded-[5px] border border-danger bg-[rgb(255_255_255/0.02)] px-3 py-1.5 text-[12px] text-danger transition duration-150 hover:bg-[rgb(255_255_255/0.05)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={saving}
+                          onClick={() => {
+                            void removeProvider(selected.providerId);
+                          }}
+                          type="button"
+                        >
+                          {saving ? translate("제거하는 중…") : translate("제거 확인")}
+                        </button>
+                        <button
+                          className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-fg-3 hover:text-primary active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={saving}
+                          onClick={() => {
+                            setConfirmRemoval(false);
+                          }}
+                          type="button"
+                        >
+                          {translate("취소")}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      className="rounded-[5px] border border-danger px-3 py-1.5 text-[12px] text-danger transition duration-150 hover:bg-[rgb(255_255_255/0.04)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={saving}
+                      onClick={() => {
+                        setNotice("");
+                        setError("");
+                        setConfirmRemoval(true);
+                      }}
+                      type="button"
+                    >
+                      {translate("프로바이더 제거")}
+                    </button>
+                  )}
                   <p className="mt-2 text-[11px] leading-4 text-muted">
                     {translate("등록한 주소와 키를 함께 지웁니다. 실행 기록이 있으면 지울 수 없습니다.")}
                   </p>

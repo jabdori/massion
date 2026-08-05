@@ -566,7 +566,7 @@ export class ProviderService {
     context: TenantContext,
     input: RemoveProviderInput,
     executor: QueryExecutor = this.database,
-  ): Promise<{ providerId: string; audit: RouterAuditEvent }> {
+  ): Promise<{ providerId: string; removed: boolean; audit: RouterAuditEvent }> {
     return await this.command(
       context,
       input.commandId,
@@ -581,16 +581,25 @@ export class ProviderService {
           { organization_id: context.organizationId, provider_id: input.providerId },
         );
         const profileIds = profiles.map((profile) => profile.model_profile_id);
+        let retired = false;
         if (profileIds.length > 0) {
           const [attempts] = await tx.query<[{ readonly count: number }[]]>(
             "SELECT count() FROM route_attempt WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids GROUP ALL;",
             { organization_id: context.organizationId, profile_ids: profileIds },
           );
-          if ((attempts[0]?.count ?? 0) > 0) throw new Error("실행 계보가 남아 있어 Provider를 제거할 수 없습니다");
+          // 실행 계보는 정본이라 지우지 않습니다. 대신 라우팅에서 빼고 자격을 폐기해
+          // 이 Provider가 더는 선택되지 않게 합니다.
+          retired = (attempts[0]?.count ?? 0) > 0;
           await tx.query(
-            "DELETE model_route_candidate WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_verification_evidence WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_profile WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
+            "DELETE model_route_candidate WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
             { organization_id: context.organizationId, profile_ids: profileIds },
           );
+          if (!retired) {
+            await tx.query(
+              "DELETE model_verification_evidence WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_profile WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
+              { organization_id: context.organizationId, profile_ids: profileIds },
+            );
+          }
         }
         const [credentials] = await tx.query<[{ readonly credential_id: string }[]]>(
           "SELECT credential_id FROM provider_credential WHERE organization_id = $organization_id AND provider_id = $provider_id;",
@@ -603,11 +612,18 @@ export class ProviderService {
             { organization_id: context.organizationId, credential_ids: credentialIds },
           );
         }
+        if (retired) {
+          await tx.query(
+            "UPDATE model_provider SET enabled = false, updated_at = time::now() WHERE organization_id = $organization_id AND provider_id = $provider_id; UPDATE provider_endpoint SET enabled = false, updated_at = time::now() WHERE organization_id = $organization_id AND provider_id = $provider_id;",
+            { organization_id: context.organizationId, provider_id: input.providerId },
+          );
+          return { providerId: input.providerId, removed: false };
+        }
         await tx.query(
           "DELETE provider_endpoint WHERE organization_id = $organization_id AND provider_id = $provider_id; DELETE model_provider WHERE organization_id = $organization_id AND provider_id = $provider_id;",
           { organization_id: context.organizationId, provider_id: input.providerId },
         );
-        return { providerId: input.providerId };
+        return { providerId: input.providerId, removed: true };
       },
       { executor },
     );

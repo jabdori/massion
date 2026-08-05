@@ -551,8 +551,12 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       weight: 100,
     });
 
-    await service.removeProvider(context, { commandId: crypto.randomUUID(), providerId: provider.provider_id });
+    const removal = await service.removeProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+    });
 
+    expect(removal.removed).toBe(true);
     expect(await service.listProviders(context)).toHaveLength(0);
     expect(await service.listEndpoints(context)).toHaveLength(0);
     expect(await service.listCredentials(context)).toHaveLength(0);

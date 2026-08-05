@@ -1573,7 +1573,7 @@ describe("AgentOS native data flow", () => {
 
   it("직접 등록한 Provider는 상세에서 제거하고 구독 연결은 제거 대상이 아니다", async () => {
     const user = userEvent.setup();
-    const removeProvider = vi.fn(async () => undefined);
+    const removeProvider = vi.fn(async () => ({ removed: true }));
     const loadSettings = vi.fn(async () => ({
       catalog: {
         providers: [
@@ -1601,6 +1601,9 @@ describe("AgentOS native data flow", () => {
 
     await user.click(screen.getByRole("button", { name: "프로바이더" }));
     await user.click(await screen.findByRole("button", { name: "프로바이더 제거" }));
+    // 첫 클릭은 확인만 요청하고 아직 지우지 않습니다.
+    expect(removeProvider).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "제거 확인" }));
 
     expect(removeProvider).toHaveBeenCalledWith("openrouter");
     expect(await screen.findByText("프로바이더를 제거했습니다.")).toBeInTheDocument();

@@ -1392,7 +1392,7 @@ export interface DesktopService {
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
-  removeProvider(providerId: string): Promise<void>;
+  removeProvider(providerId: string): Promise<{ readonly removed: boolean }>;
   registerEndpoint(input: Record<string, unknown>): Promise<{ readonly endpointId: string }>;
   addCredential(input: Record<string, unknown>): Promise<void>;
   disableCredential(credentialId: string, expectedVersion: number): Promise<void>;
@@ -1764,7 +1764,8 @@ export function createApplicationDesktopService(
       await command("router.provider.register", input);
     },
     async removeProvider(providerId) {
-      await command("router.provider.remove", { providerId });
+      const response = await command("router.provider.remove", { providerId });
+      return { removed: object(response.data)?.removed !== false };
     },
     async registerEndpoint(input) {
       // 서버가 base_url을 정규화해 저장하므로 입력 원문으로 endpoint를 되찾으면 안 됩니다.
@@ -3413,6 +3414,7 @@ export function createFixtureDesktopService(): DesktopService {
         for (let index = credentials.length - 1; index >= 0; index -= 1) {
           if (credentials[index]?.providerId === providerId) credentials.splice(index, 1);
         }
+        return { removed: true };
       }),
     registerEndpoint: (input) =>
       fixturePromise(() => {
@@ -5263,25 +5265,25 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
           : {}),
       };
     });
-  const codex = rows(providers).find((row) => str(row, "providerId") === "openai-codex");
-  if (!codex) return connections;
-  const existing = connections.find((connection) => connection.providerId === "openai-codex");
-  if (existing) {
-    return connections.map((connection) =>
-      connection === existing
-        ? {
-            ...connection,
-            subscriptionConnectable: true,
-            connectionConflict: connection.adapterKind !== "subscription-connector",
-          }
-        : connection,
-    );
-  }
-  return [
-    ...connections,
-    {
-      providerId: "openai-codex",
-      displayName: str(codex, "displayName") || "OpenAI Codex",
+  // 지원하는 Provider는 등록 전에도 목록에 있어야 사용자가 키나 구독만 더하면 됩니다.
+  // 연결 경로가 없는 manifest는 고를 수 없으므로 제외합니다.
+  const connectable = rows(providers).filter(
+    (row) => typeof row.providerId === "string" && str(row, "connectionSurface") !== "unavailable",
+  );
+  const merged = connections.map((connection) => {
+    const manifest = connectable.find((row) => str(row, "providerId") === connection.providerId);
+    if (!manifest) return connection;
+    return {
+      ...connection,
+      subscriptionConnectable: true,
+      connectionConflict: connection.adapterKind !== "subscription-connector",
+    };
+  });
+  const offered = connectable
+    .filter((row) => !merged.some((connection) => connection.providerId === str(row, "providerId")))
+    .map((row) => ({
+      providerId: str(row, "providerId"),
+      displayName: str(row, "displayName") || str(row, "providerId"),
       adapterKind: "subscription-connector",
       enabled: true,
       connected: false,
@@ -5289,8 +5291,8 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
       connectionConflict: false,
       endpoints: [],
       models: [],
-    },
-  ].sort((left, right) => left.displayName.localeCompare(right.displayName));
+    }));
+  return [...merged, ...offered].sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
 export function projectSubscriptionAccounts(accounts: unknown): readonly SubscriptionAccountView[] {
