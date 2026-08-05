@@ -4847,6 +4847,23 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       ),
     },
   ].filter((group) => group.items.length > 0);
+  const removeProvider = async (providerId: string) => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await service.removeProvider(providerId);
+      setSettings(await service.loadSettings());
+      setSelectedId(undefined);
+      setNotice("프로바이더를 제거했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "프로바이더를 제거하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const selected = matched.find((connection) => connection.providerId === selectedId) ?? matched[0];
 
   return (
@@ -4964,6 +4981,23 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 loginBusy={loginBusy}
                 onLogin={(newAccount, alias) => void loginSubscription(selected, newAccount, alias)}
               />
+              {selected.connected && selected.adapterKind !== "subscription-connector" ? (
+                <div className="mt-5 border-t border-border pt-4">
+                  <button
+                    className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-danger hover:text-danger active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={saving}
+                    onClick={() => {
+                      void removeProvider(selected.providerId);
+                    }}
+                    type="button"
+                  >
+                    {translate("프로바이더 제거")}
+                  </button>
+                  <p className="mt-2 text-[11px] leading-4 text-muted">
+                    {translate("등록한 주소와 키를 함께 지웁니다. 실행 기록이 있으면 지울 수 없습니다.")}
+                  </p>
+                </div>
+              ) : null}
             </>
           )}
           {notice ? <p className="mt-4 text-[12px] text-fg-3">{notice}</p> : null}

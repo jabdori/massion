@@ -1571,6 +1571,41 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
+  it("직접 등록한 Provider는 상세에서 제거하고 구독 연결은 제거 대상이 아니다", async () => {
+    const user = userEvent.setup();
+    const removeProvider = vi.fn(async () => undefined);
+    const loadSettings = vi.fn(async () => ({
+      catalog: {
+        providers: [
+          { providerId: "openrouter", displayName: "OpenRouter", adapterKind: "openai-compatible", enabled: true },
+        ],
+        endpoints: [
+          {
+            endpointId: "endpoint-openrouter",
+            providerId: "openrouter",
+            name: "api",
+            baseUrl: "https://openrouter.ai/api/v1",
+          },
+        ],
+        models: [],
+        candidates: [],
+      },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    render(<App service={service({ loadSettings, removeProvider })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "프로바이더 제거" }));
+
+    expect(removeProvider).toHaveBeenCalledWith("openrouter");
+    expect(await screen.findByText("프로바이더를 제거했습니다.")).toBeInTheDocument();
+  });
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);

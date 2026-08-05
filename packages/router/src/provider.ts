@@ -13,6 +13,7 @@ import {
 } from "@massion/subscriptions";
 
 import {
+  MODEL_ROUTE_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
   ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
@@ -119,6 +120,10 @@ export interface RegisterProviderInput extends CommandInput {
   readonly providerId: string;
   readonly displayName: string;
   readonly adapterKind: AdapterKind;
+}
+
+export interface RemoveProviderInput extends CommandInput {
+  readonly providerId: string;
 }
 
 export interface RegisterEndpointInput extends CommandInput {
@@ -368,6 +373,8 @@ export class ProviderService {
   ): Promise<ProviderService> {
     await applyMigrations(database, [
       ROUTER_REGISTRY_MIGRATION,
+      // Provider 제거가 딸린 모델 등록까지 정리하므로 같은 스키마를 보장합니다.
+      MODEL_ROUTE_MIGRATION,
       ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
       ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
     ]);
@@ -546,6 +553,61 @@ export class ProviderService {
         );
         if (!endpoints[0]) throw new Error("Provider Endpoint 생성 결과가 없습니다");
         return { endpoint: endpoints[0] };
+      },
+      { executor },
+    );
+  }
+
+  /**
+   * 잘못 등록한 Provider를 지우는 경로입니다. 실행 계보는 정본이므로 route attempt가
+   * 남아 있으면 지우지 않고 거절합니다. 구독 연결은 자체 해제 흐름이 소유합니다.
+   */
+  public async removeProvider(
+    context: TenantContext,
+    input: RemoveProviderInput,
+    executor: QueryExecutor = this.database,
+  ): Promise<{ providerId: string; audit: RouterAuditEvent }> {
+    return await this.command(
+      context,
+      input.commandId,
+      "provider_removed",
+      canonicalJson(input),
+      async (tx) => {
+        const provider = await this.requireProvider(tx, context.organizationId, input.providerId);
+        if (provider.adapter_kind === "subscription-connector")
+          throw new Error("구독으로 연결한 Provider는 구독 해제로만 정리할 수 있습니다");
+        const [profiles] = await tx.query<[{ readonly model_profile_id: string }[]]>(
+          "SELECT model_profile_id FROM model_profile WHERE organization_id = $organization_id AND provider_id = $provider_id;",
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        const profileIds = profiles.map((profile) => profile.model_profile_id);
+        if (profileIds.length > 0) {
+          const [attempts] = await tx.query<[{ readonly count: number }[]]>(
+            "SELECT count() FROM route_attempt WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids GROUP ALL;",
+            { organization_id: context.organizationId, profile_ids: profileIds },
+          );
+          if ((attempts[0]?.count ?? 0) > 0) throw new Error("실행 계보가 남아 있어 Provider를 제거할 수 없습니다");
+          await tx.query(
+            "DELETE model_route_candidate WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_verification_evidence WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids; DELETE model_profile WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
+            { organization_id: context.organizationId, profile_ids: profileIds },
+          );
+        }
+        const [credentials] = await tx.query<[{ readonly credential_id: string }[]]>(
+          "SELECT credential_id FROM provider_credential WHERE organization_id = $organization_id AND provider_id = $provider_id;",
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        const credentialIds = credentials.map((credential) => credential.credential_id);
+        if (credentialIds.length > 0) {
+          await tx.query(
+            "DELETE credential_secret_version WHERE organization_id = $organization_id AND credential_id IN $credential_ids; DELETE provider_credential WHERE organization_id = $organization_id AND credential_id IN $credential_ids;",
+            { organization_id: context.organizationId, credential_ids: credentialIds },
+          );
+        }
+        await tx.query(
+          "DELETE provider_endpoint WHERE organization_id = $organization_id AND provider_id = $provider_id; DELETE model_provider WHERE organization_id = $organization_id AND provider_id = $provider_id;",
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        return { providerId: input.providerId };
       },
       { executor },
     );

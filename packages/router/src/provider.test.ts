@@ -538,4 +538,42 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       }),
     ).rejects.toThrow("external-gateway");
   });
+  it("참조가 없는 Provider는 endpoint·credential과 함께 제거한다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "기본 키",
+      credentialType: "api_key",
+      secret: "sk-remove-me",
+      priority: 0,
+      weight: 100,
+    });
+
+    await service.removeProvider(context, { commandId: crypto.randomUUID(), providerId: provider.provider_id });
+
+    expect(await service.listProviders(context)).toHaveLength(0);
+    expect(await service.listEndpoints(context)).toHaveLength(0);
+    expect(await service.listCredentials(context)).toHaveLength(0);
+  });
+
+  it("구독 연결 Provider는 제거 대신 구독 해제를 요구한다", async () => {
+    await service.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "subscribed",
+      displayName: "Subscribed",
+      adapterKind: "subscription-connector",
+    });
+
+    await expect(
+      service.removeProvider(context, { commandId: crypto.randomUUID(), providerId: "subscribed" }),
+    ).rejects.toThrow("구독");
+  });
+
+  it("없는 Provider 제거는 명확히 거절한다", async () => {
+    await expect(
+      service.removeProvider(context, { commandId: crypto.randomUUID(), providerId: "missing" }),
+    ).rejects.toThrow();
+  });
 });

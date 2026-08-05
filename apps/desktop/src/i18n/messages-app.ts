@@ -428,6 +428,11 @@ export const appEnglishMessages = {
   "개선 후보 찾기가 꺼져 있습니다.": "Growth candidate discovery is off.",
   "OpenAI 호환": "OpenAI-compatible",
   "검증 중…": "Checking…",
+  "프로바이더 제거": "Remove Provider",
+  "프로바이더를 제거했습니다.": "Provider removed.",
+  "프로바이더를 제거하지 못했습니다.": "Couldn't remove the provider.",
+  "등록한 주소와 키를 함께 지웁니다. 실행 기록이 있으면 지울 수 없습니다.":
+    "Deletes the saved address and key. It can't be deleted once execution history exists.",
   "프로바이더 추가": "Add Provider",
   이름: "Name",
   어댑터: "Adapter",

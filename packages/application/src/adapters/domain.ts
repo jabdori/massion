@@ -89,7 +89,7 @@ export interface ApplicationDomainDependencies {
   >;
   readonly providers?: Pick<
     ProviderService,
-    "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
+    "registerProvider" | "removeProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
   >;
   readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
   readonly optimization?: {
@@ -1621,6 +1621,25 @@ function registerRouter(registry: ApplicationCommandRegistry, dependencies: Appl
         return result(command, {
           resource: { type: "ModelProvider", id: registered.provider.provider_id },
           data: { providerId: registered.provider.provider_id },
+        });
+      },
+    });
+    register(registry, {
+      operation: "router.provider.remove",
+      requiredScopes: ["router:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      retryFailedCommand: true,
+      validate: (value) => payload(value, ["providerId"], ["providerId"]),
+      async handle(context, command, value) {
+        const removed = await dependencies.providers?.removeProvider(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+        });
+        if (!removed) throw new Error("Provider service가 구성되지 않았습니다");
+        return result(command, {
+          resource: { type: "ModelProvider", id: removed.providerId },
+          data: { providerId: removed.providerId },
         });
       },
     });

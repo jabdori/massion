@@ -1392,6 +1392,7 @@ export interface DesktopService {
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
+  removeProvider(providerId: string): Promise<void>;
   registerEndpoint(input: Record<string, unknown>): Promise<{ readonly endpointId: string }>;
   addCredential(input: Record<string, unknown>): Promise<void>;
   disableCredential(credentialId: string, expectedVersion: number): Promise<void>;
@@ -1761,6 +1762,9 @@ export function createApplicationDesktopService(
     },
     async registerProvider(input) {
       await command("router.provider.register", input);
+    },
+    async removeProvider(providerId) {
+      await command("router.provider.remove", { providerId });
     },
     async registerEndpoint(input) {
       // 서버가 base_url을 정규화해 저장하므로 입력 원문으로 endpoint를 되찾으면 안 됩니다.
@@ -3395,6 +3399,19 @@ export function createFixtureDesktopService(): DesktopService {
             adapterKind: input.adapterKind,
             enabled: true,
           });
+        }
+      }),
+    removeProvider: (providerId) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as {
+          providers: Record<string, unknown>[];
+          endpoints: Record<string, unknown>[];
+        };
+        catalog.providers = catalog.providers.filter((row) => row.providerId !== providerId);
+        catalog.endpoints = catalog.endpoints.filter((row) => row.providerId !== providerId);
+        const credentials = settingsState.credentials as Record<string, unknown>[];
+        for (let index = credentials.length - 1; index >= 0; index -= 1) {
+          if (credentials[index]?.providerId === providerId) credentials.splice(index, 1);
         }
       }),
     registerEndpoint: (input) =>
