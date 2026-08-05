@@ -4936,7 +4936,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         <nav className="min-h-0 overflow-y-auto pb-2">
           {groups.length === 0 ? (
             <p className="px-2.5 py-2 text-[12px] text-muted">
-              {connections.length === 0 ? "연결된 프로바이더가 없습니다." : "검색과 맞는 것이 없습니다."}
+              {translate(connections.length === 0 ? "연결된 프로바이더가 없습니다." : "검색과 맞는 것이 없습니다.")}
             </p>
           ) : (
             groups.map((group) => (
@@ -5015,16 +5015,20 @@ function ProviderSurface({ service }: { service: DesktopService }) {
 
       <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
         <header className="flex items-center gap-3 border-b border-border px-5">
-          <h2 className="min-w-0 truncate text-title text-primary">{selected?.displayName ?? "프로바이더"}</h2>
+          <h2 className="min-w-0 truncate text-title text-primary">
+            {selected?.displayName ?? translate("프로바이더")}
+          </h2>
           {selected ? (
             <span className="shrink-0 text-[11px] text-muted">
-              {selected.connectionConflict
-                ? "연결 충돌"
-                : selected.connected
-                  ? selected.enabled
-                    ? "활성"
-                    : "비활성"
-                  : "사용 가능"}
+              {translate(
+                selected.connectionConflict
+                  ? "연결 충돌"
+                  : selected.connected
+                    ? selected.enabled
+                      ? "활성"
+                      : "비활성"
+                    : "사용 가능",
+              )}
             </span>
           ) : null}
         </header>
@@ -5312,17 +5316,19 @@ function ProviderOverviewTab({
           {connection.endpoints.map((endpoint) => (
             <ProviderField key={endpoint.baseUrl} label="Base URL">
               <span className="font-mono text-[12px]">{endpoint.baseUrl}</span>
-              <span className="ml-2 text-[11px] text-muted">{endpoint.local ? "이 컴퓨터" : "외부"}</span>
+              <span className="ml-2 text-[11px] text-muted">{translate(endpoint.local ? "이 컴퓨터" : "외부")}</span>
             </ProviderField>
           ))}
           <ProviderField label={translate("인증")}>
             {usesAccounts ? (
               <span className={activeAccount ? undefined : "text-muted"}>
-                {activeAccount
-                  ? "구독 계정으로 연결됨"
-                  : mine.length > 0
-                    ? "계정 확인이 필요합니다"
-                    : "로그인이 필요합니다"}
+                {translate(
+                  activeAccount
+                    ? "구독 계정으로 연결됨"
+                    : mine.length > 0
+                      ? "계정 확인이 필요합니다"
+                      : "로그인이 필요합니다",
+                )}
               </span>
             ) : connection.credentialVersion === undefined ? (
               <span className="text-fg-2">{translate("등록되지 않았습니다")}</span>
@@ -5383,7 +5389,7 @@ function ProviderOverviewTab({
               }}
               type="button"
             >
-              {loginBusy ? "브라우저에서 로그인 중…" : primaryLogin.label}
+              {translate(loginBusy ? "브라우저에서 로그인 중…" : primaryLogin.label)}
             </button>
             {!activeAccount && mine.length > 0 ? (
               <button
@@ -7887,7 +7893,7 @@ function NewWorkDialog({
             ) : null}
           </fieldset>
           <p aria-live="polite" className="min-h-5 text-xs text-danger" role="status">
-            {error}
+            {translate(error)}
           </p>
           <div className="flex justify-end gap-2">
             <DialogClose

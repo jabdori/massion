@@ -1794,7 +1794,7 @@ export function createApplicationDesktopService(
       // 서버가 base_url을 정규화해 저장하므로 입력 원문으로 endpoint를 되찾으면 안 됩니다.
       const response = await command("router.endpoint.register", input);
       const endpointId = object(response.data)?.endpointId;
-      if (typeof endpointId !== "string" || !endpointId) throw new Error("생성된 endpoint ID가 유효하지 않습니다");
+      if (typeof endpointId !== "string" || !endpointId) throw new Error("주소를 등록하지 못했습니다.");
       return { endpointId };
     },
     async addCredential(input) {

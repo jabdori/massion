@@ -155,10 +155,57 @@ describe("스타일 의미 토큰", () => {
     const surfaceMessages = [...app.matchAll(/set(?:Error|Notice)\(\s*"([^"]+)"/gu)].map((match) => match[1] ?? "");
     const unregistered = surfaceMessages.filter((message) => !catalog.has(message));
     expect(unregistered).toEqual([]);
-    // 그 문구들이 실제로 화면에 나가려면 렌더 지점이 translate를 거쳐야 합니다.
-    // 범위는 프로바이더 표면입니다. 수신함·새 Work의 같은 결함은 그 표면을 감사할 때 함께 넣습니다.
-    const surface = app.slice(app.indexOf("function ProviderField"), app.indexOf("function SurfaceLoading"));
-    expect(surface).not.toMatch(/role="(?:alert|status)">\s*\{(?:error|notice)\}/u);
+  });
+
+  /*
+   * 좁은 가드는 방금 고친 형태만 지킵니다. 부류 전체를 봅니다 — 한글이 든 리터럴이
+   * translate() 밖에 있으면 영어 화면에서 한국어로 렌더됩니다.
+   * 범위는 프로바이더 표면(ProviderField ~ AccountCard)입니다. 다른 표면의 같은 결함은
+   * 그 표면을 감사할 때 같은 방식으로 넣습니다.
+   */
+  it("프로바이더 표면의 한글 문구는 전부 translate를 거칩니다", () => {
+    const start = app.indexOf("function ProviderField");
+    const end = app.indexOf("function SettingsSurface");
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const surface = app.slice(start, end);
+    // 삼항을 통째로 감싼 translate(a ? "A" : "B")도 인정하려면 괄호 범위를 봐야 합니다.
+    const covered = (opener: RegExp): Set<number> => {
+      const inside = new Set<number>();
+      for (const call of surface.matchAll(opener)) {
+        const from = (call.index ?? 0) + call[0].length - 1;
+        let depth = 0;
+        let cursor = from;
+        for (; cursor < surface.length; cursor += 1) {
+          if (surface[cursor] === "(") depth += 1;
+          else if (surface[cursor] === ")") {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        for (const literal of surface.slice(from, cursor).matchAll(/"[^"\n]*"/gu))
+          inside.add(from + (literal.index ?? 0));
+      }
+      return inside;
+    };
+    const wrapped = covered(/\btranslate\(/gu);
+    // 상태를 거치는 문구는 렌더 지점이 translate(error)/translate(notice)로 감쌉니다.
+    const routed = covered(/\b(?:setError|setNotice|surfaceErrorMessage|new Error)\(/gu);
+    // 객체 속성으로 정의되고 사용 지점에서 감싸지는 상수입니다 — translate(group.title) 같은 경로.
+    const deferred = new Set(
+      [...surface.matchAll(/(?:title|label):\s*"[^"\n]*"/gu)].map(
+        (match) => (match.index ?? 0) + match[0].indexOf('"'),
+      ),
+    );
+    // 화면에 나가지 않는 리터럴만 예외입니다. 늘리지 마십시오 — 늘리는 대신 코드를 고칩니다.
+    const offScreen = new Set(["기본 키", "OpenAI 호환"]);
+    const raw = [...surface.matchAll(/"([^"\n]*[가-힣][^"\n]*)"/gu)]
+      .filter(
+        (match) => !wrapped.has(match.index ?? 0) && !routed.has(match.index ?? 0) && !deferred.has(match.index ?? 0),
+      )
+      .map((match) => match[1] ?? "")
+      .filter((message) => !offScreen.has(message));
+    expect(raw).toEqual([]);
   });
 
   it("scope work·미승인 표기를 점선 토큰 하나로 고정합니다", () => {
