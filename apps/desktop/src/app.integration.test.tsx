@@ -1653,6 +1653,40 @@ describe("AgentOS native data flow", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("키가 거부됐습니다.");
   });
 
+  it("키가 등록된 Provider는 빈 상태 대신 교체 경로를 보여준다", async () => {
+    const user = userEvent.setup();
+    const loadSettings = vi.fn(async () => ({
+      catalog: {
+        providers: [
+          { providerId: "openrouter", displayName: "OpenRouter", adapterKind: "openai-compatible", enabled: true },
+        ],
+        endpoints: [
+          {
+            endpointId: "endpoint-openrouter",
+            providerId: "openrouter",
+            name: "api",
+            baseUrl: "https://openrouter.ai/api/v1",
+          },
+        ],
+        models: [],
+        candidates: [],
+        credentials: [{ providerId: "openrouter", endpointId: "endpoint-openrouter", secretVersion: 1 }],
+      },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    render(<App service={service({ loadSettings })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    // 계정이 아니라 자격 증명이 사실이므로, 키가 있으면 빈 상태가 아니어야 합니다.
+    expect(await screen.findByRole("button", { name: "키 교체" })).toBeInTheDocument();
+    expect(screen.queryByText("등록된 키가 없습니다.")).not.toBeInTheDocument();
+  });
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);

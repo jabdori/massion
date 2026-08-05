@@ -3565,7 +3565,7 @@ function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
 function GrowthField({ children, label }: { children: ReactNode; label: string }) {
   return (
     <div className="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-2 py-0.5">
-      <dt className="text-[12px] text-muted">{label}</dt>
+      <dt className="text-figure text-fg-4">{label}</dt>
       <dd className="min-w-0 text-[13px] text-secondary">{children}</dd>
     </div>
   );
@@ -4859,7 +4859,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
     setNotice("");
     try {
       // 구독 manifest는 계정을 만들고, 직접 등록한 Provider는 endpoint에 자격을 답니다.
-      if (target?.keyAuthKind) {
+      if (target?.keyAuthKind && target.endpoints.length === 0) {
         await service.connectSubscriptionKey({
           providerId,
           alias: target.displayName,
@@ -5028,7 +5028,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           ) : null}
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
-          {error ? (
+          {error && keyTarget === undefined && !confirmRemoval ? (
             <p className="mb-3 text-speaker text-danger" role="alert">
               {error}
             </p>
@@ -5158,9 +5158,9 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         }}
         open={confirmRemoval}
       >
-        <AlertDialogContent className="rounded-lg border border-line-strong bg-chrome ring-0">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-title">{translate("프로바이더 제거")}</AlertDialogTitle>
+            <AlertDialogTitle>{translate("프로바이더 제거")}</AlertDialogTitle>
             <AlertDialogDescription>
               {/* 결과가 두 갈래이므로 «되돌릴 수 없다»고 단언하지 않고 둘 다 미리 말합니다. */}
               {translate("실행 기록이 없으면 등록한 주소와 키를 지웁니다. 기록이 있으면 제거 대신 비활성화합니다.")}
@@ -5275,7 +5275,11 @@ function ProviderOverviewTab({
   // 로그인 워크플로는 아직 Codex만 구현돼 있고, 키 연결은 manifest가 정합니다.
   const canLogin = usesAccounts && connection.providerId === "openai-codex";
   // manifest 밖에서 직접 등록한 Provider도 API 어댑터면 키를 받습니다.
-  const directEndpointId = connection.endpoints[0]?.endpointId;
+  const directEndpointId = connection.endpoints[0]?.endpointId || undefined;
+  // 키는 계정이 아니라 자격 증명이 사실입니다. mine으로 세면 직접 등록 Provider는 영원히 0입니다.
+  const hasKey = connection.credentialVersion !== undefined;
+  const credentialCount = usesAccounts ? mine.length : hasKey ? 1 : 0;
+  const credentialEmpty = usesAccounts ? mine.length === 0 : !hasKey;
   const canConnectKey =
     !canLogin &&
     (connection.keyAuthKind !== undefined ||
@@ -5295,7 +5299,10 @@ function ProviderOverviewTab({
     <>
       {connection.connectionConflict ? (
         <p className="mb-4 rounded-[5px] border border-gate-border bg-gate-wash px-3 py-2 text-[12px] text-secondary">
-          {translate("OpenAI Codex ID가 다른 어댑터로 등록되어 있습니다. Codex 로그인에서 호환성을 확인해 주세요.")}
+          {connection.displayName}
+          {translate(
+            "는 공식 구독 Provider와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.",
+          )}
         </p>
       ) : null}
       <section className="mb-6">
@@ -5336,9 +5343,9 @@ function ProviderOverviewTab({
       <section>
         <div className="mb-2 flex items-baseline gap-2">
           <h3 className="text-label text-fg-4">{usesAccounts ? translate("계정") : translate("API 키")}</h3>
-          <span className="font-mono text-[11px] tabular-nums text-muted">{mine.length}</span>
+          <span className="text-figure tabular-nums text-fg-4">{credentialCount}</span>
         </div>
-        {mine.length === 0 ? (
+        {credentialEmpty ? (
           <div className="py-2">
             <p className="text-speaker text-fg-4">
               {usesAccounts ? translate("연결된 계정이 없습니다.") : translate("등록된 키가 없습니다.")}
@@ -5362,7 +5369,7 @@ function ProviderOverviewTab({
             }}
             type="button"
           >
-            {translate(mine.length === 0 ? "키로 연결" : "키 교체")}
+            {translate(hasKey ? "키 교체" : "키로 연결")}
           </button>
         ) : null}
         {canLogin ? (
@@ -6962,7 +6969,7 @@ function InspectorRoom({ room }: { room: RoomView }) {
                 </p>
                 <span aria-hidden="true" className="mt-1 block h-[3px] overflow-hidden rounded-sm bg-bg-3">
                   <span
-                    className="block h-full bg-muted"
+                    className="block h-full bg-fg-3"
                     style={{
                       width: `${String(Math.min(100, Math.round((budget.used / Math.max(budget.limit, 1)) * 100)))}%`,
                     }}
