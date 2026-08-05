@@ -22,9 +22,20 @@ async function cancelBestEffort(transaction: SurrealTransaction): Promise<void> 
   }
 }
 
+/**
+ * 서버의 WebSocket transactions map에서 transaction이 사라진 경우입니다. 그 시점에
+ * commit된 것은 없으므로 새 transaction으로 다시 시도하는 것이 안전합니다. 재시도하지
+ * 않으면 사용자에게는 아무 조작이나 무작위로 실패하는 것으로 보입니다.
+ */
+function isLostTransaction(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^transaction(?:\s+[0-9a-fA-F-]+)?\s+not found/iu.test(message.trim());
+}
+
 function isCompatibleRetryableConflict(error: unknown): boolean {
   return (
     isRetryableConflict(error) ||
+    isLostTransaction(error) ||
     (error instanceof Error &&
       error.message.startsWith(LEGACY_CONFLICT_PREFIX) &&
       error.message.endsWith("can be retried"))

@@ -83,6 +83,35 @@ describe("SurrealDB 연결", () => {
     expect(cancellations).toBe(4);
   });
 
+  it("서버가 transaction을 잃어버리면 새 transaction으로 다시 시도한다", async () => {
+    // WebSocket transactions map이 비면 진행 중이던 transaction이 통째로 사라집니다.
+    // 아무것도 commit되지 않은 상태이므로 재시도가 안전합니다.
+    const lost = new Error("Transaction 019fd3cd-9f78-7723-a5cb-b94e420b0fd0 not found");
+    let attempts = 0;
+    const database = new MassionDatabase({
+      beginTransaction: async () => {
+        attempts += 1;
+        const failing = attempts === 1;
+        return {
+          query: async () => {
+            if (failing) throw lost;
+            return [];
+          },
+          commit: async () => undefined,
+          cancel: async () => undefined,
+        };
+      },
+    } as never);
+
+    await expect(
+      database.transaction(async (transaction) => {
+        await transaction.query("SELECT 1;");
+        return "완료";
+      }),
+    ).resolves.toBe("완료");
+    expect(attempts).toBe(2);
+  });
+
   it("transaction은 응답을 막을 수 있는 별도 session 수명주기를 만들지 않는다", async () => {
     let committed = false;
     const database = new MassionDatabase({
