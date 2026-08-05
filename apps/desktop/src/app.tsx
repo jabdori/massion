@@ -5216,7 +5216,11 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             <AlertDialogTitle>{translate("프로바이더 제거")}</AlertDialogTitle>
             <AlertDialogDescription>
               {/* 결과가 두 갈래이므로 «되돌릴 수 없다»고 단언하지 않고 둘 다 미리 말합니다. */}
-              {translate("실행 기록이 없으면 등록한 주소와 키를 지웁니다. 기록이 있으면 제거 대신 비활성화합니다.")}
+              {translate(
+                selected?.enabled === false
+                  ? "이 프로바이더는 이미 비활성입니다. 지금 제거하면 등록이 사라집니다."
+                  : "실행 기록이 없으면 등록한 주소와 키를 지웁니다. 기록이 있으면 제거 대신 비활성화합니다.",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? (

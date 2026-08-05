@@ -14,6 +14,7 @@ import {
 
 import {
   MODEL_ROUTE_MIGRATION,
+  MODEL_VERIFICATION_EVIDENCE_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
   ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
@@ -373,8 +374,9 @@ export class ProviderService {
   ): Promise<ProviderService> {
     await applyMigrations(database, [
       ROUTER_REGISTRY_MIGRATION,
-      // Provider 제거가 딸린 모델 등록까지 정리하므로 같은 스키마를 보장합니다.
+      // Provider 제거가 딸린 모델 등록·검증 근거까지 정리하므로 같은 스키마를 보장합니다.
       MODEL_ROUTE_MIGRATION,
+      MODEL_VERIFICATION_EVIDENCE_MIGRATION,
       ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
       ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
     ]);
@@ -573,7 +575,13 @@ export class ProviderService {
       "provider_removed",
       canonicalJson(input),
       async (tx) => {
-        const provider = await this.requireProvider(tx, context.organizationId, input.providerId);
+        // requireProvider는 활성만 봅니다. 은퇴시킨 것을 다시 지우려면 비활성도 찾아야 합니다.
+        const [existing] = await tx.query<[ModelProvider[]]>(
+          "SELECT * OMIT id FROM model_provider WHERE organization_id = $organization_id AND provider_id = $provider_id LIMIT 1;",
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        const provider = existing[0];
+        if (!provider) throw new Error(`Provider를 찾을 수 없습니다: ${input.providerId}`);
         if (provider.adapter_kind === "subscription-connector")
           throw new Error("구독으로 연결한 Provider는 구독 해제로만 정리할 수 있습니다");
         const [profiles] = await tx.query<[{ readonly model_profile_id: string }[]]>(
@@ -587,9 +595,9 @@ export class ProviderService {
             "SELECT count() FROM route_attempt WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids GROUP ALL;",
             { organization_id: context.organizationId, profile_ids: profileIds },
           );
-          // 실행 계보는 정본이라 지우지 않습니다. 대신 라우팅에서 빼고 자격을 폐기해
-          // 이 Provider가 더는 선택되지 않게 합니다.
-          retired = (attempts[0]?.count ?? 0) > 0;
+          // 처음 제거하면 실행 계보를 지키려고 은퇴만 시킵니다. 이미 은퇴한 것을 다시 제거하면
+          // 사용자가 두 번 확인한 것이므로 등록 자체를 지웁니다. route_attempt 행은 그대로 남습니다.
+          retired = (attempts[0]?.count ?? 0) > 0 && provider.enabled;
           await tx.query(
             "DELETE model_route_candidate WHERE organization_id = $organization_id AND model_profile_id IN $profile_ids;",
             { organization_id: context.organizationId, profile_ids: profileIds },

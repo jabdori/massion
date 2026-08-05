@@ -601,6 +601,44 @@ describe("Provider와 암호화 Credential lifecycle", () => {
     expect(await service.listCredentials(context)).toHaveLength(0);
   });
 
+  it("이미 은퇴한 Provider를 다시 제거하면 등록을 지운다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    const modelProfileId = crypto.randomUUID();
+    await database.query(
+      "CREATE model_profile CONTENT { model_profile_id: $model_profile_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, model_id: 'retired-twice', route_kind: 'chat', context_window: 1000, supports_tools: false, supports_structured_output: false, supports_vision: false, supports_streaming: false, equivalence_group: 'test-group', eval_score: 0.9f, verified: false, enabled: true, created_at: time::now(), updated_at: time::now() };",
+      {
+        model_profile_id: modelProfileId,
+        organization_id: context.organizationId,
+        provider_id: provider.provider_id,
+        endpoint_id: endpoint.endpoint_id,
+      },
+    );
+    await database.query(
+      "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: 'route-1', model_profile_id: $model_profile_id, candidate_id: 'candidate-1', credential_id: 'credential-1', credential_secret_version: 1, command_id: 'command-1', status: 'failed', selection_sequence: 1, estimated_tokens: 0, reserved_cost_micros: 0, explanation_json: '{}', created_at: time::now(), updated_at: time::now() };",
+      { attempt_id: crypto.randomUUID(), organization_id: context.organizationId, model_profile_id: modelProfileId },
+    );
+
+    const first = await service.removeProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+    });
+    expect(first.removed).toBe(false);
+
+    const second = await service.removeProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+    });
+
+    expect(second.removed).toBe(true);
+    expect(await service.listProviders(context)).toHaveLength(0);
+    // 실행 기록 자체는 지우지 않습니다.
+    const [attempts] = await database.query<[{ readonly count: number }[]]>(
+      "SELECT count() FROM route_attempt WHERE organization_id = $organization_id GROUP ALL;",
+      { organization_id: context.organizationId },
+    );
+    expect(attempts[0]?.count).toBe(1);
+  });
+
   it("구독 연결 Provider는 제거 대신 구독 해제를 요구한다", async () => {
     await service.registerProvider(context, {
       commandId: crypto.randomUUID(),
