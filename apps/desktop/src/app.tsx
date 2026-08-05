@@ -4259,7 +4259,7 @@ function AttemptDetail({ attempt, onClose }: { attempt: RouteAttemptView | undef
       }}
       open={attempt !== undefined}
     >
-      <DialogContent className="max-w-[520px]">
+      <DialogContent className="w-[520px]">
         {attempt === undefined ? null : (
           <>
             <DialogTitle className="flex items-baseline gap-2">
@@ -4869,7 +4869,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         });
       } else {
         const endpointId = target?.endpoints[0]?.endpointId;
-        if (!endpointId) throw new Error("연결할 endpoint를 찾지 못했습니다.");
+        if (!endpointId) throw new Error("연결할 주소를 찾지 못했습니다.");
         await service.addCredential({
           providerId,
           endpointId,
@@ -5031,12 +5031,12 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         <div className="min-h-0 overflow-y-auto px-5 py-4">
           {error && keyTarget === undefined && !confirmRemoval ? (
             <p className="mb-3 text-speaker text-danger" role="alert">
-              {error}
+              {translate(error)}
             </p>
           ) : null}
           {notice ? (
             <p className="mb-3 text-speaker text-fg-3" role="status">
-              {notice}
+              {translate(notice)}
             </p>
           ) : null}
           {settings === undefined && connections.length === 0 ? (
@@ -5131,7 +5131,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             </label>
             {error ? (
               <p className="text-speaker text-danger" role="alert">
-                {error}
+                {translate(error)}
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
@@ -5169,7 +5169,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           </AlertDialogHeader>
           {error ? (
             <p className="text-speaker text-danger" role="alert">
-              {error}
+              {translate(error)}
             </p>
           ) : null}
           <AlertDialogFooter>

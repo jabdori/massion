@@ -143,6 +143,24 @@ describe("스타일 의미 토큰", () => {
     expect([...called].filter((message) => !catalog.has(message))).toEqual([]);
   });
 
+  /*
+   * 이번 감사에서 가장 오래 숨은 결함은 «등록 안 함»이 아니라 «등록했는데 호출 안 함»이었습니다.
+   * 오류·알림 문구 11개가 번역된 채로 6라운드 동안 사문이었고, {error}가 translate()를 거치지
+   * 않아 영어 화면에서 한국어로 낭독됐습니다. 반대 방향도 함께 검사합니다.
+   */
+  it("프로바이더 표면의 상태 문구는 등록만 하고 방치하지 않습니다", () => {
+    const catalog = new Set(
+      [...messages.matchAll(/^\s*(?:"([^"]+)"|([^\s":]+)):/gmu)].map((match) => match[1] ?? match[2] ?? ""),
+    );
+    const surfaceMessages = [...app.matchAll(/set(?:Error|Notice)\(\s*"([^"]+)"/gu)].map((match) => match[1] ?? "");
+    const unregistered = surfaceMessages.filter((message) => !catalog.has(message));
+    expect(unregistered).toEqual([]);
+    // 그 문구들이 실제로 화면에 나가려면 렌더 지점이 translate를 거쳐야 합니다.
+    // 범위는 프로바이더 표면입니다. 수신함·새 Work의 같은 결함은 그 표면을 감사할 때 함께 넣습니다.
+    const surface = app.slice(app.indexOf("function ProviderField"), app.indexOf("function SurfaceLoading"));
+    expect(surface).not.toMatch(/role="(?:alert|status)">\s*\{(?:error|notice)\}/u);
+  });
+
   it("scope work·미승인 표기를 점선 토큰 하나로 고정합니다", () => {
     expect(styles).toMatch(/--provisional-border:\s*1px dashed var\(--agent-provisional\);/);
   });

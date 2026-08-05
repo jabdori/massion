@@ -446,6 +446,7 @@ export const appEnglishMessages = {
   "구독 로그인": "Subscription login",
   "사용 중": "In use",
   미사용: "Not in use",
+  "연결할 주소를 찾지 못했습니다.": "Couldn't find an address to connect to.",
   "OpenAI 호환": "OpenAI-compatible",
   "이 프로바이더는 공식 구독 프로바이더와 같은 ID이지만 다른 어댑터로 등록돼 있습니다. 제거한 뒤 다시 연결해 주세요.":
     "This provider shares an ID with an official subscription provider but is registered with a different adapter. Remove it and connect again.",
