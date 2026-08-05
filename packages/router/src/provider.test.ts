@@ -562,6 +562,45 @@ describe("Provider와 암호화 Credential lifecycle", () => {
     expect(await service.listCredentials(context)).toHaveLength(0);
   });
 
+  it("실행 계보가 있으면 제거 대신 비활성화하고 라우팅 후보에서 뺀다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "기본 키",
+      credentialType: "api_key",
+      secret: "sk-retire-me",
+      priority: 0,
+      weight: 100,
+    });
+    const modelProfileId = crypto.randomUUID();
+    await database.query(
+      "CREATE model_profile CONTENT { model_profile_id: $model_profile_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, model_id: 'retired-model', route_kind: 'chat', context_window: 1000, supports_tools: false, supports_structured_output: false, supports_vision: false, supports_streaming: false, equivalence_group: 'test-group', eval_score: 0.9f, verified: false, enabled: true, created_at: time::now(), updated_at: time::now() };",
+      {
+        model_profile_id: modelProfileId,
+        organization_id: context.organizationId,
+        provider_id: provider.provider_id,
+        endpoint_id: endpoint.endpoint_id,
+      },
+    );
+    await database.query(
+      "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: 'route-1', model_profile_id: $model_profile_id, candidate_id: 'candidate-1', credential_id: 'credential-1', credential_secret_version: 1, command_id: 'command-1', status: 'failed', selection_sequence: 1, estimated_tokens: 0, reserved_cost_micros: 0, explanation_json: '{}', created_at: time::now(), updated_at: time::now() };",
+      { attempt_id: crypto.randomUUID(), organization_id: context.organizationId, model_profile_id: modelProfileId },
+    );
+
+    const outcome = await service.removeProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+    });
+
+    expect(outcome.removed).toBe(false);
+    const providers = await service.listProviders(context);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]?.enabled).toBe(false);
+    expect(await service.listCredentials(context)).toHaveLength(0);
+  });
+
   it("구독 연결 Provider는 제거 대신 구독 해제를 요구한다", async () => {
     await service.registerProvider(context, {
       commandId: crypto.randomUUID(),

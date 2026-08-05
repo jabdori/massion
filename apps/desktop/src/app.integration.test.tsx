@@ -1603,10 +1603,54 @@ describe("AgentOS native data flow", () => {
     await user.click(await screen.findByRole("button", { name: "프로바이더 제거" }));
     // 첫 클릭은 확인만 요청하고 아직 지우지 않습니다.
     expect(removeProvider).not.toHaveBeenCalled();
-    await user.click(await screen.findByRole("button", { name: "제거 확인" }));
+    await user.click(await screen.findByRole("button", { name: "제거" }));
 
     expect(removeProvider).toHaveBeenCalledWith("openrouter");
     expect(await screen.findByText("프로바이더를 제거했습니다.")).toBeInTheDocument();
+  });
+
+  it("직접 등록한 Provider도 endpoint에 키를 달 수 있고 실패는 모달 안에서 알린다", async () => {
+    const user = userEvent.setup();
+    const addCredential = vi.fn(async () => {
+      throw new Error("키가 거부됐습니다.");
+    });
+    const loadSettings = vi.fn(async () => ({
+      catalog: {
+        providers: [
+          { providerId: "openrouter", displayName: "OpenRouter", adapterKind: "openai-compatible", enabled: true },
+        ],
+        endpoints: [
+          {
+            endpointId: "endpoint-openrouter",
+            providerId: "openrouter",
+            name: "api",
+            baseUrl: "https://openrouter.ai/api/v1",
+          },
+        ],
+        models: [],
+        candidates: [],
+      },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    render(<App service={service({ addCredential, loadSettings })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    // manifest에 없는 Provider라도 어댑터가 키를 받으면 연결 경로가 있어야 합니다.
+    await user.click(await screen.findByRole("button", { name: "키로 연결" }));
+    await user.type(screen.getByLabelText("키"), "sk-test");
+    await user.click(screen.getByRole("button", { name: "연결" }));
+
+    expect(addCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "openrouter", endpointId: "endpoint-openrouter", secret: "sk-test" }),
+    );
+    // 실패 사유가 모달 뒤로 숨지 않아야 합니다.
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("키가 거부됐습니다.");
   });
 
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {

@@ -172,7 +172,8 @@
   --color-primary-foreground: var(--bg-0);
   --color-secondary: var(--fg-2);
   --color-secondary-foreground: var(--fg);
-  --color-muted: var(--fg-3);
+  /* :root의 --muted가 fg-4인데 여기만 fg-3을 가리켜, text-muted와 text-fg-3이 같은 픽셀이었습니다. */
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--fg-3);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-ink);

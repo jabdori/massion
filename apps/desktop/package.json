@@ -30,7 +30,8 @@
     "react-resizable-panels": "^4.12.2",
     "rehype-katex": "7.0.1",
     "remark-gfm": "4.0.1",
-    "remark-math": "6.0.0"
+    "remark-math": "6.0.0",
+    "@massion/subscriptions": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

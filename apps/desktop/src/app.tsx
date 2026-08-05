@@ -3776,7 +3776,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
     >
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)_auto] border-r border-border bg-chrome">
         <header className="flex items-baseline gap-2 px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.008em]">{translate("예산")}</h1>
+          <h1 className="text-title">{translate("예산")}</h1>
           <span className="font-mono text-[11px] tabular-nums text-muted">{costText(spent)}</span>
         </header>
         {/* 목록 문법은 프로바이더 표면과 같습니다 — 전폭 행, 사이는 선. 표면을 옮길 때 눈이 자리를 다시 찾지 않습니다. */}
@@ -4602,6 +4602,11 @@ function ProviderField({ children, label }: { children: ReactNode; label: string
   );
 }
 
+function adapterLabel(adapterKind: string): string {
+  if (adapterKind === "subscription-connector") return translate("구독 로그인");
+  return PROVIDER_ADAPTERS.find((adapter) => adapter.value === adapterKind)?.label ?? adapterKind;
+}
+
 const PROVIDER_ADAPTERS = [
   { value: "openai-compatible", label: "OpenAI 호환" },
   { value: "anthropic", label: "Anthropic" },
@@ -4708,17 +4713,14 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
-  /*
-   * 모델 켜고 끄기는 화면이 먼저 세웁니다. 계약에 model.enable 명령이 아직 없어 이 회차는
-   * 화면 상태로만 남습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
-   */
-  const [disabledModels, setDisabledModels] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [secret, setSecret] = useState("");
   const [draft, setDraft] = useState({ displayName: "", adapterKind: "openai-compatible", baseUrl: "" });
   const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [keyTarget, setKeyTarget] = useState<string>();
+  const [keySecret, setKeySecret] = useState("");
 
   useEffect(() => {
     let disposed = false;
@@ -4816,7 +4818,8 @@ function ProviderSurface({ service }: { service: DesktopService }) {
     }
   };
 
-  const connections = settings ? projectProviderConnections(settings.catalog, settings.providers) : [];
+  // 지원 목록은 앱 상수라 서버를 기다리지 않습니다. 연결 상태만 도착한 뒤 채워집니다.
+  const connections = projectProviderConnections(settings?.catalog, settings?.providers);
   const accounts = settings ? projectSubscriptionAccounts(settings.accounts) : [];
   const normalizedQuery = normalizeSearch(query, locale);
   const matched = connections.filter(
@@ -4848,6 +4851,45 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       ),
     },
   ].filter((group) => group.items.length > 0);
+  const connectKey = async (providerId: string, secret: string) => {
+    if (saving || !secret.trim()) return;
+    const target = connections.find((connection) => connection.providerId === providerId);
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      // 구독 manifest는 계정을 만들고, 직접 등록한 Provider는 endpoint에 자격을 답니다.
+      if (target?.keyAuthKind) {
+        await service.connectSubscriptionKey({
+          providerId,
+          alias: target.displayName,
+          authKind: target.keyAuthKind,
+          secret,
+        });
+      } else {
+        const endpointId = target?.endpoints[0]?.endpointId;
+        if (!endpointId) throw new Error("연결할 endpoint를 찾지 못했습니다.");
+        await service.addCredential({
+          providerId,
+          endpointId,
+          label: "기본 키",
+          credentialType: "api_key",
+          secret,
+          priority: 0,
+          weight: 100,
+        });
+      }
+      setSettings(await service.loadSettings());
+      setKeyTarget(undefined);
+      setKeySecret("");
+      setNotice("키를 등록했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "키를 등록하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const removeProvider = async (providerId: string) => {
     if (saving) return;
     setSaving(true);
@@ -4876,8 +4918,8 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)_300px] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)_332px]"
     >
       <section className="grid min-h-0 grid-rows-[46px_auto_minmax(0,1fr)_auto] border-r border-border bg-chrome">
-        <header className="flex items-center px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.008em]">{translate("프로바이더")}</h1>
+        <header className="flex items-center border-b border-border px-3">
+          <h1 className="text-title">{translate("프로바이더")}</h1>
         </header>
         <div className="px-2 pb-2">
           <input
@@ -4890,7 +4932,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             value={query}
           />
         </div>
-        <nav className="min-h-0 overflow-y-auto px-2 pb-2">
+        <nav className="min-h-0 overflow-y-auto pb-2">
           {groups.length === 0 ? (
             <p className="px-2.5 py-2 text-[12px] text-muted">
               {connections.length === 0 ? "연결된 프로바이더가 없습니다." : "검색과 맞는 것이 없습니다."}
@@ -4899,17 +4941,22 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             groups.map((group) => (
               <div className="mb-3 last:mb-0" key={group.title}>
                 {group.title ? (
-                  <div className="mb-1 border-b border-border px-2.5 pb-1.5">
-                    <span className="text-[11px] text-muted">{translate(group.title)}</span>
+                  <div className="mb-1 border-b border-border px-3 pb-2">
+                    <h2 className="text-label text-fg-4" id={`provider-group-${group.title}`}>
+                      {translate(group.title)}
+                    </h2>
                   </div>
                 ) : null}
                 {/* 행은 전폭이고 사이는 여백이 아니라 선으로 가릅니다. 둥근 인셋은 카드라는 다른 뜻을 갖습니다. */}
-                <ul className="divide-y divide-border">
+                <ul
+                  className="divide-y divide-border"
+                  {...(group.title ? { "aria-labelledby": `provider-group-${group.title}` } : {})}
+                >
                   {group.items.map((connection) => (
                     <li key={connection.providerId}>
                       <button
                         aria-current={connection.providerId === selected?.providerId ? "true" : undefined}
-                        className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left outline-none transition-colors duration-150 ${
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors duration-150 ${
                           connection.providerId === selected?.providerId
                             ? "bg-[rgb(255_255_255/0.047)]"
                             : "hover:bg-[rgb(255_255_255/0.027)]"
@@ -4922,18 +4969,28 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                         }}
                         type="button"
                       >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] text-secondary">{connection.displayName}</span>
-                          <span className="flex items-baseline gap-1.5 text-[11px] text-muted">
-                            <span aria-hidden="true" className={connection.enabled ? "text-fg-3" : "text-muted"}>
-                              ●
-                            </span>
-                            <span className="tabular-nums">
-                              {connection.models.filter((model) => model.enabled).length}/{connection.models.length}
-                            </span>
-                            <span>{translate("모델")}</span>
-                          </span>
+                        <span
+                          aria-hidden="true"
+                          className={`size-1.5 shrink-0 rounded-full ${
+                            connection.connected && connection.enabled ? "bg-fg-3" : "border border-fg-4"
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-body text-secondary">
+                          {connection.displayName}
                         </span>
+                        <span className="sr-only">
+                          {connection.connected
+                            ? connection.enabled
+                              ? translate("활성")
+                              : translate("비활성")
+                            : translate("사용 가능")}
+                        </span>
+                        {connection.models.length === 0 ? null : (
+                          <span className="shrink-0 text-figure tabular-nums text-fg-4">
+                            {connection.models.filter((model) => model.enabled).length}/{connection.models.length}
+                            <span className="sr-only"> {translate("모델")}</span>
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
@@ -4957,9 +5014,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
 
       <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
         <header className="flex items-center gap-3 border-b border-border px-5">
-          <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.008em] text-primary">
-            {selected?.displayName ?? "프로바이더"}
-          </h2>
+          <h2 className="min-w-0 truncate text-title text-primary">{selected?.displayName ?? "프로바이더"}</h2>
           {selected ? (
             <span className="shrink-0 text-[11px] text-muted">
               {selected.connectionConflict
@@ -4973,8 +5028,17 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           ) : null}
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
-          {error ? <p className="mb-3 text-[12px] text-danger">{error}</p> : null}
-          {settings === undefined ? (
+          {error ? (
+            <p className="mb-3 text-speaker text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notice ? (
+            <p className="mb-3 text-speaker text-fg-3" role="status">
+              {notice}
+            </p>
+          ) : null}
+          {settings === undefined && connections.length === 0 ? (
             <SurfaceLoading />
           ) : selected === undefined ? (
             <p className="text-[12px] text-muted">
@@ -4988,112 +5052,140 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 accounts={accounts}
                 connection={selected}
                 loginBusy={loginBusy}
+                onConnectKey={() => {
+                  setKeyTarget(selected.providerId);
+                }}
                 onLogin={(newAccount, alias) => void loginSubscription(selected, newAccount, alias)}
               />
               {selected.connected && selected.adapterKind !== "subscription-connector" ? (
-                <div className="mt-5 border-t border-border pt-4">
-                  {confirmRemoval ? (
-                    <>
-                      <p className="text-[12px] leading-4 text-danger">
-                        {translate("정말 제거할까요? 되돌릴 수 없습니다.")}
-                      </p>
-                      <div className="mt-2.5 flex gap-2">
-                        <button
-                          className="rounded-[5px] border border-danger bg-[rgb(255_255_255/0.02)] px-3 py-1.5 text-[12px] text-danger transition duration-150 hover:bg-[rgb(255_255_255/0.05)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={saving}
-                          onClick={() => {
-                            void removeProvider(selected.providerId);
-                          }}
-                          type="button"
-                        >
-                          {saving ? translate("제거하는 중…") : translate("제거 확인")}
-                        </button>
-                        <button
-                          className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-fg-3 hover:text-primary active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={saving}
-                          onClick={() => {
-                            setConfirmRemoval(false);
-                          }}
-                          type="button"
-                        >
-                          {translate("취소")}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      className="rounded-[5px] border border-danger px-3 py-1.5 text-[12px] text-danger transition duration-150 hover:bg-[rgb(255_255_255/0.04)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={saving}
-                      onClick={() => {
-                        setNotice("");
-                        setError("");
-                        setConfirmRemoval(true);
-                      }}
-                      type="button"
-                    >
-                      {translate("프로바이더 제거")}
-                    </button>
-                  )}
-                  <p className="mt-2 text-[11px] leading-4 text-muted">
-                    {translate("등록한 주소와 키를 함께 지웁니다. 실행 기록이 있으면 지울 수 없습니다.")}
-                  </p>
+                <div className="mt-6 border-t border-border pt-4">
+                  <button
+                    className="rounded-[5px] px-2 py-1 text-speaker text-fg-4 transition-colors duration-150 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={saving}
+                    onClick={() => {
+                      setNotice("");
+                      setError("");
+                      setConfirmRemoval(true);
+                    }}
+                    type="button"
+                  >
+                    {translate("프로바이더 제거")}
+                  </button>
                 </div>
               ) : null}
             </>
           )}
-          {notice ? <p className="mt-4 text-[12px] text-fg-3">{notice}</p> : null}
         </div>
       </div>
 
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
-        <header className="flex items-baseline gap-2 px-3">
-          <h2 className="text-[13px] text-muted">{translate("모델")}</h2>
-          <span className="font-mono text-[11px] tabular-nums text-muted">
-            {selected === undefined
-              ? 0
-              : selected.models.filter((model) => !disabledModels.has(model.modelProfileId)).length}
-            /{selected?.models.length ?? 0}
+        <header className="flex items-baseline gap-2 border-b border-border px-3">
+          <h2 className="text-label text-fg-4">{translate("모델")}</h2>
+          <span className="text-figure tabular-nums text-fg-4">
+            {selected?.models.filter((model) => model.enabled).length ?? 0}/{selected?.models.length ?? 0}
           </span>
-          {selected === undefined || selected.models.length === 0 ? null : (
-            <span className="ml-auto flex gap-1">
-              <button
-                className="rounded-[5px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
-                onClick={() => {
-                  setDisabledModels(new Set());
-                }}
-                type="button"
-              >
-                {translate("모두 켜기")}
-              </button>
-              <button
-                className="rounded-[5px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
-                onClick={() => {
-                  setDisabledModels(new Set(selected.models.map((model) => model.modelProfileId)));
-                }}
-                type="button"
-              >
-                {translate("모두 끄기")}
-              </button>
-            </span>
-          )}
         </header>
-        <div className="min-h-0 overflow-y-auto px-2 pb-3">
-          {selected === undefined ? null : (
-            <ProviderModelList
-              connection={selected}
-              disabled={disabledModels}
-              onToggle={(id) => {
-                setDisabledModels((current) => {
-                  const next = new Set(current);
-                  if (next.has(id)) next.delete(id);
-                  else next.add(id);
-                  return next;
-                });
-              }}
-            />
-          )}
+        <div className="min-h-0 overflow-y-auto pb-3">
+          {selected === undefined ? null : <ProviderModelList connection={selected} />}
         </div>
       </aside>
+
+      {/* 키는 보호된 포커스가 필요한 입력이라 모달이고, 값은 저장 직후 화면에서 지웁니다. */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setKeyTarget(undefined);
+            setKeySecret("");
+            setError("");
+          }
+        }}
+        open={keyTarget !== undefined}
+      >
+        <DialogContent aria-label={translate("키로 연결")} className="w-[440px]">
+          <form
+            className="grid gap-4 px-5 py-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (keyTarget) void connectKey(keyTarget, keySecret);
+            }}
+          >
+            <div>
+              <DialogTitle className="text-title">{translate("키로 연결")}</DialogTitle>
+              <DialogDescription className="mt-1 text-speaker leading-5 text-fg-4">
+                {translate("발급받은 키를 붙여 넣으면 이 프로바이더의 모델을 쓸 수 있습니다.")}
+              </DialogDescription>
+            </div>
+            <label className="grid gap-1.5">
+              <span className="text-figure text-fg-4">{translate("키")}</span>
+              <input
+                autoComplete="off"
+                autoFocus
+                className="w-full rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 text-body text-secondary outline-none focus-visible:border-fg-3"
+                onChange={(event) => {
+                  setKeySecret(event.target.value);
+                }}
+                type="password"
+                value={keySecret}
+              />
+            </label>
+            {error ? (
+              <p className="text-speaker text-danger" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <DialogClose className="rounded-[5px] border border-control px-3 py-1.5 text-speaker text-secondary hover:border-fg-3 hover:text-primary">
+                {translate("취소")}
+              </DialogClose>
+              <button
+                className="rounded-[5px] border border-control bg-[rgb(255_255_255/0.04)] px-3 py-1.5 text-speaker text-primary transition-colors duration-150 hover:border-fg-3 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={saving || !keySecret.trim()}
+                type="submit"
+              >
+                {saving ? translate("연결하는 중…") : translate("연결")}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmRemoval(false);
+            setError("");
+          }
+        }}
+        open={confirmRemoval}
+      >
+        <AlertDialogContent className="rounded-lg border border-line-strong bg-chrome ring-0">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-title">{translate("프로바이더 제거")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* 결과가 두 갈래이므로 «되돌릴 수 없다»고 단언하지 않고 둘 다 미리 말합니다. */}
+              {translate("실행 기록이 없으면 등록한 주소와 키를 지웁니다. 기록이 있으면 제거 대신 비활성화합니다.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? (
+            <p className="text-speaker text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel size="sm">{translate("취소")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={saving}
+              onClick={() => {
+                if (selected) void removeProvider(selected.providerId);
+              }}
+              size="sm"
+              variant="danger"
+            >
+              {saving ? translate("제거하는 중…") : translate("제거")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 자격 증명 입력은 보호된 포커스가 필요한 작업이라 모달입니다. 보던 프로바이더를 밀어내지 않습니다. */}
       <Dialog onOpenChange={setAddOpen} open={addOpen}>
@@ -5101,9 +5193,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           <div className="grid max-h-[80vh] min-h-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="flex items-start gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-[17px] font-semibold tracking-[-0.012em]">
-                  {translate("프로바이더 추가")}
-                </DialogTitle>
+                <DialogTitle className="text-title">{translate("프로바이더 추가")}</DialogTitle>
                 <DialogDescription className="mt-1 text-[12px] leading-5 text-muted">
                   {translate("검증된 모델을 연결하거나 직접 Provider를 등록합니다.")}
                 </DialogDescription>
@@ -5136,51 +5226,31 @@ function ProviderSurface({ service }: { service: DesktopService }) {
 }
 
 /** 열3. 이 프로바이더가 제공하는 모델 전부. 목록이라 열 하나를 온전히 씁니다. */
-function ProviderModelList({
-  connection,
-  disabled,
-  onToggle,
-}: {
-  connection: ProviderConnectionView;
-  disabled: ReadonlySet<string>;
-  onToggle: (modelProfileId: string) => void;
-}) {
+/**
+ * 모델 켜고 끄기는 아직 계약에 명령이 없습니다. 저장되지 않는 토글을 두면 사용자가
+ * 끈 것이 조용히 되살아나므로, 명령이 생기기 전까지는 사실만 읽습니다.
+ * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+ */
+function ProviderModelList({ connection }: { connection: ProviderConnectionView }) {
   if (connection.models.length === 0)
     return <p className="px-1 py-2 text-[12px] text-muted">{translate("등록된 모델이 없습니다.")}</p>;
   return (
     <ul>
-      {connection.models.map((model) => {
-        const on = !disabled.has(model.modelProfileId);
-        return (
-          <li key={model.modelProfileId}>
-            <button
-              aria-pressed={on}
-              className="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left outline-none transition-colors duration-150 hover:bg-[rgb(255_255_255/0.027)]"
-              onClick={() => {
-                onToggle(model.modelProfileId);
-              }}
-              type="button"
-            >
-              {/* 초록을 쓰지 않으므로 켜짐은 밝은 손잡이, 꺼짐은 가라앉은 트랙으로 가릅니다. */}
-              <span
-                className={`relative h-3 w-6 shrink-0 rounded-full transition-colors duration-150 ${
-                  on ? "bg-control" : "bg-border"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-2 w-2 rounded-full transition-all duration-150 ${
-                    on ? "left-3.5 bg-fg" : "left-0.5 bg-fg-3"
-                  }`}
-                />
-              </span>
-              <span className={`min-w-0 flex-1 truncate font-mono text-[12px] ${on ? "text-secondary" : "text-muted"}`}>
-                {model.modelId}
-              </span>
-              {model.verified ? null : <span className="shrink-0 text-[11px] text-muted">{translate("미확인")}</span>}
-            </button>
-          </li>
-        );
-      })}
+      {connection.models.map((model) => (
+        <li className="flex w-full items-center gap-2.5 px-3 py-1.5" key={model.modelProfileId}>
+          <span
+            aria-hidden="true"
+            className={`size-1.5 shrink-0 rounded-full ${model.enabled ? "bg-fg-3" : "border border-fg-4"}`}
+          />
+          <span
+            className={`min-w-0 flex-1 truncate font-mono text-speaker ${model.enabled ? "text-secondary" : "text-muted"}`}
+          >
+            {model.modelId}
+          </span>
+          <span className="sr-only">{model.enabled ? translate("사용 중") : translate("미사용")}</span>
+          {model.verified ? null : <span className="shrink-0 text-figure text-fg-4">{translate("미확인")}</span>}
+        </li>
+      ))}
     </ul>
   );
 }
@@ -5189,18 +5259,27 @@ function ProviderOverviewTab({
   accounts,
   connection,
   loginBusy,
+  onConnectKey,
   onLogin,
 }: {
   accounts: readonly SubscriptionAccountView[];
   connection: ProviderConnectionView;
   loginBusy: boolean;
   onLogin: (newAccount: boolean, alias: string) => void;
+  onConnectKey: () => void;
 }) {
   const mine = accounts.filter((account) => account.providerId === connection.providerId);
   // 구독 커넥터는 계정을 갖고, API 어댑터는 키를 갖습니다. 없는 쪽을 빈 목록으로 보이면 잘못된 인상을 줍니다.
   const usesAccounts = connection.subscriptionConnectable || connection.adapterKind === "subscription-connector";
   const activeAccount = mine.some((account) => account.status === "active");
+  // 로그인 워크플로는 아직 Codex만 구현돼 있고, 키 연결은 manifest가 정합니다.
   const canLogin = usesAccounts && connection.providerId === "openai-codex";
+  // manifest 밖에서 직접 등록한 Provider도 API 어댑터면 키를 받습니다.
+  const directEndpointId = connection.endpoints[0]?.endpointId;
+  const canConnectKey =
+    !canLogin &&
+    (connection.keyAuthKind !== undefined ||
+      (connection.adapterKind !== "subscription-connector" && directEndpointId !== undefined));
   const reconnectAccount = mine.find((account) => account.status !== "active");
   const primaryLogin =
     mine.length === 0
@@ -5215,12 +5294,12 @@ function ProviderOverviewTab({
   return (
     <>
       {connection.connectionConflict ? (
-        <p className="mb-4 rounded-[5px] border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-secondary">
+        <p className="mb-4 rounded-[5px] border border-gate-border bg-gate-wash px-3 py-2 text-[12px] text-secondary">
           {translate("OpenAI Codex ID가 다른 어댑터로 등록되어 있습니다. Codex 로그인에서 호환성을 확인해 주세요.")}
         </p>
       ) : null}
       <section className="mb-6">
-        <h3 className="mb-2 text-[13px] text-muted">{translate("연결")}</h3>
+        <h3 className="mb-2 text-label text-fg-4">{translate("연결")}</h3>
         <dl>
           {connection.endpoints.map((endpoint) => (
             <ProviderField key={endpoint.baseUrl} label="Base URL">
@@ -5238,7 +5317,7 @@ function ProviderOverviewTab({
                     : "로그인이 필요합니다"}
               </span>
             ) : connection.credentialVersion === undefined ? (
-              <span className="text-muted">{translate("등록되지 않았습니다")}</span>
+              <span className="text-fg-2">{translate("등록되지 않았습니다")}</span>
             ) : (
               <span>
                 {translate("API 키")}
@@ -5249,21 +5328,24 @@ function ProviderOverviewTab({
             )}
           </ProviderField>
           <ProviderField label={translate("어댑터")}>
-            <span className="font-mono text-[12px]">{connection.adapterKind}</span>
+            <span className="text-body">{adapterLabel(connection.adapterKind)}</span>
           </ProviderField>
         </dl>
       </section>
 
       <section>
         <div className="mb-2 flex items-baseline gap-2">
-          <h3 className="text-[13px] text-muted">{usesAccounts ? "계정" : "API 키"}</h3>
+          <h3 className="text-label text-fg-4">{usesAccounts ? translate("계정") : translate("API 키")}</h3>
           <span className="font-mono text-[11px] tabular-nums text-muted">{mine.length}</span>
         </div>
         {mine.length === 0 ? (
-          <div className="rounded-[5px] border border-border px-3 py-6 text-center">
-            <p className="text-[12px] text-muted">
-              {usesAccounts ? "연결된 계정이 없습니다." : "등록된 키가 없습니다."}
+          <div className="py-2">
+            <p className="text-speaker text-fg-4">
+              {usesAccounts ? translate("연결된 계정이 없습니다.") : translate("등록된 키가 없습니다.")}
             </p>
+            {canLogin || canConnectKey ? null : (
+              <p className="mt-1 text-figure text-fg-4">{translate("이 앱에서는 아직 연결할 수 없습니다.")}</p>
+            )}
           </div>
         ) : (
           <ul className="space-y-2">
@@ -5272,6 +5354,17 @@ function ProviderOverviewTab({
             ))}
           </ul>
         )}
+        {canConnectKey ? (
+          <button
+            className="mt-2 w-full rounded-[5px] border border-control px-3 py-1.5 text-speaker text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
+            onClick={() => {
+              onConnectKey();
+            }}
+            type="button"
+          >
+            {translate(mine.length === 0 ? "키로 연결" : "키 교체")}
+          </button>
+        ) : null}
         {canLogin ? (
           <div aria-busy={loginBusy} className="mt-2 grid gap-2">
             <button
@@ -7711,7 +7804,7 @@ function NewWorkDialog({
               {translate("폴더 추가")}
             </Button>
             {workspace?.trust === "pending" ? (
-              <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+              <div className="rounded-md border border-gate-border bg-gate-wash p-3 text-sm">
                 <p>{translate("이 폴더 안에서 에이전트가 읽기·쓰기 도구를 사용할 수 있습니다.")}</p>
                 <p className="mt-1 font-mono text-xs text-muted">{workspace.path}</p>
                 <div className="mt-2 flex gap-2">

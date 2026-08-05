@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/provider-catalog.d.ts",
+      "default": "./dist/provider-catalog.js"
     }
   },
   "files": [

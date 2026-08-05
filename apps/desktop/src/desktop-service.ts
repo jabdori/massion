@@ -26,6 +26,7 @@ import {
   type WorkSummaryV1,
   type WorkspaceViewV1,
 } from "@massion/application/client";
+import { listSubscriptionProviderManifests } from "@massion/subscriptions/catalog";
 
 import {
   fixtureDataAdapter,
@@ -1166,7 +1167,14 @@ export interface ProviderConnectionView {
   readonly subscriptionConnectable: boolean;
   /** 같은 공식 ID가 호환되지 않는 Router adapter로 등록된 업그레이드 충돌입니다. */
   readonly connectionConflict: boolean;
-  readonly endpoints: readonly { readonly name: string; readonly baseUrl: string; readonly local: boolean }[];
+  /** manifest가 선언한 키 종류입니다. 없으면 구독 키로 연결하는 Provider가 아닙니다. */
+  readonly keyAuthKind?: "api-key" | "subscription-key";
+  readonly endpoints: readonly {
+    readonly endpointId: string;
+    readonly name: string;
+    readonly baseUrl: string;
+    readonly local: boolean;
+  }[];
   /** 없으면 «아직 한 번도 부르지 않았다»입니다. 성하다고 단정하지 않습니다. */
   readonly health?: ProviderHealthView;
   /**
@@ -1391,6 +1399,12 @@ export interface DesktopService {
   loadSettings(): Promise<SettingsView>;
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
+  connectSubscriptionKey(input: {
+    readonly providerId: string;
+    readonly alias: string;
+    readonly authKind: "api-key" | "subscription-key";
+    readonly secret: string;
+  }): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
   removeProvider(providerId: string): Promise<{ readonly removed: boolean }>;
   registerEndpoint(input: Record<string, unknown>): Promise<{ readonly endpointId: string }>;
@@ -1756,6 +1770,15 @@ export function createApplicationDesktopService(
         providerId: "zai-coding-plan",
         alias: input.alias,
         authKind: "api-key",
+        billingKind: "coding-plan",
+        secret: input.secret,
+      });
+    },
+    async connectSubscriptionKey(input) {
+      await command("subscription.server.connect-model", {
+        providerId: input.providerId,
+        alias: input.alias,
+        authKind: input.authKind,
         billingKind: "coding-plan",
         secret: input.secret,
       });
@@ -3390,6 +3413,7 @@ export function createFixtureDesktopService(): DesktopService {
           credentialVersions.set(credentialId, 1);
         }
       }),
+    connectSubscriptionKey: () => fixturePromise(() => undefined),
     registerProvider: (input) =>
       fixturePromise(() => {
         const catalog = settingsState.catalog as { providers: Record<string, unknown>[] };
@@ -5212,6 +5236,17 @@ function projectProviderHealth(row: Record<string, unknown> | undefined): Provid
   };
 }
 
+/**
+ * 키 한 줄로 연결되는 Provider만 화면이 입력을 요청합니다. 어떤 키인지까지 실어야
+ * 호출부가 providerId로 다시 분기하지 않습니다.
+ */
+function keyAuthKind(row: Record<string, unknown>): "api-key" | "subscription-key" | undefined {
+  const kinds = Array.isArray(row.authKinds) ? row.authKinds : [];
+  if (kinds.includes("api-key")) return "api-key";
+  if (kinds.includes("subscription-key")) return "subscription-key";
+  return undefined;
+}
+
 export function projectProviderConnections(catalog: unknown, providers?: unknown): readonly ProviderConnectionView[] {
   const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
   const endpoints = rows(source.endpoints);
@@ -5242,6 +5277,7 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
         subscriptionConnectable: false,
         connectionConflict: false,
         endpoints: providerEndpoints.map((endpoint) => ({
+          endpointId: str(endpoint, "endpointId"),
           name: str(endpoint, "name"),
           baseUrl: str(endpoint, "baseUrl"),
           local: bool(endpoint, "local"),
@@ -5265,11 +5301,19 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
           : {}),
       };
     });
-  // 지원하는 Provider는 등록 전에도 목록에 있어야 사용자가 키나 구독만 더하면 됩니다.
+  // 지원 목록은 앱에 고정된 상수라 서버를 기다릴 이유가 없습니다. 연결 상태만 나중에 채웁니다.
   // 연결 경로가 없는 manifest는 고를 수 없으므로 제외합니다.
-  const connectable = rows(providers).filter(
-    (row) => typeof row.providerId === "string" && str(row, "connectionSurface") !== "unavailable",
-  );
+  // providers가 아직 오지 않은 첫 렌더에서만 상수를 씁니다. 빈 배열은 서버가 없다고 답한 것이므로 존중합니다.
+  const connectable = (
+    providers === undefined
+      ? listSubscriptionProviderManifests().map((manifest) => ({
+          providerId: manifest.id,
+          displayName: manifest.displayName,
+          connectionSurface: manifest.connectionSurface,
+          authKinds: manifest.authKinds,
+        }))
+      : rows(providers).filter((row) => typeof row.providerId === "string")
+  ).filter((row) => ["server-only", "server-and-edge"].includes(str(row, "connectionSurface")));
   const merged = connections.map((connection) => {
     const manifest = connectable.find((row) => str(row, "providerId") === connection.providerId);
     if (!manifest) return connection;
@@ -5277,6 +5321,7 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
       ...connection,
       subscriptionConnectable: true,
       connectionConflict: connection.adapterKind !== "subscription-connector",
+      ...(keyAuthKind(manifest) ? { keyAuthKind: keyAuthKind(manifest) as "api-key" | "subscription-key" } : {}),
     };
   });
   const offered = connectable
@@ -5291,6 +5336,7 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
       connectionConflict: false,
       endpoints: [],
       models: [],
+      ...(keyAuthKind(row) ? { keyAuthKind: keyAuthKind(row) as "api-key" | "subscription-key" } : {}),
     }));
   return [...merged, ...offered].sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
