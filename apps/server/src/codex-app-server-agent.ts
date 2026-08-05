@@ -117,23 +117,30 @@ function optionalRecord(value: unknown): JsonRecord | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : undefined;
 }
 
-function appServerAuthenticationFailed(error: unknown): boolean {
+const APP_SERVER_TRANSPORT_FAILURES = new Set([
+  "httpConnectionFailed",
+  "responseStreamConnectionFailed",
+  "responseStreamDisconnected",
+  "responseTooManyFailedAttempts",
+]);
+
+/**
+ * 공식 app-server가 구조적으로 보고한 실패만 상태 코드를 보존해 반환합니다.
+ * 인식하지 못한 형태는 undefined를 돌려 호출자가 fail-closed하게 두고,
+ * fallback 허용 여부는 router의 보안 gate가 판단합니다.
+ */
+function appServerFailureSignal(error: unknown): { readonly kind: "http"; readonly statusCode: number } | undefined {
   const codexErrorInfo = optionalRecord(error)?.codexErrorInfo;
-  if (codexErrorInfo === "unauthorized") return true;
+  if (codexErrorInfo === "unauthorized") return { kind: "http", statusCode: 401 };
   const structured = optionalRecord(codexErrorInfo);
-  if (!structured || Object.keys(structured).length !== 1) return false;
+  if (!structured || Object.keys(structured).length !== 1) return undefined;
   const [kind] = Object.keys(structured);
-  switch (kind) {
-    case "httpConnectionFailed":
-    case "responseStreamConnectionFailed":
-    case "responseStreamDisconnected":
-    case "responseTooManyFailedAttempts": {
-      const details = optionalRecord(structured[kind]);
-      return details !== undefined && Object.keys(details).length === 1 && details.httpStatusCode === 401;
-    }
-    default:
-      return false;
-  }
+  if (kind === undefined || !APP_SERVER_TRANSPORT_FAILURES.has(kind)) return undefined;
+  const details = optionalRecord(structured[kind]);
+  if (!details || Object.keys(details).length !== 1) return undefined;
+  const statusCode = details.httpStatusCode;
+  if (!Number.isSafeInteger(statusCode) || Number(statusCode) < 400 || Number(statusCode) > 599) return undefined;
+  return { kind: "http", statusCode: Number(statusCode) };
 }
 
 function turnItemsHaveSideEffects(value: unknown): boolean {
@@ -501,18 +508,19 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
     if (turn.status === "failed") {
       if (turnItemsHaveSideEffects(turn.items)) active.sideEffectsStarted = true;
       const emittedTokens = Math.max(active.emittedTokens, active.usage?.outputTokens ?? 0);
-      const authenticationFailed = appServerAuthenticationFailed(turn.error);
-      const safeAuthenticationFailure =
-        authenticationFailed && active.usage?.outputTokens === 0 && emittedTokens === 0 && !active.sideEffectsStarted;
+      const signal = appServerFailureSignal(turn.error);
+      // 부작용과 출력은 관측 사실 그대로 보고하고, 어떤 상태 코드가 fallback 가능한지는 router가 판정합니다.
+      const sideEffectsStarted = active.sideEffectsStarted || emittedTokens > 0;
+      const safeFailure = signal !== undefined && !sideEffectsStarted;
       active.completion.resolve({
         outcome: "failed",
         executionId: active.input.executionId,
         sessionId: threadId,
         category: "codex-turn-failed",
-        retryable: safeAuthenticationFailure,
-        ...(safeAuthenticationFailure ? { signal: { kind: "http", statusCode: 401 } as const } : {}),
+        retryable: safeFailure,
+        ...(safeFailure ? { signal } : {}),
         emittedTokens,
-        sideEffectsStarted: safeAuthenticationFailure ? false : true,
+        sideEffectsStarted,
       });
       return;
     }

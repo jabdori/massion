@@ -402,18 +402,45 @@ describe("Codex app-server 구독 실행 adapter", () => {
   });
 
   it.each([
-    ["명시적인 unauthorized", "unauthorized"],
-    ["명시적인 HTTP 401", { httpConnectionFailed: { httpStatusCode: 401 } }],
-  ])("출력이나 도구 이벤트 전의 %s 오류만 fallback 가능한 실패로 반환한다", async (_label, codexErrorInfo) => {
+    ["명시적인 unauthorized", "unauthorized", 401],
+    ["명시적인 HTTP 401", { httpConnectionFailed: { httpStatusCode: 401 } }, 401],
+    ["구독 사용량 초과 429", { httpConnectionFailed: { httpStatusCode: 429 } }, 429],
+    ["upstream 503", { httpConnectionFailed: { httpStatusCode: 503 } }, 503],
+    ["stream 연결 실패 502", { responseStreamConnectionFailed: { httpStatusCode: 502 } }, 502],
+    ["stream 끊김 500", { responseStreamDisconnected: { httpStatusCode: 500 } }, 500],
+    ["재시도 소진 429", { responseTooManyFailedAttempts: { httpStatusCode: 429 } }, 429],
+  ])(
+    "출력이나 도구 이벤트 전의 %s 오류는 실제 상태 코드를 보존한 fallback 가능한 실패로 반환한다",
+    async (_label, codexErrorInfo, statusCode) => {
+      const connector = failedTurnConnector({
+        message: "Codex turn이 실패했습니다",
+        codexErrorInfo,
+        additionalDetails: null,
+      });
+
+      await expect(connector.execute(context, input)).resolves.toMatchObject({
+        outcome: "failed",
+        retryable: true,
+        signal: { kind: "http", statusCode },
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+      });
+    },
+  );
+
+  it.each([
+    ["결제 필요 402", { httpConnectionFailed: { httpStatusCode: 402 } }, 402],
+    ["정책 거부 403", { httpConnectionFailed: { httpStatusCode: 403 } }, 403],
+  ])("출력 전의 %s는 상태 코드를 보존하되 router가 fallback을 막도록 위임한다", async (_label, info, statusCode) => {
     const connector = failedTurnConnector({
-      message: "인증이 필요합니다",
-      codexErrorInfo,
+      message: "Codex turn이 실패했습니다",
+      codexErrorInfo: info,
       additionalDetails: null,
     });
 
     await expect(connector.execute(context, input)).resolves.toMatchObject({
       outcome: "failed",
-      signal: { kind: "http", statusCode: 401 },
+      signal: { kind: "http", statusCode },
       emittedTokens: 0,
       sideEffectsStarted: false,
     });
@@ -473,21 +500,47 @@ describe("Codex app-server 구독 실행 adapter", () => {
 
     const result = await connector.execute(context, input);
 
-    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
-    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
+    expect(result).toMatchObject({ outcome: "failed", retryable: false, sideEffectsStarted: true });
   });
 
-  it("401이 아닌 구조화 오류는 출력 전이어도 fallback 가능한 실패로 낮추지 않는다", async () => {
-    const connector = failedTurnConnector({
-      message: "요청이 제한됐습니다",
-      codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 429 } },
-      additionalDetails: null,
+  it.each([
+    [
+      "명령 실행 item",
+      {
+        method: "item/started",
+        params: {
+          threadId: "thread-auth-failed",
+          turnId: "turn-auth-failed",
+          item: { id: "command-quota", type: "commandExecution", command: "pwd", status: "inProgress" },
+        },
+      },
+    ],
+    [
+      "assistant delta",
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-auth-failed",
+          turnId: "turn-auth-failed",
+          itemId: "message-quota",
+          delta: "한",
+        },
+      },
+    ],
+  ])("%s를 관측한 뒤의 429는 실제 부작용을 보고해 fallback을 막는다", async (_label, notification) => {
+    const connector = failedTurnConnector(
+      {
+        message: "요청이 제한됐습니다",
+        codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 429 } },
+        additionalDetails: null,
+      },
+      [notification],
+    );
+
+    await expect(connector.execute(context, input)).resolves.toMatchObject({
+      outcome: "failed",
+      sideEffectsStarted: true,
     });
-
-    const result = await connector.execute(context, input);
-
-    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
-    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
   });
 
   it.each([
@@ -495,24 +548,22 @@ describe("Codex app-server 구독 실행 adapter", () => {
     ["top-level code", { code: 401 }],
     ["cause statusCode", { cause: { statusCode: 401 } }],
     ["알 수 없는 Codex variant", { codexErrorInfo: { futureFailure: { httpStatusCode: 401 } } }],
-  ])("공식 app-server 오류가 아닌 %s 형태는 fallback 가능한 실패로 분류하지 않는다", async (_label, error) => {
+    ["상태 코드 없는 transport 실패", { codexErrorInfo: { responseStreamDisconnected: {} } }],
+    ["HTTP 범위 밖 상태 코드", { codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 200 } } }],
+  ])("공식 app-server 오류가 아닌 %s 형태는 signal 없이 fail-closed로 반환한다", async (_label, error) => {
     const connector = failedTurnConnector(error);
 
     const result = await connector.execute(context, input);
 
-    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result).toMatchObject({ outcome: "failed", retryable: false });
     expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
   });
 
-  it.each([
-    ["429", { httpConnectionFailed: { httpStatusCode: 429 } }],
-    ["503", { httpConnectionFailed: { httpStatusCode: 503 } }],
-    ["unknown", "other"],
-  ])("앞선 error notification만 401이고 최종 turn.error가 %s이면 fallback하지 않는다", async (_label, finalError) => {
+  it("앞선 error notification과 무관하게 최종 turn.error의 상태 코드를 정본으로 사용한다", async () => {
     const connector = failedTurnConnector(
       {
         message: "최종 인증 외 오류입니다",
-        codexErrorInfo: finalError,
+        codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 429 } },
         additionalDetails: null,
       },
       [],
@@ -524,9 +575,25 @@ describe("Codex app-server 구독 실행 adapter", () => {
       },
     );
 
+    await expect(connector.execute(context, input)).resolves.toMatchObject({
+      outcome: "failed",
+      retryable: true,
+      signal: { kind: "http", statusCode: 429 },
+      sideEffectsStarted: false,
+    });
+  });
+
+  it("최종 turn.error가 알 수 없는 값이면 앞선 401 notification으로 fallback을 허용하지 않는다", async () => {
+    const connector = failedTurnConnector(
+      { message: "최종 오류입니다", codexErrorInfo: "other", additionalDetails: null },
+      [],
+      0,
+      { message: "인증이 필요합니다", codexErrorInfo: "unauthorized", additionalDetails: null },
+    );
+
     const result = await connector.execute(context, input);
 
-    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result).toMatchObject({ outcome: "failed", retryable: false });
     expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
   });
 
