@@ -1715,6 +1715,49 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("등록한 키는 같은 화면에서 제거할 수 있다", async () => {
+    const user = userEvent.setup();
+    const disableCredential = vi.fn(async () => undefined);
+    const loadSettings = vi.fn(async () => ({
+      catalog: {
+        providers: [
+          { providerId: "openrouter", displayName: "OpenRouter", adapterKind: "openai-compatible", enabled: true },
+        ],
+        endpoints: [
+          {
+            endpointId: "endpoint-openrouter",
+            providerId: "openrouter",
+            name: "api",
+            baseUrl: "https://openrouter.ai/api/v1",
+          },
+        ],
+        models: [],
+        candidates: [],
+        credentials: [
+          {
+            providerId: "openrouter",
+            endpointId: "endpoint-openrouter",
+            credentialId: "credential-openrouter",
+            secretVersion: 2,
+          },
+        ],
+      },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    render(<App service={service({ disableCredential, loadSettings })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "키 제거" }));
+
+    expect(disableCredential).toHaveBeenCalledWith("credential-openrouter", 2);
+    expect(await screen.findByRole("status")).toHaveTextContent("키를 제거했습니다.");
+  });
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);

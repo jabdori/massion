@@ -1185,6 +1185,8 @@ export interface ProviderConnectionView {
   readonly verifiedAt?: string;
   /** `provider_credential.secret_version`. 키를 언제 갈았는지입니다. */
   readonly credentialVersion?: number;
+  /** 키를 지우려면 식별자가 필요합니다. 없으면 화면이 제거를 제안할 수 없습니다. */
+  readonly credentialId?: string;
   /** 이 Provider가 제공하는 모델 프로필입니다. */
   readonly models: readonly ProviderModelView[];
 }
@@ -1207,6 +1209,8 @@ export interface SubscriptionAccountView {
   readonly alias: string;
   readonly status: string;
   readonly billingKind: string;
+  /** 해제는 낙관적 동시성을 쓰므로 현재 version이 필요합니다. */
+  readonly accountVersion?: number;
   readonly quotaExhausted?: boolean;
   /** 0~1. 여러 창(window) 중 가장 적게 남은 비율입니다. */
   readonly minimumRemainingRatio?: number;
@@ -1399,6 +1403,7 @@ export interface DesktopService {
   loadSettings(): Promise<SettingsView>;
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
+  disconnectAccount(accountId: string, expectedVersion: number): Promise<void>;
   connectSubscriptionKey(input: {
     readonly providerId: string;
     readonly alias: string;
@@ -1773,6 +1778,9 @@ export function createApplicationDesktopService(
         billingKind: "coding-plan",
         secret: input.secret,
       });
+    },
+    async disconnectAccount(accountId, expectedVersion) {
+      await command("subscription.account.disconnect", { accountId, expectedVersion });
     },
     async connectSubscriptionKey(input) {
       await command("subscription.server.connect-model", {
@@ -3414,6 +3422,7 @@ export function createFixtureDesktopService(): DesktopService {
         }
       }),
     connectSubscriptionKey: () => fixturePromise(() => undefined),
+    disconnectAccount: () => fixturePromise(() => undefined),
     registerProvider: (input) =>
       fixturePromise(() => {
         const catalog = settingsState.catalog as { providers: Record<string, unknown>[] };
@@ -5299,6 +5308,7 @@ export function projectProviderConnections(catalog: unknown, providers?: unknown
         ...(credential && typeof credential.secretVersion === "number"
           ? { credentialVersion: credential.secretVersion }
           : {}),
+        ...(credential && typeof credential.credentialId === "string" ? { credentialId: credential.credentialId } : {}),
       };
     });
   // 지원 목록은 앱에 고정된 상수라 서버를 기다릴 이유가 없습니다. 연결 상태만 나중에 채웁니다.
@@ -5351,6 +5361,7 @@ export function projectSubscriptionAccounts(accounts: unknown): readonly Subscri
       alias: str(row, "alias"),
       status: str(row, "status"),
       billingKind: str(row, "billingKind"),
+      ...(typeof row.version === "number" ? { accountVersion: row.version } : {}),
       ...(typeof row.quotaExhausted === "boolean" ? { quotaExhausted: row.quotaExhausted } : {}),
       ...(typeof row.minimumRemainingRatio === "number" ? { minimumRemainingRatio: row.minimumRemainingRatio } : {}),
       ...(typeof row.earliestResetAt === "string" ? { earliestResetAt: row.earliestResetAt } : {}),

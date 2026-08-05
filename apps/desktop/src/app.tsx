@@ -4854,6 +4854,38 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       ),
     },
   ].filter((group) => group.items.length > 0);
+  const removeKey = async (connection: ProviderConnectionView) => {
+    if (saving || connection.credentialId === undefined || connection.credentialVersion === undefined) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await service.disableCredential(connection.credentialId, connection.credentialVersion);
+      setSettings(await service.loadSettings());
+      setNotice("키를 제거했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "키를 제거하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disconnectAccount = async (account: SubscriptionAccountView) => {
+    if (saving || account.accountVersion === undefined) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await service.disconnectAccount(account.accountId, account.accountVersion);
+      setSettings(await service.loadSettings());
+      setNotice("계정 연결을 해제했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "계정 연결을 해제하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const connectKey = async (providerId: string, secret: string) => {
     if (saving || !secret.trim()) return;
     const target = connections.find((connection) => connection.providerId === providerId);
@@ -5074,7 +5106,9 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 onConnectKey={() => {
                   setKeyTarget(selected.providerId);
                 }}
+                onDisconnectAccount={(account) => void disconnectAccount(account)}
                 onLogin={(newAccount, alias) => void loginSubscription(selected, newAccount, alias)}
+                onRemoveKey={() => void removeKey(selected)}
               />
               {selected.connected && selected.adapterKind !== "subscription-connector" ? (
                 <div className="mt-6 border-t border-border pt-4">
@@ -5279,13 +5313,17 @@ function ProviderOverviewTab({
   connection,
   loginBusy,
   onConnectKey,
+  onDisconnectAccount,
   onLogin,
+  onRemoveKey,
 }: {
   accounts: readonly SubscriptionAccountView[];
   connection: ProviderConnectionView;
   loginBusy: boolean;
   onLogin: (newAccount: boolean, alias: string) => void;
   onConnectKey: () => void;
+  onDisconnectAccount: (account: SubscriptionAccountView) => void;
+  onRemoveKey: () => void;
 }) {
   const mine = accounts.filter((account) => account.providerId === connection.providerId);
   // 구독 커넥터는 계정을 갖고, API 어댑터는 키를 갖습니다. 없는 쪽을 빈 목록으로 보이면 잘못된 인상을 줍니다.
@@ -5376,22 +5414,42 @@ function ProviderOverviewTab({
             )}
           </div>
         ) : (
-          <ul className="space-y-2">
+          <ul>
             {mine.map((account) => (
-              <AccountCard account={account} key={account.accountId} />
+              <AccountCard
+                account={account}
+                key={account.accountId}
+                onDisconnect={() => {
+                  onDisconnectAccount(account);
+                }}
+              />
             ))}
           </ul>
         )}
         {canConnectKey ? (
-          <button
-            className="mt-2 w-full rounded-[5px] border border-control px-3 py-1.5 text-speaker text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
-            onClick={() => {
-              onConnectKey();
-            }}
-            type="button"
-          >
-            {translate(hasKey ? "키 교체" : "키로 연결")}
-          </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              className="flex-1 rounded-[5px] border border-control px-3 py-1.5 text-speaker text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
+              onClick={() => {
+                onConnectKey();
+              }}
+              type="button"
+            >
+              {translate(hasKey ? "키 교체" : "키로 연결")}
+            </button>
+            {/* 넣을 수 있으면 뺄 수도 있어야 합니다. 키가 없으면 뺄 것도 없습니다. */}
+            {hasKey ? (
+              <button
+                className="rounded-[5px] px-3 py-1.5 text-speaker text-fg-4 transition-colors duration-150 hover:text-danger"
+                onClick={() => {
+                  onRemoveKey();
+                }}
+                type="button"
+              >
+                {translate("키 제거")}
+              </button>
+            ) : null}
+          </div>
         ) : null}
         {canLogin ? (
           <div aria-busy={loginBusy} className="mt-2 grid gap-2">
@@ -5428,7 +5486,7 @@ function ProviderOverviewTab({
  * 계정 하나. 남은 양이 아니라 «쓴 양»을 먼저 말합니다 — 사용자가 묻는 것은 얼마나 썼나입니다.
  * 막대는 데이터라 이징하지 않습니다.
  */
-function AccountCard({ account }: { account: SubscriptionAccountView }) {
+function AccountCard({ account, onDisconnect }: { account: SubscriptionAccountView; onDisconnect: () => void }) {
   const used = account.minimumRemainingRatio === undefined ? undefined : 1 - account.minimumRemainingRatio;
   return (
     <li className="border-b border-border px-3 py-2.5 last:border-b-0">
@@ -5441,6 +5499,16 @@ function AccountCard({ account }: { account: SubscriptionAccountView }) {
           )}
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{account.alias}</span>
+        {/* 연결한 계정은 해제할 수 있어야 합니다. 서버에는 명령이 있었고 화면에만 없었습니다. */}
+        <button
+          className="shrink-0 rounded-[5px] px-1.5 py-0.5 text-[11px] text-fg-4 transition-colors duration-150 hover:text-danger"
+          onClick={() => {
+            onDisconnect();
+          }}
+          type="button"
+        >
+          {translate("연결 해제")}
+        </button>
         <span className="shrink-0 text-[11px] text-muted">{account.billingKind}</span>
       </div>
       {used === undefined ? (
