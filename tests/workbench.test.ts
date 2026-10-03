@@ -1,0 +1,288 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createContext,runInContext,Script} from 'node:vm';
+import {workbenchPage} from '../src/workbench.ts';
+import type {Mission} from '../src/domain.ts';
+
+// A deliberately small DOM double runs the actual inline client without dependencies.
+// It checks transitions and rendered text, not browser layout/accessibility conformance.
+class Node {
+ tagName:string; id=''; className=''; value=''; disabled=false; hidden=false; required=false;
+ rows=0; maxLength=0; type=''; htmlFor=''; style:Record<string,string>={}; children:Node[]=[];
+ attributes=new Map<string,string>(); listeners=new Map<string,((event:any)=>unknown)[]>();
+ private text=''; resets=0;
+ constructor(tag='div'){this.tagName=tag.toUpperCase();}
+ set textContent(value:string){this.text=String(value);this.children=[];}
+ get textContent():string{return this.text+this.children.map(child=>child.textContent).join('');}
+ append(...items:Node[]){this.children.push(...items);}
+ replaceChildren(...items:Node[]){this.text='';this.children=items;}
+ setAttribute(key:string,value:string){this.attributes.set(key,value);}
+ hasAttribute(key:string){return this.attributes.has(key);}
+ addEventListener(name:string,fn:(event:any)=>unknown){this.listeners.set(name,[...(this.listeners.get(name)||[]),fn]);}
+ async fire(name:string){await Promise.all((this.listeners.get(name)||[]).map(fn=>fn({preventDefault(){}})));}
+ reset(){this.resets++;}
+}
+type Reply={status:number;body:any};
+type Handler=(path:string,options:any)=>Reply|Promise<Reply>;
+const reply=(body:any,status=200):Reply=>({body,status});
+const fixtureMission=(id='mission:test'):Mission=>({id,version:1,purpose:'Inspect durable work',scope:'test',constraints:['Do not execute providers'],criteria:{version:1,description:'Evidence is inspectable',oracle:'manual-review/v1'},works:[],memories:[],growth:[],relations:[]});
+function work(mission:Mission,title='A bounded responsibility') {
+ return {id:'work:test',title,missionVersion:1,criteria:mission.criteria,execution:'queued' as const,acceptance:'pending' as const,tasks:[],attempts:[{id:'attempt:1',number:1,criteria:mission.criteria,status:'queued' as const,modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:['explicit@1'],budget:{limit:12,reserved:0,measured:0}};
+}
+class SharedWebLocks {
+ held=false;waiters:(()=>void)[]=[];
+ async request(name:string,options:{ifAvailable:boolean},callback:(lock:{name:string}|null)=>unknown) {
+  if(this.held){if(options.ifAvailable)return callback(null);await new Promise<void>(resolve=>this.waiters.push(resolve));}
+  this.held=true;
+  // Grant asynchronously so two simultaneous clients overlap before either callback.
+  await Promise.resolve();
+  try{return await callback({name});}finally{this.held=false;this.waiters.shift()?.();}
+ }
+}
+async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
+function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string}) {
+ const nodes=new Map<string,Node>();
+ for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');nodes.set(node.id,node);}
+ nodes.get('work-budget')!.value='0';
+ const storage=coordination?.storage || new Map(Object.entries(initial)); const calls:{path:string;options:any}[]=[]; const intervals:(()=>unknown)[]=[];
+ const all=():Node[]=>{const output:Node[]=[];const visit=(node:Node)=>{output.push(node);node.children.forEach(visit);};nodes.forEach(visit);return output;};
+ const listeners=new Map<string,()=>unknown>();
+ const document={getElementById:(id:string)=>nodes.get(id),createElement:(tag:string)=>new Node(tag),querySelectorAll:()=>all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
+ const context=createContext({navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{addEventListener(){}},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
+  calls.push({path,options});
+  const result=path==='/health'?reply({status:'ready'}):path==='/providers'?reply({providers:[],selection:{status:'unavailable',code:'provider_unavailable',reason:'No authorized provider is configured.'}}):await handler(path,options);
+  return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>result.body};
+ }});
+ const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
+ runInContext(source,context);
+ return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
+}
+
+test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
+ assert.match(workbenchPage,/Create a Mission/);assert.match(workbenchPage,/Run development fixture/);
+ assert.match(workbenchPage,/manual-review\/v1/);assert.match(workbenchPage,/aria-live="polite"/);
+ assert.doesNotMatch(workbenchPage,/innerHTML|insertAdjacentHTML|document\.write\(/);
+ new Script(workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!);
+});
+
+test('Mission submit has stable IDs, blocks duplicate writes and renders host text safely',async()=>{
+ let resolvePost!:(result:Reply)=>void;let submitted:any;
+ const app=harness(async(path,options)=>{
+  if(path==='/events?after=0')return reply({events:[],cursor:0});
+  if(path==='/missions'){submitted=JSON.parse(options.body);return new Promise<Reply>(resolve=>{resolvePost=resolve;});}
+  throw new Error('Unexpected '+path);
+ });await settle();
+ app.node('purpose').value='<img src=x onerror=alert(1)>';app.node('scope').value='Project';app.node('constraints').value='First\n Second\n\n';app.node('criteria').value='A reviewable result';
+ const first=app.node('mission-form').fire('submit');await settle();await app.node('mission-form').fire('submit');
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('mission-fields').disabled,true);
+ assert.equal(submitted.id,'mission:uuid-1');assert.equal(submitted.commandId,'uuid-2');assert.deepEqual(submitted.constraints,['First','Second']);assert.equal(submitted.criteria.oracle,'manual-review/v1');
+ resolvePost(reply({status:'committed',revision:1,value:{...fixtureMission(submitted.id),purpose:submitted.purpose}},201));await first;await settle();
+ assert.equal(app.node('mission-purpose').textContent,submitted.purpose);assert.equal(app.node('mission-purpose').children.length,0);
+ assert.equal(app.storage.get('massion.workbench.mission'),submitted.id);assert.equal(app.node('mission-fields').disabled,false);
+ assert.match(app.node('provider-notice').textContent,/unavailable/);
+});
+
+test('manually entered Mission survives reload and failed refresh clears stale JSON and controls',async()=>{
+ let fail=false;const mission=fixtureMission();mission.works.push(work(mission));
+ const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):fail?reply({error:'Store unavailable'},503):reply({revision:3,value:mission}));await settle();
+ app.node('mission-id').value=mission.id;await app.submit('load-form');
+ assert.equal(app.storage.get('massion.workbench.mission'),mission.id);assert.match(app.node('snapshot-json').textContent,/Inspect durable work/);
+ assert.match(app.node('work-list').textContent,/Attempts1/);assert.match(app.node('work-list').textContent,/explicit@1/);assert.match(app.node('work-list').textContent,/Provider unavailable/);
+ fail=true;await app.submit('load-form');
+ assert.equal(app.node('snapshot-json').textContent,'');assert.equal(app.node('work-list').children.length,0);assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('work-fields').disabled,true);assert.match(app.node('status').textContent,/Refresh failed/);
+});
+
+test('Work admission uses the current revision and conflict refresh never retries the write',async()=>{
+ const mission=fixtureMission();let revision=2;let submitted:any;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  if(options.method==='POST'){submitted=JSON.parse(options.body);revision=4;return reply({status:'conflict',revision:4},409);}
+  return reply({revision,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ app.node('work-title').value='Build the report';app.node('work-budget').value='12.5';await app.submit('work-form');
+ assert.equal(submitted.expectedRevision,2);assert.equal(submitted.budget,12.5);assert.equal(submitted.workId,'work:uuid-2');
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('revision').textContent,'Revision 4');assert.match(app.node('status').textContent,/not retried/);
+});
+
+test('unknown write stays blocked until an exact durable command receipt arrives',async()=>{
+ const mission=fixtureMission();let command:any;let seen=false;let createdWork=false;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:seen?[{cursor:1,aggregateId:mission.id,revision:2,commandId:command.commandId,events:[{type:'admit-work'}]}]:[],cursor:seen?1:0});
+  if(options.method==='POST'){command=JSON.parse(options.body);createdWork=true;throw new Error('Connection lost');}
+  return reply({revision:createdWork?2:1,value:createdWork?{...mission,works:[{...work(mission),id:command.workId}]}:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ app.node('work-title').value='Do bounded work';await app.submit('work-form');
+ assert.equal(app.node('operation-notice').hidden,false);assert.match(app.node('operation-notice').textContent,/Outcome unknown/);
+ assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('mission-fields').disabled,true);
+ await app.submit('work-form');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+ seen=true;await app.tick();
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.equal(app.storage.get('massion.workbench.cursor'),'1');assert.match(app.node('event-list').textContent,/admit work/);
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+});
+
+test('unknown reconciliation advances across event pages without replaying commands',async()=>{
+ const mission=fixtureMission();let command:any;let posted=false;let page=0;
+ const app=harness((path,options)=>{
+  if(options.method==='POST'){command=JSON.parse(options.body);posted=true;throw new Error('Lost response');}
+  if(path.startsWith('/events')){
+   if(!posted)return reply({events:[],cursor:0});page++;
+   const cursor=page;return reply({events:[{cursor,aggregateId:page===1?'mission:other':mission.id,revision:2,commandId:page===1?'another-command':command.commandId,events:[{type:'admit-work'}]}],cursor});
+  }
+  return reply({revision:1,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();app.node('work-title').value='Bounded';await app.submit('work-form');
+ assert.equal(app.node('operation-notice').hidden,false);await app.tick();
+ assert.ok(app.calls.some(call=>call.path==='/events?after=1'));assert.equal(app.node('operation-notice').hidden,true);
+});
+
+test('cursor ahead of the host safely resets and reconnects from durable history',async()=>{
+ const mission=fixtureMission();
+ const app=harness(path=>path==='/events?after=99'?reply({error:'Cursor is ahead'},409):path.startsWith('/events')?reply({events:[{cursor:1,aggregateId:mission.id,revision:1,commandId:'created',events:[{type:'mission-created'}]}],cursor:1}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id,'massion.workbench.cursor':'99'});await settle();
+ assert.equal(app.storage.get('massion.workbench.cursor'),'0');await app.tick();assert.equal(app.storage.get('massion.workbench.cursor'),'1');assert.match(app.node('event-list').textContent,/mission created/);
+});
+
+test('steer and cancel send only explicit commands and terminal Work loses controls',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));let revision=1;const commands:any[]=[];
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  if(options.method==='POST'){const body=JSON.parse(options.body);commands.push(body);mission.works[0]!.execution=body.command.type==='cancel'?'cancelled':'waiting';return reply({status:'committed',revision:++revision,value:mission});}
+  return reply({revision,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ const input=app.all().find(node=>node.id==='steer-work:test')!;input.value='Stay within the approved scope';await input.fire('input');
+ await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
+ assert.equal(commands[0].command.instruction,'Stay within the approved scope');assert.equal(commands[0].expectedRevision,1);assert.match(app.node('work-list').textContent,/Execution: waiting/);
+ await app.all().find(node=>node.textContent==='Cancel Work')!.fire('click');await settle();
+ assert.equal(commands[1].command.type,'cancel');assert.equal(commands[1].expectedRevision,2);assert.equal(app.all().filter(node=>node.hasAttribute('data-write')).length,0);assert.match(app.node('work-list').textContent,/Execution: cancelled/);
+});
+
+test('an unknown fixture response never becomes a success or permits a blind fixture rerun',async()=>{
+ const app=harness((path,options)=>{if(options.method==='POST')throw new Error('Connection lost');return reply({events:[],cursor:0});});await settle();
+ await app.node('run-fixture').fire('click');await settle();assert.match(app.node('status').textContent,/Fixture outcome unknown/);assert.equal(app.node('run-fixture').disabled,true);
+ runInContext('controls()',app.context);assert.equal(app.node('run-fixture').disabled,true);
+});
+
+test('known rolled-back contention is a rejected write, not an unresolved commit',async()=>{
+ const mission=fixtureMission();
+ const app=harness((path,options)=>options.method==='POST'?reply({outcome:'rejected',retryable:true,error:'Rolled back'},503):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();
+ app.node('work-title').value='A bounded responsibility';await app.submit('work-form');
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('status').textContent,/confirmed a transaction rollback/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+});
+
+test('blocked Work renders its actual gate and persisted steering without claiming it resumed',async()=>{
+ const mission=fixtureMission();mission.works.push({...work(mission),execution:'blocked',blocker:{code:'provider_unavailable',detail:'No authorized adapter is configured.'},instructions:[{actorId:'owner',text:'Keep the current budget.'}]});
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  if(options.method==='POST'){const body=JSON.parse(options.body);mission.works[0]!.instructions!.push({actorId:'owner',text:body.command.instruction});return reply({status:'committed',revision:2,value:mission});}
+  return reply({revision:1,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ assert.match(app.node('work-list').textContent,/Execution: blocked/);assert.match(app.node('work-list').textContent,/No authorized adapter is configured/);assert.match(app.node('work-list').textContent,/Latest owner instruction: Keep the current budget/);
+ const input=app.all().find(node=>node.id==='steer-work:test')!;input.value='Stay bounded';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
+ assert.match(app.node('work-list').textContent,/Execution: blocked/);assert.match(app.node('work-list').textContent,/Latest owner instruction: Stay bounded/);assert.doesNotMatch(app.node('status').textContent,/Work is waiting/);
+});
+
+test('pending identity is persisted before transmission and reload recovers read-only until an exact receipt',async()=>{
+ const mission=fixtureMission();let resolvePost!:(value:Reply)=>void;let submitted:any;
+ const first=harness((path,options)=>{
+  if(options.method==='POST'){
+   submitted=JSON.parse(options.body);
+   const pending=JSON.parse(first.storage.get('massion.workbench.pending')!);
+   assert.deepEqual(pending,{commandId:submitted.commandId,missionId:mission.id,reconcileCursor:0});
+   assert.equal(Object.keys(pending).length,3);
+   return new Promise<Reply>(resolve=>{resolvePost=resolve;});
+  }
+  return path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission});
+ },{'massion.workbench.mission':mission.id});await settle();
+ first.node('work-title').value='Private user text must not enter browser recovery storage';
+ const inFlight=first.node('work-form').fire('submit');await settle();
+ assert.ok(first.storage.has('massion.workbench.pending'));assert.doesNotMatch(first.storage.get('massion.workbench.pending')!,/Private|title|budget/);
+ let matching=false;
+ const reloaded=harness(path=>{
+  if(path.startsWith('/events'))return reply({events:matching?[{cursor:1,aggregateId:mission.id,revision:2,commandId:submitted.commandId,events:[{type:'admit-work'}]}]:[],cursor:matching?1:0});
+  return reply({revision:2,value:{...mission,works:[{...work(mission),id:submitted.workId}]}});
+ },Object.fromEntries(first.storage));await settle();
+ assert.equal(reloaded.node('mission-fields').disabled,true);assert.equal(reloaded.node('work-fields').disabled,true);assert.equal(reloaded.node('operation-notice').hidden,false);
+ assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+ assert.ok(reloaded.storage.has('massion.workbench.pending'),'snapshot evidence alone cannot clear the pending identity');
+ matching=true;await reloaded.tick();
+ assert.equal(reloaded.node('work-fields').disabled,false);assert.equal(reloaded.storage.has('massion.workbench.pending'),false);assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+ resolvePost(reply({status:'committed',revision:2,value:mission}));await inFlight;await settle();
+ assert.equal(first.storage.has('massion.workbench.pending'),false,'confirmed HTTP response clears the saved reference');
+});
+
+test('reload after a lost response retains the command lock through absent and unrelated receipts',async()=>{
+ const mission=fixtureMission();let submitted:any;
+ const first=harness((path,options)=>{if(options.method==='POST'){submitted=JSON.parse(options.body);throw new Error('Lost response');}return path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission});},{'massion.workbench.mission':mission.id});await settle();first.node('work-title').value='Bounded';await first.submit('work-form');
+ const reloaded=harness(path=>path.startsWith('/events')?reply({events:[{cursor:1,aggregateId:'mission:different',revision:1,commandId:submitted.commandId,events:[{type:'admit-work'}]}],cursor:1}):reply({error:'Read unavailable'},503),Object.fromEntries(first.storage));await settle();
+ assert.equal(reloaded.node('mission-fields').disabled,true);assert.equal(reloaded.node('operation-notice').hidden,false);assert.ok(reloaded.storage.has('massion.workbench.pending'));assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+});
+
+test('unreadable or corrupted recovery references lock writes without leaking stored text',async()=>{
+ const invalid=[JSON.stringify({commandId:'command:test',missionId:'mission:test',reconcileCursor:-1}),JSON.stringify({commandId:'command:test',missionId:'mission:test',reconcileCursor:Number.MAX_SAFE_INTEGER+1}),'{invalid',JSON.stringify({commandId:'secret<script>',missionId:'mission:test',reconcileCursor:0})];
+ for(const saved of invalid){
+  const app=harness(path=>reply({events:[],cursor:0}),{'massion.workbench.pending':saved});await settle();
+  assert.equal(app.node('mission-fields').disabled,true);assert.match(app.node('operation-notice').textContent,/unreadable/);assert.doesNotMatch(app.node('operation-notice').textContent,/secret<script>/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+ }
+ const unreadable=harness(()=>reply({events:[],cursor:0}),{},'read');await settle();assert.equal(unreadable.node('mission-fields').disabled,true);assert.match(unreadable.node('operation-notice').textContent,/unavailable/);
+});
+
+test('a failed pending-reference save blocks transmission while reads remain available',async()=>{
+ const mission=fixtureMission();
+ const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id},'write');await settle();
+ app.node('work-title').value='Bounded';await app.submit('work-form');
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);assert.match(app.node('operation-notice').textContent,/No command was sent/);assert.equal(app.node('load-mission').disabled,false);assert.equal(app.node('mission-fields').disabled,true);
+});
+
+test('an in-flight fixture marker survives reload and never triggers automatic execution',async()=>{
+ let resolvePost!:(reply:Reply)=>void;
+ const first=harness((path,options)=>options.method==='POST'?new Promise<Reply>(resolve=>{resolvePost=resolve;}):reply({events:[],cursor:0}));await settle();
+ const pending=first.node('run-fixture').fire('click');await settle();assert.equal(first.storage.get('massion.workbench.fixture-pending'),'pending');
+ const reloaded=harness(()=>reply({events:[],cursor:0}),Object.fromEntries(first.storage));await settle();
+ assert.equal(reloaded.node('run-fixture').disabled,true);assert.match(reloaded.node('operation-notice').textContent,/host logs/);assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+ await reloaded.node('run-fixture').fire('click');assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+ resolvePost(reply({error:'Ambiguous outcome'},500));await pending;assert.equal(first.storage.get('massion.workbench.fixture-pending'),'pending');
+});
+
+test('an explicit identity conflict clears pending rejection but is not mislabeled as a revision race',async()=>{
+ const mission=fixtureMission();
+ const app=harness((path,options)=>options.method==='POST'?reply({status:'conflict',reason:'idempotency',revision:1},409):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id});await settle();
+ app.node('work-title').value='Bounded';await app.submit('work-form');
+ assert.equal(app.storage.has('massion.workbench.pending'),false);assert.match(app.node('status').textContent,/Command identity conflict/);assert.doesNotMatch(app.node('status').textContent,/Revision conflict/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+});
+
+test('two simultaneous tabs cannot overwrite pending identities or clear a newer different-Mission command',async()=>{
+ const storage=new Map<string,string>();const locks=new SharedWebLocks();const commands:any[]=[];
+ let completeFirst!:(value:Reply)=>void,completeSecond!:(value:Reply)=>void,receipt=false;
+ const handler:Handler=(path,options)=>{
+  if(options.method==='POST'){
+   const body=JSON.parse(options.body);commands.push(body);
+   assert.equal(JSON.parse(storage.get('massion.workbench.pending')!).commandId,body.commandId);
+   return new Promise<Reply>(resolve=>{if(commands.length===1)completeFirst=resolve;else completeSecond=resolve;});
+  }
+  if(path.startsWith('/events'))return reply({events:receipt?[{cursor:1,aggregateId:commands[0].id,revision:1,commandId:commands[0].commandId,events:[{type:'mission-created'}]}]:[],cursor:receipt?1:0});
+  return reply({revision:1,value:fixtureMission(decodeURIComponent(path.slice('/missions/'.length)))});
+ };
+ const first=harness(handler,{},undefined,{storage,locks,identity:'client-a'});
+ const second=harness(handler,{},undefined,{storage,locks,identity:'client-b'});await settle();
+ for(const app of [first,second]){app.node('purpose').value='A separate purpose';app.node('scope').value='Scope';app.node('criteria').value='Inspect evidence';}
+ // These submissions overlap before the lock callback executes; they are not sequential claims.
+ const firstRequest=first.node('mission-form').fire('submit');const collision=second.node('mission-form').fire('submit');await settle();await collision;
+ assert.equal(commands.length,1);assert.equal(commands[0].id,'mission:client-a-1');assert.match(second.node('status').textContent,/Another tab/);
+ assert.equal(JSON.parse(storage.get('massion.workbench.pending')!).commandId,commands[0].commandId);
+ // Once the atomic claim lock is free, the saved marker still blocks the other client.
+ await second.submit('mission-form');assert.equal(commands.length,1);assert.equal(second.node('mission-fields').disabled,true);
+ receipt=true;await second.tick();assert.equal(storage.has('massion.workbench.pending'),false);assert.equal(second.node('mission-fields').disabled,false);
+ // A receipt can settle A before its original HTTP response returns. B may now submit.
+ const secondRequest=second.node('mission-form').fire('submit');await settle();assert.equal(commands.length,2);assert.notEqual(commands[1].id,commands[0].id);
+ const secondMarker=storage.get('massion.workbench.pending');
+ completeFirst(reply({status:'committed',revision:1,value:fixtureMission(commands[0].id)},201));await firstRequest;await settle();
+ assert.equal(storage.get('massion.workbench.pending'),secondMarker,'late cleanup of A must preserve B');
+ assert.equal(first.node('mission-fields').disabled,true,'the earlier tab observes the newer pending identity');
+ completeSecond(reply({status:'committed',revision:1,value:fixtureMission(commands[1].id)},201));await secondRequest;await settle();
+ assert.equal(storage.has('massion.workbench.pending'),false);assert.equal(commands.length,2);
+});
+
+test('missing Web Locks fails closed for mutations while snapshots can still be read',async()=>{
+ const mission=fixtureMission();
+ const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id},undefined,{noLocks:true});await settle();
+ assert.equal(app.node('mission-panel').hidden,false);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('run-fixture').disabled,true);assert.match(app.node('operation-notice').textContent,/Web Locks unavailable/);assert.equal(app.node('load-mission').disabled,false);
+ app.node('work-title').value='A bounded request';await app.submit('work-form');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+});

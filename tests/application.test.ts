@@ -11,7 +11,7 @@ test('same command replays original revision and snapshot after subsequent chang
  const a=await app();const first=await a.dispatch(admit);assert.equal(first.status,'committed');
  await a.dispatch({...admit,commandId:'admit-b',expectedRevision:2,command:{...admit.command,workId:'b'}});
  const replay=await a.dispatch(admit);assert.equal(replay.status,'replayed');assert.equal(replay.revision,2);
- if(replay.status!=='conflict')assert.equal(replay.value.works.length,1);
+ assert.equal(replay.value.works.length,1);
  assert.equal((await a.store.load('mission'))?.value.works.length,2);
  const misuse=await a.dispatch({...admit,command:{...admit.command,title:'Different'}});assert.equal(misuse.status,'conflict');
 });
