@@ -3,11 +3,15 @@ import {Application} from './application.ts';
 import type {Mission,Command,Actor,Artifact,Work} from './domain.ts';
 import type {Store} from './storage.ts';
 import {BUILTIN_FIXTURE_EXTENSION,FIXTURE_PROVIDER,CALCULATION_CRITERIA_VERSION,DOCUMENT_CRITERIA_VERSION,createFixtureWorkspace,writeCalculationCandidate,independentlyVerifyCalculation,writeDocumentSummaryCandidate,independentlyVerifyDocumentSummary,evaluateCalculationImprovement,chooseFixtureVariant,sealArtifact,assertFixtureCapability} from './execution.ts';
-import type {FixtureWorkspace,FixtureVerification} from './execution.ts';
+import type {FixtureWorkspace,FixtureVerification,Artifact as FixtureArtifact} from './execution.ts';
 export const FIXTURE_ACTORS: readonly Actor[] = [
  {id:'local-owner',roles:['owner']}, {id:'representative',roles:['representative']},
  {id:'specialist',roles:['executor']},{id:'assurance',roles:['verifier']},{id:'growth-evaluator',roles:['evaluator']}
 ];
+function asFixtureArtifact(artifact:Artifact):FixtureArtifact {
+ if(artifact.kind!=='code'&&artifact.kind!=='document')throw new Error('Unsupported fixture artifact kind');
+ return {...artifact,kind:artifact.kind};
+}
 const model={provider:FIXTURE_PROVIDER.providerId,model:FIXTURE_PROVIDER.modelId,configVersion:FIXTURE_PROVIDER.configurationVersion,reason:FIXTURE_PROVIDER.selectionReason,evidenceClass:'fixture' as const};
 export class FixtureWorkflow {
  readonly app:Application; readonly missionId:string; readonly root:string;
@@ -63,13 +67,13 @@ export class FixtureWorkflow {
   const w=await this.work(workId);if(!w.artifact)throw new Error('No artifact');
   const assigned=w.assignments.find(a=>a.id===`${workId}:assurance`)!;
   assertFixtureCapability({...assigned.model,extensionVersion:assigned.extensionVersion,capability:kind==='calculation'?'controlled-code-verification':'controlled-document-verification'});
-  const check=kind==='calculation'?await independentlyVerifyCalculation(workspace,w.artifact,w.criteria.oracle):await independentlyVerifyDocumentSummary(workspace,w.artifact,w.criteria.oracle);
+  const check=kind==='calculation'?await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle):await independentlyVerifyDocumentSummary(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
   await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle}))}},'assurance');
   return check;
  }
  async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<number> {
   const w=await this.work(workId);if(!w.artifact||w.acceptance!=='accepted')throw new Error('No accepted candidate');
-  const check=await independentlyVerifyCalculation(workspace,w.artifact,w.criteria.oracle);
+  const check=await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
   if(check.verdict!=='passed'||!check.process)throw new Error('Measurement oracle failed');
   const report=JSON.parse(check.process.stdout) as {results:{passed:boolean}[]};
   return report.results.filter(result=>result.passed).length;
@@ -78,7 +82,7 @@ export class FixtureWorkflow {
  async accept(workId:string,workspace:FixtureWorkspace,kind:'calculation'|'document'='calculation') {
   // Re-read and re-verify exact on-disk content immediately before Records acceptance.
   const check=await this.verify(workId,workspace,kind);if(check.verdict!=='passed')throw new Error('Current artifact does not pass independent assurance');
-  const current=await this.work(workId);const snapshot=await sealArtifact(workspace,current.artifact!);
+  const current=await this.work(workId);const snapshot=await sealArtifact(workspace,asFixtureArtifact(current.artifact!));
   return this.send({type:'accept',workId,recordId:randomUUID(),artifactSnapshot:snapshot},'representative');
  }
 }

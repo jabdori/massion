@@ -10,7 +10,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
-      - name: Runtime syntax and unit checks
+      - name: Install locked development tools
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Static types, runtime syntax and unit checks
         run: npm run check
       - name: Verify official SurrealDB archive
         shell: bash

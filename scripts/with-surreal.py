@@ -33,6 +33,9 @@ def main():
     binary = shutil.which(str(BINARY)) if not BINARY.is_absolute() else str(BINARY)
     if not binary or not Path(binary).is_file():
         parser.error('Set MASSION_SURREAL_BINARY to an installed official SurrealDB 3.3.0 binary')
+    actual_version = subprocess.check_output([binary, 'version'], text=True).strip().split()[0]
+    if actual_version != '3.3.0':
+        parser.error('This test contract requires SurrealDB 3.3.0; found ' + actual_version)
     runtime = Path(tempfile.mkdtemp(prefix='disposable-', dir=ROOT))
     (runtime / 'tmp').mkdir()
     url = f'http://127.0.0.1:{args.port}'
@@ -48,7 +51,7 @@ def main():
                                   env={'PATH': '/usr/bin:/bin'})
         metadata = {'pid_in_this_exec_namespace': server.pid, 'url': url,
                     'runtime': str(runtime), 'binary': str(binary),
-                    'version': '3.3.0', 'server_args': server_args}
+                    'version': actual_version, 'server_args': server_args}
         (runtime / 'server.json').write_text(json.dumps(metadata, indent=2) + '\n')
         try:
             deadline = time.monotonic() + 30

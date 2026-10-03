@@ -6,29 +6,58 @@ import type {Store} from './storage.ts';
 import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from './storage.ts';
 import type {Mission} from './domain.ts';
 import {runGrowthScenario} from './scenario.ts';
-const page=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Massion · Workbench</title><style>body{font:16px system-ui;background:#10151e;color:#e6ecf4;max-width:960px;margin:48px auto;padding:0 24px}h1{font-size:40px}p{color:#bcc8d8;line-height:1.6}button,input{font:inherit;padding:12px;border-radius:8px;border:1px solid #60738b}button{background:#a8e1c4;color:#11231b;cursor:pointer}button:disabled{opacity:.5}input{background:#172334;color:white;min-width:280px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#172334;padding:20px;border-radius:12px}small{color:#bcc8d8}.row{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0}</style><h1>Massion</h1><p>Mission → organized Work → independent Assurance → Records → Growth</p><p>This development workbench runs a controlled local fixture against SurrealDB. It performs real file and process effects. It does not run a real model or prove production readiness.</p><div class="row"><button id="run">Run verified-work fixture</button><button id="refresh">Refresh Mission</button></div><label>Mission ID <input id="mission" placeholder="mission identifier"></label><p id="status" role="status" aria-live="polite">Ready. No work started.</p><pre id="result">Accepted Records and pinned evidence will appear here.</pre><small>Refresh uses the same authoritative database. Event catch-up, recovery controls and production authentication remain open.</small><script>const $=id=>document.getElementById(id);async function load(){if(!$('mission').value)return;$('status').textContent='Reading authoritative state…';try{const r=await fetch('/missions/'+encodeURIComponent($('mission').value));const v=await r.json();if(!r.ok)throw Error(v.error);$('result').textContent=JSON.stringify(v,null,2);$('status').textContent='Loaded revision '+v.revision;}catch(e){$('status').textContent=e.message;}}$('refresh').onclick=load;$('run').onclick=async()=>{$('run').disabled=true;$('status').textContent='Running controlled wrong/fix/verify/Growth workflow…';try{const r=await fetch('/fixture-run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const v=await r.json();if(!r.ok)throw Error(v.error);$('mission').value=v.missionId;localStorage.setItem('massion.fixture.mission',v.missionId);await load();}catch(e){$('status').textContent=e.message;}finally{$('run').disabled=false;}};$('mission').value=localStorage.getItem('massion.fixture.mission')||'';if($('mission').value)load();</script></html>`;
+import {ProductService} from './product.ts';
+import {DomainError} from './domain.ts';
+import {workbenchPage} from './workbench.ts';
+class RequestError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
+function identifier(value:unknown,name:string):asserts value is string {if(typeof value!=='string'||!(/^[a-zA-Z0-9:_-]{1,128}$/).test(value))throw new RequestError(400,`Invalid ${name}`);}
+
+function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
+
 export function createWorkbench(store:Store<Mission>,workspaceRoot:string) {
- let running=false;
+ let running=false;const product=new ProductService(store);
  const server=createServer(async(req,res)=>{
   const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
   const address=server.address();const port=typeof address==='object'&&address?address.port:0;
   const expected=`127.0.0.1:${port}`;
   if(req.headers.host!==expected){send(403,{error:'Loopback host required'});return;}
   if(req.headers.origin&&req.headers.origin!==`http://${expected}`){send(403,{error:'Cross-origin request denied'});return;}
+  const readBody=async():Promise<Record<string,unknown>>=>{
+   if(req.headers['content-type']!=='application/json')throw new RequestError(415,'JSON required');
+   let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>32768)throw new RequestError(413,'Request too large');}
+   let input:unknown;try{input=JSON.parse(body);}catch{throw new RequestError(400,'Invalid JSON');}
+   if(!input||typeof input!=='object'||Array.isArray(input))throw new RequestError(400,'JSON object required');return input as Record<string,unknown>;
+  };
+  const sendCommit=(result:{status:string;revision:number},created=false)=>send(result.status==='conflict'?409:created&&result.status==='committed'?201:200,result);
   try{
    const url=new URL(req.url??'/',`http://${expected}`);
-   if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(page);return;}
-   if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'controlled-fixture'});return;}
-   if(req.method==='GET'&&url.pathname.startsWith('/missions/')){const id=decodeURIComponent(url.pathname.slice(10));if(!/^[a-zA-Z0-9:_-]{1,128}$/.test(id)){send(400,{error:'Invalid Mission identifier'});return;}const state=await store.load(id);send(state?200:404,state??{error:'Unknown Mission'});return;}
+   if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
+   if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
+   if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output'])});return;}
+   if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');send(200,await store.readEvents(after,limit));return;}
+   if(req.method==='POST'&&url.pathname==='/missions'){
+    const body=await readBody();identifier(body.id,'Mission identifier');identifier(body.commandId,'command identity');
+    const {id,purpose,scope,constraints,criteria}=body;
+    if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
+    sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
+   }
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands)$/.exec(url.pathname);
+   if(req.method==='POST'&&workRoute){
+    const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
+    if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
+    if(workRoute[2]==='work'){identifier(body.workId,'Work identifier');sendCommit(await product.admit(missionId,body as Parameters<ProductService['admit']>[1]),true);return;}
+    if(!body.command||typeof body.command!=='object'||!['cancel','steer'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel and steer are exposed');
+    identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
+   }
+   if(req.method==='GET'&&url.pathname.startsWith('/missions/')){const id=decodeIdentifier(url.pathname.slice(10));const state=await store.load(id);send(state?200:404,state??{error:'Unknown Mission'});return;}
    if(req.method==='POST'&&url.pathname==='/fixture-run'){
-    if(req.headers['content-type']!=='application/json'){send(415,{error:'JSON required'});return;}
-    let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1024){send(413,{error:'Request too large'});return;}}
-    if(body.trim()!=='{}'){send(400,{error:'This route accepts only the built-in fixture command'});return;}
+    const body=await readBody();
+    if(Object.keys(body).length!==0){send(400,{error:'This route accepts only the built-in fixture command'});return;}
     if(running){send(409,{error:'A fixture is already running; observe its state before starting another'});return;}
     running=true;try{const result=await runGrowthScenario(store,workspaceRoot);send(201,{missionId:result.missionId,revision:result.snapshot?.revision,evidenceClass:'fixture'});}finally{running=false;}return;
    }
    send(404,{error:'Unknown route'});
-  }catch(error){console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
+  }catch(error){if(error instanceof RequestError){send(error.status,{error:error.message});return;}if(error instanceof DomainError){send(error.code==='denied'?403:400,{error:error.message});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event cursor does not belong to this database head; reload a snapshot and restart catch-up at zero.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
  });
  return server;
 }

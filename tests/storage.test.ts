@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import {
-  COMMIT_QUERY, LOAD_QUERY, OPERATION_QUERY,
-  CommitOutcomeUnknownError, InMemoryStore, StorageProtocolError, StorageQueryError, SurrealStore, createHttpRpcTransport, initializeSurrealSchema,
+  COMMIT_QUERY, EVENTS_QUERY, LOAD_QUERY, OPERATION_QUERY,
+  CommitOutcomeUnknownError, EventCursorError, InMemoryStore, StorageContentionError, StorageProtocolError, StorageQueryError, SurrealStore, createHttpRpcTransport, initializeSurrealSchema,
 } from '../src/storage.ts';
 import type { CommitInput, QueryTransport } from '../src/storage.ts';
 
@@ -19,6 +19,7 @@ test('test-only memory store retains state, audit, events and outbox together', 
   const input = command();
   assert.deepEqual(await store.commit(input), { status: 'committed', revision: 1, value: input.value });
   const [operation] = store.inspect();
+  assert.ok(operation);
   assert.deepEqual(operation.events, input.events);
   assert.deepEqual(operation.outbox, input.outbox);
   assert.equal(operation.recordedAt, now().toISOString());
@@ -203,6 +204,89 @@ test('HTTP RPC rejects error statuses anywhere in response and protocol violatio
   assert.throws(() => createHttpRpcTransport({ endpoint: 'https://name:password@example.com/rpc', namespace: 'n', database: 'd' }), TypeError);
 });
 
+test('HTTP conflict classification uses structured kind, not message guesses', async () => {
+  for (const structured of [true, false]) {
+    const transport = createHttpRpcTransport({ endpoint: 'http://localhost:8000/rpc', namespace: 'tests', database: 'tests',
+      fetch: (async (_url, init) => {
+        const { id } = JSON.parse(String(init?.body));
+        return Response.json({ id, result: [
+          { status: 'ERR', result: 'The query was not executed due to a failed transaction', kind: 'Query', details: { kind: 'NotExecuted' } },
+          { status: 'ERR', result: 'Cannot COMMIT: Transaction conflict', kind: 'Query', details: { kind: structured ? 'TransactionConflict' : 'Other' } },
+        ] });
+      }) as typeof fetch });
+    await assert.rejects(transport.query('RETURN 1;', {}), (error: unknown) => structured
+      ? error instanceof StorageContentionError && error.retryable
+      : error instanceof StorageQueryError && !(error instanceof StorageContentionError));
+  }
+});
+
+test('event feed orders committed operations globally with bounded cursor pagination', async () => {
+  const store = new InMemoryStore(now);
+  assert.deepEqual(await store.readEvents(0), { events: [], cursor: 0 });
+  const first = command();
+  await store.commit(first);
+  await store.commit(command({ id: 'other-work', commandId: 'other-command', events: [] }));
+  await store.commit(first);
+  await store.commit(command({ commandId: 'losing-revision' }));
+  const page = await store.readEvents(0, 1);
+  assert.deepEqual(page, { events: [{ cursor: 1, aggregateId: first.id, revision: 1, commandId: first.commandId, events: first.events }], cursor: 1 });
+  assert.deepEqual(await store.readEvents(page.cursor), { events: [{ cursor: 2, aggregateId: 'other-work', revision: 1, commandId: 'other-command', events: [] }], cursor: 2 });
+  assert.deepEqual(await store.readEvents(2), { events: [], cursor: 2 });
+  (page.events[0]!.events as unknown[]).push('caller mutation');
+  assert.deepEqual((await store.readEvents(0, 1)).events[0]!.events, first.events);
+});
+
+test('event cursors and limits reject invalid numbers and future positions', async () => {
+  const store = new InMemoryStore();
+  const remote = mockedStore(async () => { throw new Error('invalid inputs must not query'); });
+  for (const target of [store, remote]) {
+    for (const after of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '0' as unknown as number]) {
+      await assert.rejects(target.readEvents(after), TypeError);
+    }
+    for (const limit of [0, -1, 1001, 1.5, NaN, Infinity, '1' as unknown as number]) {
+      await assert.rejects(target.readEvents(0, limit), TypeError);
+    }
+  }
+  await assert.rejects(store.readEvents(1), (error: unknown) => error instanceof EventCursorError && error.head === 0 && error.after === 1);
+});
+
+test('event transport validates increasing safe cursors and preserves entire event payload', async () => {
+  const event = { type: 'approved', actorId: 'owner', command: { type: 'approve', scope: 'fixture' } };
+  const store = mockedStore(async (sql, vars) => {
+    assert.equal(sql, EVENTS_QUERY); assert.deepEqual(vars, { after: 3, limit: 10 });
+    return [{ head: 4, events: [{ cursor: 4, aggregateId: 'mission', revision: 2, commandId: 'approval', events: [event] }] }];
+  });
+  assert.deepEqual((await store.readEvents(3, 10)).events[0]!.events, [event]);
+  for (const result of [
+    { head: 2, events: [{ cursor: 1, aggregateId: 'm', revision: 1, commandId: 'c', events: [] }] },
+    { head: 2, events: [{ cursor: 3, aggregateId: 'm', revision: 1, commandId: 'c', events: [] }] },
+    { head: 2, events: [{ cursor: 2, aggregateId: 'm', revision: 0, commandId: 'c', events: [] }] },
+    { head: 2.5, events: [] },
+  ]) await assert.rejects(mockedStore(async () => [result]).readEvents(1), StorageProtocolError);
+  await assert.rejects(mockedStore(async () => [{ head: 2, events: [] }]).readEvents(3), EventCursorError);
+});
+
+test('one-host commit queue serializes writes and recovers after rejected operation', async () => {
+  let active = 0;
+  let maximum = 0;
+  let writes = 0;
+  const store = mockedStore(async (sql, variables) => {
+    if (sql !== COMMIT_QUERY) return [null];
+    active += 1; maximum = Math.max(maximum, active); writes += 1;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    active -= 1;
+    if (variables.commandId === 'reject') throw new StorageQueryError('invalid value');
+    return [{ status: 'committed', revision: 1, value: variables.value }];
+  });
+  const rejected = store.commit(command({ commandId: 'reject' }));
+  const queued = command({ commandId: 'accepted' });
+  const accepted = store.commit(queued);
+  queued.value.title = 'caller changed after queueing';
+  await assert.rejects(rejected, StorageQueryError);
+  assert.deepEqual(await accepted, { status: 'committed', revision: 1, value: { title: 'Accepted snapshot' } });
+  assert.equal(maximum, 1); assert.equal(writes, 2);
+});
+
 const endpoint = process.env.MASSION_TEST_SURREAL_RPC;
 test('actual SurrealDB conformance: atomic journal, revision race, replay and response-loss readback', { skip: !endpoint }, async () => {
   // This test is opt-in and must only target a fresh, disposable database.
@@ -224,13 +308,13 @@ test('actual SurrealDB conformance: atomic journal, revision race, replay and re
     outbox: (SELECT * FROM massion_outbox WHERE operation.commandId = $commandId)
   };`, { commandId: first.commandId });
   const retained = journal[0] as Record<string, unknown[]>;
-  for (const key of ['operations', 'audits', 'events', 'outbox']) assert.equal(retained[key].length, 1, key);
+  for (const key of ['operations', 'audits', 'events', 'outbox']) assert.equal(retained[key]!.length, 1, key);
   await store.commit(command({ id: first.id, commandId: `${first.commandId}-later`, expectedRevision: 1, value: { title: 'Later' } }));
   assert.deepEqual(await store.commit(first), { status: 'replayed', revision: 1, value: first.value });
   assert.deepEqual(await store.lookupOperation(first), { status: 'replayed', revision: 1, value: first.value });
   assert.deepEqual(await store.commit({ ...first, events: [] }), { status: 'conflict', revision: 1, reason: 'idempotency' });
   const racers = Array.from({ length: 12 }, (_, n) => command({ id: `${first.id}-race`, commandId: `${first.commandId}-race-${n}` }));
-  const raceResults = await Promise.all(racers.map((input) => store.commit(input)));
+  const raceResults = await Promise.all(racers.map((input) => new SurrealStore(transport, now).commit(input)));
   assert.equal(raceResults.filter((result) => result.status === 'committed').length, 1);
   assert.equal(raceResults.filter((result) => result.status === 'conflict').length, 11);
   const racedJournal = await transport.query(`RETURN {
@@ -238,10 +322,10 @@ test('actual SurrealDB conformance: atomic journal, revision race, replay and re
     audits: (SELECT * FROM massion_audit WHERE aggregateId = $aggregateId),
     events: (SELECT * FROM massion_event WHERE aggregate = type::record('massion_state', $aggregateKey)),
     outbox: (SELECT * FROM massion_outbox WHERE aggregate = type::record('massion_state', $aggregateKey))
-  };`, { aggregateId: racers[0].id, aggregateKey: createHash('sha256').update(racers[0].id).digest('hex') });
+  };`, { aggregateId: racers[0]!.id, aggregateKey: createHash('sha256').update(racers[0]!.id).digest('hex') });
   for (const rows of Object.values(racedJournal[0] as Record<string, unknown[]>)) assert.equal(rows.length, 1);
   const duplicate = command({ id: `${first.id}-duplicate`, commandId: `${first.commandId}-duplicate` });
-  const duplicateResults = await Promise.all(Array.from({ length: 12 }, () => store.commit(duplicate)));
+  const duplicateResults = await Promise.all(Array.from({ length: 12 }, () => new SurrealStore(transport, now).commit(duplicate)));
   assert.equal(duplicateResults.filter((result) => result.status === 'committed').length, 1);
   assert.equal(duplicateResults.filter((result) => result.status === 'replayed').length, 11);
   let writes = 0;
@@ -267,6 +351,63 @@ test('actual SurrealDB conformance: atomic journal, revision race, replay and re
   for (const rows of Object.values(rollbackJournal[0] as Record<string, unknown[]>)) assert.equal(rows.length, 0);
 });
 
+test('actual SurrealDB event reconnect, replay suppression, rollback and cross-store contention', { skip: !endpoint }, async () => {
+  const transport = createHttpRpcTransport({ endpoint: endpoint!, namespace: 'massion_storage_tests', database: 'massion_storage_tests' });
+  await initializeSurrealSchema(transport);
+  const store = new SurrealStore(transport, now);
+  const baseline = await store.readEvents(0, 1000);
+  const prefix = randomUUID();
+  const first = command({ id: `feed-${prefix}`, commandId: `feed-${prefix}` });
+  await store.commit(first);
+  const page = await store.readEvents(baseline.cursor, 1);
+  assert.equal(page.cursor, baseline.cursor + 1);
+  assert.deepEqual(page.events, [{ cursor: page.cursor, aggregateId: first.id, revision: 1, commandId: first.commandId, events: first.events }]);
+  const later = command({ id: `later-${prefix}`, commandId: `later-${prefix}`, events: [{ actorId: 'owner', type: 'changed', scope: 'fixture' }] });
+  await store.commit(later);
+  await store.commit(first);
+  assert.equal((await store.commit({ ...first, commandId: `${first.commandId}-stale` })).status, 'conflict');
+  const reconnect = new SurrealStore(transport, now);
+  const next = await reconnect.readEvents(page.cursor);
+  assert.deepEqual(next.events, [{ cursor: page.cursor + 1, aggregateId: later.id, revision: 1, commandId: later.commandId, events: later.events }]);
+  assert.deepEqual(await reconnect.readEvents(next.cursor), { events: [], cursor: next.cursor });
+  await assert.rejects(reconnect.readEvents(next.cursor + 1), EventCursorError);
+  const failed = command({ id: `failed-${prefix}`, commandId: `failed-${prefix}` });
+  const failing = new SurrealStore({ query: (sql, variables) => transport.query(sql === COMMIT_QUERY ? sql.replace("RETURN { status: 'committed'", "THROW 'injected failure';\nRETURN { status: 'committed'") : sql, variables) }, now);
+  await assert.rejects(failing.commit(failed), StorageQueryError);
+  assert.deepEqual(await reconnect.readEvents(next.cursor), { events: [], cursor: next.cursor });
+  const queued = Array.from({ length: 6 }, (_, n) => command({ id: `queued-${prefix}-${n}`, commandId: `queued-${prefix}-${n}` }));
+  const queuedResults = await Promise.all(queued.map((input) => store.commit(input)));
+  assert.ok(queuedResults.every((result) => result.status === 'committed'));
+  const queuedPage = await reconnect.readEvents(next.cursor);
+  assert.equal(queuedPage.events.length, 6);
+  assert.deepEqual(queuedPage.events.map((entry) => entry.cursor), Array.from({ length: 6 }, (_, n) => next.cursor + n + 1));
+
+  // Separate instances deliberately bypass the one-host queue. Hold the same
+  // counter snapshot long enough to establish an actual cross-store conflict.
+  const contendedTransport: QueryTransport = { query: (sql, vars) => transport.query(sql === COMMIT_QUERY ? sql.replace('UPDATE massion_feed:global', 'SLEEP 50ms;\nUPDATE massion_feed:global') : sql, vars) };
+  const contenders = [0, 1].map((n) => new SurrealStore(contendedTransport, now).commit(command({ id: `contention-${prefix}-${n}`, commandId: `contention-${prefix}-${n}` })));
+  const outcomes = await Promise.allSettled(contenders);
+  assert.equal(outcomes.filter((result) => result.status === 'fulfilled').length, 1);
+  const rejection = outcomes.find((result) => result.status === 'rejected') as PromiseRejectedResult;
+  assert.ok(rejection.reason instanceof StorageContentionError, String(rejection.reason));
+  assert.equal(rejection.reason.retryable, true);
+  const tail = await reconnect.readEvents(queuedPage.cursor);
+  assert.equal(tail.events.length, 1);
+  assert.equal(tail.cursor, queuedPage.cursor + 1);
+});
+
+test('actual SurrealDB initializer refuses legacy journal without fabricating cursor history', { skip: !endpoint }, async () => {
+  const transport = createHttpRpcTransport({ endpoint: endpoint!, namespace: 'massion_storage_tests', database: 'massion_storage_tests' });
+  const database = `legacy_${randomUUID().replaceAll('-', '')}`;
+  await transport.query(`DEFINE DATABASE ${database};`, {});
+  const legacy = createHttpRpcTransport({ endpoint: endpoint!, namespace: 'massion_storage_tests', database });
+  await legacy.query(`DEFINE TABLE massion_operation SCHEMALESS; CREATE massion_operation:legacy CONTENT { commandId: 'legacy' };`, {});
+  await assert.rejects(initializeSurrealSchema(legacy), StorageQueryError);
+  const retained = await legacy.query('SELECT * FROM massion_operation;', {});
+  assert.equal((retained[0] as Record<string, unknown>[])[0]!.commandId, 'legacy');
+  assert.equal(Object.hasOwn((retained[0] as Record<string, unknown>[])[0]!, 'cursor'), false);
+});
+
 test('actual SurrealDB crash restart and clean backup restore retain exact snapshots and journal', {
   skip: !endpoint || process.env.MASSION_TEST_SURREAL_RESTART !== '1',
 }, async () => {
@@ -286,6 +427,7 @@ test('actual SurrealDB crash restart and clean backup restore retain exact snaps
   const input = command({ id: `restart-${randomUUID()}`, commandId: `restart-${randomUUID()}` });
   await store.commit(input);
   const journalQuery = `RETURN {
+    feed: (SELECT * FROM massion_feed ORDER BY id),
     states: (SELECT * FROM massion_state ORDER BY id),
     operations: (SELECT * FROM massion_operation ORDER BY id),
     audits: (SELECT * FROM massion_audit ORDER BY id),
@@ -293,11 +435,12 @@ test('actual SurrealDB crash restart and clean backup restore retain exact snaps
     outbox: (SELECT * FROM massion_outbox ORDER BY id)
   };`;
   const before = await transport.query(journalQuery, {});
+  const feedBefore = await store.readEvents(0, 1000);
   process.kill(originalPid, 'SIGKILL');
   const stopDeadline = Date.now() + 10_000;
   while (true) {
     let state = '';
-    try { state = (await readFile(`/proc/${originalPid}/stat`, 'utf8')).split(') ')[1].split(' ')[0]; }
+    try { state = (await readFile(`/proc/${originalPid}/stat`, 'utf8')).split(') ')[1]?.split(' ')[0] ?? ''; }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') break; throw error; }
     if (state === 'Z' || state === 'X') break;
     assert.ok(Date.now() < stopDeadline, 'original process did not exit');
@@ -320,6 +463,7 @@ test('actual SurrealDB crash restart and clean backup restore retain exact snaps
     assert.deepEqual(await restarted.load(input.id), { revision: 1, value: input.value });
     assert.deepEqual(await restarted.lookupOperation(input), { status: 'replayed', revision: 1, value: input.value });
     assert.deepEqual(await transport.query(journalQuery, {}), before);
+    assert.deepEqual(await restarted.readEvents(0, 1000), feedBefore);
 
     const headers = { 'Surreal-NS': 'massion_storage_tests', 'Surreal-DB': 'massion_storage_tests', 'Content-Type': 'application/json' };
     const exported = await fetch(new URL('/export', url), {
@@ -340,6 +484,7 @@ test('actual SurrealDB crash restart and clean backup restore retain exact snaps
     assert.deepEqual(await restored.load(input.id), { revision: 1, value: input.value });
     assert.deepEqual(await restored.lookupOperation(input), { status: 'replayed', revision: 1, value: input.value });
     assert.deepEqual(await restoredTransport.query(journalQuery, {}), before);
+    assert.deepEqual(await restored.readEvents(0, 1000), feedBefore);
   } finally {
     if (server.exitCode === null && server.signalCode === null) {
       const exited = new Promise<void>((resolve) => { server.once('exit', () => resolve()); });
