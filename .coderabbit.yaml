@@ -1,0 +1,5 @@
+reviews:
+  auto_review:
+    drafts: true
+    base_branches:
+      - ".*"
