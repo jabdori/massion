@@ -49,6 +49,15 @@ A request that loses its receipt does not silently rerun. Pending/unknown effect
 
 For the opt-in provider path and its remaining live-service gates, see [configured execution](docs/architecture/configured-runtime.md). No account or credential is loaded by default.
 
+## Portable Work backup
+
+The bounded text runtime now has a versioned private bundle containing the complete
+Mission operation history plus every referenced sealed text artifact. Restore into
+a fresh SurrealDB and new artifact root preserves original Records and command
+identities, verifies relocated bytes, and holds old outbox rows without replay.
+See [backup CLI, limits and recovery](docs/architecture/portable-backup.md) and
+[clean-restore evidence](docs/acceptance/portable-backup-evidence.md).
+
 ## Repository map
 
 - `src/domain.ts`: product invariants, pinned attempts, authority, Records, Memory/Growth and typed relation impact
