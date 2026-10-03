@@ -3,7 +3,7 @@ export interface ProviderDescriptor {
   provider:string; model:string; configVersion:string; enabled:boolean;
   capabilities:readonly string[]; evidenceClass:'fixture'|'real-provider';
 }
-export interface ProviderRequest { invocationId:string; workId:string; instruction:string; inputReferences:readonly string[]; signal:AbortSignal }
+export interface ProviderRequest { invocationId:string; workId:string; instruction:string; inputReferences:readonly string[]; signal:AbortSignal; maxOutputTokens?:number }
 export interface ProviderOutcome {
   status:'completed'|'failed'|'cancelled'|'unknown';
   output:string|null; usage:{inputTokens:number|null;outputTokens:number|null};
