@@ -53,6 +53,18 @@ Record identifiers are SHA-256 digests of opaque IDs, with the original IDs reta
 
 SurrealDB uses snapshot isolation. The adapter always writes the aggregate key that it read, and creates a deterministic operation key, so overlapping writers contend on the same keys. The actual cross-store race test checks both result classifications and retained journal cardinality. It does not assert serializability across arbitrary sets of aggregates.
 
+## Lossless JSON transport boundary
+
+Actual SurrealDB 3.3.0 testing exposed eager string interpretation in JSON RPC parameters: even a bare `RETURN $value` changed nested `run:verifier:assignment` into `run:verifier`. Ordinary source/output fields and array strings were affected too; the problem was not limited to fields named `id`. This was reproduced before any database write, so changing domain IDs would only conceal the transport defect.
+
+The HTTP transport now serializes each parameter value into canonical JSON text under a collision-free wire variable name. Generated `LET` bindings decode that text with `encoding::json::decode` before the original query runs. Variable names must pass a strict identifier allowlist, and data never enters SQL source. The resulting database values remain normal queryable objects, arrays, strings and numbers. Native record links are still created explicitly by the storage query; snapshots are not converted into opaque string blobs.
+
+The transport validates every binding result and removes only those known leading result slots, preserving the caller's original result positions. A binding error before the transaction cannot establish that later statements rolled back, so it remains a protocol/ambiguous-outcome failure. No retry is introduced. The codec requires SurrealDB's JSON decoding function (available from 3.1); the tested/pinned candidate remains 3.3.0.
+
+The actual regression deep-compares the entire original commit envelope with the retained operation, fresh-client load, replay, event feed and individual event/outbox payloads. It includes nested opaque colon IDs, source/output content, embedded receipt JSON, Unicode, escaped text, timestamps, URLs, nulls, booleans and numeric values. The full configured-runtime acceptance route using two local HTTP model mocks also passes against the actual database after this fix. This does not certify an external model/provider.
+
+The fix prevents corruption in new writes. It cannot reconstruct suffixes or content already discarded by an older transport. Existing affected data must be recovered from intact source/backup evidence or recreated; no silent repair or historical migration is claimed.
+
 ## Durable operation-event catch-up
 
 Each accepted command increments the single `massion_feed:global` counter and stores that cursor on its operation, audit, event and outbox rows in the same transaction. One command is one feed batch, including commands with an empty event array. Replays, revision/idempotency conflicts and rolled-back commands do not create a batch or consume a cursor. Feed order comes from committed cursor allocation, never timestamps.
@@ -80,11 +92,12 @@ The HTTP client validates RPC request IDs and every statement result, including 
 
 ## Evidence and reproduction
 
-`node --test tests/storage.test.ts` runs 19 unit/mock tests and skips the four actual-server tests unless their explicit environment is supplied. Mock and in-memory tests are not SurrealDB conformance evidence.
+`node --test tests/storage.test.ts` runs 21 unit/mock tests and skips the five actual-server tests unless their explicit environment is supplied. Mock and in-memory tests are not SurrealDB conformance evidence.
 
 Actual live test coverage on the configuration above:
 
 - State, operation, audit, event and outbox records commit together.
+- Nested opaque identifiers and complete source/output/event/outbox JSON survive RPC echo, commit, fresh-client load, original replay and event catch-up with deep equality.
 - Injecting a statement failure after all journal writes rolls everything back. Checks query raw operation links, so dangling events/outbox records cannot hide behind a missing operation.
 - Twelve concurrent commands with one expected revision produce one commit and eleven explicit conflicts, with exactly one retained operation/audit/event/outbox set.
 - Twelve concurrent identical command submissions produce one commit and eleven original-result replays.
@@ -102,7 +115,7 @@ MASSION_SURREAL_BINARY=/absolute/path/to/surreal \
   env MASSION_TEST_SURREAL_RESTART=1 node --test tests/storage.test.ts
 ```
 
-It passed **23/23 tests** with no skips. The launcher is development tooling, not the product host. An equivalent fresh test server must supply:
+It passed **26/26 tests** with no skips. Static TypeScript checking also passed (`npm run typecheck`). The launcher is development tooling, not the product host. An equivalent fresh test server must supply:
 
 - `MASSION_TEST_SURREAL_RPC=http://127.0.0.1:<port>/rpc`
 - Namespace and database `massion_storage_tests`
@@ -125,6 +138,7 @@ Do not run the crash test alongside other clients or parallel test files using t
 The implementation was checked against official documentation, then tested against the exact server binary rather than treating documentation as a substitute for execution:
 
 - [HTTP protocol, structured RPC variables, export/import](https://surrealdb.com/docs/reference/rest-api/http-protocol)
+- [Explicit JSON decoding](https://surrealdb.com/docs/reference/query-language/functions/database-functions/encoding)
 - [RPC query request and statement response format](https://surrealdb.com/docs/reference/rest-api/rpc-protocol)
 - [Transactions, rollback and snapshot isolation](https://surrealdb.com/docs/learn/querying/concepts-and-guides/transactions)
 - [RETURN control flow](https://surrealdb.com/docs/reference/query-language/statements/return)

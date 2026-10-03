@@ -177,11 +177,39 @@ test('HTTP RPC encodes structured variables and validates matching response IDs'
       assert.equal(headers.get('Surreal-DB'), 'tests');
       const body = JSON.parse(String(init?.body));
       assert.equal(body.method, 'query');
-      assert.deepEqual(body.params, ['RETURN $data;', { data: { quote: "a'b", n: 3 } }]);
-      return Response.json({ id: body.id, result: [{ status: 'OK', result: { quote: "a'b", n: 3 } }] });
+      assert.equal(body.params[0], 'LET $data = encoding::json::decode($__massion_json_0);\nRETURN $data;');
+      assert.deepEqual(body.params[1], { __massion_json_0: JSON.stringify({ n: 3, quote: "a'b" }) });
+      assert.ok(!body.params[0].includes("a'b"));
+      return Response.json({ id: body.id, result: [{ status: 'OK', result: null }, { status: 'OK', result: { quote: "a'b", n: 3 } }] });
     }) as typeof fetch,
   });
   assert.deepEqual(await transport.query('RETURN $data;', { data: { quote: "a'b", n: 3 } }), [{ quote: "a'b", n: 3 }]);
+});
+
+test('RPC JSON bindings reject injected names, avoid collisions and preserve result positions', async () => {
+  let calls = 0;
+  const transport = createHttpRpcTransport({ endpoint: 'http://localhost:8000/rpc', namespace: 'tests', database: 'tests',
+    fetch: (async (_url, init) => {
+      calls += 1;
+      const { id, params } = JSON.parse(String(init?.body));
+      assert.equal(params[0], 'LET $__massion_json_0 = encoding::json::decode($__massion_json__0);\nRETURN $__massion_json_0; RETURN 2;');
+      assert.deepEqual(params[1], { __massion_json__0: '"run:verifier:assignment"' });
+      return Response.json({ id, result: [{ status: 'OK', result: null }, { status: 'OK', result: 'run:verifier:assignment' }, { status: 'OK', result: 2 }] });
+    }) as typeof fetch });
+  await assert.rejects(transport.query('RETURN 1;', { 'x; DELETE massion_state;': 1 }), TypeError);
+  assert.equal(calls, 0);
+  assert.deepEqual(await transport.query('RETURN $__massion_json_0; RETURN 2;', { __massion_json_0: 'run:verifier:assignment' }), ['run:verifier:assignment', 2]);
+});
+
+test('failed or malformed pre-transaction JSON bindings never prove commit rollback', async () => {
+  for (const binding of [{ status: 'ERR', result: 'decoding failed' }, { status: 'OK', result: 'unexpected binding result' }]) {
+    const transport = createHttpRpcTransport({ endpoint: 'http://localhost:8000/rpc', namespace: 'tests', database: 'tests',
+      fetch: (async (_url, init) => {
+        const { id } = JSON.parse(String(init?.body));
+        return Response.json({ id, result: [binding, { status: 'OK', result: { status: 'committed', revision: 1 } }] });
+      }) as typeof fetch });
+    await assert.rejects(transport.query('RETURN $value;', { value: 'run:executor:assignment' }), StorageProtocolError);
+  }
 });
 
 test('HTTP RPC rejects error statuses anywhere in response and protocol violations', async () => {
@@ -406,6 +434,58 @@ test('actual SurrealDB initializer refuses legacy journal without fabricating cu
   const retained = await legacy.query('SELECT * FROM massion_operation;', {});
   assert.equal((retained[0] as Record<string, unknown>[])[0]!.commandId, 'legacy');
   assert.equal(Object.hasOwn((retained[0] as Record<string, unknown>[])[0]!, 'cursor'), false);
+});
+
+test('actual SurrealDB preserves nested opaque colon IDs and full JSON source/output payloads', { skip: !endpoint }, async () => {
+  const options = { endpoint: endpoint!, namespace: 'massion_storage_tests', database: 'massion_storage_tests' };
+  const transport = createHttpRpcTransport(options);
+  await initializeSurrealSchema(transport);
+  const suffix = randomUUID();
+  const value = {
+    id: 'mission:readiness:review',
+    assignments: [
+      { id: 'run:executor:assignment', taskId: 'task:source:analysis', source: 'run:executor:assignment' },
+      { id: 'run:verifier:assignment', taskId: 'task:source:review', output: 'run:verifier:assignment' },
+    ],
+    source: { uri: 'https://example.invalid/source:a:b', content: 'source:opaque:full', text: 'Quote: "preserve me"\nBackslash: \\ 🧭 한글' },
+    output: { content: 'result:opaque:full', receipt: '{"id":"run:executor:assignment","output":"a:b:c"}', empty: '', nil: null },
+    literals: ['person:tobie:extra', '2026-10-03T06:30:00.000Z', 'NONE', 'null', 'true', '1.25', '550e8400-e29b-41d4-a716-446655440000'],
+    arrays: [[{ id: 'nested:one:two', more: [true, false, null, 0, 1.25, 1e100, 1e-100] }]],
+    'opaque:key:full': { 'nested:key': 'value:with:colons' },
+  };
+  const input: CommitInput<typeof value> = {
+    id: `mission:${suffix}:aggregate`, commandId: `command:${suffix}:commit`, fingerprint: `fingerprint:${suffix}:full`,
+    expectedRevision: 0, value,
+    events: [{ id: 'event:accepted:full', actorId: 'actor:verifier:full', command: { id: 'command:review:full', source: value.source, output: value.output } }],
+    outbox: [{ id: 'outbox:effect:full', target: 'target:artifact:full', payload: value }],
+  };
+  const original = structuredClone(input);
+  assert.deepEqual(await transport.query('RETURN $value;', { value }), [value], 'RPC echo must preserve JSON before storage');
+  for (const scalar of [null, true, false, 0, 1.25, 'source:opaque:full', '', ['nested:id:full']]) {
+    assert.deepEqual(await transport.query('RETURN $scalar;', { scalar }), [scalar]);
+  }
+  assert.deepEqual(await transport.query('RETURN type::of($value.assignments[0].id);', { value }), ['string']);
+  const store = new SurrealStore<typeof value>(transport, now);
+  const before = await store.readEvents(0, 1000);
+  assert.deepEqual(await store.commit(input), { status: 'committed', revision: 1, value: original.value });
+  assert.deepEqual(input, original, 'commit cannot mutate caller input');
+  const fresh = new SurrealStore<typeof value>(createHttpRpcTransport(options), now);
+  assert.deepEqual(await fresh.load(input.id), { revision: 1, value: original.value });
+  assert.deepEqual(await fresh.lookupOperation(input), { status: 'replayed', revision: 1, value: original.value });
+  assert.deepEqual(await fresh.reconcile(input), { status: 'replayed', revision: 1, value: original.value });
+  const [operations, eventRows, outboxRows] = await transport.query(`
+    SELECT * FROM massion_operation WHERE commandId = $commandId;
+    SELECT payload FROM massion_event WHERE operation.commandId = $commandId ORDER BY ordinal;
+    SELECT payload FROM massion_outbox WHERE operation.commandId = $commandId ORDER BY ordinal;
+  `, { commandId: input.commandId });
+  const operation = (operations as Record<string, unknown>[])[0]!;
+  assert.deepEqual({ id: operation.aggregateId, commandId: operation.commandId, fingerprint: operation.fingerprint, expectedRevision: operation.expectedRevision,
+    value: operation.value, events: operation.events, outbox: operation.outbox }, original, 'entire commit input must survive the durable journal');
+  assert.deepEqual((eventRows as { payload: unknown }[]).map((entry) => entry.payload), original.events);
+  assert.deepEqual((outboxRows as { payload: unknown }[]).map((entry) => entry.payload), original.outbox);
+  assert.deepEqual((await fresh.readEvents(before.cursor)).events, [{ cursor: before.cursor + 1, aggregateId: input.id, revision: 1, commandId: input.commandId, events: original.events }]);
+  assert.deepEqual(await fresh.commit(input), { status: 'replayed', revision: 1, value: original.value });
+  assert.deepEqual(await fresh.readEvents(before.cursor + 1), { events: [], cursor: before.cursor + 1 });
 });
 
 test('actual SurrealDB crash restart and clean backup restore retain exact snapshots and journal', {

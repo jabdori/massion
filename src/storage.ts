@@ -219,7 +219,30 @@ export interface HttpRpcOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-/** Structured vars travel in the RPC body, never in SQL or URL interpolation. */
+/**
+ * SurrealDB 3.3 JSON RPC eagerly interprets record-shaped strings, including
+ * nested ordinary data. Encode each JSON variable as a string and decode it in
+ * SurrealQL to retain its exact JSON type and content. Values never enter SQL.
+ */
+function jsonVariableBindings(sql: string, variables: Record<string, unknown>): {
+  sql: string; variables: Record<string, string>; statementCount: number;
+} {
+  const names = Object.keys(variables);
+  if (names.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) {
+    throw new TypeError('Query variable names must be simple SurrealQL identifiers');
+  }
+  let prefix = '__massion_json_';
+  while (names.some((name) => name.startsWith(prefix))) prefix += '_';
+  const encoded: Record<string, string> = {};
+  const bindings = names.map((name, index) => {
+    const wireName = `${prefix}${index}`;
+    encoded[wireName] = canonical(variables[name]);
+    return `LET $${name} = encoding::json::decode($${wireName});`;
+  });
+  return { sql: bindings.length ? `${bindings.join('\n')}\n${sql}` : sql, variables: encoded, statementCount: bindings.length };
+}
+
+/** Structured values travel losslessly in the RPC body, never SQL or URL interpolation. */
 export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport {
   const endpoint = new URL(options.endpoint);
   if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
@@ -237,9 +260,10 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
   return {
     async query(sql, variables) {
       const id = randomUUID();
+      const bound = jsonVariableBindings(sql, variables);
       const response = await request(endpoint, {
         method: 'POST', headers, redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({ id, method: 'query', params: [sql, variables] }),
+        body: JSON.stringify({ id, method: 'query', params: [bound.sql, bound.variables] }),
       });
       if (!response.ok) throw new StorageProtocolError(`SurrealDB HTTP status ${response.status}`);
       const envelope: unknown = await response.json();
@@ -252,6 +276,11 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
           throw new StorageProtocolError('Invalid SurrealDB statement result');
         }
       }
+      // Bindings precede the caller's transaction. A failed binding does not
+      // prove later statements were rolled back, so keep its outcome ambiguous.
+      if (statements.slice(0, bound.statementCount).some((statement) => statement.status === 'ERR')) {
+        throw new StorageProtocolError('JSON-variable binding failed; query outcome is not established');
+      }
       const failures = statements.filter((statement) => statement.status === 'ERR');
       if (failures.length) {
         // Structured conflict kind is verified against HTTP RPC 3.3.0. Never
@@ -261,7 +290,10 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
         if (conflict) throw new StorageContentionError(String(conflict.result));
         throw new StorageQueryError(String(failures[0].result));
       }
-      return statements.map((statement) => statement.result);
+      if (statements.length <= bound.statementCount || statements.slice(0, bound.statementCount).some((statement) => statement.result !== null)) {
+        throw new StorageProtocolError('Invalid JSON-variable binding results');
+      }
+      return statements.slice(bound.statementCount).map((statement) => statement.result);
     },
   };
 }
