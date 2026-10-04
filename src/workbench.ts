@@ -175,7 +175,7 @@ async function request(path, options = {}, timeout = 15000) {
 function validSnapshot(value, id) { return value && Number.isSafeInteger(value.revision) && value.revision > 0 && value.value && value.value.id === id && Array.isArray(value.value.works); }
 function rememberMission(id) { selectedId = id; $('mission-id').value = id; storage.set(missionKey, id); }
 function clearSnapshot(message) {
-  snapshot = null;
+  snapshot = null; restoreMissionAddress();
   $('mission-panel').hidden = true;
   $('empty-state').hidden = false;
   $('empty-message').textContent = message;

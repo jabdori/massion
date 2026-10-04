@@ -22,7 +22,7 @@ Project inspection was blocked by missing `read:project`; no token scope changed
 ## Local verification
 
 Strict pinned Node 24.19.0 / TypeScript checking passes. The affected workbench and
-client-to-HTTP suite with disposable SurrealDB 3.3.0 passes 39/39, 0 failures,
+client-to-HTTP suite with disposable SurrealDB 3.3.0 passes 40/40, 0 failures,
 0 skips. Counts belong to this candidate, not a sum of earlier runs.
 
 - Fresh storage opens a validated fragment with GET only; changing the fragment
@@ -49,6 +49,11 @@ address paired with the visible snapshot. Invalid/busy navigation now restores
 the validated Mission address, or clears the fragment when no snapshot exists.
 A held command followed by definite HTTP 400 and reload proves the reference
 remains the original Mission with exactly one command send.
+
+A third Codex P2 found failed form navigation discarded the snapshot but left
+the previous address active. Snapshot disposal now also clears the fragment.
+The regression checks Mission A, a failed load of B, and reload without reopening
+A or exposing an old continuation link. All three P2s were reproduced before fixes.
 
 Initial new-test failures were test setup errors: checking a button instead of
 its disabled fieldset, and omitting creation of the unique disposable database.
