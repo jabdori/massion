@@ -23,6 +23,9 @@ product/security decisions. No new issue, board or Project authorization is need
 
 Pinned Node 24.19.0/TypeScript strict checking passes. Affected actual SurrealDB
 3.3.0 and inline-client/HTTP suite: 46 passed, 0 failed, 0 skipped.
+After the CI fixture corrections, the complete ordinary runtime regression passes
+278/299, with 21 conditional DB skips and 0 failures. Actual DB completion must be
+verified separately on the final published head.
 
 - Event transport failure pauses Mission/Work actions and fixture execution before
   a marker or POST is sent; read/refresh stays available and drafts remain.
@@ -41,7 +44,10 @@ Pinned Node 24.19.0/TypeScript strict checking passes. Affected actual SurrealDB
   Fixture acceptance establishes orchestration only, not model competence.
 
 Initial verification exposed a previous UI test returning `head` instead of the
-actual event protocol's `cursor`. The fixture was corrected; the synchronization
+actual event protocol's `cursor`. Published-head CI exposed two more provider UI fixtures with the same invalid
+field; both failures were reproduced locally. They now return the real cursor
+contract and permit only cursor storage, retaining the no-credential assertion.
+The fixtures were corrected; the synchronization
 requirement was not relaxed. An existing stale runtime-UI regression also led to
 removing prior execution controls when current provider metadata cannot be read.
 
