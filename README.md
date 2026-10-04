@@ -100,3 +100,13 @@ The [Work-aware preflight evidence](docs/acceptance/workbench-preflight-evidence
 covers explicit selection, two-call budget guidance, side-effect-free checks,
 stale-result rejection and client/HTTP/SurrealDB reload integration. These tests
 use fixture providers; they do not establish live-model or browser-rendering quality.
+
+## Configure host-owned model connections
+
+The normal CLI supports an explicitly selected, versioned non-secret host manifest.
+It enrolls only declared connections/models and binds credential references to exact
+destinations. HTTPS model calls still require a separate startup option, scoped
+executor/verifier permission, current preflight and explicit Run. The unconfigured
+CLI reads no provider credential. See [CLI host setup](docs/architecture/cli-host-connections.md)
+for the manifest, lazy environment binding, credential-free loopback fixture mode
+and restart/no-replay limits. No live account has been validated.

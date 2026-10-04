@@ -1,4 +1,5 @@
-import {ConnectionWorkbench} from './connection-workbench.ts';
+import type {ConnectionWorkbench} from './connection-workbench.ts';
+import {loadHostStartup,createHostConnections} from './host-connections.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
 import {createServer} from 'node:http';
@@ -74,13 +75,14 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  return server;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+ const hostStartup=await loadHostStartup(process.argv.slice(2));
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
  const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
- const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=new ConnectionWorkbench(store,artifacts,{transport:(url,init)=>fetch(url,init)});
+ const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
  const server=createWorkbench(store,workspaceRoot,{connections});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
- for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>server.close(()=>process.exit(0)));
+ for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{server.closeAllConnections();server.close(()=>process.exit(0));});
 }
