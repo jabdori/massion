@@ -5,6 +5,38 @@ import type {ModelConnectionProfile,ModelAdapterFactory} from '../src/provider-p
 
 const profile=(id='primary'):ModelConnectionProfile=>({id,label:id,backend:'model-provider',providerKind:'fixture-provider',protocol:'fixture-text/v1',model:'exact-v1',endpoint:'http://127.0.0.1:1234/text',revision:'1',enabled:true,auth:{method:'none'},capabilities:['text-output'],usage:{inputTokens:'reported',outputTokens:'reported',cost:'unknown'},limits:{maxInputBytes:4096,maxOutputTokens:64,maxResponseBytes:4096,timeoutMs:1000}});
 const factory:ModelAdapterFactory={protocol:'fixture-text/v1',authMethods:['none'],capabilities:['text-output'],evidenceClass:'fixture',validate:()=>[],create:(p)=>({descriptor:{provider:p.providerKind,model:p.model,configVersion:p.revision,enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},invoke:async()=>({status:'completed',output:'Fixture only',usage:{inputTokens:1,outputTokens:1},reason:'fixture'})})};
+class PrototypeFactory implements ModelAdapterFactory {
+ protocol=factory.protocol;authMethods=[...factory.authMethods];capabilities=[...factory.capabilities];evidenceClass:ModelAdapterFactory['evidenceClass']='fixture';
+ readonly #model='exact-v1';readonly #adapterFactory=factory;
+ validate(p:Readonly<ModelConnectionProfile>){return p.model===this.#model?[]:[{code:'model_unsupported',message:'Unsupported fixture model.'}];}
+ create(p:Readonly<ModelConnectionProfile>){assert.equal(p.model,this.#model);return this.#adapterFactory.create(p);}
+}
+
+test('catalog list preserves prototype validation and its original private state',()=>{
+ const catalog=new ConnectionCatalog([profile(),{...profile('unsupported'),model:'other'}],[new PrototypeFactory()]);
+ const listed=catalog.list();
+ assert.deepEqual(listed[0]?.diagnostics,[]);
+ assert.deepEqual(listed[1]?.diagnostics,[{code:'model_unsupported',message:'Unsupported fixture model.'}]);
+});
+test('catalog resolve preserves prototype construction and its original private state',()=>{
+ const result=new ConnectionCatalog([profile()],[new PrototypeFactory()]).resolve('primary',['text-output']);
+ assert.equal(result.status,'selected');
+ if(result.status==='selected'){
+  assert.equal(result.adapter.descriptor.model,'exact-v1');
+  assert.equal(result.adapter.descriptor.configVersion,result.configHash);
+ }
+});
+test('factory registration snapshots metadata while retaining the original method receiver',()=>{
+ const instance=new PrototypeFactory();
+ const catalog=new ConnectionCatalog([profile(),{...profile('auth'),auth:{method:'oauth'}},{...profile('capability'),capabilities:['tools']}],[instance]);
+ instance.authMethods.splice(0,1,'oauth');instance.capabilities.splice(0,1,'tools');
+ instance.protocol='changed';instance.evidenceClass='real-provider';
+ assert.equal(catalog.resolve('primary',['text-output']).status,'selected');
+ const listed=catalog.list();
+ assert.deepEqual(listed[0]?.diagnostics,[]);
+ assert.ok(listed[1]?.diagnostics.some(d=>d.code==='auth_unsupported'));
+ assert.ok(listed[2]?.diagnostics.some(d=>d.code==='capability_unsupported'));
+});
 
 test('catalog never selects the first available connection when a profile is missing',()=>{
  const catalog=new ConnectionCatalog([profile()],[factory]);

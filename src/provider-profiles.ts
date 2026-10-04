@@ -47,7 +47,14 @@ export class ConnectionCatalog {
  readonly #profiles:Map<string,ExecutionConnectionProfile>;readonly #factories:Map<string,ModelAdapterFactory>;
  constructor(profiles:readonly ExecutionConnectionProfile[]=[],factories:readonly ModelAdapterFactory[]=[]){
   this.#profiles=new Map();this.#factories=new Map();
-  for(const factory of factories){if(this.#factories.has(factory.protocol))throw new Error('Duplicate adapter protocol');this.#factories.set(factory.protocol,{...factory,authMethods:[...factory.authMethods],capabilities:[...factory.capabilities]});}
+  for(const factory of factories){
+   if(this.#factories.has(factory.protocol))throw new Error('Duplicate adapter protocol');
+   // Snapshot declarations, but retain prototype methods and their original instance state.
+   this.#factories.set(factory.protocol,{
+    protocol:factory.protocol,authMethods:[...factory.authMethods],capabilities:[...factory.capabilities],evidenceClass:factory.evidenceClass,
+    validate:factory.validate.bind(factory),create:factory.create.bind(factory),
+   });
+  }
   for(const profile of profiles){if(this.#profiles.has(profile.id))throw new Error('Duplicate connection profile');this.#profiles.set(profile.id,structuredClone(profile));}
  }
  list(){return [...this.#profiles.values()].map(profile=>({...structuredClone(profile),configHash:hash(profile),diagnostics:validate(profile,profile.backend==='model-provider'?this.#factories.get(profile.protocol):undefined)}));}
