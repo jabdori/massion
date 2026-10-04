@@ -15,6 +15,19 @@ import {harness,reply,selectionField} from './support/workbench-client.ts';
 import type {Handler} from './support/workbench-client.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 const eventually=async(check:()=>boolean)=>{const end=Date.now()+5000;while(!check()){assert.ok(Date.now()<end,'Client state timeout');await new Promise(r=>setTimeout(r,5));}};
+test('connection grants preserve the full Mission scope contract and exact matching without effects',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-grant-scope-'));t.after(()=>rm(root,{recursive:true,force:true}));let sends=0;const store=new InMemoryStore<Mission>();
+ const manager=new ConnectionWorkbench(store,new TextArtifactStore(join(root,'artifacts')),{allowFixture:true,transport:async()=>{sends++;assert.fail('Grant and preflight must not dispatch');}});
+ manager.connect({id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',mode:'local-http-mock'});const connection=manager.list().connections[0]!;
+ const exec=manager.selectModel(connection.id,{model:'exec',label:'Executor',expectedConfigHash:connection.configHash}),verify=manager.selectModel(connection.id,{model:'verify',label:'Verifier',expectedConfigHash:connection.configHash});const product=new ProductService(store,undefined,manager);
+ for(const [index,scope] of ['s'.repeat(513),'s'.repeat(16000),'  multiline\nscope  '].entries()){
+  const id='mission'+index,grant='grant'+index;manager.authorize({id:grant,scope,executorProfileId:exec.profileId,verifierProfileId:verify.profileId,maxOutputTokensPerCall:8,expectedConfigHash:manager.list().configHash});assert.equal(manager.list().runtime.authorizations.at(-1)!.scope,scope);
+  await product.create({id,purpose:'Scope parity',scope,constraints:[],criteria:{version:1,description:'Text',oracle:'bounded-text-review/v1'}},'create'+index);await product.admit(id,{commandId:'admit'+index,expectedRevision:1,workId:'work',title:'Scope parity',budget:16});
+  const choice={executorProfileId:exec.profileId,verifierProfileId:verify.profileId,authorizationId:grant,outputTokenCap:8};const preflight=await product.preflight(id,'work',2,choice);assert.ok(preflight);assert.equal(preflight.diagnostics.length,0);
+  const mismatch=await product.preflight(id,'work',2,{...choice,authorizationId:index===0?'missing':'grant0'});assert.ok(mismatch?.diagnostics.some(d=>d.code==='authorization_mismatch'));
+ }
+ const before=manager.list();for(const scope of ['', '   ', 's'.repeat(16001)])assert.throws(()=>manager.authorize({id:'invalid',scope,executorProfileId:exec.profileId,verifierProfileId:verify.profileId,maxOutputTokensPerCall:8,expectedConfigHash:manager.list().configHash}),/scope/);assert.deepEqual(manager.list(),before);assert.equal(sends,0);
+});
 test('connection HTTP rejects invalid custom base URLs with actionable client errors and no mutation',async t=>{
  const root=await mkdtemp(join(tmpdir(),'massion-connection-url-'));t.after(()=>rm(root,{recursive:true,force:true}));let sends=0;
  const manager=new ConnectionWorkbench(new InMemoryStore<Mission>(),new TextArtifactStore(join(root,'artifacts')),{transport:async()=>{sends++;assert.fail('Saving connection metadata must not contact a provider');}});
