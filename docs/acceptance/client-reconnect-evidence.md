@@ -22,10 +22,11 @@ product/security decisions. No new issue, board or Project authorization is need
 ## Local observed checks
 
 Pinned Node 24.19.0/TypeScript strict checking passes. Affected actual SurrealDB
-3.3.0 and inline-client/HTTP suite: 46 passed, 0 failed, 0 skipped.
-After the CI fixture corrections, the complete ordinary runtime regression passes
-278/299, with 21 conditional DB skips and 0 failures. Actual DB completion must be
-verified separately on the final published head.
+3.3.0 and inline-client/HTTP suite: 59 passed, 0 failed, 0 skipped.
+The earlier fixture-only correction candidate a890efe passed the ordinary runtime
+regression 278/299, with 21 conditional DB skips and 0 failures. Those counts do
+not establish completion for subsequent setup-cache/callback changes; final-head
+actual DB CI is recorded separately.
 
 - Event transport failure pauses Mission/Work actions and fixture execution before
   a marker or POST is sent; read/refresh stays available and drafts remain.
@@ -55,8 +56,15 @@ removing prior execution controls when current provider metadata cannot be read.
 MASSION_SURREAL_BINARY=/path/to/official/surreal \
   python3 scripts/with-surreal.py -- \
   node --test tests/workbench.test.ts tests/client-workbench.test.ts \
-    tests/host-connections.test.ts
+    tests/host-connections.test.ts tests/provider-setup.test.ts
 ```
+
+An additional source audit reproduced a failed connection-setup read leaving old
+mutation controls enabled after runtime synchronization. Failed setup now discards
+the cached catalog/forms, fences discovery callbacks and rejects stale programmatic
+mutation handlers until valid setup metadata is received. Reconnect also cancels
+old metadata discovery and fences setup mutation acknowledgements by connection
+epoch; an acknowledged late mutation never installs an older catalog or retries.
 
 Final published-head CI and independent review are separate evidence in the Draft
 PR. CodeRabbit is optional and no repeated/paid review is requested. No real browser
