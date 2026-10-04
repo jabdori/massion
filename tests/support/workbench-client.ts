@@ -49,7 +49,7 @@ export function harness(handler:Handler,initial:Record<string,string>={},storage
  }});
  const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
  runInContext(source,context);
- return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
+ return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async windowEvent(name:string){windowListeners.get(name)?.();await settle();},async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
 }
 
 export function selectionField(app:ReturnType<typeof harness>,id:string) {return app.all().find(node=>node.id===id)!;}
