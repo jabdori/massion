@@ -57,6 +57,22 @@ test('HTTP preflight and run use the same selection contract and catalog exposes
  assert.equal((await(await post('preflight',s.choice)).json() as any).ready,true);assert.equal(s.calls.length,0);
  assert.equal((await(await post('run',s.choice)).json() as any).status,'settled');assert.deepEqual(s.calls.map(c=>c.model),['exact-b','exact-a']);
 });
+test('undefined optional secret references preserve public configuration and authorized execution',async t=>{
+ const s=await setup(t);
+ const profiles=s.profiles.map(p=>({...p,auth:{...p.auth,secretRef:undefined}}));
+ const catalog=new ConnectionCatalog(profiles,[chatProfileFactory({mode:'local-http-mock',transport:fetch})]);
+ const runtime=new SelectableTextRuntime(s.store,catalog,s.grants,s.artifacts);
+ const server=createWorkbench(s.store,s.root,{runtime});server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
+ const address=server.address();assert.ok(address&&typeof address==='object');
+ const response=await fetch(`http://127.0.0.1:${address.port}/providers`);assert.equal(response.status,200);
+ const configuration=await response.json() as {runtime:ReturnType<SelectableTextRuntime['configuration']>};
+ assert.deepEqual(configuration.runtime,s.runtime.configuration());assert.equal(s.calls.length,0);
+ assert.equal(runtime.preflight((await s.store.load(s.missionId))!.value,s.choice).ready,true);
+ const result=await runtime.run(s.missionId,'work','undefined-secret-run',2,s.choice);
+ assert.equal(result.status,'settled');assert.deepEqual(s.calls.map(c=>c.model),['exact-b','exact-a']);
+ assert.equal(result.snapshot.value.works[0]!.runtimeRun!.connectionBindings!.executor.configHash,s.grants[0]!.executor.find(p=>p.profileId==='b')!.configHash);
+});
 test('actual Surreal reopens selected model bindings and exact accepted Record', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
  const transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:'massion_storage_tests',database:'massion_storage_tests'});await initializeSurrealSchema(transport);const store=new SurrealStore<Mission>(transport);const s=await setup(t,store);const result=await s.product.run(s.missionId,'work','durable-run',2,s.choice);assert.equal(result.status,'settled');assert.deepEqual(await new SurrealStore<Mission>(transport).load(s.missionId),result.snapshot);
 });

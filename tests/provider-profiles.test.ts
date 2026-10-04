@@ -57,6 +57,32 @@ test('profile identity is immutable and changes with model, endpoint, limits and
   const changed=new ConnectionCatalog([{...profile(),...change}],[factory]).list()[0]!;assert.notEqual(changed.configHash,original.configHash);
  }
 });
+test('catalog normalizes an undefined optional secret reference without mutating the caller',()=>{
+ const p=profile();p.auth=Object.freeze({method:'none',secretRef:undefined});
+ const omitted=new ConnectionCatalog([profile()],[factory]).list()[0]!;
+ const catalog=new ConnectionCatalog([p],[factory]);
+ const listed=catalog.list()[0]!;
+ assert.deepEqual(listed,omitted);
+ assert.ok(Object.hasOwn(p.auth,'secretRef'));
+ assert.ok(listed.backend==='model-provider'&&!Object.hasOwn(listed.auth,'secretRef'));
+ if(listed.backend==='model-provider')listed.auth.secretRef='changed';
+ assert.deepEqual(catalog.list()[0],omitted);
+});
+test('undefined optional secret references resolve with the omitted-field identity and adapter input',()=>{
+ const p=profile();p.auth.secretRef=undefined;
+ const normalizedFactory:ModelAdapterFactory={...factory,
+  validate:p=>{assert.ok(!Object.hasOwn(p.auth,'secretRef'));return [];},
+  create:p=>{assert.ok(!Object.hasOwn(p.auth,'secretRef'));return factory.create(p);},
+ };
+ const expected=new ConnectionCatalog([profile()],[factory]).resolve('primary',['text-output']);
+ const selected=new ConnectionCatalog([p],[normalizedFactory]).resolve('primary',['text-output']);
+ assert.equal(expected.status,'selected');assert.equal(selected.status,'selected');
+ if(expected.status==='selected'&&selected.status==='selected'){
+  assert.deepEqual(selected.profile,expected.profile);
+  assert.equal(selected.configHash,expected.configHash);
+  assert.deepEqual(selected.adapter.descriptor,expected.adapter.descriptor);
+ }
+});
 test('duplicate profiles and duplicate factory contracts reject instead of order-dependent routing',()=>{
  assert.throws(()=>new ConnectionCatalog([profile(),profile()],[factory]),/duplicate/i);
  assert.throws(()=>new ConnectionCatalog([profile()],[factory,factory]),/duplicate/i);

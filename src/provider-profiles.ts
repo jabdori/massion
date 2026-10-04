@@ -55,7 +55,13 @@ export class ConnectionCatalog {
     validate:factory.validate.bind(factory),create:factory.create.bind(factory),
    });
   }
-  for(const profile of profiles){if(this.#profiles.has(profile.id))throw new Error('Duplicate connection profile');this.#profiles.set(profile.id,structuredClone(profile));}
+  for(const profile of profiles){
+   if(this.#profiles.has(profile.id))throw new Error('Duplicate connection profile');
+   const snapshot=structuredClone(profile);
+   // An absent optional reference has one JSON identity, including explicit undefined.
+   if(snapshot.backend==='model-provider'&&snapshot.auth&&snapshot.auth.secretRef===undefined)delete snapshot.auth.secretRef;
+   this.#profiles.set(profile.id,snapshot);
+  }
  }
  list(){return [...this.#profiles.values()].map(profile=>({...structuredClone(profile),configHash:hash(profile),diagnostics:validate(profile,profile.backend==='model-provider'?this.#factories.get(profile.protocol):undefined)}));}
  resolve(profileId:string,requiredCapabilities:readonly string[]):ResolvedConnection{
