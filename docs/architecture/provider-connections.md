@@ -45,13 +45,15 @@ by selecting another model or connection.
 
 ## Credentials, evidence and lifetime
 
-No API key is accepted by these JSON setup routes, copied from environment or
-credential files, logged or stored in browser localStorage. The optional secretRef
+No API key is accepted by these JSON setup routes, logged or stored in browser
+localStorage. The default has no environment/credential-file lookup; the opt-in CLI
+host manifest allows only individually declared environment value sources, read
+lazily after exact reference/identity/destination checks. The optional secretRef
 is an opaque host reference. Actual authentication uses the existing injected
 CredentialResolver with profile ID, exact destination and abort signal. Public
 configuration redacts secretRef. Synthetic credentials exist only in tests.
 
-The default CLI has no resolver and no live-execution permission. It reports
+The unconfigured CLI has no resolver and no live-execution permission. An explicitly selected [host manifest](cli-host-connections.md) can now supply destination-bound references and separately enabled live capability. It reports
 credential-required, permits configuration/manual model entry, and cannot activate
 live execution. An authorized host integration must provide its resolver and
 explicitly enable live execution before live scoped permission can be granted.
