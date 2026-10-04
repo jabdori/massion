@@ -554,10 +554,11 @@ controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { void connect(); });
+function restoreMissionAddress() { window.history.replaceState(null, '', snapshot ? '#mission=' + encodeURIComponent(snapshot.value.id) : window.location.pathname + window.location.search); }
 window.addEventListener('hashchange', () => {
   const reference = missionReference();
-  if (!reference.id) { report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error'); return; }
-  if (busy) { report('Wait for the current command to settle before opening another Mission.', 'warning'); return; }
+  if (!reference.id) { restoreMissionAddress(); report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error'); return; }
+  if (busy) { restoreMissionAddress(); report('Wait for the current command to settle before opening another Mission.', 'warning'); return; }
   void loadMission(reference.id);
 });
 </script>
