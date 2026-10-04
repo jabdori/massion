@@ -18,6 +18,15 @@ reporting and limits are shown; unavailable profiles show diagnostics. Run uses
 that exact selection. An admitted run displays its pinned profile IDs and hashes.
 Changes after admission never reroute, retry, or resume a run.
 
+The execution plan shows both calls' required output reservation and remaining
+Work budget before submission. With selectable connections, Work admission labels
+budget as output tokens and explains the two-call minimum. All choices remain
+explicit; a check does not start a run. The client binds check feedback to the
+same rendered Work, snapshot revision and selected values. Selection changes,
+newer snapshots, navigation and a run request invalidate earlier feedback. No
+positive check is required to submit an explicit Run; the host rechecks admission
+regardless of whether the client previously checked.
+
 ## Headless composition
 
 - `ConnectionCatalog` accepts immutable `ExecutionConnectionProfile` values and
@@ -40,7 +49,16 @@ Changes after admission never reroute, retry, or resume a run.
 - `ExecutionChoice` names executorProfileId, verifierProfileId, authorizationId,
   and outputTokenCap. Pass it to `ProductService.run` or POST `/missions/:id/run`
   alongside workId, commandId and expectedRevision. `/preflight` accepts the same
-  envelope but does not admit Work, resolve credentials or send inference.
+  envelope but does not admit Work, resolve credentials or send inference. It
+  loads authoritative Work through `ProductService.preflight(missionId, workId,
+  expectedRevision, choice)`. The result binds `missionId`, `workId`, `revision`
+  and `expectedRevision`; a stale revision returns HTTP 409 and `ready: false`.
+- The runtime port is now `preflight(snapshot, workId, expectedRevision, choice)`.
+  It checks Work-pinned criteria, pinned input, open/unstarted state, prior
+  execution evidence, task progress and the remaining two-call output budget as
+  well as profile/authorization compatibility. Run uses the same admission checks
+  and still performs CAS at dispatch. A successful check does not reserve budget,
+  guarantee later admission, authorize new spending, or prove provider quality.
 - The profile's full canonical hash includes endpoint/model/auth reference,
   capabilities, bounds and revision. That hash becomes the actual adapter
   descriptor's configVersion; role bindings are committed with run admission.

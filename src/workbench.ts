@@ -33,7 +33,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <div class="stack">
 <section id="empty-state" class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>No Mission selected</h2><p id="empty-message">Start with a purpose and clear success criteria. Your Mission and Work will appear here after the host confirms them.</p></section>
 <section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
-<form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
+<form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
 <details style="margin-top:22px"><summary>Authoritative snapshot</summary><pre id="snapshot-json"></pre></details></section>
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
 </div>
@@ -169,7 +169,7 @@ function clearSnapshot(message) {
   $('empty-state').hidden = false;
   $('empty-message').textContent = message;
   $('snapshot-json').textContent = '';
-  $('work-list').replaceChildren();
+  $('work-list').replaceChildren(); executionForms.clear();
   $('snapshot-time').textContent = 'No current snapshot is available.';
   controls();
 }
@@ -209,7 +209,9 @@ function badge(text, state) { return element('span', text, 'tag' + (['accepted',
 function addFact(list, title, value) { const group = element('div'); group.append(element('dt', title)); const detail = element('dd'); if (Array.isArray(value)) { const items = element('ul'); for (const item of value) items.append(element('li', item)); detail.append(items); } else detail.textContent = String(value); group.append(detail); list.append(group); }
 function metric(label, value) { const group = element('div', undefined, 'metric'); group.append(element('dt', label), element('dd', value)); return group; }
 function providerNotice() {
-  if (runtimeConfiguration) { $('provider-notice').textContent = 'Choose configured connections separately for execution and independent review on each Work. Selection does not authorize new accounts or spend. Costs remain unknown; budget units are output tokens.'; return; }
+  if (runtimeConfiguration) { $('work-budget-label').textContent = 'Budget limit (output tokens)'; $('work-budget-hint').textContent = 'Set a budget of at least twice the intended per-call output cap for executor and independent review. This is not a money or total-token limit. Admission does not start execution.'; $('provider-notice').textContent = 'Choose configured connections separately for execution and independent review on each Work. Selection does not authorize new accounts or spend. Costs remain unknown; budget units are output tokens.'; return; }
+  $('work-budget-label').textContent = 'Budget limit (host units)';
+  $('work-budget-hint').textContent = 'Admission records responsibility and pins criteria and effective memory. It does not start model execution. Confirm host runtime units before choosing a budget.';
   $('provider-notice').textContent = !providerKnown ? 'Provider availability could not be confirmed. User Work is only admitted here; no model execution is started.' : providerSelection.status === 'selected' ? 'A real provider is configured. This client admits Work and records controls; automatic model execution is not implemented.' : 'Real-provider execution is unavailable. ' + providerSelection.reason;
 }
 function workBlocker(work) {
@@ -226,18 +228,21 @@ function workBlocker(work) {
   return 'Execution and acceptance are tracked separately. Inspect the pinned evidence below.';
 }
 
-const executionDrafts = new Map();
+const executionDrafts = new Map(), executionForms = new Map();
 function renderExecutionSelection(work) {
+  const missionId = snapshot.value.id, revision = snapshot.revision;
+  const configuration = runtimeConfiguration;
   const area = element('details',undefined,'controls'); area.append(element('summary','Choose execution and review connections'));
   const form = element('form',undefined,'execution-form');
-  const draftKey = snapshot.value.id + '\u0000' + work.id;
+  const draftKey = missionId + '\u0000' + work.id;
+  executionForms.set(draftKey,form);
   const saved = executionDrafts.get(draftKey) || {};
   const fields = {};
   for (const role of ['executor','verifier']) {
     const label = element('label',role === 'executor' ? 'Executor connection / model' : 'Independent verifier connection / model');
     const select = element('select'); select.id = role + '-profile-' + work.id; label.htmlFor = select.id; select.required = true;
     const empty = element('option','Choose a connection'); empty.value = ''; select.append(empty);
-    for (const connection of runtimeConfiguration.connections) {
+    for (const connection of configuration.connections) {
       if (connection.backend !== 'model-provider') continue;
       const option = element('option',connection.label + (connection.diagnostics.length ? ' · unavailable' : ' · ' + connection.providerKind + ' / ' + connection.model)); option.value = connection.id; option.disabled = connection.diagnostics.length > 0; select.append(option);
     }
@@ -245,19 +250,48 @@ function renderExecutionSelection(work) {
   }
   const grantLabel = element('label','Authorized use'); const grant = element('select'); grant.id = 'authorization-' + work.id; grantLabel.htmlFor = grant.id; grant.required = true;
   const empty = element('option','Choose an authorization'); empty.value = ''; grant.append(empty);
-  for (const item of runtimeConfiguration.authorizations.filter(a => a.scope === snapshot.value.scope)) { const option = element('option',item.id + ' · ' + item.mode + ' · max ' + item.maxOutputTokensPerCall + ' output tokens per call'); option.value = item.id; grant.append(option); }
+  const grants = configuration.authorizations.filter(a => a.scope === snapshot.value.scope);
+  for (const item of grants) { const option = element('option',item.id + ' · ' + item.mode + ' · max ' + item.maxOutputTokensPerCall + ' output tokens per call'); option.value = item.id; grant.append(option); }
   grant.value = saved.authorizationId || ''; fields.authorizationId = grant; form.append(grantLabel,grant);
+  if (!grants.length) form.append(element('p','No host authorization matches this Mission scope. Choosing a connection cannot grant account access or spending permission.','work-note warning'));
   const capLabel = element('label','Output-token cap per call (two calls reserved)'); const cap = element('input'); cap.type = 'number'; cap.min = '1'; cap.step = '1'; cap.required = true; cap.id = 'output-cap-' + work.id; capLabel.htmlFor = cap.id; cap.value = saved.outputTokenCap || ''; fields.outputTokenCap = cap; form.append(capLabel,cap);
   const detail = element('p',undefined,'hint');
-  const choice = () => ({executorProfileId:fields.executorProfileId.value,verifierProfileId:fields.verifierProfileId.value,authorizationId:grant.value,outputTokenCap:Number(cap.value)});
-  const refresh = () => { const selection = choice(); executionDrafts.set(draftKey,selection); detail.textContent = ['executor','verifier'].map(role => { const c = runtimeConfiguration.connections.find(p => p.id === selection[role + 'ProfileId']); return c && !c.diagnostics.length ? role + ': ' + c.protocol + ' · ' + c.endpoint + ' · auth ' + c.auth.method + ' · max output ' + c.limits.maxOutputTokens + ' · input usage ' + c.usage.inputTokens + ' · cost unknown' : role + ': no connection selected'; }).join(' | '); };
-  for (const field of Object.values(fields)) field.addEventListener('change',refresh); refresh();
+  const plan = element('p',undefined,'work-note'); plan.id = 'execution-plan-' + work.id;
+  const result = element('p','Not checked. Check selection does not start execution.','status'); result.id = 'selection-check-' + work.id; result.setAttribute('role','status'); result.setAttribute('aria-live','polite');
   const check = element('button','Check selection','secondary'); check.type = 'button';
-  check.addEventListener('click',async () => { const missionId = snapshot.value.id; const selection = choice(); try { const result = await request('/missions/' + encodeURIComponent(missionId) + '/preflight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,workId:work.id,selection})}); if(selectedId===missionId) report(result.body.ready ? 'Selection is valid. No provider request was made.' : (result.body.diagnostics || []).map(d => d.message).join(' ') || result.body.error,'warning'); } catch(error) { if(selectedId===missionId) report('Selection could not be checked: ' + error.message,'warning'); } });
-  const run = element('button','Run with selected connections'); run.type = 'submit'; run.setAttribute('data-write','');
-  form.addEventListener('submit',async event => { event.preventDefault(); if(!snapshot)return; const missionId=snapshot.value.id; await write('/missions/' + encodeURIComponent(missionId) + '/run',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,workId:work.id,selection:choice()},missionId,'Run finished. Inspect its execution and independent assurance below.'); });
-  for(const connection of runtimeConfiguration.connections.filter(c=>c.diagnostics.length))form.append(element('p',connection.label + ': ' + connection.diagnostics.map(d=>d.message).join(' '),'hint'));
-  form.append(detail,check,run,element('p','No automatic fallback, retry or provider change. The same connection may serve both roles through separate stateless calls; independent review is not a quality guarantee.','hint'));area.append(form);return area;
+  const choice = () => ({executorProfileId:fields.executorProfileId.value,verifierProfileId:fields.verifierProfileId.value,authorizationId:grant.value,outputTokenCap:Number(cap.value)});
+  const current = () => snapshot && selectedId === missionId && snapshot.value.id === missionId && snapshot.revision === revision && runtimeConfiguration === configuration && executionForms.get(draftKey) === form;
+  let checkVersion = 0, checking = false;
+  const refresh = () => {
+    ++checkVersion; checking = false; check.disabled = false; check.textContent = 'Check selection';
+    result.textContent = 'Not checked. Check selection does not start execution.'; result.className = 'status';
+    const selection = choice(); executionDrafts.set(draftKey,selection);
+    detail.textContent = ['executor','verifier'].map(role => { const c = configuration.connections.find(p => p.id === selection[role + 'ProfileId']); return c && !c.diagnostics.length ? role + ': ' + c.protocol + ' · ' + c.endpoint + ' · auth ' + c.auth.method + ' · max output ' + c.limits.maxOutputTokens + ' · input usage ' + c.usage.inputTokens + ' · cost unknown' : role + ': no connection selected'; }).join(' | ');
+    const remaining = work.budget.limit - work.budget.reserved;
+    const validCap = Number.isSafeInteger(selection.outputTokenCap) && selection.outputTokenCap > 0 && Number.isSafeInteger(selection.outputTokenCap * 2);
+    plan.textContent = validCap ? 'Execution plan: up to ' + selection.outputTokenCap + ' output tokens per call; ' + selection.outputTokenCap * 2 + ' needed for two calls. Work has ' + remaining + ' output tokens available. ' + (selection.outputTokenCap * 2 > remaining ? 'Insufficient Work budget. Use a lower cap or admit new Work with a sufficient budget. ' : '') + 'This does not bound money or total input-plus-output usage.' : 'Choose both connections, authorized use, and a positive whole-number output cap. Both calls must fit the available Work budget of ' + remaining + ' output tokens.';
+    plan.className = 'work-note' + (validCap && selection.outputTokenCap * 2 > remaining ? ' warning' : '');
+  };
+  for (const field of Object.values(fields)) { field.addEventListener('change',refresh); field.addEventListener('input',refresh); } refresh();
+  check.addEventListener('click',async () => {
+    if (!current() || checking) return;
+    const selection = choice(), key = JSON.stringify(selection), version = ++checkVersion;
+    const stillCurrent = () => current() && version === checkVersion && key === JSON.stringify(choice());
+    checking = true; check.disabled = true; check.textContent = 'Checking…'; result.textContent = 'Checking this Work and selection without executing providers…';
+    try {
+      const response = await request('/missions/' + encodeURIComponent(missionId) + '/preflight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection})});
+      if (!stillCurrent()) return;
+      const body = response.body;
+      if (!response.response.ok || body.ready !== true) { result.textContent = (body.diagnostics || []).map(d => d.message).join(' ') || body.error || 'Selection was not confirmed. Refresh this Mission and check again.'; result.className = 'status warning'; return; }
+      if (body.revision !== revision || body.workId !== work.id) { result.textContent = 'The host did not confirm this exact Work revision. Refresh the Mission and check again.'; result.className = 'status warning'; return; }
+      result.textContent = 'Checked at revision ' + revision + '. This Work and selection can be submitted now. No provider request was made; Run rechecks current state before admission.'; result.className = 'status success';
+    } catch(error) { if (stillCurrent()) { result.textContent = 'Selection could not be checked: ' + error.message; result.className = 'status warning'; } }
+    finally { if (stillCurrent()) { checking = false; check.disabled = false; check.textContent = 'Check selection'; } }
+  });
+  const run = element('button','Run with selected connections'); run.type = 'submit'; run.setAttribute('data-write',''); run.setAttribute('aria-describedby',plan.id);
+  form.addEventListener('submit',async event => { event.preventDefault(); if(!current())return; refresh(); await write('/missions/' + encodeURIComponent(missionId) + '/run',{commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection:choice()},missionId,'Run finished. Inspect its execution and independent assurance below.'); });
+  for(const connection of configuration.connections.filter(c=>c.diagnostics.length))form.append(element('p',connection.label + ': ' + connection.diagnostics.map(d=>d.message).join(' '),'hint'));
+  form.append(detail,plan,check,run,result,element('p','No automatic fallback, retry or provider change. The same connection may serve both roles through separate stateless calls; independent review is not a quality guarantee.','hint'));area.append(form);return area;
 }
 
 function renderWork(work) {
@@ -314,6 +348,7 @@ function renderWork(work) {
 function renderMission() {
   if (!snapshot) return;
   const mission = snapshot.value;
+  executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
   $('loaded-id').textContent = mission.id;
   $('mission-purpose').textContent = mission.purpose;
@@ -463,9 +498,11 @@ async function connect() {
   try { const {response,body} = await request('/health'); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
   catch { $('health').textContent = 'Host unavailable'; }
   try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; }
-  catch { providerKnown = false; }
+  catch { providerKnown = false; runtimeConfiguration = null; }
   providerNotice();
   if (selectedId) await loadMission(selectedId);
+  // A fresh catalog invalidates prior selection checks even when Work revision is unchanged.
+  if (snapshot) renderMission();
   await pollEvents();
 }
 controls(); void connect();

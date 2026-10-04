@@ -1,8 +1,8 @@
 /** User choices bind to host-authorized immutable profiles before any runtime effect. */
-import {ConfiguredTextRuntime} from './configured-runtime.ts';
+import {ConfiguredTextRuntime,workAdmissionPreflight,rejectedRun} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeResult} from './configured-runtime.ts';
 import type {Mission} from './domain.ts';
-import type {Store} from './storage.ts';
+import type {Store,Snapshot} from './storage.ts';
 import {ConnectionCatalog} from './provider-profiles.ts';
 import type {ConnectionDiagnostic,ResolvedConnection} from './provider-profiles.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
@@ -11,7 +11,7 @@ export interface ProfilePermission {profileId:string;configHash:string}
 export interface ExecutionAuthorization {
  id:string;scope:string;mode:'mock-http'|'live';executor:readonly ProfilePermission[];verifier:readonly ProfilePermission[];maxOutputTokensPerCall:number;
 }
-export interface SelectionPreflight {ready:boolean;diagnostics:ConnectionDiagnostic[]}
+export interface SelectionPreflight {missionId:string;workId:string;revision:number;expectedRevision:number;ready:boolean;diagnostics:ConnectionDiagnostic[]}
 export class SelectableTextRuntime implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #catalog:ConnectionCatalog;readonly #grants:readonly ExecutionAuthorization[];readonly #artifacts:TextArtifactStore;
  readonly #active=new Map<string,ConfiguredTextRuntime>();
@@ -46,10 +46,20 @@ export class SelectableTextRuntime implements WorkRuntime {
   const available=runtime.availability(mission);if(!available.ready)add('runtime_unavailable',available.reason);
   return {diagnostics,...(diagnostics.length?{}:{runtime})};
  }
- preflight(mission:Mission,choice?:ExecutionChoice):SelectionPreflight{const result=this.prepare(mission,choice);return {ready:result.diagnostics.length===0,diagnostics:result.diagnostics};}
+ preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight {
+  const result=this.admission(snapshot,workId,expectedRevision,choice);if(!result.ready)return result;
+  const work=snapshot.value.works.find(w=>w.id===workId)!;const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
+  return {...result,ready:prepared.diagnostics.length===0,diagnostics:prepared.diagnostics};
+ }
+ private admission(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight {
+  const cap=choice&&Number.isSafeInteger(choice.outputTokenCap)&&choice.outputTokenCap>0?choice.outputTokenCap:undefined;
+  const result=workAdmissionPreflight(snapshot,workId,expectedRevision,cap);
+  if(this.#active.has(`${snapshot.value.id}\0${workId}`))result.diagnostics.push({code:'work_already_started',message:'This Work already has an active dispatch.'});
+  return {...result,ready:result.diagnostics.length===0};
+ }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>{
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new Error('Unknown Work');
-  if(work.runtimeRun)return {status:'already-started',snapshot,reason:'A run was already admitted. Changing connections cannot replay it.'};
+  const admission=this.admission(snapshot,workId,expectedRevision,choice);if(!admission.ready)return rejectedRun(admission,snapshot);
   const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
   if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
   const key=`${missionId}\0${workId}`;if(this.#active.has(key))return {status:'already-started',snapshot,reason:'This Work already has an active dispatch.'};

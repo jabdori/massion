@@ -1,62 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createContext,runInContext,Script} from 'node:vm';
+import {runInContext,Script} from 'node:vm';
 import {workbenchPage} from '../src/workbench.ts';
 import type {Mission} from '../src/domain.ts';
 
-// A deliberately small DOM double runs the actual inline client without dependencies.
-// It checks transitions and rendered text, not browser layout/accessibility conformance.
-class Node {
- tagName:string; id=''; className=''; value=''; disabled=false; hidden=false; required=false;
- rows=0; maxLength=0; type=''; htmlFor=''; style:Record<string,string>={}; children:Node[]=[];
- attributes=new Map<string,string>(); listeners=new Map<string,((event:any)=>unknown)[]>();
- private text=''; resets=0;
- constructor(tag='div'){this.tagName=tag.toUpperCase();}
- set textContent(value:string){this.text=String(value);this.children=[];}
- get textContent():string{return this.text+this.children.map(child=>child.textContent).join('');}
- append(...items:Node[]){this.children.push(...items);}
- replaceChildren(...items:Node[]){this.text='';this.children=items;}
- setAttribute(key:string,value:string){this.attributes.set(key,value);}
- hasAttribute(key:string){return this.attributes.has(key);}
- addEventListener(name:string,fn:(event:any)=>unknown){this.listeners.set(name,[...(this.listeners.get(name)||[]),fn]);}
- async fire(name:string){await Promise.all((this.listeners.get(name)||[]).map(fn=>fn({preventDefault(){}})));}
- reset(){this.resets++;}
-}
-type Reply={status:number;body:any};
-type Handler=(path:string,options:any)=>Reply|Promise<Reply>;
-const reply=(body:any,status=200):Reply=>({body,status});
 const fixtureMission=(id='mission:test'):Mission=>({id,version:1,purpose:'Inspect durable work',scope:'test',constraints:['Do not execute providers'],criteria:{version:1,description:'Evidence is inspectable',oracle:'manual-review/v1'},works:[],memories:[],growth:[],relations:[]});
 function work(mission:Mission,title='A bounded responsibility') {
  return {id:'work:test',title,missionVersion:1,criteria:mission.criteria,execution:'queued' as const,acceptance:'pending' as const,tasks:[],attempts:[{id:'attempt:1',number:1,criteria:mission.criteria,status:'queued' as const,modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:['explicit@1'],budget:{limit:12,reserved:0,measured:0}};
 }
-class SharedWebLocks {
- held=false;waiters:(()=>void)[]=[];
- async request(name:string,options:{ifAvailable:boolean},callback:(lock:{name:string}|null)=>unknown) {
-  if(this.held){if(options.ifAvailable)return callback(null);await new Promise<void>(resolve=>this.waiters.push(resolve));}
-  this.held=true;
-  // Grant asynchronously so two simultaneous clients overlap before either callback.
-  await Promise.resolve();
-  try{return await callback({name});}finally{this.held=false;this.waiters.shift()?.();}
- }
-}
-async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
-function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string}) {
- const nodes=new Map<string,Node>();
- for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');nodes.set(node.id,node);}
- nodes.get('work-budget')!.value='0';
- const storage=coordination?.storage || new Map(Object.entries(initial)); const calls:{path:string;options:any}[]=[]; const intervals:(()=>unknown)[]=[];
- const all=():Node[]=>{const output:Node[]=[];const visit=(node:Node)=>{output.push(node);node.children.forEach(visit);};nodes.forEach(visit);return output;};
- const listeners=new Map<string,()=>unknown>();
- const document={getElementById:(id:string)=>nodes.get(id),createElement:(tag:string)=>new Node(tag),querySelectorAll:()=>all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
- const context=createContext({navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{addEventListener(){}},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
-  calls.push({path,options});
-  const result=path==='/health'?reply({status:'ready'}):path==='/providers'?reply({providers:[],selection:{status:'unavailable',code:'provider_unavailable',reason:'No authorized provider is configured.'}}):await handler(path,options);
-  return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>result.body};
- }});
- const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
- runInContext(source,context);
- return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
-}
+
+import {harness,reply,settle,selectionField,SharedWebLocks} from './support/workbench-client.ts';
+import type {Node,Reply,Handler} from './support/workbench-client.ts';
 
 test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
  assert.match(workbenchPage,/Create a Mission/);assert.match(workbenchPage,/Run development fixture/);
@@ -375,4 +329,61 @@ test('known run rollback after navigation clears only its pending marker without
  const app=harness((path)=>{if(path.endsWith('/run'))return new Promise(resolve=>{finish=resolve;});if(path.startsWith('/events'))return reply({events:[],cursor:0});return reply({revision:1,value:path.endsWith('first')?first:second});});await settle();app.node('mission-id').value='first';await app.submit('load-form');
  const running=runInContext(`write('/missions/first/run',{commandId:'rejected-run',expectedRevision:1,workId:'work',selection:{}},'first','Run finished')`,app.context);await settle();assert.equal(app.storage.has('massion.workbench.pending'),true);app.node('mission-id').value='second';await app.submit('load-form');
  finish(reply({outcome:'rejected',error:'Rolled back transaction'},503));await running;await settle();assert.equal(app.storage.has('massion.workbench.pending'),false);assert.equal(app.node('loaded-id').textContent,'second');assert.equal(app.node('mission-fields').disabled,false);
+});
+
+
+const selectionConfiguration={connections:[{id:'a',label:'Fixture connection',backend:'model-provider',providerKind:'fixture',model:'exact',protocol:'test',endpoint:'http://127.0.0.1:1234',auth:{method:'none'},limits:{maxOutputTokens:8},usage:{inputTokens:'reported'},diagnostics:[]}],authorizations:[{id:'grant',scope:'test',mode:'mock-http',maxOutputTokensPerCall:8}]};
+function configureSelection(app:ReturnType<typeof harness>) {runInContext('runtimeConfiguration='+JSON.stringify(selectionConfiguration)+';renderMission();',app.context);}
+
+async function selectExecution(app:ReturnType<typeof harness>,cap='4') {for(const [id,value] of [['executor-profile-work:test','a'],['verifier-profile-work:test','a'],['authorization-work:test','grant'],['output-cap-work:test',cap]]){const field=selectionField(app,id!);field.value=value!;await field.fire('change');}}
+
+test('execution plan preserves explicit empty choices and explains both output reservations before submission',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();configureSelection(app);
+ for(const role of ['executor-profile','verifier-profile','authorization','output-cap'])assert.equal(selectionField(app,role+'-work:test').value,'');
+ assert.match(selectionField(app,'execution-plan-work:test').textContent,/available Work budget of 12 output tokens/);
+ await selectExecution(app);assert.match(selectionField(app,'execution-plan-work:test').textContent,/8 needed for two calls/);assert.match(selectionField(app,'execution-plan-work:test').textContent,/not bound money/);
+ await selectExecution(app,'7');assert.match(selectionField(app,'execution-plan-work:test').textContent,/Insufficient Work budget/);
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('selection check ignores older choices, suppresses duplicates and displays only exact Work revision proof',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));const checks:((value:Reply)=>void)[]=[];
+ const app=harness(path=>path.endsWith('/preflight')?new Promise<Reply>(resolve=>checks.push(resolve)):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();configureSelection(app);await selectExecution(app);
+ const check=app.all().find(node=>node.textContent==='Check selection')!;const first=check.fire('click');await settle();await check.fire('click');assert.equal(checks.length,1);
+ await selectExecution(app,'5');const second=check.fire('click');await settle();assert.equal(checks.length,2);
+ checks[1]!(reply({ready:true,revision:2,workId:'work:test',diagnostics:[]}));await second;assert.match(selectionField(app,'selection-check-work:test').textContent,/Checked at revision 2/);
+ checks[0]!(reply({ready:false,revision:2,workId:'work:test',diagnostics:[{message:'Obsolete failure'}]}));await first;assert.doesNotMatch(selectionField(app,'selection-check-work:test').textContent,/Obsolete/);
+ const changed=selectionField(app,'output-cap-work:test');changed.value='6';await changed.fire('input');assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
+ const third=check.fire('click');await settle();checks[2]!(reply({ready:true,revision:1,workId:'work:test',diagnostics:[]}));await third;assert.match(selectionField(app,'selection-check-work:test').textContent,/did not confirm this exact Work revision/);
+ assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);assert.equal(app.storage.has('massion.workbench.pending'),false);
+});
+
+test('navigation and refreshed Work invalidate old check and detached run handlers',async()=>{
+ const first=fixtureMission('first'),second=fixtureMission('second');first.works.push(work(first));second.works.push(work(second));let finish!:(value:Reply)=>void;
+ const app=harness(path=>path.endsWith('/preflight')?new Promise<Reply>(resolve=>{finish=resolve;}):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:path.endsWith('first')?first:second}),{'massion.workbench.mission':'first'});await settle();configureSelection(app);await selectExecution(app);
+ const oldForm=app.all().find(node=>node.className==='execution-form')!;const oldCheck=app.all().find(node=>node.textContent==='Check selection')!;const pending=oldCheck.fire('click');await settle();
+ app.node('mission-id').value='second';await app.submit('load-form');const status=app.node('status').textContent;
+ finish(reply({ready:true,revision:2,workId:'work:test',diagnostics:[]}));await pending;await oldForm.fire('submit');assert.equal(app.node('status').textContent,status);assert.equal(app.node('loaded-id').textContent,'second');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);
+ assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
+});
+
+
+test('online catalog refresh rerenders same-revision choices and invalidates checks without freezing Run',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));let providerOffline=false;
+ const app=harness((path,options)=>{
+  if(path==='/health')return reply({status:'ready'});
+  if(path==='/providers')return providerOffline?reply({error:'Catalog unavailable'},503):reply({providers:[],selection:{status:'unavailable',reason:'Explicit choice required'},runtime:structuredClone(selectionConfiguration)});
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  if(path.endsWith('/preflight'))return reply({ready:true,revision:2,workId:'work:test',diagnostics:[]});
+  if(path.endsWith('/run'))return reply({status:'blocked',snapshot:{revision:2,value:mission},reason:'Synthetic blocked response'});
+  return reply({revision:2,value:mission});
+ },{'massion.workbench.mission':mission.id},undefined,{network:true});await settle();await selectExecution(app);
+ await app.all().find(n=>n.textContent==='Check selection')!.fire('click');assert.match(selectionField(app,'selection-check-work:test').textContent,/Checked at revision 2/);
+ const oldForm=app.all().find(n=>n.className==='execution-form')!;
+ await runInContext('connect()',app.context);await settle();
+ assert.equal(selectionField(app,'executor-profile-work:test').value,'a');assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
+ await oldForm.fire('submit');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);
+ await app.all().find(n=>n.textContent==='Check selection')!.fire('click');assert.equal(app.calls.filter(c=>c.path.endsWith('/preflight')).length,2);
+ await app.all().find(n=>n.className==='execution-form')!.fire('submit');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
+ providerOffline=true;await runInContext('connect()',app.context);await settle();assert.equal(app.all().some(n=>n.className==='execution-form'),false);assert.match(app.node('provider-notice').textContent,/could not be confirmed/);assert.match(app.node('work-budget-label').textContent,/host units/);assert.match(app.node('work-budget-hint').textContent,/Confirm host runtime units/);
 });

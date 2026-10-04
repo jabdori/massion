@@ -95,3 +95,8 @@ session adapter, not a fake selectable provider. Configuration and authorization
 remain disabled by default. See [connection selection and extension
 contracts](docs/architecture/provider-selection.md) for scope, authentication,
 preflight, usage limits and the Hermes/ACP design reference.
+
+The [Work-aware preflight evidence](docs/acceptance/workbench-preflight-evidence.md)
+covers explicit selection, two-call budget guidance, side-effect-free checks,
+stale-result rejection and client/HTTP/SurrealDB reload integration. These tests
+use fixture providers; they do not establish live-model or browser-rendering quality.
