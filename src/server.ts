@@ -1,3 +1,5 @@
+import {ConnectionWorkbench} from './connection-workbench.ts';
+import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
 import {createServer} from 'node:http';
 import {pathToFileURL} from 'node:url';
@@ -17,8 +19,8 @@ function identifier(value:unknown,name:string):asserts value is string {if(typeo
 
 function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime}={}) {
- let running=false;const product=new ProductService(store,options.providers,options.runtime);
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench}={}) {
+ let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime);
  const server=createServer(async(req,res)=>{
   const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
   const address=server.address();const port=typeof address==='object'&&address?address.port:0;
@@ -37,6 +39,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
    if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
+   if(req.method==='GET'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.list());return;}
+   if(req.method==='POST'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.connect(await readBody()));return;}
+   if(req.method==='POST'&&url.pathname==='/connection-authorizations'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.authorize(await readBody()));return;}
+   const connectionRoute=/^\/connections\/([^/]+)\/(models|profiles)$/.exec(url.pathname);
+   if(req.method==='POST'&&connectionRoute){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const connectionId=decodeIdentifier(connectionRoute[1]!);const input=await readBody();if(connectionRoute[2]==='models'){if(Object.keys(input).length!==1||typeof input.expectedConfigHash!=='string')throw new RequestError(400,'Exact discovery fields required');send(200,await options.connections.discover(connectionId,input.expectedConfigHash));}else send(200,options.connections.selectModel(connectionId,input));return;}
    if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');send(200,await store.readEvents(after,limit));return;}
    if(req.method==='POST'&&url.pathname==='/missions'){
     const body=await readBody();identifier(body.id,'Mission identifier');identifier(body.commandId,'command identity');
@@ -72,7 +79,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
- const server=createWorkbench(new SurrealStore<Mission>(transport),resolve('.runtime/workspaces'));
+ const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=new ConnectionWorkbench(store,artifacts,{transport:(url,init)=>fetch(url,init)});
+ const server=createWorkbench(store,workspaceRoot,{connections});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>server.close(()=>process.exit(0)));
 }
