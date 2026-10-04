@@ -41,6 +41,10 @@ the final UI reload; using the real product key fixed it without relaxing deadli
 The final affected suite against the disposable database passed all 6 cases with
 0 failures and 0 skips, including both actual CLI process tests.
 
+A later boundary regression reproduced valid 512-character connection labels failing
+automatic profile enrollment when concatenated with model IDs. Profiles now use
+the exact model ID as their display label; the connection retains its owner label.
+
 ## Reproduce
 
 ```sh
