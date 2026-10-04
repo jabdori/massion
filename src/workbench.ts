@@ -6,7 +6,8 @@ export const workbenchPage = String.raw`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Massion · Mission workbench</title>
 <style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#21302d;background:#f4f5f0;font-synthesis:none;--ink:#21302d;--muted:#65726c;--line:#dce2d9;--green:#245b44;--soft:#edf4ee;--warn:#855019;--warn-bg:#fcf3df}*{box-sizing:border-box}body{margin:0}button,input,textarea{font:inherit}button,input,textarea,summary{outline-offset:4px}button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #377dba}button{border:1px solid var(--green);border-radius:8px;background:var(--green);color:#fff;padding:10px 15px;font-weight:650;cursor:pointer;min-height:42px}button.secondary{background:#fff;color:var(--ink);border-color:#c9d2c7}button.quiet{background:transparent;color:var(--green);border-color:transparent}button.danger{color:#8a3932;border-color:#e1c7c1;background:#fff}button:disabled{opacity:.48;cursor:not-allowed}input,textarea{width:100%;padding:10px 11px;border:1px solid #bfcbbd;border-radius:7px;background:#fff;color:var(--ink);min-width:0}textarea{resize:vertical;line-height:1.5}label{display:block;font-size:.84rem;font-weight:650;margin-bottom:7px}input:disabled,textarea:disabled{background:#f0f2ed}fieldset{padding:0;border:0;margin:0;min-width:0}h1,h2,h3,h4,p{margin-top:0}h1{font-size:clamp(1.8rem,3vw,2.65rem);line-height:1.13;letter-spacing:-.06em;margin-bottom:12px;font-weight:650}h2{font-size:1.05rem;letter-spacing:-.02em;margin-bottom:16px}h3{font-size:1.08rem;line-height:1.45;margin:0}h4{font-size:.85rem;margin:18px 0 8px}p{line-height:1.55}small,.muted,.hint{color:var(--muted)}small,.hint{font-size:.77rem;line-height:1.5}.hint{margin:7px 0 0}.eyebrow{font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;font-weight:750;color:var(--green);margin-bottom:8px}.shell{max-width:1300px;padding:0 36px;margin:auto}header{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:12px}.brand{display:flex;align-items:center;gap:10px;font-size:1.2rem;letter-spacing:-.04em;font-weight:750}.mark{display:grid;place-items:center;width:31px;height:31px;background:var(--green);color:#fff;border-radius:8px;font-size:1rem}.header-meta{display:flex;align-items:center;gap:10px;font-size:.73rem;color:var(--muted)}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#99a39b;margin-right:5px}.dot.online{background:#44845c}.intro{padding:32px 0 22px;display:flex;justify-content:space-between;align-items:end;gap:20px}.intro p{max-width:610px;margin:0;color:var(--muted);font-size:.9rem}.intro-side{max-width:255px;font-size:.75rem!important}.layout{display:grid;grid-template-columns:minmax(270px,340px) minmax(0,1fr);gap:24px;align-items:start;padding-bottom:32px}.stack{display:grid;gap:18px}.panel{border:1px solid var(--line);background:#fff;border-radius:13px;padding:22px;box-shadow:0 3px 10px #243d2d03}.field{margin-bottom:16px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.spread{justify-content:space-between}.grow{flex:1;min-width:150px}.full{width:100%}.section-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:17px}.section-top h2{margin:0}.tag{display:inline-block;font-size:.69rem;line-height:1.3;padding:5px 8px;border-radius:6px;background:#eff2ec;color:#4d6153;white-space:nowrap}.tag.good{background:#e7f2e9;color:#285b38}.tag.warn{background:var(--warn-bg);color:var(--warn)}.tag.bad{background:#fbece8;color:#8c4037}.notice{padding:13px 15px;border-radius:8px;border:1px solid #e7dbbd;background:var(--warn-bg);color:#77531d;font-size:.82rem;line-height:1.5;margin-bottom:18px}.notice p{margin:0}.status{margin:0 0 19px;font-size:.8rem;line-height:1.5;min-height:20px;color:var(--muted);overflow-wrap:anywhere}.status.error{color:#934438}.status.warning{color:var(--warn)}.status.success{color:var(--green)}.empty{padding:38px 30px;text-align:center;border:1px dashed #becdbb;border-radius:12px;background:#fafcf7}.empty-symbol{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;border:1px solid #d9e5d5;background:#eff5ec;color:#55714d;margin:0 auto 16px;font-size:1.2rem}.empty h2{margin-bottom:9px}.empty p{max-width:410px;margin:0 auto;color:var(--muted);font-size:.86rem}.mission-purpose{font-size:1.4rem;line-height:1.35;letter-spacing:-.03em;margin:0 0 16px;overflow-wrap:anywhere}.facts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0}.facts dt,.metric dt{font-size:.7rem;color:var(--muted);margin-bottom:5px}.facts dd,.metric dd{margin:0;font-size:.86rem;line-height:1.5;overflow-wrap:anywhere}.facts ul{margin:0;padding-left:17px}.id{font: .7rem ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}.divider{height:1px;background:var(--line);margin:20px 0}.work-list{display:grid;gap:14px}.work-card{border:1px solid var(--line);border-radius:11px;padding:18px;background:#fff;overflow-wrap:anywhere}.work-title{margin:0 0 10px}.badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 15px}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;background:#f7f9f4;border-radius:8px;padding:12px;margin:0 0 14px}.metric{margin:0}.metric dd{font-size:.8rem}.work-note{font-size:.8rem;line-height:1.5;margin-bottom:12px;color:var(--muted)}.work-note.warning{color:var(--warn)}details{font-size:.82rem;line-height:1.5}summary{cursor:pointer;font-weight:650;color:var(--green);padding:6px 0}.detail-content{margin-top:10px}.detail-content p,.detail-content ul{margin-bottom:9px}.detail-content ul{padding-left:18px}.detail-content pre,pre{font: .72rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f1;border:1px solid #e4e9df;border-radius:7px;padding:12px;max-height:360px;overflow:auto}.controls{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}.steer-form{margin-top:9px}.steer-form .row{align-items:end}.steer-form label{font-size:.75rem}.steer-form textarea{font-size:.83rem}.work-compose{border-top:1px solid var(--line);padding-top:19px;margin-top:22px}.work-compose .budget{width:165px}.event-list{list-style:none;margin:0;padding:0}.event-list li{padding:10px 0;border-top:1px solid #edf0e8;font-size:.8rem;display:flex;justify-content:space-between;gap:10px}.event-list li:first-child{border-top:0}.event-list small{text-align:right}.fixture{background:#f9faf6}.fixture p{font-size:.79rem;margin:10px 0 14px}.footer{font-size:.72rem;color:var(--muted);padding:0 0 30px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}[hidden]{display:none!important}@media(max-width:850px){.shell{padding:0 20px}.layout{grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px}.panel{padding:18px}.intro-side{display:none}.facts{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.metrics .metric:last-child{grid-column:1/-1}}@media(max-width:650px){header{height:68px}.shell{padding:0 15px}.layout{grid-template-columns:1fr}.intro{padding:26px 0 22px}.header-meta{max-width:180px;text-align:right}.panel{padding:19px}.facts{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics .metric:last-child{grid-column:auto}.work-compose .budget{width:100%}.row>button{max-width:100%}}@media(prefers-reduced-motion:no-preference){button{transition:background .15s,opacity .15s}button:hover:not(:disabled){filter:brightness(.96)}}
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#21302d;background:#f4f5f0;font-synthesis:none;--ink:#21302d;--muted:#65726c;--line:#dce2d9;--green:#245b44;--soft:#edf4ee;--warn:#855019;--warn-bg:#fcf3df}*{box-sizing:border-box}body{margin:0}button,input,textarea,select{font:inherit}button,input,textarea,select,summary{outline-offset:4px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #377dba}button{border:1px solid var(--green);border-radius:8px;background:var(--green);color:#fff;padding:10px 15px;font-weight:650;cursor:pointer;min-height:42px}button.secondary{background:#fff;color:var(--ink);border-color:#c9d2c7}button.quiet{background:transparent;color:var(--green);border-color:transparent}button.danger{color:#8a3932;border-color:#e1c7c1;background:#fff}button:disabled{opacity:.48;cursor:not-allowed}input,textarea,select{width:100%;padding:10px 11px;border:1px solid #bfcbbd;border-radius:7px;background:#fff;color:var(--ink);min-width:0}textarea{resize:vertical;line-height:1.5}label{display:block;font-size:.84rem;font-weight:650;margin-bottom:7px}input:disabled,textarea:disabled,select:disabled{background:#f0f2ed}fieldset{padding:0;border:0;margin:0;min-width:0}h1,h2,h3,h4,p{margin-top:0}h1{font-size:clamp(1.8rem,3vw,2.65rem);line-height:1.13;letter-spacing:-.06em;margin-bottom:12px;font-weight:650}h2{font-size:1.05rem;letter-spacing:-.02em;margin-bottom:16px}h3{font-size:1.08rem;line-height:1.45;margin:0}h4{font-size:.85rem;margin:18px 0 8px}p{line-height:1.55}small,.muted,.hint{color:var(--muted)}small,.hint{font-size:.77rem;line-height:1.5}.hint{margin:7px 0 0}.eyebrow{font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;font-weight:750;color:var(--green);margin-bottom:8px}.shell{max-width:1300px;padding:0 36px;margin:auto}header{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:12px}.brand{display:flex;align-items:center;gap:10px;font-size:1.2rem;letter-spacing:-.04em;font-weight:750}.mark{display:grid;place-items:center;width:31px;height:31px;background:var(--green);color:#fff;border-radius:8px;font-size:1rem}.header-meta{display:flex;align-items:center;gap:10px;font-size:.73rem;color:var(--muted)}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#99a39b;margin-right:5px}.dot.online{background:#44845c}.intro{padding:32px 0 22px;display:flex;justify-content:space-between;align-items:end;gap:20px}.intro p{max-width:610px;margin:0;color:var(--muted);font-size:.9rem}.intro-side{max-width:255px;font-size:.75rem!important}.layout{display:grid;grid-template-columns:minmax(270px,340px) minmax(0,1fr);gap:24px;align-items:start;padding-bottom:32px}.stack{display:grid;gap:18px}.panel{border:1px solid var(--line);background:#fff;border-radius:13px;padding:22px;box-shadow:0 3px 10px #243d2d03}.field{margin-bottom:16px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.spread{justify-content:space-between}.grow{flex:1;min-width:150px}.full{width:100%}.section-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:17px}.section-top h2{margin:0}.tag{display:inline-block;font-size:.69rem;line-height:1.3;padding:5px 8px;border-radius:6px;background:#eff2ec;color:#4d6153;white-space:nowrap}.tag.good{background:#e7f2e9;color:#285b38}.tag.warn{background:var(--warn-bg);color:var(--warn)}.tag.bad{background:#fbece8;color:#8c4037}.notice{padding:13px 15px;border-radius:8px;border:1px solid #e7dbbd;background:var(--warn-bg);color:#77531d;font-size:.82rem;line-height:1.5;margin-bottom:18px}.notice p{margin:0}.status{margin:0 0 19px;font-size:.8rem;line-height:1.5;min-height:20px;color:var(--muted);overflow-wrap:anywhere}.status.error{color:#934438}.status.warning{color:var(--warn)}.status.success{color:var(--green)}.empty{padding:38px 30px;text-align:center;border:1px dashed #becdbb;border-radius:12px;background:#fafcf7}.empty-symbol{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;border:1px solid #d9e5d5;background:#eff5ec;color:#55714d;margin:0 auto 16px;font-size:1.2rem}.empty h2{margin-bottom:9px}.empty p{max-width:410px;margin:0 auto;color:var(--muted);font-size:.86rem}.mission-purpose{font-size:1.4rem;line-height:1.35;letter-spacing:-.03em;margin:0 0 16px;overflow-wrap:anywhere}.facts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0}.facts dt,.metric dt{font-size:.7rem;color:var(--muted);margin-bottom:5px}.facts dd,.metric dd{margin:0;font-size:.86rem;line-height:1.5;overflow-wrap:anywhere}.facts ul{margin:0;padding-left:17px}.id{font: .7rem ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}.divider{height:1px;background:var(--line);margin:20px 0}.work-list{display:grid;gap:14px}.work-card{border:1px solid var(--line);border-radius:11px;padding:18px;background:#fff;overflow-wrap:anywhere}.work-title{margin:0 0 10px}.badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 15px}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;background:#f7f9f4;border-radius:8px;padding:12px;margin:0 0 14px}.metric{margin:0}.metric dd{font-size:.8rem}.work-note{font-size:.8rem;line-height:1.5;margin-bottom:12px;color:var(--muted)}.work-note.warning{color:var(--warn)}details{font-size:.82rem;line-height:1.5}summary{cursor:pointer;font-weight:650;color:var(--green);padding:6px 0}.detail-content{margin-top:10px}.detail-content p,.detail-content ul{margin-bottom:9px}.detail-content ul{padding-left:18px}.detail-content pre,pre{font: .72rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f1;border:1px solid #e4e9df;border-radius:7px;padding:12px;max-height:360px;overflow:auto}.controls{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}.steer-form{margin-top:9px}.steer-form .row{align-items:end}.steer-form label{font-size:.75rem}.steer-form textarea{font-size:.83rem}.work-compose{border-top:1px solid var(--line);padding-top:19px;margin-top:22px}.work-compose .budget{width:165px}.event-list{list-style:none;margin:0;padding:0}.event-list li{padding:10px 0;border-top:1px solid #edf0e8;font-size:.8rem;display:flex;justify-content:space-between;gap:10px}.event-list li:first-child{border-top:0}.event-list small{text-align:right}.fixture{background:#f9faf6}.fixture p{font-size:.79rem;margin:10px 0 14px}.footer{font-size:.72rem;color:var(--muted);padding:0 0 30px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}[hidden]{display:none!important}@media(max-width:850px){.shell{padding:0 20px}.layout{grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px}.panel{padding:18px}.intro-side{display:none}.facts{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.metrics .metric:last-child{grid-column:1/-1}}@media(max-width:650px){header{height:68px}.shell{padding:0 15px}.layout{grid-template-columns:1fr}.intro{padding:26px 0 22px}.header-meta{max-width:180px;text-align:right}.panel{padding:19px}.facts{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics .metric:last-child{grid-column:auto}.work-compose .budget{width:100%}.row>button{max-width:100%}}@media(prefers-reduced-motion:no-preference){button{transition:background .15s,opacity .15s}button:hover:not(:disabled){filter:brightness(.96)}}
+.execution-form select,.execution-form input,#criteria-oracle{margin-bottom:14px}.execution-form button{margin:7px 8px 0 0}
 </style>
 </head>
 <body>
@@ -23,8 +24,8 @@ export const workbenchPage = String.raw`<!doctype html>
 <div class="field"><label for="purpose">Purpose</label><textarea id="purpose" rows="2" maxlength="16000" placeholder="What outcome should this Mission own?" required></textarea></div>
 <div class="field"><label for="scope">Scope</label><input id="scope" maxlength="16000" placeholder="A project or area of responsibility" required></div>
 <div class="field"><label for="constraints">Constraints <span class="muted">(optional)</span></label><textarea id="constraints" rows="2" maxlength="16000" placeholder="One constraint per line"></textarea></div>
-<div class="field"><label for="criteria">Success criteria</label><textarea id="criteria" rows="3" maxlength="16000" placeholder="What evidence would make the outcome acceptable?" required></textarea><p class="hint">Saved as manual-review/v1. This client cannot execute that review or mark Work accepted.</p></div>
-<button id="create-mission" class="full" type="submit">Create Mission</button>
+<div class="field"><label for="criteria">Success criteria</label><textarea id="criteria" rows="3" maxlength="16000" placeholder="What evidence would make the outcome acceptable?" required></textarea><p id="criteria-oracle-hint" class="hint">Saved with the selected acceptance method. Manual review uses manual-review/v1, which this client cannot execute. Bounded text uses bounded-text-review/v1 with independent model review during an explicitly requested Work run. Selecting a method or creating a Mission does not start execution or mark Work accepted.</p></div>
+<label for="criteria-oracle">Acceptance method</label><select id="criteria-oracle" aria-describedby="criteria-oracle-hint"><option value="manual-review/v1">Manual review (no model execution)</option><option value="bounded-text-review/v1">Bounded text with independent model review</option></select><button id="create-mission" class="full" type="submit">Create Mission</button>
 </fieldset></form></section>
 <section class="panel" aria-labelledby="load-heading"><h2 id="load-heading">Continue a Mission</h2><form id="load-form"><label for="mission-id">Mission ID</label><input id="mission-id" maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" placeholder="mission:…" required><div class="row" style="margin-top:12px"><button id="load-mission" class="secondary" type="submit">Load / refresh</button></div><p class="hint">Reloads the authoritative snapshot. The last entered ID is remembered on this browser.</p></form></section>
 <section class="panel fixture"><details><summary>Development fixture</summary><p>This controlled local fixture creates a separate Mission and runs real local file and process effects. Its predefined outputs demonstrate the lifecycle, not real model competence.</p><button id="run-fixture" class="secondary" type="button">Run development fixture</button><p class="hint">User Work never falls back to this fixture.</p></details></section>
@@ -32,7 +33,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <div class="stack">
 <section id="empty-state" class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>No Mission selected</h2><p id="empty-message">Start with a purpose and clear success criteria. Your Mission and Work will appear here after the host confirms them.</p></section>
 <section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
-<form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
+<form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
 <details style="margin-top:22px"><summary>Authoritative snapshot</summary><pre id="snapshot-json"></pre></details></section>
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
 </div>
@@ -56,7 +57,7 @@ let selectedId = storage.get(missionKey) || storage.get('massion.fixture.mission
 let cursor = Number(storage.get(cursorKey) || 0);
 if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false;
-let unknownOperation = null, providerSelection = null, providerKnown = false, activity = [], eventRefreshNeeded = false;
+let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 const drafts = new Map(), confirmedOperations = new Set();
 function parsePending(raw) {
@@ -168,7 +169,7 @@ function clearSnapshot(message) {
   $('empty-state').hidden = false;
   $('empty-message').textContent = message;
   $('snapshot-json').textContent = '';
-  $('work-list').replaceChildren();
+  $('work-list').replaceChildren(); executionForms.clear();
   $('snapshot-time').textContent = 'No current snapshot is available.';
   controls();
 }
@@ -208,9 +209,13 @@ function badge(text, state) { return element('span', text, 'tag' + (['accepted',
 function addFact(list, title, value) { const group = element('div'); group.append(element('dt', title)); const detail = element('dd'); if (Array.isArray(value)) { const items = element('ul'); for (const item of value) items.append(element('li', item)); detail.append(items); } else detail.textContent = String(value); group.append(detail); list.append(group); }
 function metric(label, value) { const group = element('div', undefined, 'metric'); group.append(element('dt', label), element('dd', value)); return group; }
 function providerNotice() {
+  if (runtimeConfiguration) { $('work-budget-label').textContent = 'Budget limit (output tokens)'; $('work-budget-hint').textContent = 'Set a budget of at least twice the intended per-call output cap for executor and independent review. This is not a money or total-token limit. Admission does not start execution.'; $('provider-notice').textContent = 'Choose configured connections separately for execution and independent review on each Work. Selection does not authorize new accounts or spend. Costs remain unknown; budget units are output tokens.'; return; }
+  $('work-budget-label').textContent = 'Budget limit (host units)';
+  $('work-budget-hint').textContent = 'Admission records responsibility and pins criteria and effective memory. It does not start model execution. Confirm host runtime units before choosing a budget.';
   $('provider-notice').textContent = !providerKnown ? 'Provider availability could not be confirmed. User Work is only admitted here; no model execution is started.' : providerSelection.status === 'selected' ? 'A real provider is configured. This client admits Work and records controls; automatic model execution is not implemented.' : 'Real-provider execution is unavailable. ' + providerSelection.reason;
 }
 function workBlocker(work) {
+  if (work.runtimeRecovery) return 'Permanently quarantined by owner. External outcomes remain unresolved; this is not proof the provider stopped. No replay or resumed completion is authorized.';
   const unknown = (work.effects || []).filter(effect => effect.status === 'unknown' || effect.status === 'pending');
   if (unknown.length) return 'Unresolved effects: ' + unknown.map(effect => effect.id + ' (' + effect.status + ')').join(', ') + '. Reconcile observed outcomes before any replay.';
   if (work.execution === 'cancelled') return 'Cancelled in durable state. Existing effects and evidence remain visible.';
@@ -222,6 +227,73 @@ function workBlocker(work) {
   if (work.acceptance === 'failed' || work.acceptance === 'stale') return 'Independent assurance is ' + work.acceptance + '. This Work has no accepted current Record.';
   return 'Execution and acceptance are tracked separately. Inspect the pinned evidence below.';
 }
+
+const executionDrafts = new Map(), executionForms = new Map();
+function renderExecutionSelection(work) {
+  const missionId = snapshot.value.id, revision = snapshot.revision;
+  const configuration = runtimeConfiguration;
+  const area = element('details',undefined,'controls'); area.append(element('summary','Choose execution and review connections'));
+  const form = element('form',undefined,'execution-form');
+  const draftKey = missionId + '\u0000' + work.id;
+  executionForms.set(draftKey,form);
+  const saved = executionDrafts.get(draftKey) || {};
+  const fields = {};
+  for (const role of ['executor','verifier']) {
+    const label = element('label',role === 'executor' ? 'Executor connection / model' : 'Independent verifier connection / model');
+    const select = element('select'); select.id = role + '-profile-' + work.id; label.htmlFor = select.id; select.required = true;
+    const empty = element('option','Choose a connection'); empty.value = ''; select.append(empty);
+    for (const connection of configuration.connections) {
+      if (connection.backend !== 'model-provider') continue;
+      const option = element('option',connection.label + (connection.diagnostics.length ? ' · unavailable' : ' · ' + connection.providerKind + ' / ' + connection.model)); option.value = connection.id; option.disabled = connection.diagnostics.length > 0; select.append(option);
+    }
+    select.value = saved[role + 'ProfileId'] || ''; fields[role + 'ProfileId'] = select; form.append(label,select);
+  }
+  const grantLabel = element('label','Authorized use'); const grant = element('select'); grant.id = 'authorization-' + work.id; grantLabel.htmlFor = grant.id; grant.required = true;
+  const empty = element('option','Choose an authorization'); empty.value = ''; grant.append(empty);
+  const grants = configuration.authorizations.filter(a => a.scope === snapshot.value.scope);
+  for (const item of grants) { const option = element('option',item.id + ' · ' + item.mode + ' · max ' + item.maxOutputTokensPerCall + ' output tokens per call'); option.value = item.id; grant.append(option); }
+  grant.value = saved.authorizationId || ''; fields.authorizationId = grant; form.append(grantLabel,grant);
+  if (!grants.length) form.append(element('p','No host authorization matches this Mission scope. Choosing a connection cannot grant account access or spending permission.','work-note warning'));
+  const capLabel = element('label','Output-token cap per call (two calls reserved)'); const cap = element('input'); cap.type = 'number'; cap.min = '1'; cap.step = '1'; cap.required = true; cap.id = 'output-cap-' + work.id; capLabel.htmlFor = cap.id; cap.value = saved.outputTokenCap || ''; fields.outputTokenCap = cap; form.append(capLabel,cap);
+  const detail = element('p',undefined,'hint');
+  const plan = element('p',undefined,'work-note'); plan.id = 'execution-plan-' + work.id;
+  const result = element('p','Not checked. Check selection does not start execution.','status'); result.id = 'selection-check-' + work.id; result.setAttribute('role','status'); result.setAttribute('aria-live','polite');
+  const check = element('button','Check selection','secondary'); check.type = 'button';
+  const choice = () => ({executorProfileId:fields.executorProfileId.value,verifierProfileId:fields.verifierProfileId.value,authorizationId:grant.value,outputTokenCap:Number(cap.value)});
+  const current = () => snapshot && selectedId === missionId && snapshot.value.id === missionId && snapshot.revision === revision && runtimeConfiguration === configuration && executionForms.get(draftKey) === form;
+  let checkVersion = 0, checking = false;
+  const refresh = () => {
+    ++checkVersion; checking = false; check.disabled = false; check.textContent = 'Check selection';
+    result.textContent = 'Not checked. Check selection does not start execution.'; result.className = 'status';
+    const selection = choice(); executionDrafts.set(draftKey,selection);
+    detail.textContent = ['executor','verifier'].map(role => { const c = configuration.connections.find(p => p.id === selection[role + 'ProfileId']); return c && !c.diagnostics.length ? role + ': ' + c.protocol + ' · ' + c.endpoint + ' · auth ' + c.auth.method + ' · max output ' + c.limits.maxOutputTokens + ' · input usage ' + c.usage.inputTokens + ' · cost unknown' : role + ': no connection selected'; }).join(' | ');
+    const remaining = work.budget.limit - work.budget.reserved;
+    const validCap = Number.isSafeInteger(selection.outputTokenCap) && selection.outputTokenCap > 0 && Number.isSafeInteger(selection.outputTokenCap * 2);
+    plan.textContent = validCap ? 'Execution plan: up to ' + selection.outputTokenCap + ' output tokens per call; ' + selection.outputTokenCap * 2 + ' needed for two calls. Work has ' + remaining + ' output tokens available. ' + (selection.outputTokenCap * 2 > remaining ? 'Insufficient Work budget. Use a lower cap or admit new Work with a sufficient budget. ' : '') + 'This does not bound money or total input-plus-output usage.' : 'Choose both connections, authorized use, and a positive whole-number output cap. Both calls must fit the available Work budget of ' + remaining + ' output tokens.';
+    plan.className = 'work-note' + (validCap && selection.outputTokenCap * 2 > remaining ? ' warning' : '');
+  };
+  for (const field of Object.values(fields)) { field.addEventListener('change',refresh); field.addEventListener('input',refresh); } refresh();
+  check.addEventListener('click',async () => {
+    if (!current() || checking) return;
+    const selection = choice(), key = JSON.stringify(selection), version = ++checkVersion;
+    const stillCurrent = () => current() && version === checkVersion && key === JSON.stringify(choice());
+    checking = true; check.disabled = true; check.textContent = 'Checking…'; result.textContent = 'Checking this Work and selection without executing providers…';
+    try {
+      const response = await request('/missions/' + encodeURIComponent(missionId) + '/preflight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection})});
+      if (!stillCurrent()) return;
+      const body = response.body;
+      if (!response.response.ok || body.ready !== true) { result.textContent = (body.diagnostics || []).map(d => d.message).join(' ') || body.error || 'Selection was not confirmed. Refresh this Mission and check again.'; result.className = 'status warning'; return; }
+      if (body.revision !== revision || body.workId !== work.id) { result.textContent = 'The host did not confirm this exact Work revision. Refresh the Mission and check again.'; result.className = 'status warning'; return; }
+      result.textContent = 'Checked at revision ' + revision + '. This Work and selection can be submitted now. No provider request was made; Run rechecks current state before admission.'; result.className = 'status success';
+    } catch(error) { if (stillCurrent()) { result.textContent = 'Selection could not be checked: ' + error.message; result.className = 'status warning'; } }
+    finally { if (stillCurrent()) { checking = false; check.disabled = false; check.textContent = 'Check selection'; } }
+  });
+  const run = element('button','Run with selected connections'); run.type = 'submit'; run.setAttribute('data-write',''); run.setAttribute('aria-describedby',plan.id);
+  form.addEventListener('submit',async event => { event.preventDefault(); if(!current())return; refresh(); await write('/missions/' + encodeURIComponent(missionId) + '/run',{commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection:choice()},missionId,'Run finished. Inspect its execution and independent assurance below.'); });
+  for(const connection of configuration.connections.filter(c=>c.diagnostics.length))form.append(element('p',connection.label + ': ' + connection.diagnostics.map(d=>d.message).join(' '),'hint'));
+  form.append(detail,plan,check,run,result,element('p','No automatic fallback, retry or provider change. The same connection may serve both roles through separate stateless calls; independent review is not a quality guarantee.','hint'));area.append(form);return area;
+}
+
 function renderWork(work) {
   const card = element('article', undefined, 'work-card');
   const title = element('h3', work.title, 'work-title'); card.append(title, element('div', work.id, 'id'));
@@ -239,6 +311,7 @@ function renderWork(work) {
   body.append(element('h4', 'Independent assurance'), element('p', work.verdict ? work.verdict.status + ' · artifact v' + work.verdict.artifactVersion + ' · criteria v' + work.verdict.criteriaVersion : 'No independent verdict yet.'));
   if (work.verdict) { const items = element('ul'); for (const proof of work.verdict.evidence) items.append(element('li', proof.kind + ': ' + proof.detail + ' · source: ' + proof.source)); body.append(items); }
   if ((work.instructions || []).length) { body.append(element('h4', 'Recorded owner instructions')); const instructions = element('ul'); for (const instruction of work.instructions) instructions.append(element('li', instruction.actorId + ': ' + instruction.text)); body.append(instructions); }
+  if (work.runtimeRecovery) { body.append(element('h4', 'Owner quarantine decision'), element('p', work.runtimeRecovery.actorId + ': ' + work.runtimeRecovery.reason), element('pre', JSON.stringify(work.runtimeRecovery, null, 2))); }
   body.append(element('h4', 'Effect receipts'));
   if (!work.effects.length) body.append(element('p', 'No effects admitted.'));
   for (const effect of work.effects) body.append(element('p', effect.id + ' · ' + effect.status + ' · ' + effect.target + (effect.receipt ? ' · receipt: ' + effect.receipt : ' · no receipt')));
@@ -246,6 +319,19 @@ function renderWork(work) {
   if (work.record) { body.append(element('p', work.record.id + ' · ' + work.record.evidenceClass), element('p', 'Checksum: ' + work.record.checksum, 'id')); const record = element('details'); record.append(element('summary', 'Inspect Record bundle'), element('pre', JSON.stringify(work.record, null, 2))); body.append(record); }
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
   const attempts = element('details'); attempts.append(element('summary', 'Attempts, tasks & assignments'), element('pre', JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments}, null, 2))); body.append(attempts); evidence.append(body); card.append(evidence);
+  if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),element('pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2)));
+  if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
+  if (work.runtimeRun && !work.runtimeRecovery && work.acceptance !== 'accepted' && work.effects.some(effect => effect.status === 'pending' || effect.status === 'unknown')) {
+    const area = element('details', undefined, 'controls'); area.append(element('summary', 'Quarantine interrupted run'));
+    area.append(element('p', 'Permanent local closure: pending effects become unknown, reservations remain held, and late provider responses cannot change this Work. An already admitted effect may still execute remotely. This does not resume completion or authorize replay.', 'work-note warning'));
+    const form = element('form', undefined, 'quarantine-form');
+    const label = element('label', 'Why are you quarantining this run?'); const reason = element('textarea'); reason.id = 'quarantine-reason-' + work.id; label.htmlFor = reason.id; reason.rows = 2; reason.maxLength = 16000; reason.required = true;
+    const acknowledgement = element('input'); acknowledgement.type = 'checkbox'; acknowledgement.id = 'quarantine-ack-' + work.id; acknowledgement.required = true; acknowledgement.style.width = 'auto';
+    const ackLabel = element('label', 'I understand that external effects and usage may remain unknown and this Work cannot be reopened.'); ackLabel.htmlFor = acknowledgement.id;
+    const submit = element('button', 'Permanently quarantine run', 'danger'); submit.type = 'submit'; submit.setAttribute('data-write','');
+    form.addEventListener('submit', event => { event.preventDefault(); const text = reason.value.trim(); if (!text || !acknowledgement.checked) { report('Enter a reason and explicitly acknowledge the uncertain external outcome.','warning'); return; } sendCommand({type:'quarantine-runtime',workId:work.id,runId:work.runtimeRun.id,reason:text,acknowledgeUncertainOutcome:true}); });
+    form.append(label,reason,acknowledgement,ackLabel,submit); area.append(form); card.append(area);
+  }
   if (work.execution !== 'cancelled' && work.acceptance !== 'accepted') {
     const area = element('div', undefined, 'controls');
     const form = element('form', undefined, 'steer-form');
@@ -262,6 +348,7 @@ function renderWork(work) {
 function renderMission() {
   if (!snapshot) return;
   const mission = snapshot.value;
+  executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
   $('loaded-id').textContent = mission.id;
   $('mission-purpose').textContent = mission.purpose;
@@ -313,6 +400,7 @@ async function pollEvents() {
   } finally { polling = false; }
 }
 async function write(path, body, missionId, successMessage) {
+  const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
   busy = true; controls();
@@ -320,7 +408,16 @@ async function write(path, body, missionId, successMessage) {
   rememberMission(missionId);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
-    const {response, body:result} = await request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},longRun ? 120000 : 15000);
+    // Keep the durable pending lock only until admission is observed. Events can then
+    // refresh the admitted run and owner controls while the provider HTTP call waits.
+    if(longRun){busy=false;ownsBusy=false;controls();}
+    const {response, body:result} = await responsePromise;
+    if(longRun && selectedId!==missionId){
+      if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmedOperations.add(operationKey(operation));await clearPending(operation);return result.status==='settled';}
+      if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
+      throw new Error('Background run outcome requires durable readback.');
+    }
     if (response.status === 409 || result.status === 'conflict') {
       await clearPending(operation);
       const loaded = await loadMission(missionId, false);
@@ -335,11 +432,16 @@ async function write(path, body, missionId, successMessage) {
     }
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || 'The host could not confirm the commit outcome.');
     if (!response.ok) { await clearPending(operation); report('Command rejected: ' + (result.error || 'HTTP ' + response.status) + '. No automatic retry.','error'); return false; }
+    if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
+      confirmedOperations.add(operationKey(operation)); await clearPending(operation); if(selectedId===missionId && (!snapshot || snapshot.revision<=result.snapshot.revision)){++readSequence;installSnapshot(result.snapshot);}
+      report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
+    }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
     confirmedOperations.add(operationKey(operation)); await clearPending(operation); rememberMission(missionId); ++readSequence; installSnapshot(result);
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
+    if(longRun && selectedId!==missionId){if(!confirmedOperations.has(operationKey(operation)) && (!unknownOperation || operationKey(unknownOperation)===operationKey(operation)))unknownOperation=operation;await pollEvents();return false;}
     if (confirmedOperations.has(operationKey(operation))) {
       const loaded = await loadMission(missionId, false);
       if (loaded) report('The host confirmed this command. Its current state was refreshed without replaying it.','success');
@@ -350,12 +452,12 @@ async function write(path, body, missionId, successMessage) {
     await loadMission(missionId,false);
     await pollEvents();
     return false;
-  } finally { busy = false; controls(); if (eventRefreshNeeded && !unknownOperation) { eventRefreshNeeded = false; void loadMission(selectedId,false); } }
+  } finally { if(ownsBusy)busy = false; controls(); if (eventRefreshNeeded && !unknownOperation) { eventRefreshNeeded = false; void loadMission(selectedId,false); } }
 }
 async function sendCommand(command) {
   if (!snapshot || busy || loading || unknownOperation || recoveryProblem) return;
   const missionId = snapshot.value.id;
-  const ok = await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
+  const ok = await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'quarantine-runtime' ? 'Work permanently quarantined. External outcomes remain unresolved; no run was replayed.' : command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
   if (ok && command.type === 'steer') { drafts.delete(command.workId); renderMission(); }
 }
 $('mission-form').addEventListener('submit', async event => {
@@ -363,7 +465,7 @@ $('mission-form').addEventListener('submit', async event => {
   const purpose = $('purpose').value.trim(), scope = $('scope').value.trim(), description = $('criteria').value.trim();
   if (!purpose || !scope || !description) { report('Purpose, scope and success criteria are required.','error'); return; }
   const id = 'mission:' + crypto.randomUUID();
-  const body = {id,commandId:crypto.randomUUID(),purpose,scope,constraints:$('constraints').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean),criteria:{version:1,description,oracle:'manual-review/v1'}};
+  const body = {id,commandId:crypto.randomUUID(),purpose,scope,constraints:$('constraints').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean),criteria:{version:1,description,oracle:$('criteria-oracle').value || 'manual-review/v1'}};
   if (await write('/missions',body,id,'Mission created.')) $('mission-form').reset();
 });
 $('work-form').addEventListener('submit', async event => {
@@ -395,10 +497,12 @@ $('run-fixture').addEventListener('click', async () => {
 async function connect() {
   try { const {response,body} = await request('/health'); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
   catch { $('health').textContent = 'Host unavailable'; }
-  try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; providerKnown = true; }
-  catch { providerKnown = false; }
+  try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; }
+  catch { providerKnown = false; runtimeConfiguration = null; }
   providerNotice();
   if (selectedId) await loadMission(selectedId);
+  // A fresh catalog invalidates prior selection checks even when Work revision is unchanged.
+  if (snapshot) renderMission();
   await pollEvents();
 }
 controls(); void connect();

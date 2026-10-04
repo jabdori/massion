@@ -61,15 +61,20 @@ function assignment(value: unknown): asserts value is Assignment {
   const item = object(value, 'assignment', ['id', 'actorId', 'role', 'taskId', 'model', 'extensionVersion']);
   for (const key of ['id', 'actorId', 'taskId', 'extensionVersion']) text(item[key], `assignment ${key}`);
   oneOf(item.role, ['executor', 'verifier'], 'assignment role');
-  const model = object(item.model, 'model selection', ['provider', 'model', 'configVersion', 'reason', 'evidenceClass']);
+  const model = object(item.model, 'model selection', ['provider', 'model', 'configVersion', 'reason', 'evidenceClass'], ['enabled', 'capabilities']);
+  // Configured runtime historically copied these descriptor fields into assignments.
+  // Retain and validate them as evidence, never as restored execution authority.
+  if (Object.hasOwn(model, 'enabled')) ensure(typeof model.enabled === 'boolean', 'invalid recorded model enablement');
+  if (Object.hasOwn(model, 'capabilities')) texts(model.capabilities, 'recorded model capabilities');
   for (const key of ['provider', 'model', 'configVersion', 'reason']) text(model[key], `model ${key}`);
   oneOf(model.evidenceClass, ['fixture', 'real-provider'], 'evidence class');
 }
-function effect(value: unknown): asserts value is Effect {
+function effect(value: unknown, recoveryPendingIds: readonly string[] = []): asserts value is Effect {
   const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt']);
   for (const key of ['id', 'taskId', 'target', 'authority']) text(item[key], `effect ${key}`);
   oneOf(item.status, ['pending', 'succeeded', 'failed', 'unknown'], 'effect status');
   if (item.status === 'pending') ensure(!Object.hasOwn(item, 'receipt'), 'pending effect has a receipt');
+  else if (item.status === 'unknown' && !Object.hasOwn(item, 'receipt')) ensure(recoveryPendingIds.includes(String(item.id)), 'receipt-free unknown lacks owner recovery');
   else text(item.receipt, 'effect receipt', 262_144);
 }
 function verdict(value: unknown): asserts value is Verdict {
@@ -100,7 +105,7 @@ function checkRecord(work: Work): void {
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
-  array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(effect);
+  array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
   equal(record.criteria, work.criteria, 'Record criteria'); equal(record.artifact, work.artifact, 'Record artifact');
   equal(record.verdict, work.verdict, 'Record verdict'); equal(record.assignments, work.assignments, 'Record assignments');
@@ -119,7 +124,7 @@ function checkRecord(work: Work): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record']);
+    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record']);
   text(item.id, 'Work ID'); text(item.title, 'Work title'); integer(item.missionVersion, 'Work Mission version'); criteria(item.criteria);
   ensure(item.missionVersion <= mission.version && item.criteria.version <= mission.criteria.version, 'Work references future Mission or criteria');
   oneOf(item.execution, ['queued', 'active', 'waiting', 'blocked', 'cancelled', 'settled'], 'Work execution');
@@ -144,12 +149,35 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings']);
     text(run.id, 'run ID'); text(run.authorizationId, 'run authorization identity'); sha(run.criteriaHash, 'run criteria hash'); sha(run.inputHash, 'run input hash');
     oneOf(run.mode, ['mock-http', 'live'], 'run mode'); integer(run.outputTokenCap, 'output cap');
+    if (run.connectionBindings !== undefined) {
+      const bindings = object(run.connectionBindings, 'connection bindings', ['executor', 'verifier']);
+      for (const role of ['executor', 'verifier']) { const binding = object(bindings[role], 'connection binding', ['profileId', 'configHash']); text(binding.profileId, 'profile ID', 128); sha(binding.configHash, 'profile config hash');
+        for (const assignment of item.assignments as Assignment[]) if (assignment.role === role) ensure(assignment.model.configVersion === binding.configHash, 'assignment/profile config binding mismatch');
+      }
+    }
     ensure(run.criteriaHash === hash(item.criteria) && item.missionSnapshot && budget.unit === 'output-tokens', 'runtime criteria/input/budget binding mismatch');
     // Owner steering can append instructions after admission. The original
     // inputHash is retained, not recomputed from later mutable instructions.
+  }
+  let recoveryPendingIds: string[] = [];
+  if (Object.hasOwn(item, 'runtimeRecovery')) {
+    const recovery = object(item.runtimeRecovery, 'owner recovery', ['runId', 'actorId', 'reason', 'pendingEffectIds', 'unknownEffectIds']);
+    text(recovery.runId, 'recovery run'); text(recovery.actorId, 'recovery actor'); text(recovery.reason, 'recovery reason');
+    ensure(item.runtimeRun && recovery.runId === (item.runtimeRun as {id:unknown}).id, 'recovery run binding mismatch');
+    ensure(item.execution === 'cancelled' && item.acceptance !== 'accepted', 'quarantined Work must remain unaccepted and cancelled');
+    recoveryPendingIds = texts(recovery.pendingEffectIds, 'recovery pending effects');
+    const unknownIds = texts(recovery.unknownEffectIds, 'recovery unknown effects');
+    const ids = [...recoveryPendingIds, ...unknownIds]; unique(ids, 'recovery effect'); ensure(ids.length > 0, 'empty recovery effects');
+    if (recoveryPendingIds.length) ensure(budget.measured === null, 'missing receipts cannot imply known usage');
+    const effects = array(item.effects, 'effects') as Effect[];
+    ensure(ids.every(id => effects.some(effect => effect.id === id && effect.status === 'unknown')), 'recovery effects must remain unknown');
+    ensure(effects.filter(effect => effect.status === 'unknown').every(effect => ids.includes(effect.id)), 'unbound recovery unknown effect');
+    ensure(!effects.some(effect => effect.status === 'pending'), 'quarantined Work still has pending effects');
+    ensure(recoveryPendingIds.every(id => !Object.hasOwn(effects.find(effect => effect.id === id)!, 'receipt')), 'owner recovery fabricated a provider receipt');
+    ensure(unknownIds.every(id => Object.hasOwn(effects.find(effect => effect.id === id)!, 'receipt')), 'existing unknown receipt was lost');
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
@@ -158,7 +186,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
     if (task.status === 'settled') text(task.result, 'settled task result');
   }
-  array(item.assignments, 'assignments').forEach(assignment); array(item.effects, 'effects').forEach(effect);
+  array(item.assignments, 'assignments').forEach(assignment); array(item.effects, 'effects').forEach(entry => effect(entry, recoveryPendingIds));
   const attempts = array(item.attempts, 'attempts'); ensure(attempts.length > 0, 'Work has no attempt');
   for (const [index, value] of attempts.entries()) {
     const attempt = object(value, 'attempt', ['id', 'number', 'criteria', 'status', 'modelVersions'], ['results']);
@@ -265,6 +293,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
   'activate-runtime': { required: ['workId', 'run'] },
+  'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
   'block-work': { required: ['workId', 'blocker'] },
   delegate: { required: ['workId', 'taskId', 'parentId'] },
   'settle-task': { required: ['workId', 'taskId', 'result'] },

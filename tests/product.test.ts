@@ -21,5 +21,5 @@ test('fixture provider and disabled real provider cannot satisfy product selecti
 test('configured provider is not executed before runtime and assurance authorization',async()=>{
  let called=false;const service=new ProductService(new InMemoryStore<Mission>(),new ProviderRegistry([{descriptor:{provider:'configured',model:'user-choice',configVersion:'1',enabled:true,capabilities:['text-output'],evidenceClass:'real-provider'},invoke:async()=>{called=true;throw new Error('must not run');}}]));
  await service.create(input,'create');const result=await service.admit(input.id,{commandId:'admit',expectedRevision:1,workId:'work',title:'Task',budget:1});assert.notEqual(result.status,'conflict');if(result.status==='conflict')return;assert.equal(result.value.works[0]?.blocker?.code,'runtime_unavailable');assert.equal(called,false);
- await assert.rejects(service.intervene(input.id,{commandId:'forge',expectedRevision:2,command:{type:'accept',workId:'work',recordId:'r'}}),/Only cancel and steer/);
+ await assert.rejects(service.intervene(input.id,{commandId:'forge',expectedRevision:2,command:{type:'accept',workId:'work',recordId:'r'}}),/Only cancel, steer and quarantine-runtime/);
 });
