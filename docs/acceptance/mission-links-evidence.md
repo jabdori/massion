@@ -55,6 +55,10 @@ the previous address active. Snapshot disposal now also clears the fragment.
 The regression checks Mission A, a failed load of B, and reload without reopening
 A or exposing an old continuation link. All three P2s were reproduced before fixes.
 
+The first snapshot-disposal run also exposed an inaccurate test history shim: it
+stored path-only history replacements as hashes. It was corrected to browser
+semantics; the premature 40/40 review reply is superseded by final-head evidence.
+
 Initial new-test failures were test setup errors: checking a button instead of
 its disabled fieldset, and omitting creation of the unique disposable database.
 Both were corrected; no product guard was relaxed.
