@@ -387,3 +387,35 @@ test('online catalog refresh rerenders same-revision choices and invalidates che
  await app.all().find(n=>n.className==='execution-form')!.fire('submit');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
  providerOffline=true;await runInContext('connect()',app.context);await settle();assert.equal(app.all().some(n=>n.className==='execution-form'),false);assert.match(app.node('provider-notice').textContent,/could not be confirmed/);assert.match(app.node('work-budget-label').textContent,/host units/);assert.match(app.node('work-budget-hint').textContent,/Confirm host runtime units/);
 });
+
+test('Mission links load authoritative state with fresh storage and navigation remains read-only',async()=>{
+ const handler:Handler=path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:fixtureMission(decodeURIComponent(path.slice('/missions/'.length)))});
+ const app=harness(handler,{'massion.workbench.mission':'old'},undefined,{fragment:'#mission=mission%3Alink'});await settle();assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'mission:link');assert.equal(app.node('mission-link').attributes.get('href'),'#mission=mission%3Alink');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ const maximum=':'.repeat(128);const boundary=harness(handler,{},undefined,{fragment:'#mission='+encodeURIComponent(maximum)});await settle();assert.equal(JSON.parse(boundary.node('snapshot-json').textContent).value.id,maximum);
+ await app.navigateFragment('#mission=second');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'second');assert.equal(app.node('mission-link').attributes.get('href'),'#mission=second');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('malformed Mission links never create paths or writes and absent snapshots expose no link',async()=>{
+ for(const fragment of ['#mission=','%','https://attacker.example','#mission=%ZZ','#mission=..%2Fsecret','#mission=good&run=true','#mission='+ 'a'.repeat(129),'#mission='+ '%41'.repeat(129)]){
+  const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({},404),{},undefined,{fragment});await settle();assert.equal(app.calls.some(c=>c.path.startsWith('/missions/')),false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);assert.equal(app.node('mission-link').hidden,true);
+ }
+ const missing=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({error:'Missing'},404),{},undefined,{fragment:'#mission=missing'});await settle();assert.equal(missing.node('mission-link').hidden,true);
+});
+
+test('Mission links cannot replace pending recovery identity or unlock uncertain writes',async()=>{
+ const marker=JSON.stringify({commandId:'uncertain',missionId:'pending',reconcileCursor:0});const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:fixtureMission(path.slice('/missions/'.length))}),{'massion.workbench.pending':marker},undefined,{fragment:'#mission=another'});await settle();assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'pending');assert.equal(app.storage.get('massion.workbench.pending'),marker);assert.equal(app.node('mission-fields').disabled,true);
+ await app.navigateFragment('#mission=another');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'another');assert.equal(app.storage.get('massion.workbench.pending'),marker);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('explicit Mission loading keeps the address and reload aligned with the validated snapshot',async()=>{
+ const handler:Handler=path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:fixtureMission(path.slice('/missions/'.length))});const app=harness(handler,{},undefined,{fragment:'#mission=first'});await settle();app.node('mission-id').value='second';await app.submit('load-form');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'second');assert.equal(app.fragment(),'#mission=second');const reload=harness(handler,Object.fromEntries(app.storage),undefined,{fragment:app.fragment()});await settle();assert.equal(JSON.parse(reload.node('snapshot-json').textContent).value.id,'second');assert.equal(reload.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('rejected fragment navigation restores the visible Mission through command rejection',async()=>{
+ let release!:(value:Reply)=>void;const handler:Handler=(path,init)=>init.method==='POST'?new Promise<Reply>(resolve=>release=resolve):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:fixtureMission(path.slice('/missions/'.length))});const app=harness(handler,{},undefined,{fragment:'#mission=first'});await settle();await app.navigateFragment('#mission=%ZZ');assert.equal(app.fragment(),'#mission=first');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'first');
+ const pending=runInContext("write('/missions/first/commands',{commandId:'rejected',expectedRevision:1,command:{type:'steer',workId:'missing',text:'Synthetic rejected command'}},'first','Changed')",app.context);await settle();assert.equal(typeof release,'function');await app.navigateFragment('#mission=second');assert.equal(app.fragment(),'#mission=first');release(reply({error:'Definite rejection'},400));await pending;await settle();assert.equal(app.fragment(),'#mission=first');assert.equal(JSON.parse(app.node('snapshot-json').textContent).value.id,'first');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);const reload=harness(handler,Object.fromEntries(app.storage),undefined,{fragment:app.fragment()});await settle();assert.equal(JSON.parse(reload.node('snapshot-json').textContent).value.id,'first');assert.equal(reload.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('failed explicit Mission navigation removes the stale address with the discarded snapshot',async()=>{
+ const handler:Handler=path=>path.startsWith('/events')?reply({events:[],cursor:0}):path==='/missions/first'?reply({revision:1,value:fixtureMission('first')}):reply({error:'Missing'},404);const app=harness(handler,{},undefined,{fragment:'#mission=first'});await settle();app.node('mission-id').value='missing';await app.submit('load-form');assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('mission-link').hidden,true);assert.equal(app.fragment(),'');const reloaded=harness(handler,Object.fromEntries(app.storage),undefined,{fragment:app.fragment()});await settle();assert.equal(reloaded.calls.some(c=>c.path==='/missions/first'),false);assert.equal(reloaded.node('mission-panel').hidden,true);assert.equal(reloaded.calls.filter(c=>c.options.method==='POST').length,0);
+});
