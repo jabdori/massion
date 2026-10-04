@@ -34,7 +34,7 @@ export const workbenchPage = String.raw`<!doctype html>
 </aside>
 <div class="stack">
 <section id="empty-state" class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>No Mission selected</h2><p id="empty-message">Start with a purpose and clear success criteria. Your Mission and Work will appear here after the host confirms them.</p></section>
-<section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
+<section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><p><a id="mission-link" href="#" hidden>Open this Mission in another browser</a></p><p class="hint">Copy this link to continue on the same host. Opening it reads current state; it does not start Work or grant access.</p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
 <details style="margin-top:22px"><summary>Authoritative snapshot</summary><pre id="snapshot-json"></pre></details></section>
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
@@ -55,7 +55,15 @@ const missionKey = 'massion.workbench.mission';
 const cursorKey = 'massion.workbench.cursor';
 const pendingKey = 'massion.workbench.pending';
 const fixtureKey = 'massion.workbench.fixture-pending';
-let selectedId = storage.get(missionKey) || storage.get('massion.fixture.mission') || '';
+function missionReference() {
+  const fragment = window.location.hash;
+  if (!fragment) return {present:false,id:''};
+  if (fragment.length > 393 || !fragment.startsWith('#mission=')) return {present:true,id:''};
+  try { const id = decodeURIComponent(fragment.slice(9)); return {present:true,id:/^[a-zA-Z0-9:_-]{1,128}$/.test(id) ? id : ''}; }
+  catch { return {present:true,id:''}; }
+}
+const initialReference = missionReference();
+let selectedId = initialReference.present ? initialReference.id : storage.get(missionKey) || storage.get('massion.fixture.mission') || '';
 let cursor = Number(storage.get(cursorKey) || 0);
 if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false;
@@ -172,6 +180,7 @@ function clearSnapshot(message) {
   $('empty-state').hidden = false;
   $('empty-message').textContent = message;
   $('snapshot-json').textContent = '';
+  $('mission-link').hidden = true; $('mission-link').setAttribute('href','#');
   $('work-list').replaceChildren(); executionForms.clear();
   $('snapshot-time').textContent = 'No current snapshot is available.';
   controls();
@@ -354,6 +363,7 @@ function renderMission() {
   executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
   $('loaded-id').textContent = mission.id;
+  $('mission-link').setAttribute('href','#mission=' + encodeURIComponent(mission.id)); $('mission-link').hidden = false;
   $('mission-purpose').textContent = mission.purpose;
   const facts = $('mission-facts'); facts.replaceChildren();
   addFact(facts,'Scope',mission.scope); addFact(facts,'Success criteria · v' + mission.criteria.version,mission.criteria.description); addFact(facts,'Constraints',mission.constraints.length ? mission.constraints : 'No constraints recorded.'); addFact(facts,'Mission version / effective memory',mission.version + ' / ' + mission.memories.filter(memory => memory.effective).length + ' versions');
@@ -534,6 +544,7 @@ async function connect() {
   await refreshConnections();
   providerNotice();
   if (selectedId) await loadMission(selectedId);
+  else if (initialReference.present) report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error');
   // A fresh catalog invalidates prior selection checks even when Work revision is unchanged.
   if (snapshot) renderMission();
   await pollEvents();
@@ -542,6 +553,12 @@ controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { void connect(); });
+window.addEventListener('hashchange', () => {
+  const reference = missionReference();
+  if (!reference.id) { report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error'); return; }
+  if (busy) { report('Wait for the current command to settle before opening another Mission.', 'warning'); return; }
+  void loadMission(reference.id);
+});
 </script>
 </body>
 </html>`;
