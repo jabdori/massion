@@ -65,6 +65,11 @@ the cached catalog/forms, fences discovery callbacks and rejects stale programma
 mutation handlers until valid setup metadata is received. Reconnect also cancels
 old metadata discovery and fences setup mutation acknowledgements by connection
 epoch; an acknowledged late mutation never installs an older catalog or retries.
+Codex then identified that discarding a late acknowledgement alone could leave
+the client writable after that mutation committed behind a reconnect read. The
+regression reproduced the missing refresh. Late/uncertain setup outcomes now close
+the barrier again and read current state; a held GET proves no unlock before the
+committed setup is observed and exactly one POST remains.
 
 Final published-head CI and independent review are separate evidence in the Draft
 PR. CodeRabbit is optional and no repeated/paid review is requested. No real browser

@@ -530,7 +530,14 @@ function installConnections(body){
  connectionCatalog=body;runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
-async function connectionWrite(path,body){const epoch=connectionEpoch;const {response,body:result}=await request(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},20000);if(epoch!==connectionEpoch||reconnectRequired)throw new Error('Host connection changed during the request. Refresh before further changes; no retry occurred.');if(!response.ok)throw new Error(result.error||'Connection request failed');return result;}
+async function connectionWrite(path,body){
+ const epoch=connectionEpoch;let response,result;
+ try{const reply=await request(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},20000);response=reply.response;result=reply.body;}
+ catch(error){requireReconnect();void pollEvents();throw error;}
+ if(epoch!==connectionEpoch||reconnectRequired){requireReconnect();void pollEvents();throw new Error('Host connection changed during the request. Refresh before further changes; no retry occurred.');}
+ if(!response.ok)throw new Error(result.error||'Connection request failed');return result;
+}
+
 function renderConnections(){
  const area=$('connection-list');area.replaceChildren();connectionButtons.clear();if(!connectionCatalog)return;
  for(const c of connectionCatalog.connections){
