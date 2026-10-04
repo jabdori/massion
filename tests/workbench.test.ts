@@ -65,6 +65,49 @@ test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
  new Script(workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!);
 });
 
+test('acceptance guidance describes both methods and preserves the explicit execution boundary',()=>{
+ const hint=workbenchPage.match(/<p id="criteria-oracle-hint" class="hint">([^<]+)<\/p>/)![1]!;
+ assert.match(hint,/Saved with the selected acceptance method/);
+ assert.match(hint,/Manual review uses manual-review\/v1, which this client cannot execute/);
+ assert.match(hint,/Bounded text uses bounded-text-review\/v1 with independent model review during an explicitly requested Work run/);
+ assert.match(hint,/Selecting a method or creating a Mission does not start execution or mark Work accepted/);
+ assert.match(workbenchPage,/<select id="criteria-oracle" aria-describedby="criteria-oracle-hint">/);
+ assert.doesNotMatch(workbenchPage,/Saved as manual-review\/v1/);
+});
+
+for(const oracle of ['manual-review/v1','bounded-text-review/v1'])test(`Mission creation preserves ${oracle} without execution or acceptance`,async()=>{
+ let mission:Mission|undefined;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:[],cursor:0});
+  const body=JSON.parse(options.body);
+  if(path==='/missions'){
+   mission={...fixtureMission(body.id),criteria:body.criteria};
+   return reply({status:'committed',revision:1,value:mission},201);
+  }
+  if(path==='/missions/'+encodeURIComponent(mission!.id)+'/work'){
+   mission!.works.push({...work(mission!),id:body.workId,title:body.title});
+   return reply({status:'committed',revision:2,value:mission},201);
+  }
+  throw new Error('Unexpected '+path);
+ });await settle();
+ app.node('purpose').value='Inspect selected criteria';app.node('scope').value='Project';app.node('criteria').value='A reviewable result';
+ // Selection changes are side-effect-free, including switching back to either method.
+ for(const selected of [oracle,oracle==='manual-review/v1'?'bounded-text-review/v1':'manual-review/v1',oracle]){
+  app.node('criteria-oracle').value=selected;await app.node('criteria-oracle').fire('change');await settle();
+  assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+ }
+ await app.submit('mission-form');
+ const created=JSON.parse(app.node('snapshot-json').textContent);
+ assert.equal(created.value.criteria.oracle,oracle);assert.deepEqual(created.value.works,[]);
+ assert.equal(JSON.parse(app.calls.find(call=>call.path==='/missions')!.options.body).criteria.oracle,oracle);
+ assert.deepEqual(app.calls.filter(call=>call.options.method==='POST').map(call=>call.path),['/missions']);
+ app.node('work-title').value='Admitted responsibility';await app.submit('work-form');
+ const admitted=JSON.parse(app.node('snapshot-json').textContent).value.works[0];
+ assert.equal(admitted.criteria.oracle,oracle);assert.equal(admitted.execution,'queued');assert.equal(admitted.acceptance,'pending');assert.equal(admitted.record,undefined);
+ assert.match(app.node('work-list').textContent,/Acceptance: pending/);assert.doesNotMatch(app.node('work-list').textContent,/Acceptance: accepted/);
+ assert.deepEqual(app.calls.filter(call=>call.options.method==='POST').map(call=>call.path),['/missions','/missions/'+encodeURIComponent(mission!.id)+'/work']);
+});
+
 test('Mission submit has stable IDs, blocks duplicate writes and renders host text safely',async()=>{
  let resolvePost!:(result:Reply)=>void;let submitted:any;
  const app=harness(async(path,options)=>{
