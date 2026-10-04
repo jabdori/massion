@@ -84,5 +84,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
  const server=createWorkbench(store,workspaceRoot,{connections});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
- for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{server.closeAllConnections();server.close(()=>process.exit(0));});
+ for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{server.close(()=>process.exit(0));});
 }

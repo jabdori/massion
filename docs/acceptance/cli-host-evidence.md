@@ -51,6 +51,12 @@ manifest parser now checks each generated native inference endpoint, including
 the 512-character boundary, before database startup. The regression failed before
 the fix and checks both rejection and the accepted exact boundary.
 
+Codex P1 review found forced active-connection closure on SIGTERM could exit before
+a provider receipt was persisted. The actual CLI regression holds an executor
+response, sends SIGTERM, verifies the host stays alive, then releases it and checks
+accepted receipt/Record persistence before exit and restart. It failed before the
+fix. Shutdown now stops accepting connections and waits for active handlers.
+
 ## Reproduce
 
 ```sh
