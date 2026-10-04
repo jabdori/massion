@@ -30,6 +30,8 @@ No retention/pruning is enabled. A cursor beyond the database head requires rese
 ## Same-host Mission links
 
 A validated loaded snapshot exposes `#mission=<encoded ID>` on the current host.
+Installing a validated snapshot replaces the current address fragment with that
+Mission, so explicit form navigation and reload cannot reopen a stale reference.
 Opening that link in a browser with separate storage loads the authoritative
 Mission and durable events using reads only. The link carries no command,
 credentials, grants, selected model or execution authorization. Invalid or

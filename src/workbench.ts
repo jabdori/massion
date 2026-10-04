@@ -188,6 +188,7 @@ function clearSnapshot(message) {
 function installSnapshot(value) {
   const changed = !snapshot || snapshot.revision !== value.revision || snapshot.value.id !== value.value.id;
   snapshot = {revision:value.revision, value:value.value};
+  window.history.replaceState(null, '', '#mission=' + encodeURIComponent(value.value.id));
   $('empty-state').hidden = true;
   $('mission-panel').hidden = false;
   $('snapshot-time').textContent = 'Snapshot read at ' + new Date().toLocaleTimeString() + ' · revision ' + value.revision;

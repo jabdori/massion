@@ -22,7 +22,7 @@ Project inspection was blocked by missing `read:project`; no token scope changed
 ## Local verification
 
 Strict pinned Node 24.19.0 / TypeScript checking passes. The affected workbench and
-client-to-HTTP suite with disposable SurrealDB 3.3.0 passes 37/37, 0 failures,
+client-to-HTTP suite with disposable SurrealDB 3.3.0 passes 38/38, 0 failures,
 0 skips. Counts belong to this candidate, not a sum of earlier runs.
 
 - Fresh storage opens a validated fragment with GET only; changing the fragment
@@ -38,6 +38,11 @@ client-to-HTTP suite with disposable SurrealDB 3.3.0 passes 37/37, 0 failures,
 - Existing configured fixture flow now reopens an accepted Record through the
   link in fresh client storage after host restart, with no extra provider sends.
   Its local mock outcome remains fixture evidence.
+
+Codex independently found a stale address fragment after explicit form navigation.
+A regression reproduced the old Mission reopening after switching to another one.
+Validated snapshot installation now uses browser history replacement to keep the
+address and displayed Mission aligned without sending a command or hashchange.
 
 Initial new-test failures were test setup errors: checking a button instead of
 its disabled fieldset, and omitting creation of the unique disposable database.
