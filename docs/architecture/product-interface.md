@@ -27,6 +27,25 @@ The store serializes commits within one host/store instance because its atomic g
 
 No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
 
+## Explicit owner-instruction conflict comparison
+
+A rejected owner instruction retains its submitted text and editable draft in
+browser memory, scoped by Mission and Work together. Its Work card compares the
+unrecorded submission and attempted revision with the latest authoritative owner
+instruction and snapshot revision. A new action requires deliberate submission
+against the displayed revision with a fresh command identity; no conflict is
+merged or retried automatically. Repeated conflicts update the comparison.
+
+Durable events and reconnect reads refresh the canonical side while preserving
+local drafts. Closed Work retains the comparison/draft for reading and has no
+resubmit controls. Detached controls cannot submit to a different Mission or a
+newer/closed Work snapshot. Another Work's draft remains independent. Drafts are
+volatile browser memory, not shared conversation state or persisted server input;
+reload/new clients reconstruct committed instructions, not rejected private drafts.
+Existing owner resolution, revision admission, no-replay and effect gates apply.
+This advances #4/SUR-01 without choosing conversation/session or identity/auth
+semantics. General shared conversation remains a separate product decision.
+
 ## Reconnection synchronization barrier
 
 Startup, an offline notification or a failed/invalid event read pauses new writes.

@@ -431,3 +431,20 @@ test('a later offline event fences an in-flight reconnect and successful sync ca
  const mission=fixtureMission();let hold=false,release!:(value:Reply)=>void;const providers=()=>reply({providers:[],selection:{status:'unavailable',reason:'No model'},runtime:null});const handler:Handler=path=>path==='/health'?reply({status:'ready'}):path==='/providers'?hold?new Promise<Reply>(resolve=>release=resolve):providers():path==='/connections'?reply({},503):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission});const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();hold=true;await app.windowEvent('offline');await app.tick();assert.equal(typeof release,'function');await app.windowEvent('offline');hold=false;release(providers());await settle();assert.equal(app.node('mission-fields').disabled,true);await app.tick();assert.equal(app.node('mission-fields').disabled,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
  const marker=JSON.stringify({commandId:'unconfirmed',missionId:mission.id,reconcileCursor:0});const pending=harness(handler,{'massion.workbench.pending':marker},undefined,{network:true});await settle();await pending.windowEvent('offline');await pending.tick();assert.equal(pending.node('sync-notice').hidden,true);assert.equal(pending.node('mission-fields').disabled,true);assert.equal(pending.storage.get('massion.workbench.pending'),marker);assert.equal(pending.calls.filter(c=>c.options.method==='POST').length,0);
 });
+
+test('instruction drafts and conflict comparisons are scoped to Mission plus Work identities',async()=>{
+ const one=fixtureMission('mission:one'),two=fixtureMission('mission:two');one.works=[work(one)];two.works=[work(two)];one.works[0]!.instructions=[{actorId:'owner',text:'Current first Mission direction'}];
+ const states=new Map([[one.id,{revision:2,value:one}],[two.id,{revision:2,value:two}]]);
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST')return reply({status:'conflict',reason:'revision',revision:2},409);
+  return reply(states.get(decodeURIComponent(path.slice('/missions/'.length))));
+ },{},undefined,{fragment:'#mission=mission%3Aone'});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='Private first Mission draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
+ assert.match(app.node('work-list').textContent,/Private first Mission draft/);assert.match(app.node('work-list').textContent,/owner: Current first Mission direction/);
+ const writes=app.calls.filter(call=>call.options.method==='POST').length;
+ await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);
+ selectionField(app,'steer-work:test').value='Second Mission draft';await selectionField(app,'steer-work:test').fire('input');
+ await app.navigateFragment('#mission=mission%3Aone');assert.equal(selectionField(app,'steer-work:test').value,'Private first Mission draft');assert.match(app.node('work-list').textContent,/Current first Mission direction/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
+ await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'Second Mission draft');
+});

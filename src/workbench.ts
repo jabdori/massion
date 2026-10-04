@@ -70,7 +70,8 @@ if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
-const drafts = new Map(), confirmedOperations = new Set();
+const drafts = new Map(), instructionConflicts = new Map(), confirmedOperations = new Set();
+const instructionKey = (missionId, workId) => JSON.stringify([missionId, workId]);
 function parsePending(raw) {
   const item = JSON.parse(raw);
   if (!item || Object.keys(item).length !== 3 || typeof item.commandId !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(item.commandId) || typeof item.missionId !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(item.missionId) || !Number.isSafeInteger(item.reconcileCursor) || item.reconcileCursor < 0) throw new Error('Invalid recovery reference');
@@ -348,15 +349,28 @@ function renderWork(work) {
     form.addEventListener('submit', event => { event.preventDefault(); const text = reason.value.trim(); if (!text || !acknowledgement.checked) { report('Enter a reason and explicitly acknowledge the uncertain external outcome.','warning'); return; } sendCommand({type:'quarantine-runtime',workId:work.id,runId:work.runtimeRun.id,reason:text,acknowledgeUncertainOutcome:true}); });
     form.append(label,reason,acknowledgement,ackLabel,submit); area.append(form); card.append(area);
   }
+  const missionId = snapshot.value.id, revision = snapshot.revision, key = instructionKey(missionId, work.id);
+  const conflict = instructionConflicts.get(key);
+  if (conflict) {
+    const comparison = element('section', undefined, 'instruction-conflict'); comparison.setAttribute('role','status');
+    comparison.append(element('h4','Instruction was not recorded'),element('p','Your submission at revision ' + conflict.revision + ' conflicted. No instruction was retried.'));
+    comparison.append(element('h4','Your unrecorded submission'),element('pre',conflict.text));
+    const latest = (work.instructions || []).at(-1);
+    comparison.append(element('h4','Latest recorded owner instruction · current revision ' + revision),element('p',latest ? latest.actorId + ': ' + latest.text : 'No owner instruction is recorded.'));
+    comparison.append(element('p',work.execution === 'cancelled' || work.acceptance === 'accepted' ? 'This Work is closed. Your draft remains available here; it cannot be resubmitted.' : 'Compare the current direction with your draft below. Edit it or deliberately submit it against the displayed revision.','hint'));
+    if (work.execution === 'cancelled' || work.acceptance === 'accepted') comparison.append(element('h4','Retained draft'),element('pre',drafts.get(key) || conflict.text));
+    card.append(comparison);
+  }
   if (work.execution !== 'cancelled' && work.acceptance !== 'accepted') {
     const area = element('div', undefined, 'controls');
     const form = element('form', undefined, 'steer-form');
-    const label = element('label', 'Steering instruction'); const input = element('textarea'); input.id = 'steer-' + work.id; label.htmlFor = input.id; input.rows = 2; input.maxLength = 16000; input.required = true; input.placeholder = 'Record a change of direction'; input.value = drafts.get(work.id) || ''; input.addEventListener('input', () => drafts.set(work.id, input.value));
+    const label = element('label', 'Steering instruction'); const input = element('textarea'); input.id = 'steer-' + work.id; label.htmlFor = input.id; input.rows = 2; input.maxLength = 16000; input.required = true; input.placeholder = 'Record a change of direction'; input.value = drafts.get(key) || ''; input.addEventListener('input', () => drafts.set(key, input.value));
     const buttons = element('div', undefined, 'row'); buttons.style.marginTop = '9px';
-    const steer = element('button', 'Record instruction', 'secondary'); steer.type = 'submit'; steer.setAttribute('data-write','');
+    const steer = element('button', conflict ? 'Submit revised instruction at revision ' + revision : 'Record instruction', 'secondary'); steer.type = 'submit'; steer.setAttribute('data-write','');
     const cancel = element('button', 'Cancel Work', 'danger'); cancel.type = 'button'; cancel.setAttribute('data-write','');
-    cancel.addEventListener('click', () => sendCommand({type:'cancel',workId:work.id}));
-    form.addEventListener('submit', event => { event.preventDefault(); const instruction = input.value.trim(); if (instruction) sendCommand({type:'steer',workId:work.id,instruction}); });
+    const current = () => snapshot && selectedId === missionId && snapshot.value.id === missionId && snapshot.revision === revision && snapshot.value.works.some(item => item.id === work.id && item.execution !== 'cancelled' && item.acceptance !== 'accepted');
+    cancel.addEventListener('click', () => { if (current()) sendCommand({type:'cancel',workId:work.id}); });
+    form.addEventListener('submit', event => { event.preventDefault(); if (!current()) return; const instruction = input.value.trim(); drafts.set(key,input.value); if (instruction) sendCommand({type:'steer',workId:work.id,instruction}); });
     buttons.append(steer,cancel); form.append(label,input,buttons,element('p','Steering records an owner instruction; existing execution blockers remain. Cancellation does not undo effects.','hint')); area.append(form); card.append(area);
   }
   return card;
@@ -447,7 +461,9 @@ async function write(path, body, missionId, successMessage) {
     }
     if (response.status === 409 || result.status === 'conflict') {
       await clearPending(operation);
+      if (body.command?.type === 'steer') instructionConflicts.set(instructionKey(missionId,body.command.workId),{revision:body.expectedRevision,text:body.command.instruction});
       const loaded = await loadMission(missionId, false);
+      if (loaded) renderMission();
       report((result.reason === 'idempotency' ? 'Command identity conflict. The submitted action was rejected; the existing identity belongs to different command content. ' : 'Revision conflict. ') + 'The command was not retried. ' + (loaded ? 'Review the refreshed state before submitting a new action.' : 'Current state could not be refreshed. Reload before another write.'),'warning');
       return false;
     }
@@ -483,9 +499,9 @@ async function write(path, body, missionId, successMessage) {
 }
 async function sendCommand(command) {
   if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
-  const missionId = snapshot.value.id;
+  const missionId = snapshot.value.id, key = instructionKey(missionId,command.workId), submittedDraft = drafts.get(key);
   const ok = await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'quarantine-runtime' ? 'Work permanently quarantined. External outcomes remain unresolved; no run was replayed.' : command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
-  if (ok && command.type === 'steer') { drafts.delete(command.workId); renderMission(); }
+  if (ok && command.type === 'steer') { if (drafts.get(key) === submittedDraft) drafts.delete(key); instructionConflicts.delete(key); if(snapshot?.value.id === missionId)renderMission(); }
 }
 $('mission-form').addEventListener('submit', async event => {
   event.preventDefault(); if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
