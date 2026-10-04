@@ -1,10 +1,11 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {Application} from './application.ts';
 import {hash,DomainError} from './domain.ts';
-import type {Mission,Work,Command,Actor,ModelSelection,Artifact} from './domain.ts';
+import type {Mission,Work,Command,Actor,ModelSelection,Artifact,RuntimeConnectionBindings} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome} from './providers.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
+import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
 export const TEXT_REVIEW_ORACLE='bounded-text-review/v1';
 export interface ProviderIdentity {provider:string;model:string;configVersion:string}
 export interface RuntimeAuthorization {
@@ -13,7 +14,7 @@ export interface RuntimeAuthorization {
 }
 export interface RuntimeRole {identity:string;adapter:ProviderAdapter}
 export interface ConfiguredRuntimeOptions {
- enabled?:boolean; authorization?:RuntimeAuthorization; outputTokenCap:number;
+ enabled?:boolean; authorization?:RuntimeAuthorization; outputTokenCap:number; connectionBindings?:RuntimeConnectionBindings;
  executor:RuntimeRole; verifier:RuntimeRole; artifacts:TextArtifactStore;
 }
 export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict';snapshot:Snapshot<Mission>;reason?:string}
@@ -23,7 +24,9 @@ export class RunUnsettledError extends Error {
 }
 export interface WorkRuntime {
  availability(mission:Mission):{ready:boolean;reason:string};
- run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>;
+ run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>;
+ configuration?():unknown;
+ preflight?(mission:Mission,choice?:ExecutionChoice):SelectionPreflight;
  interrupt(missionId:string,workId:string):void;
 }
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -37,7 +40,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
   if(!Number.isSafeInteger(options.outputTokenCap)||options.outputTokenCap<1)throw new Error('Invalid output-token cap');
   for(const role of [options.executor,options.verifier])if(!/^[a-zA-Z0-9:_-]{1,128}$/.test(role.identity)||['local-owner','runtime-representative'].includes(role.identity))throw new Error('Invalid or reserved runtime identity');
-  this.options={...options,authorization:options.authorization?structuredClone(options.authorization):undefined,executor:{...options.executor},verifier:{...options.verifier}};
+  this.options={...options,connectionBindings:options.connectionBindings?structuredClone(options.connectionBindings):undefined,authorization:options.authorization?structuredClone(options.authorization):undefined,executor:{...options.executor},verifier:{...options.verifier}};
   const actors:Actor[]=[{id:'local-owner',roles:['owner']},{id:'runtime-representative',roles:['representative']},{id:options.executor.identity,roles:['executor']},{id:options.verifier.identity,roles:['verifier']}];
   this.app=new Application(store,actors);
  }
@@ -82,7 +85,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(initial.work.runtimeRun)return {status:'already-started',snapshot:initial.snapshot,reason:'A run was already admitted. It is never restarted by resubmitting this endpoint.'};
   if(initial.snapshot.revision!==expectedRevision)return {status:'conflict',snapshot:initial.snapshot};
   if(initial.work.budget.limit-initial.work.budget.reserved<this.options.outputTokenCap*2)return {status:'blocked',snapshot:initial.snapshot,reason:'Budget must reserve both executor and independent verifier output caps.'};
-  const g=this.options.authorization!;const activation=await this.app.dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:hash({mission:initial.work.missionSnapshot,title:initial.work.title,instructions:initial.work.instructions??[],memoryVersions:initial.work.appliedMemoryVersions}),mode:g.mode,outputTokenCap:this.options.outputTokenCap}}});
+  const g=this.options.authorization!;const activation=await this.app.dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:hash({mission:initial.work.missionSnapshot,title:initial.work.title,instructions:initial.work.instructions??[],memoryVersions:initial.work.appliedMemoryVersions}),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});
   if(activation.status==='conflict')return {status:'conflict',snapshot:await this.snapshot(missionId)};
   if(activation.status==='replayed')return {status:'already-started',snapshot:await this.snapshot(missionId)};
   const controller=new AbortController();this.controllers.set(`${missionId}\0${workId}`,controller);

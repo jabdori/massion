@@ -45,9 +45,18 @@ Open **http://127.0.0.1:8765** for the development workbench. It invokes the sam
 
 For an existing authorized local development service, set `MASSION_SURREAL_RPC`, `MASSION_SURREAL_NAMESPACE`, and `MASSION_SURREAL_DATABASE`. Create that namespace/database before starting the host. The host initializes its own tables. Do not expose an unauthenticated service outside loopback.
 
-A request that loses its receipt does not silently rerun. Pending/unknown effects block further execution; recovery requires establishing the prior owner has stopped, inspecting actual outcome evidence, and an explicit resolution. General recovery UI, durable outbox workers, event retention/snapshot fallback and production leases remain open.
+A request that loses its receipt does not silently rerun. Pending/unknown effects block further execution; resuming execution requires establishing the prior worker has stopped, inspecting actual outcome evidence, and an explicit resolution. Terminal owner quarantine is available below without claiming that proof. General continuation controls, durable outbox workers, event retention/snapshot fallback and production leases remain open.
 
 For the opt-in provider path and its remaining live-service gates, see [configured execution](docs/architecture/configured-runtime.md). No account or credential is loaded by default.
+
+## Owner handling of interrupted runs
+
+The loopback owner interface can permanently quarantine a configured run with
+pending or unknown effects. It records the owner and reason, preserves reservations
+and history, and marks missing receipts unknown without inventing a provider result.
+Quarantine prevents later Work progression; an already admitted external effect may
+still execute. It does not resume completion or permit replay. See the
+[protocol and limits](docs/architecture/owner-quarantine.md).
 
 ## Portable Work backup
 
@@ -76,3 +85,13 @@ See [backup CLI, limits and recovery](docs/architecture/portable-backup.md) and
 ## Historical implementation
 
 The previous implementation and Git history are preserved in [massion-archive](https://github.com/jabdori/massion-archive). This repository has independent history and does not reuse the abandoned runtime or its data. Historical contracts inform the scope; historical tests are not evidence for this candidate.
+
+## Select execution connections
+
+A configured host can expose multiple connection/model profiles and explicit
+per-Work executor/verifier choices in the workbench and headless API. The first
+implemented protocol is OpenAI-compatible Chat Completions; ACP is a future
+session adapter, not a fake selectable provider. Configuration and authorization
+remain disabled by default. See [connection selection and extension
+contracts](docs/architecture/provider-selection.md) for scope, authentication,
+preflight, usage limits and the Hermes/ACP design reference.

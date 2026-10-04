@@ -29,9 +29,9 @@ A separate assigned call plus mechanical binding checks establish process indepe
 - Work budget measurements here are **output-token units**, not dollars or total input-plus-output billing. Input usage is retained in receipts. A live account still needs approved use/spend controls; these local protocol bounds are not a guaranteed provider-side monetary cap.
 - Unknown usage remains null. A timeout, abort after dispatch, malformed response or HTTP error may follow remote execution and therefore cannot prove zero usage or no side effect.
 - Correlation headers identify an invocation; they are not a provider-side idempotency guarantee.
-- Cancellation prevents future admissions and aborts the local request when possible. It cannot undo remote execution. In-flight receipts remain visible.
+- Cancellation prevents future admissions and aborts the local request when possible. It cannot undo remote execution. In-flight receipts remain visible after ordinary cancellation. Explicit owner quarantine permanently closes the Work: later provider responses are rejected, and unresolved external outcomes stay unknown.
 - Steering is atomically checked at effect admission and task progression, so a race cannot erase waiting state and write another artifact.
-- A failure after run admission is reported as `admitted-unsettled`, never as a blanket rolled-back/retryable run. The latest state is returned when readable. Recovery requires inspecting durable run/effect identity; no implicit replay or automatic owner takeover is implemented.
+- A failure after run admission is reported as `admitted-unsettled`, never as a blanket rolled-back/retryable run. The latest state is returned when readable. Recovery requires inspecting durable run/effect identity; no implicit replay or automatic owner takeover is implemented. The [owner quarantine protocol](owner-quarantine.md) supplies an explicit permanent handling decision for pending/unknown effects, not continuation or completion.
 
 ## Verification and live gate
 

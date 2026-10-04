@@ -107,3 +107,60 @@ test('HTTP receipt-commit contention reports an admitted unsettled run, never a 
  const response=await request();assert.equal(response.status,503);const body=await response.json() as {outcome:string;retryable:boolean};assert.equal(body.outcome,'admitted-unsettled');assert.equal(body.retryable,false);assert.equal(s.calls.length,1);assert.equal((await s.store.load(s.missionId))?.value.works[0]?.effects[0]?.status,'pending');
  const retry=await request();assert.equal(retry.status,200);assert.equal((await retry.json() as {status:string}).status,'already-started');assert.equal(s.calls.length,1);
 });
+
+const recoveryCommand=(workId:string,runId='interrupted-run')=>({type:'quarantine-runtime' as const,workId,runId,reason:'Owner inspected durable state after interrupted dispatch; remote outcome is unresolved.',acknowledgeUncertainOutcome:true as const});
+
+test('a second owner HTTP host quarantines pending receipt failure without a configured provider or replay',async t=>{
+ class ReceiptConflictStore extends InMemoryStore<Mission>{override async commit(input:import('../src/storage.ts').CommitInput<Mission>){if(input.events.some(event=>(event as {type:string}).type==='receipt'))throw new Error('Injected lost receipt commit');return super.commit(input);}}
+ const s=await setup(t,{},new ReceiptConflictStore());await s.admit();await assert.rejects(s.product.run(s.missionId,s.workId,'interrupted-run',2),{name:'RunUnsettledError'});
+ const before=(await s.store.load(s.missionId))!;assert.equal(s.calls.length,1);assert.equal(before.value.works[0]!.effects[0]!.status,'pending');
+ const server=createWorkbench(s.store,s.root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
+ const payload={commandId:'owner-recovery',expectedRevision:before.revision,command:recoveryCommand(s.workId)};
+ const send=()=>fetch(`http://127.0.0.1:${address.port}/missions/${s.missionId}/commands`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ assert.equal((await send()).status,200);const after=(await s.store.load(s.missionId))!;const w=after.value.works[0]!;
+ assert.equal(w.execution,'cancelled');assert.equal(w.effects[0]!.status,'unknown');assert.equal(w.effects[0]!.receipt,undefined);assert.equal(w.record,undefined);assert.equal(w.budget.measured,null);assert.equal(w.budget.reserved,64);
+ assert.equal((await (await send()).json() as {status:string}).status,'replayed');assert.deepEqual(await s.store.load(s.missionId),after);
+ assert.equal((await s.product.run(s.missionId,s.workId,'do-not-replay',after.revision)).status,'already-started');assert.equal(s.calls.length,1);
+});
+
+test('quarantine during a held provider call fences late receipt, artifact, verifier, and acceptance',async t=>{
+ const s=await setup(t,{holdExecutor:true});await s.admit();const running=s.product.run(s.missionId,s.workId,'interrupted-run',2);
+ while(s.calls.length===0)await new Promise(resolve=>setTimeout(resolve,5));
+ const before=(await s.store.load(s.missionId))!;await s.product.intervene(s.missionId,{commandId:'quarantine-held',expectedRevision:before.revision,command:recoveryCommand(s.workId)});
+ const quarantined=(await s.store.load(s.missionId))!;s.release();const result=await running;assert.equal(result.status,'cancelled');assert.deepEqual(await s.store.load(s.missionId),quarantined);
+ const w=quarantined.value.works[0]!;assert.equal(w.effects.length,1);assert.equal(w.effects[0]!.receipt,undefined);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
+});
+
+test('quarantine does not claim that an already admitted dispatch in another worker stopped',async t=>{
+ let admitted!:()=>void;const admission=new Promise<void>(resolve=>admitted=resolve);let resume!:()=>void;const pause=new Promise<void>(resolve=>resume=resolve);
+ class PausedStore extends InMemoryStore<Mission>{override async commit(input:import('../src/storage.ts').CommitInput<Mission>){const result=await super.commit(input);if(input.events.some(event=>(event as {type:string}).type==='admit-effect')){admitted();await pause;}return result;}}
+ const s=await setup(t,{},new PausedStore());await s.admit();const running=s.product.run(s.missionId,s.workId,'interrupted-run',2);await admission;
+ const before=(await s.store.load(s.missionId))!;const otherHost=new ProductService(s.store);await otherHost.intervene(s.missionId,{commandId:'other-host-recovery',expectedRevision:before.revision,command:recoveryCommand(s.workId)});
+ const quarantined=await s.store.load(s.missionId);resume();const result=await running;assert.equal(result.status,'cancelled');assert.equal(s.calls.length,1,'previously admitted effect may still dispatch; no stop proof is inferred');assert.deepEqual(await s.store.load(s.missionId),quarantined);
+ assert.equal(quarantined!.value.works[0]!.effects.length,1);assert.equal(quarantined!.value.works[0]!.record,undefined);
+});
+
+test('actual Surreal receipt failure recovers in fresh client and restores quarantined history without dispatch', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
+ const {exportPortableBackup,restorePortableBackup,parsePortableBackup}=await import('../src/portable-backup.ts');
+ const suffix=Math.random().toString(36).slice(2);const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:'quarantine_'+suffix,database:'source'};const admin=createHttpRpcTransport({endpoint:options.endpoint,namespace:'massion_storage_tests',database:'massion_storage_tests'});await admin.query(`DEFINE NAMESPACE ${options.namespace}; USE NS ${options.namespace}; DEFINE DATABASE source; DEFINE DATABASE restored;`,{});const transport=createHttpRpcTransport(options);await initializeSurrealSchema(transport);
+ class ReceiptConflictStore extends SurrealStore<Mission>{override async commit(input:import('../src/storage.ts').CommitInput<Mission>){if(input.events.some(event=>(event as {type:string}).type==='receipt'))throw new Error('Injected durable-store receipt transaction interruption');return super.commit(input);}}
+ const s=await setup(t,{},new ReceiptConflictStore(transport));await s.admit();await assert.rejects(s.product.run(s.missionId,s.workId,'interrupted-run',2),{name:'RunUnsettledError'});
+ const freshStore=new SurrealStore<Mission>(createHttpRpcTransport(options));const freshOwner=new ProductService(freshStore);const before=(await freshStore.load(s.missionId))!;
+ const input={commandId:'quarantine-surreal',expectedRevision:before.revision,command:recoveryCommand(s.workId)};
+ assert.equal((await freshOwner.intervene(s.missionId,input)).status,'committed');assert.equal((await freshOwner.intervene(s.missionId,input)).status,'replayed');
+ const recovered=(await freshStore.load(s.missionId))!;assert.equal(recovered.value.works[0]!.effects[0]!.status,'unknown');assert.equal(recovered.value.works[0]!.effects[0]!.receipt,undefined);
+ const serialized=await exportPortableBackup(freshStore,s.config.artifacts);const bundle=parsePortableBackup(serialized);const last=bundle.journal.operations.at(-1)!;assert.equal(last.commandId,'quarantine-surreal');assert.deepEqual(last.outbox,[]);
+ const restoredOptions={...options,database:'restored'};const restoredTransport=createHttpRpcTransport(restoredOptions);await initializeSurrealSchema(restoredTransport);const restoredStore=new SurrealStore<Mission>(restoredTransport);
+ await restorePortableBackup(serialized,restoredStore,join(s.root,'restored-artifacts'));const secondClient=new SurrealStore<Mission>(createHttpRpcTransport(restoredOptions));assert.deepEqual(await secondClient.load(s.missionId),recovered);assert.deepEqual((await secondClient.exportJournal()).operations,bundle.journal.operations);
+ const runtime=new ConfiguredTextRuntime(secondClient,s.config);assert.equal((await runtime.run(s.missionId,s.workId,'retry-after-restore',recovered.revision)).status,'already-started');assert.equal(s.calls.length,1);assert.equal(recovered.value.works[0]!.record,undefined);
+});
+
+test('actual configured accepted Record restores original descriptor metadata and sealed artifact bytes', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
+ const {exportPortableBackup,restorePortableBackup}=await import('../src/portable-backup.ts');const namespace='configured_backup_'+Math.random().toString(36).slice(2);
+ const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace,database:'source'};const admin=createHttpRpcTransport({endpoint:options.endpoint,namespace:'massion_storage_tests',database:'massion_storage_tests'});
+ await admin.query(`DEFINE NAMESPACE ${namespace}; USE NS ${namespace}; DEFINE DATABASE source; DEFINE DATABASE restored;`,{});const source=createHttpRpcTransport(options);await initializeSurrealSchema(source);const store=new SurrealStore<Mission>(source);
+ const s=await setup(t,{},store);await s.admit();const accepted=await s.product.run(s.missionId,s.workId,'completed-run',2);assert.equal(accepted.status,'settled');const record=accepted.snapshot.value.works[0]!.record!;
+ assert.equal((record.assignments[0]!.model as unknown as {enabled:boolean}).enabled,true);
+ const bundle=await exportPortableBackup(store,s.config.artifacts);const destination=createHttpRpcTransport({...options,database:'restored'});await initializeSurrealSchema(destination);const target=new SurrealStore<Mission>(destination);
+ const restored=await restorePortableBackup(bundle,target,join(s.root,'accepted-restored'));assert.deepEqual(await target.load(s.missionId),accepted.snapshot);assert.equal(await restored.artifacts.read(record.artifact),artifactText);assert.equal(s.calls.length,2);
+});

@@ -286,3 +286,50 @@ test('missing Web Locks fails closed for mutations while snapshots can still be 
  assert.equal(app.node('mission-panel').hidden,false);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('run-fixture').disabled,true);assert.match(app.node('operation-notice').textContent,/Web Locks unavailable/);assert.equal(app.node('load-mission').disabled,false);
  app.node('work-title').value='A bounded request';await app.submit('work-form');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
 });
+
+test('owner quarantine form requires reason and explicit uncertainty acknowledgement and binds original run',async()=>{
+ const mission=fixtureMission();const w:Mission['works'][number]={...work(mission),execution:'cancelled',runtimeRun:{id:'run-original',authorizationId:'mock',criteriaHash:'a'.repeat(64),inputHash:'b'.repeat(64),mode:'mock-http',outputTokenCap:4},effects:[{id:'effect',taskId:'task',status:'pending',target:'mock',authority:'mock'}]};mission.works.push(w);let submitted:any;
+ const app=harness((path,options)=>{if(path.startsWith('/events'))return reply({events:[],cursor:0});if(options.method==='POST'){submitted=JSON.parse(options.body);return reply({status:'committed',revision:4,value:{...mission,works:[{...w,execution:'cancelled',runtimeRecovery:{runId:'run-original',actorId:'local-owner',reason:submitted.command.reason,pendingEffectIds:['effect'],unknownEffectIds:[]},effects:[{...w.effects[0],status:'unknown'}]}]}});}return reply({revision:3,value:mission});});await settle();app.node('mission-id').value=mission.id;await app.submit('load-form');
+ const form=app.all().find(node=>node.className==='quarantine-form');assert.ok(form);const reason=app.all().find(node=>node.id==='quarantine-reason-'+w.id)!;const acknowledgement=app.all().find(node=>node.id==='quarantine-ack-'+w.id)!;
+ await form.fire('submit');await settle();assert.equal(submitted,undefined);reason.value='<script>Owner inspected uncertain output</script>';await form.fire('submit');await settle();assert.equal(submitted,undefined);
+ (acknowledgement as Node&{checked:boolean}).checked=true;await form.fire('submit');await settle();const actual=JSON.parse(app.calls.find(call=>call.options.method==='POST')!.options.body);assert.equal(actual.expectedRevision,3);assert.deepEqual(actual.command,{type:'quarantine-runtime',workId:w.id,runId:'run-original',reason:reason.value,acknowledgeUncertainOutcome:true});
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.match(app.node('work-list').textContent,/Permanently quarantined/);assert.match(app.node('work-list').textContent,/<script>Owner inspected uncertain output<\/script>/);assert.equal(app.all().some(node=>node.className==='quarantine-form'),false);
+});
+test('quarantine controls are absent for unconfigured and accepted Work',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission),{...work(mission),id:'accepted',acceptance:'accepted',runtimeRun:{id:'run',authorizationId:'mock',criteriaHash:'a'.repeat(64),inputHash:'b'.repeat(64),mode:'mock-http',outputTokenCap:4}});
+ const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:3,value:mission}));await settle();app.node('mission-id').value=mission.id;await app.submit('load-form');assert.equal(app.all().some(node=>node.className==='quarantine-form'),false);
+});
+
+test('selected run unlocks owner controls after durable admission while HTTP completion remains pending',async()=>{
+ const mission=fixtureMission();mission.criteria.oracle='bounded-text-review/v1';mission.works.push(work(mission));let revision=2,command:any,finish!:(value:Reply)=>void,admitted=false;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:admitted?[{cursor:1,aggregateId:mission.id,revision:3,commandId:command.commandId,events:[{type:'activate-runtime'}]}]:[],cursor:admitted?1:0});
+  if(path.endsWith('/run')){command=JSON.parse(options.body);return new Promise(resolve=>{finish=resolve;});}
+  if(options.method==='POST'){const b=JSON.parse(options.body);assert.equal(b.command.type,'cancel');assert.equal(b.expectedRevision,3);mission.works[0]!.execution='cancelled';revision=4;return reply({status:'committed',revision,value:structuredClone(mission)});}
+  return reply({revision,value:structuredClone(mission)});
+ });await settle();app.node('mission-id').value=mission.id;await app.submit('load-form');
+ runInContext(`runtimeConfiguration={connections:[{id:'a',label:'A',backend:'model-provider',providerKind:'fixture',model:'exact',protocol:'test',endpoint:'http://127.0.0.1:1234',auth:{method:'none'},limits:{maxOutputTokens:8},usage:{inputTokens:'reported'},diagnostics:[]}],authorizations:[{id:'grant',scope:'test',mode:'mock-http',maxOutputTokensPerCall:8}]};renderMission();`,app.context);
+ const find=(id:string)=>app.all().find(n=>n.id===id)!;find('executor-profile-work:test').value='a';find('verifier-profile-work:test').value='a';find('authorization-work:test').value='grant';find('output-cap-work:test').value='4';
+ const form=app.all().find(n=>n.className==='execution-form')!;const pending=form.fire('submit');await settle();assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);const duplicate=form.fire('submit');await settle();await duplicate;assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
+ mission.works[0]!.runtimeRun={id:command.commandId,authorizationId:'grant',criteriaHash:'a'.repeat(64),inputHash:'b'.repeat(64),mode:'mock-http',outputTokenCap:4};mission.works[0]!.execution='active';revision=3;admitted=true;await app.tick();
+ assert.equal(app.all().some(n=>n.className==='execution-form'),false);const cancel=app.all().find(n=>n.textContent==='Cancel Work')!;assert.equal(cancel.disabled,false);await cancel.fire('click');await settle();assert.equal(app.calls.filter(c=>c.options.method==='POST').length,2);assert.equal(app.node('revision').textContent,'Revision 4');
+ finish(reply({status:'cancelled',snapshot:{revision:3,value:{...mission,works:[{...mission.works[0]!,execution:'active'}]}}}));await pending;await settle();assert.equal(app.node('revision').textContent,'Revision 4','late run response must not overwrite cancellation');
+});
+
+test('late admitted run error does not steal navigation to an earlier Mission',async()=>{
+ const first=fixtureMission('first');first.works.push(work(first));const second=fixtureMission('second');let finish!:(value:Reply)=>void,command:any,admitted=false;
+ const app=harness((path,options)=>{
+  if(path.endsWith('/run')){command=JSON.parse(options.body);return new Promise(resolve=>{finish=resolve;});}
+  if(path.startsWith('/events'))return reply({events:admitted?[{cursor:1,aggregateId:'first',revision:3,commandId:command.commandId,events:[{type:'activate-runtime'}]}]:[],cursor:admitted?1:0});
+  return reply({revision:path.endsWith('first')?3:1,value:path.endsWith('first')?first:second});
+ });await settle();app.node('mission-id').value='first';await app.submit('load-form');const running=runInContext(`write('/missions/first/run',{commandId:'run-background',expectedRevision:2,workId:'work:test',selection:{}},'first','Run finished')`,app.context);await settle();admitted=true;await app.tick();
+ app.node('mission-id').value='second';await app.submit('load-form');assert.equal(app.node('loaded-id').textContent,'second');const priorFirstReads=app.calls.filter(c=>c.path==='/missions/first').length;
+ finish(reply({outcome:'admitted-unsettled',error:'Synthetic connection loss'},503));await running;await settle();assert.equal(app.node('loaded-id').textContent,'second');assert.equal(app.calls.filter(c=>c.path==='/missions/first').length,priorFirstReads);
+});
+
+test('known run rollback after navigation clears only its pending marker without waiting for an impossible receipt',async()=>{
+ const first=fixtureMission('first'),second=fixtureMission('second');let finish!:(value:Reply)=>void;
+ const app=harness((path)=>{if(path.endsWith('/run'))return new Promise(resolve=>{finish=resolve;});if(path.startsWith('/events'))return reply({events:[],cursor:0});return reply({revision:1,value:path.endsWith('first')?first:second});});await settle();app.node('mission-id').value='first';await app.submit('load-form');
+ const running=runInContext(`write('/missions/first/run',{commandId:'rejected-run',expectedRevision:1,workId:'work',selection:{}},'first','Run finished')`,app.context);await settle();assert.equal(app.storage.has('massion.workbench.pending'),true);app.node('mission-id').value='second';await app.submit('load-form');
+ finish(reply({outcome:'rejected',error:'Rolled back transaction'},503));await running;await settle();assert.equal(app.storage.has('massion.workbench.pending'),false);assert.equal(app.node('loaded-id').textContent,'second');assert.equal(app.node('mission-fields').disabled,false);
+});
