@@ -15,6 +15,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <header><div class="brand"><span class="mark" aria-hidden="true">m</span>Massion</div><div class="header-meta"><span>Local development</span><span id="health" role="status"><span class="dot"></span>Connecting</span></div></header>
 <section class="intro" aria-labelledby="page-title"><div><div class="eyebrow">Purpose → Work → Evidence</div><h1 id="page-title">Work with a reason.<br>Progress you can inspect.</h1><p>Set the Mission, admit bounded Work, and follow its durable state.</p></div><p class="intro-side">Execution and acceptance are separate. A result becomes a Record only after independent evidence.</p></section>
 <div id="provider-notice" class="notice" role="status">Checking provider availability. No execution has been requested.</div>
+<div id="sync-notice" class="notice" role="status" hidden></div>
 <div id="operation-notice" class="notice" role="alert" hidden></div>
 <p id="status" class="status" role="status" aria-live="polite">Ready. Create a Mission or load an existing one.</p>
 <main class="layout">
@@ -66,7 +67,7 @@ const initialReference = missionReference();
 let selectedId = initialReference.present ? initialReference.id : storage.get(missionKey) || storage.get('massion.fixture.mission') || '';
 let cursor = Number(storage.get(cursorKey) || 0);
 if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
-let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false;
+let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 const drafts = new Map(), confirmedOperations = new Set();
@@ -148,7 +149,9 @@ $('mission-id').value = selectedId;
 function element(tag, text, className) { const item = document.createElement(tag); if (text !== undefined) item.textContent = String(text); if (className) item.className = className; return item; }
 function report(message, tone = '') { $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : ''); }
 function controls() {
-  const locked = busy || loading || !!unknownOperation || !!recoveryProblem;
+  const locked = reconnectRequired || busy || loading || !!unknownOperation || !!recoveryProblem;
+  $('sync-notice').hidden = !reconnectRequired;
+  $('sync-notice').textContent = reconnectRequired ? 'New actions are paused until current host state and permissions are refreshed. Mission reads and your drafts remain available. No command is retried.' : '';
   $('mission-fields').disabled = locked;
   connectionControls();
   $('work-fields').disabled = locked || !snapshot;
@@ -384,7 +387,7 @@ function receiptObserved() {
 }
 async function pollEvents() {
   if (polling) return;
-  polling = true;
+  polling = true; const epoch = connectionEpoch;
   try {
     const after = unknownOperation ? Math.min(cursor, unknownOperation.reconcileCursor) : cursor;
     const {response, body} = await request('/events?after=' + after);
@@ -407,15 +410,25 @@ async function pollEvents() {
     $('event-state').textContent = 'Connected · ' + cursor; $('event-state').className = 'tag good';
     $('event-help').textContent = 'Committed events refresh this Mission automatically. Cursor ' + cursor + ' is saved for reconnect.';
     renderActivity();
-    if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
+    if (reconnectRequired) {
+      if (busy || loading) return;
+      if (!await refreshProviders()) throw new Error('Current host permissions could not be refreshed');
+      await refreshConnections(); providerNotice();
+      const missionId = selectedId;
+      if (missionId && !await loadMission(missionId, false)) throw new Error('Current Mission could not be refreshed');
+      if (epoch !== connectionEpoch || missionId !== selectedId) throw new Error('Connection or selected Mission changed during refresh');
+      if (snapshot) renderMission();
+      reconnectRequired = false; eventRefreshNeeded = false; controls();
+    } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
+    requireReconnect();
     $('event-state').textContent = 'Disconnected'; $('event-state').className = 'tag warn';
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
 async function write(path, body, missionId, successMessage) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
-  if (busy || loading || unknownOperation || recoveryProblem) return false;
+  if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
   busy = true; controls();
   if (!await persistPending(operation)) { busy = false; controls(); return false; }
@@ -469,13 +482,13 @@ async function write(path, body, missionId, successMessage) {
   } finally { if(ownsBusy)busy = false; controls(); if (eventRefreshNeeded && !unknownOperation) { eventRefreshNeeded = false; void loadMission(selectedId,false); } }
 }
 async function sendCommand(command) {
-  if (!snapshot || busy || loading || unknownOperation || recoveryProblem) return;
+  if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
   const missionId = snapshot.value.id;
   const ok = await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'quarantine-runtime' ? 'Work permanently quarantined. External outcomes remain unresolved; no run was replayed.' : command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
   if (ok && command.type === 'steer') { drafts.delete(command.workId); renderMission(); }
 }
 $('mission-form').addEventListener('submit', async event => {
-  event.preventDefault(); if (busy || loading || unknownOperation || recoveryProblem) return;
+  event.preventDefault(); if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
   const purpose = $('purpose').value.trim(), scope = $('scope').value.trim(), description = $('criteria').value.trim();
   if (!purpose || !scope || !description) { report('Purpose, scope and success criteria are required.','error'); return; }
   const id = 'mission:' + crypto.randomUUID();
@@ -483,7 +496,7 @@ $('mission-form').addEventListener('submit', async event => {
   if (await write('/missions',body,id,'Mission created.')) $('mission-form').reset();
 });
 $('work-form').addEventListener('submit', async event => {
-  event.preventDefault(); if (!snapshot || busy || loading || unknownOperation || recoveryProblem) return;
+  event.preventDefault(); if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
   const title = $('work-title').value.trim(), budgetText = $('work-budget').value, budget = Number(budgetText);
   if (!title || !budgetText || !Number.isFinite(budget) || budget < 0) { report('Enter a Work title and a nonnegative finite budget.','error'); return; }
   const id = snapshot.value.id;
@@ -492,7 +505,7 @@ $('work-form').addEventListener('submit', async event => {
 });
 $('load-form').addEventListener('submit', event => { event.preventDefault(); if (!busy) void loadMission($('mission-id').value.trim()); });
 $('run-fixture').addEventListener('click', async () => {
-  if (busy || loading || unknownOperation || recoveryProblem || fixtureUnknown) return;
+  if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem || fixtureUnknown) return;
   busy = true; controls();
   if (!await claimFixture()) { busy = false; controls(); return; }
   controls(); report('Running the separate controlled development fixture. Real local file and process effects are in flight…');
@@ -510,7 +523,7 @@ $('run-fixture').addEventListener('click', async () => {
 });
 let connectionCatalog=null,connectionSequence=0,connectionBusy=false,connectionDiscovery=null,connectionReading=false;
 const connectionButtons=new Set();
-function connectionLocked(){return busy||loading||!!unknownOperation||!!recoveryProblem||!!snapshot?.value.works.some(work=>work.execution==='active'||work.effects.some(effect=>effect.status==='pending'||effect.status==='unknown'));}
+function connectionLocked(){return reconnectRequired||busy||loading||!!unknownOperation||!!recoveryProblem||!!snapshot?.value.works.some(work=>work.execution==='active'||work.effects.some(effect=>effect.status==='pending'||effect.status==='unknown'));}
 function connectionControls(){const locked=connectionBusy||connectionLocked();for(const button of connectionButtons)button.disabled=locked;$('connection-fields').disabled=connectionLocked()||connectionBusy&&!connectionReading||!connectionCatalog||!!connectionCatalog.host?.managed;}
 function installConnections(body){
  if(!body||!Array.isArray(body.providerTypes)||!Array.isArray(body.connections)||!body.runtime||!Array.isArray(body.runtime.connections)||!Array.isArray(body.runtime.authorizations))throw new Error('Invalid connection catalog');
@@ -537,23 +550,23 @@ async function refreshConnections(){try{const {response,body}=await request('/co
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent='Connection metadata saved. Explore models or enter a model manually. Live inference remains unverified.';}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
+function requireReconnect() { reconnectRequired = true; ++connectionEpoch; controls(); }
+async function refreshProviders() {
+  try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
+  catch { providerKnown = false; runtimeConfiguration = null; providerNotice(); if (snapshot) renderMission(); return false; }
+}
 async function connect() {
+  requireReconnect();
   try { const {response,body} = await request('/health'); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
   catch { $('health').textContent = 'Host unavailable'; }
-  try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; }
-  catch { providerKnown = false; runtimeConfiguration = null; }
-  await refreshConnections();
-  providerNotice();
-  if (selectedId) await loadMission(selectedId);
-  else if (initialReference.present) report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error');
-  // A fresh catalog invalidates prior selection checks even when Work revision is unchanged.
-  if (snapshot) renderMission();
   await pollEvents();
+  if (!selectedId && initialReference.present) report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error');
 }
 controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { void connect(); });
+window.addEventListener('offline', requireReconnect);
 function restoreMissionAddress() { window.history.replaceState(null, '', snapshot ? '#mission=' + encodeURIComponent(snapshot.value.id) : window.location.pathname + window.location.search); }
 window.addEventListener('hashchange', () => {
   const reference = missionReference();
