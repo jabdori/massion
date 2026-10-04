@@ -45,6 +45,12 @@ A later boundary regression reproduced valid 512-character connection labels fai
 automatic profile enrollment when concatenated with model IDs. Profiles now use
 the exact model ID as their display label; the connection retains its owner label.
 
+Independent Codex review also found generated inference URLs could exceed the
+profile catalog limit while the discovery URL passed transport validation. The
+manifest parser now checks each generated native inference endpoint, including
+the 512-character boundary, before database startup. The regression failed before
+the fix and checks both rejection and the accepted exact boundary.
+
 ## Reproduce
 
 ```sh

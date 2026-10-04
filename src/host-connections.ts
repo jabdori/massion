@@ -41,6 +41,7 @@ export function parseHostManifest(value:unknown):HostManifest {
   requireHost(value.mode!=='https'||provider.id==='compatible'||entry.baseUrl===provider.baseUrl,'custom destinations require the compatible provider');
   requireHost(Array.isArray(entry.models)&&entry.models.length>0,'exact models required');
   const models=new Set<string>();for(const model of entry.models){requireHost(typeof model==='string'&&/^[a-zA-Z0-9._:/-]{1,256}$/.test(model)&&(provider.id!=='gemini'||/^[a-zA-Z0-9._-]{1,128}$/.test(model)),'invalid exact model');requireHost(!models.has(model),'duplicate model');models.add(model);}
+  for(const model of models){const suffix=provider.id==='anthropic'?'/messages':provider.id==='gemini'?'/models/'+model+':generateContent':'/chat/completions';const endpoint=entry.baseUrl+suffix.slice(1);requireHost(endpoint.length<=512,'inference endpoint exceeds profile limit');try{validateModelEndpoint(endpoint,value.mode,suffix);}catch{throw new DomainError('Host configuration: invalid inference endpoint');}}
   modelCount+=models.size;requireHost(modelCount<=64,'at most 64 models allowed');requireHost(!ids.has(entry.id),'duplicate connection');ids.add(entry.id);
   if(value.mode==='https'){
    fields(entry.credential,['ref','environment']);identity(entry.credential.ref);
