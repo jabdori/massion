@@ -74,7 +74,7 @@ let feedId = storage.get(feedKey) || '';
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
-let impactSequence = 0, impactReading = false;
+let impactSequence = 0, impactReading = false, impactFocus = null;
 const drafts = new Map(), instructionConflicts = new Map(), instructionSubmissions = new Map(), confirmedOperations = new Set();
 const instructionKey = (missionId, workId) => JSON.stringify([missionId, workId]);
 function confirmOperation(operation) {
@@ -193,9 +193,10 @@ function impactControls() {
   $('impact-read').disabled = !current || !feedId || loading || impactReading;
   $('impact-scope').textContent = current ? 'Mission: ' + snapshot.value.id + ' · Scope: ' + snapshot.value.scope + ' · Current revision: ' + snapshot.revision : 'No current Mission selected.';
   $('impact-results').setAttribute('aria-busy',String(impactReading));
+  if (impactFocus && !$('impact-read').disabled) { const pending = impactFocus; impactFocus = null; if (currentImpact(pending.choice)) restoreControlFocus(pending.previous,'impact-read'); }
 }
 function invalidateImpact(message = 'Selection changed. Read impact again for this exact target and version.') {
-  ++impactSequence; impactReading = false;
+  ++impactSequence; impactReading = false; impactFocus = null;
   $('impact-results').replaceChildren(); $('impact-results').hidden = true;
   $('impact-status').textContent = message; $('impact-status').className = 'status'; impactControls();
 }
@@ -240,7 +241,7 @@ $('impact-form').addEventListener('submit',async event => {
     if (!validImpact(body,choice)) throw new Error('The reply does not match the selected Mission revision, target, version or relation evidence. Refresh current Mission state before another read.');
     renderImpact(body); $('impact-status').textContent = body.affected.length ? 'Impact read complete. Stored dependencies are shown; no Work or result was changed.' : 'Impact read complete. No dependent versions were found; this does not establish that the target exists.';
   } catch(error) { if (currentImpact(choice)) { $('impact-status').textContent = 'Impact unavailable: ' + error.message; $('impact-status').className = 'status error'; } }
-  finally { if (currentImpact(choice)) { impactReading = false; impactControls(); if (submittedFocus === $('impact-read')) restoreControlFocus(submittedFocus,'impact-read'); } }
+  finally { if (currentImpact(choice)) { impactReading = false; if (submittedFocus === $('impact-read')) impactFocus = {choice,previous:submittedFocus}; impactControls(); } }
 });
 async function request(path, options = {}, timeout = 15000) {
   const controller = new AbortController();

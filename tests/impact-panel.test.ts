@@ -19,7 +19,7 @@ function result(id:string,entity:string,version:number,revision=1,feedId='feed:p
  const relations:Relation[]=[{from:'dependent:'+entity,to:entity,type:'evidenced-by',fromVersion:3,toVersion:version,provenance:'Recorded <img src=x> source, not a verdict',inferred:true}];
  return {missionId:id,revision,feedId,cursor:revision,changed:{id:entity,version},affected:relations.map(r=>r.from+'@'+r.fromVersion),relations};
 }
-async function fixture(onImpact:(id:string,entity:string,version:number)=>Reply|Promise<Reply>=(id,entity,version)=>reply(result(id,entity,version)),pending=false){
+async function fixture(onImpact:(id:string,entity:string,version:number)=>Reply|Promise<Reply>=(id,entity,version)=>reply(result(id,entity,version)),pending=false,onRead=(r:Reply):Reply|Promise<Reply>=>r){
  const missions=new Map([['mission:panel',mission()],['mission:other',mission('mission:other')]]);let revision=1,feedId='feed:panel';
  const handler:Handler=(path,options)=>{
   assert.notEqual(options.method,'POST','Impact panel must never mutate');
@@ -31,7 +31,7 @@ async function fixture(onImpact:(id:string,entity:string,version:number)=>Reply|
    if(options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feedId)return reply({error:'Feed changed'},409);
    const after=Number(url.searchParams.get('after'));return reply({feedId,cursor:revision,events:revision>after&&revision>1?[{cursor:revision,aggregateId:'mission:panel',revision,commandId:'revision-'+revision,events:[]}]:[]});
   }
-  if(url.pathname==='/read-state'){const selected=missions.get(url.searchParams.get('mission')!);return reply({feedId,cursor:revision,snapshot:selected?{revision,value:selected}:null});}
+  if(url.pathname==='/read-state'){const selected=missions.get(url.searchParams.get('mission')!);return onRead(reply({feedId,cursor:revision,snapshot:selected?{revision,value:selected}:null}));}
   const impact=/^\/missions\/([^/]+)\/impact$/.exec(url.pathname);if(impact)return onImpact(decodeURIComponent(impact[1]!),url.searchParams.get('entity')!,Number(url.searchParams.get('version')));
   if(url.pathname.startsWith('/missions/')){const selected=missions.get(decodeURIComponent(url.pathname.slice(10)));return selected?reply({revision,value:selected}):reply({error:'Missing Mission'},404);}
   throw new Error('Unexpected route '+path);
@@ -107,4 +107,18 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory'
  hold=true;const old=client.submit('impact-form');await until(()=>typeof release==='function');client.node('impact-version').value='2';await client.node('impact-version').fire('input');await client.submit('impact-form');assert.match(client.node('impact-results').textContent,/No stored relation/);const current=client.node('impact-results').textContent;release();await old;assert.equal(client.node('impact-results').textContent,current);
  assert.deepEqual(await store.load(id),snapshot);assert.deepEqual(await readJournal(),journal);assert.equal(client.calls.filter(c=>c.options.method==='POST').length,0);assert.equal(client.storage.has('massion.workbench.pending'),false);
  t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',impactGETs:client.calls.filter(c=>c.path.includes('/impact?')).length,posts:0,unchangedSnapshotAndJournal:true,staleVersionReplyDiscarded:true,providerCalls:0}));
+});
+
+for(const outcome of ['success','error'])for(const moved of [false,true])test(`impact ${outcome} settling before a same-Mission refresh ${moved?'preserves moved focus':'restores focus after the button is enabled'}`,async()=>{
+ let holdRead=false,readReply!:Reply,releaseRead!:(r:Reply)=>void,releaseImpact!:(r:Reply)=>void;
+ const {app,choose}=await fixture(()=>new Promise<Reply>(r=>releaseImpact=r),false,r=>{readReply=r;return holdRead?new Promise<Reply>(done=>releaseRead=done):r;});
+ const doc=(app.context as any).document,button=app.node('impact-read');button.onFocus=()=>{if(!button.disabled)doc.activeElement=button;};await choose('target','1');button.focus();const pending=app.submit('impact-form');await settle();doc.activeElement={tagName:'BODY',id:''};
+ holdRead=true;app.node('mission-id').value='mission:panel';const loading=app.submit('load-form');await settle();assert.ok(releaseRead);releaseImpact(outcome==='success'?reply(result('mission:panel','target',1)):reply({error:'Controlled read failure'},503));await pending;
+ assert.equal(button.disabled,true);assert.equal(doc.activeElement.tagName,'BODY');if(moved)app.node('mission-id').focus();releaseRead(readReply);await loading;await settle();
+ assert.equal(button.disabled,false);assert.equal(doc.activeElement.id,moved?'mission-id':'impact-read');assert.equal(app.calls.filter(c=>c.path.includes('/impact?')).length,1);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+test('editing a target clears deferred impact focus while its Mission refresh is still pending',async()=>{
+ let hold=false,packet!:Reply,releaseRead!:(r:Reply)=>void,releaseImpact!:(r:Reply)=>void;const {app,choose}=await fixture(()=>new Promise<Reply>(r=>releaseImpact=r),false,r=>{packet=r;return hold?new Promise<Reply>(done=>releaseRead=done):r;});
+ const doc=(app.context as any).document;app.node('impact-read').focus();await choose('target','1');const pending=app.submit('impact-form');await settle();hold=true;app.node('mission-id').value='mission:panel';const loading=app.submit('load-form');await settle();releaseImpact(reply(result('mission:panel','target',1)));await pending;
+ app.node('impact-entity').focus();await choose('other','1');releaseRead(packet);await loading;await settle();assert.equal(doc.activeElement.id,'impact-entity');assert.equal(app.node('impact-results').hidden,true);assert.equal(app.calls.filter(c=>c.path.includes('/impact?')).length,1);
 });
