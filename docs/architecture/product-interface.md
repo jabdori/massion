@@ -46,6 +46,11 @@ snapshot/feed boundary again. This also detects replacement before event polling
 has noticed it. Delayed fixture responses retain their unknown marker on either
 feed mismatch or failed current-Mission read. A read boundary is not a replay or
 an authorization for a new effect.
+The host's initial feed check is backed by an atomic expected-feed condition in
+every request-scoped application/runtime/fixture commit. Replacement after that
+initial read cannot write into or admit a provider effect on the new database.
+If a multi-commit request has already started, mismatch remains an unknown overall
+outcome: earlier effects are not undone or replayed and its marker is retained.
 Production retained-feed fallback/retention, identity-scoped feeds, event-stream
 transport, leases and multiple-host load behavior remain open.
 

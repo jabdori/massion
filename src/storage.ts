@@ -1,4 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const admissionFeed = new AsyncLocalStorage<string>();
+/** Bind every application/runtime/fixture commit in this request to its admitted database. */
+export function withAdmissionFeed<R>(feedId: string, action: () => R): R {
+  identifier(feedId,'feedId'); return admissionFeed.run(feedId,action);
+}
+export class FeedAdmissionError extends Error {
+  constructor() { super('Database feed changed before this transaction could admit a mutation. Earlier request effects may still be unresolved.'); this.name='FeedAdmissionError'; }
+}
 
 export interface Snapshot<T> { revision: number; value: T }
 export interface CommitInput<T> {
@@ -234,6 +244,8 @@ export class InMemoryStore<T> implements Store<T> {
   }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest } = prepare(command);
+    const expectedFeed=admissionFeed.getStore();
+    if(expectedFeed!==undefined && expectedFeed!==this.feedId)throw new FeedAdmissionError();
     const existing = this.operations.get(input.commandId);
     if (existing) return replay(existing, input, digest);
     const actual = this.states.get(input.id)?.revision ?? 0;
@@ -523,6 +535,9 @@ COMMIT TRANSACTION;
 export const COMMIT_QUERY = `
 BEGIN TRANSACTION;
 RETURN {
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
+IF $expectedFeed != '' AND $feed.feedId != $expectedFeed { RETURN {status:'feed-mismatch',feedId:$feed.feedId}; };
 LET $state = type::record('massion_state', $aggregateKey);
 LET $operation = type::record('massion_operation', $operationKey);
 LET $existing = SELECT * FROM ONLY $operation;
@@ -538,8 +553,6 @@ IF $actual != $expectedRevision {
   RETURN { status: 'conflict', revision: $actual, reason: 'revision' };
 };
 LET $next = $actual + 1;
-LET $feed = SELECT * FROM ONLY massion_feed:global;
-IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
 IF $feed.cursor >= 9007199254740991 { THROW 'Event cursor exhausted'; };
 LET $cursor = $feed.cursor + 1;
 UPDATE massion_feed:global SET cursor = $cursor;
@@ -703,22 +716,27 @@ export class SurrealStore<T> implements Store<T> {
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     // Capture/validate before waiting: callers cannot mutate queued submissions.
     const { input } = prepare(command);
-    const result = this.commitQueue.then(() => this.commitOnce(input));
+    const expectedFeed=admissionFeed.getStore() ?? '';
+    const result = this.commitQueue.then(() => this.commitOnce(input,expectedFeed));
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }
-  private async commitOnce(command: CommitInput<T>): Promise<CommitResult<T>> {
+  private async commitOnce(command: CommitInput<T>,expectedFeed:string): Promise<CommitResult<T>> {
     const { input, digest, aggregateKey, operationKey } = prepare(command);
     const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
     const variables = {
+      expectedFeed,
       aggregateId: input.id, aggregateKey, operationKey, commandId: input.commandId,
       fingerprint: input.fingerprint, contentDigest: digest, expectedRevision: input.expectedRevision,
       value: input.value, events: input.events, outbox: input.outbox,
       eventRows: rows(input.events), outboxRows: rows(input.outbox), recordedAt: this.clock().toISOString(),
     };
     try {
-      return commitResult<T>(oneResult(await this.transport.query(COMMIT_QUERY, variables)));
+      const result=oneResult(await this.transport.query(COMMIT_QUERY, variables));
+      if(object(result)&&result.status==='feed-mismatch')throw new FeedAdmissionError();
+      return commitResult<T>(result);
     } catch (cause) {
+      if(cause instanceof FeedAdmissionError)throw cause;
       // A timeout, disconnect, malformed response, or proxy error may follow a commit.
       // Read operation identity once; never retransmit COMMIT_QUERY automatically.
       try {

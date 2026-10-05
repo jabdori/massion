@@ -84,6 +84,16 @@ feeds and existing schema-2 feeds lacking it; repeated initialization keeps it.
 This metadata does not change journal operations, CAS or command receipts.
 Portable journal restore into a freshly initialized database retains its new feed
 identity, so even identical numeric cursors cannot masquerade as the previous DB.
+Protected HTTP mutation requests establish `withAdmissionFeed` request-local async
+scope. Each in-memory commit checks it in its synchronous critical section; each
+SurrealDB commit checks the captured expected feed in the same transaction before
+idempotency lookup, CAS, cursor allocation or journal/outbox writes. The feed is
+captured before the store queue wait and also applies to runtime/fixture commits
+made through existing store instances. A mismatch never reconciles against a
+different database's command identity and never dispatches a new effect there.
+Earlier admitted effects may remain unresolved, so the host reports an unknown
+request outcome and preserves recovery markers rather than clearing them as if
+the whole multi-commit request had rolled back.
 Numeric-only `readEvents` remains available for existing headless callers and
 cannot identify same-position database replacement by itself.
 

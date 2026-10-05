@@ -104,3 +104,27 @@ journals and screenshots are in the task-owned `review-browser` evidence. Automa
 replay POSTs and model calls remain zero; current replacement journals remain at
 their two seeded operations. Failed QA wait conditions and a hidden fixture-button
 attempt are retained as incomplete runs and are not counted as successful checks.
+
+## Atomic mutation admission follow-up
+
+Re-review of `849c6af` identified
+[P1 admission race](https://github.com/jabdori/massion/pull/14#discussion_r4180749169):
+replacement after the host feed precheck could direct a mutation to the new DB.
+`tests/feed-admission.test.ts` reproduces create/admit/steer/runtime/fixture on both
+in-memory and actual stores: 10 failed before correction, then 10/10 passed.
+Four further runtime/fixture cases replace the binding after earlier admission;
+all 14 cases pass with the replacement journal unchanged and fixture-provider
+transport calls zero. Request-local async feed scope reaches all store commits;
+the guard is checked in the commit transaction before any mutation, including
+replay lookup, and is captured before queueing. The request is not automatically
+retried and earlier effects are not declared rolled back.
+
+Actual Chrome separately injects replacement between precheck and first commit
+for an explicitly requested instruction and development fixture. Each gets one
+503 unknown acknowledgement, retains its command/fixture marker, observes the
+current snapshot after synchronization and sends no replay/model call. Both
+isolated journals remain at their two seeds. Task evidence is in
+`admission-browser`, with exact tested source hashes and screenshots. The revised
+actual-store/crash/restore aggregate is 343 passed, 0 failed/skipped; earlier
+329/329 and 324/324 remain historical, separate checkpoints. Current published
+head/base, CI and independent review disposition are recorded in Draft #14.
