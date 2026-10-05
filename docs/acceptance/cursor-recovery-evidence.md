@@ -142,3 +142,16 @@ checkpoint verifies the atomic admission commit and remains separately recorded.
 The related client/setup regressions passed 72, with one conditional DB skip;
 the actual aggregate includes that DB path. Prior focused Chrome admission
 evidence retains its exact source hashes and is not relabeled as this new client.
+
+## Empty replacement follow-up
+
+Re-review of `0a1159b` found that a replacement lacking the selected Mission
+returned a valid null snapshot but could not establish its new feed boundary.
+Two client regressions failed before correction and pass after: empty replacement
+adopts its feed, clears unavailable selection and permits creation after host
+permissions refresh; an unresolved command retains its exact marker and write
+lock. Neither recovery sends a POST. Null snapshots are accepted only after
+validating the feed, cursor and current read/connection ownership.
+Related checks passed 74 with one conditional DB skip. The final serial actual
+DB/restart/restore aggregate passed 346, with no failures or skips; strict types
+and runtime syntax also passed. Earlier 344/344 remains a separate checkpoint.

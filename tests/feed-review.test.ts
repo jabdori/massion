@@ -47,3 +47,20 @@ test('paginated reconnect keeps the delivered cursor until every event page is o
  assert.deepEqual(app.calls.filter(c=>c.path.startsWith('/events')).map(c=>Number(new URL(c.path,'http://localhost').searchParams.get('after'))),[0,100,200]);
  assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
 });
+for(const pending of [false,true])test(`empty replacement adopts its feed and ${pending?'preserves unknown admission':'unlocks creation'}`,async()=>{
+ let feed='feed:a';
+ const marker=JSON.stringify({commandId:'unresolved',missionId:mission.id,reconcileCursor:0});
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/events'))return options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feed?reply({},409):reply({feedId:feed,cursor:feed==='feed:a'?1:0,events:[]});
+  if(path.startsWith('/read-state'))return reply({feedId:feed,cursor:feed==='feed:a'?1:0,snapshot:feed==='feed:a'?{revision:1,value:mission}:null});
+  return reply({revision:1,value:mission});
+ },pending?{'massion.workbench.pending':marker}:{},undefined,{fragment:'#mission=mission%3Areview'});
+ await settle();feed='feed:b';await app.tick();await app.tick();await app.tick();
+ assert.equal(app.storage.get('massion.workbench.feed'),'feed:b');
+ assert.equal(app.storage.get('massion.workbench.cursor'),'0');
+ assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.fragment(),'');
+ assert.equal(app.node('sync-notice').hidden,true);
+ assert.equal(app.node('mission-fields').disabled,pending);
+ if(pending)assert.equal(app.storage.get('massion.workbench.pending'),marker);
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});

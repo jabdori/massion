@@ -447,15 +447,17 @@ async function refreshReadState(epoch, expectedFeed) {
   try {
     const {response,body} = await request('/read-state' + (missionId ? '?mission=' + encodeURIComponent(missionId) : ''));
     if (epoch !== connectionEpoch || sequence !== readSequence || missionId !== selectedId) throw new Error('Connection or selected Mission changed during read recovery');
-    if (response.ok && missionId && body.snapshot === null) { clearSnapshot('This Mission is absent from the current database. Load an existing Mission to continue reading.'); throw new Error('Selected Mission is absent from the current database'); }
-    if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
+    if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? body.snapshot !== null && !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
     if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
     if (feedId && body.feedId !== feedId) {
       activity = []; confirmedOperations.clear();
     }
     // Receipts predating this snapshot still matter; a fresh boundary is not command reconciliation.
     if (unknownOperation) unknownOperation.reconcileCursor = 0;
-    if (missionId) installSnapshot(body.snapshot);
+    if (missionId && body.snapshot === null) {
+      rememberMission(''); storage.remove('massion.fixture.mission');
+      clearSnapshot('This Mission is absent from the current database. Create or load current state after reconnecting.');
+    } else if (missionId) installSnapshot(body.snapshot);
     feedId = body.feedId;
     // Same-feed snapshot reads may be ahead of bounded event pages. Only reset
     // the event boundary when recovering a replaced/invalid feed, not reconnecting.
