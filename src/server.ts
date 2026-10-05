@@ -23,7 +23,8 @@ function decodeIdentifier(value:string):string {let decoded:string;try{decoded=d
 export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench}={}) {
  let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime);
  const server=createServer(async(req,res)=>{
-  const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
+  let mutationFeed='';
+  const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(mutationFeed && value && typeof value==='object' ? {...value,feedId:mutationFeed} : value));};
   const address=server.address();const port=typeof address==='object'&&address?address.port:0;
   const expected=`127.0.0.1:${port}`;
   if(req.headers.host!==expected){send(403,{error:'Loopback host required'});return;}
@@ -37,6 +38,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
   const sendCommit=(result:{status:string;revision:number},created=false)=>send(result.status==='conflict'?409:created&&result.status==='committed'?201:200,result);
   try{
    const url=new URL(req.url??'/',`http://${expected}`);
+   if(req.method==='POST'&&(url.pathname==='/missions'||url.pathname.startsWith('/missions/')||url.pathname==='/fixture-run')){mutationFeed=(await store.readState()).feedId;const requested=req.headers['x-massion-feed'];if(requested!==undefined){identifier(requested,'Feed identity');if(requested!==mutationFeed){send(409,{error:'Database changed before admission',reason:'feed',outcome:'rejected'});return;}}}
    if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
    if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}

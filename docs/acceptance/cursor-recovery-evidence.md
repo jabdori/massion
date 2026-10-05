@@ -69,3 +69,38 @@ must not be added. Raw DB copies preserving feed identity, journal tampering or
 arbitrary rollback within one identity are outside this contract. Retention,
 remote identity/authentication, general conversation design, live-provider quality,
 merge and deployment remain separate gates.
+
+## Independent review follow-up
+
+Codex completed review of published `81d2176` with three P1 findings:
+[acknowledgement before polling](https://github.com/jabdori/massion/pull/14#discussion_r4180669360),
+[routine snapshot reads](https://github.com/jabdori/massion/pull/14#discussion_r4180669367)
+and [fixture marker loss](https://github.com/jabdori/massion/pull/14#discussion_r4180669370).
+`tests/feed-review.test.ts` reproduced all four paths (fixture before/after polling
+are separate cases): 0 passed, 4 failed on that source, then 4/4 after correction.
+The HTTP regression rejects old-feed command/fixture admission without any journal
+entry and checks the originating feed in a successful acknowledgement.
+
+The client now verifies both the acknowledgement's server-checked feed and a fresh
+current snapshot/feed before settling it. Ordinary Mission reads use the same
+atomic endpoint and close the write barrier on mismatch. Fixture recovery retains
+its marker until the current originating Mission is successfully read. Related
+actual DB/HTTP/client checks pass 86/86; the revised actual-store/crash/restore
+aggregate passes 329/329 with zero failures/skips, plus pinned static types and
+runtime syntax. The earlier 324/324 is its own historical checkpoint, not a count
+to add or evidence that the three P1s were absent. Exact revised published SHA,
+focused actual Chrome evidence and independent re-review are recorded in Draft
+[#14](https://github.com/jabdori/massion/pull/14) and its linked issue #4 comment.
+
+Focused actual Chrome checks now cover all three revised boundaries before event
+polling can observe replacement. The command case holds one actual committed
+steering reply, retains its marker/private draft, and requires the current feed
+before settlement. The fixture case holds one explicitly requested development
+fixture reply after its controlled old-DB file/process effects, then retains the
+fixture marker across replacement. The explicit snapshot case sends no POST and
+closes the write barrier before old permissions can be mixed with a new feed.
+Their actual source hashes, withheld-event-read fault injection, original/current
+journals and screenshots are in the task-owned `review-browser` evidence. Automatic
+replay POSTs and model calls remain zero; current replacement journals remain at
+their two seeded operations. Failed QA wait conditions and a hidden fixture-button
+attempt are retained as incomplete runs and are not counted as successful checks.

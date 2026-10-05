@@ -7,6 +7,16 @@ import {join} from 'node:path';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import type {Mission} from '../src/domain.ts';
+test('server tags command acknowledgements and rejects old feed admission before command or fixture effects',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-feed-http-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ try{
+  const boundary=await store.readState();const body={id:'mission:feed',commandId:'create:feed',purpose:'Feed-bound command',scope:'feed',constraints:[],criteria:{version:1,description:'No stale admission',oracle:'manual-review/v1'}};
+  const post=(path:string,feed:string)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify(path==='/fixture-run'?{}:body)});
+  for(const path of ['/missions','/fixture-run']){const response=await post(path,'old:feed');assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'Database changed before admission',reason:'feed',outcome:'rejected',feedId:boundary.feedId});}
+  assert.equal((await store.readEvents(0)).events.length,0);
+  const response=await post('/missions',boundary.feedId);assert.equal(response.status,201);assert.equal((await response.json() as {feedId:string}).feedId,boundary.feedId);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}
+});
 test('headless clients share authoritative fixture results; web commands cannot forge pass',async()=>{
  const root=await mkdtemp(join(tmpdir(),'massion-http-'));const server=createWorkbench(new InMemoryStore<Mission>(),root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
  try{

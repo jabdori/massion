@@ -37,6 +37,15 @@ does not settle a command. Pending receipt catch-up starts at zero after fresh
 synchronization and only its exact receipt permits clearing the command marker.
 No mutation or model dispatch is automatically replayed. See
 [bounded recovery evidence](../acceptance/cursor-recovery-evidence.md).
+Routine Mission refreshes also use the atomic read endpoint once feed identity is
+known; a different feed or newer connection closes the write barrier. Commands and
+fixture requests carry `X-Massion-Feed`; the host rejects a stale identity before
+admission and tags acknowledgements with the checked originating feed. Before a
+successful acknowledgement can settle a marker, the client reads the current
+snapshot/feed boundary again. This also detects replacement before event polling
+has noticed it. Delayed fixture responses retain their unknown marker on either
+feed mismatch or failed current-Mission read. A read boundary is not a replay or
+an authorization for a new effect.
 Production retained-feed fallback/retention, identity-scoped feeds, event-stream
 transport, leases and multiple-host load behavior remain open.
 
