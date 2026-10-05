@@ -4,8 +4,8 @@ import {spawn} from 'node:child_process';
 import type {ChildProcess} from 'node:child_process';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {readFile,writeFile,mkdtemp,readlink,realpath,stat,rm,readdir} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
+import {readFile,writeFile,mkdtemp,readlink,rm,readdir} from 'node:fs/promises';
+import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {runInContext} from 'node:vm';
@@ -13,38 +13,8 @@ import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../sr
 import type {Mission} from '../src/domain.ts';
 import {ProductService} from '../src/product.ts';
 import {harness,reply,selectionField} from './support/workbench-client.ts';
+import {verifyDisposableDatabase} from './support/owned-process.ts';
 const entry=fileURLToPath(new URL('./support/host-kill-child.ts',import.meta.url));
-async function processIdentity(pid:number){
- const raw=await readFile('/proc/'+pid+'/stat','utf8');
- return {parentPid:Number(raw.slice(raw.lastIndexOf(')')+2).split(' ')[1]),argv:(await readFile('/proc/'+pid+'/cmdline','utf8')).split('\0').filter(Boolean),cwd:await readlink('/proc/'+pid+'/cwd')};
-}
-/** Reject unrelated RPC services before any database request or process signal. */
-async function verifyDisposableDatabase(){
- const root=process.env.SURREAL_TEST_RUNTIME!;
- assert.equal(await realpath(root),root);
- assert.equal(resolve(root,'..'),await realpath(tmpdir()));
- assert.match(root.split('/').at(-1)!,/^disposable-/);
- assert.equal((await stat(root)).uid,process.getuid!());
- const metadata=JSON.parse(await readFile(join(root,'server.json'),'utf8'));
- const pid=Number(process.env.SURREAL_TEST_PID);
- assert.ok(Number.isSafeInteger(pid)&&pid>1);
- assert.equal(metadata.pid_in_this_exec_namespace,pid);
- assert.equal(metadata.runtime,root);
- assert.equal(metadata.url+'/rpc',process.env.MASSION_TEST_SURREAL_RPC);
- assert.equal(metadata.version,'3.3.0');
- const identity=await processIdentity(pid);
- assert.equal(await realpath(identity.argv[0]!),await realpath(metadata.binary));
- assert.ok(identity.argv.includes('surrealkv://'+join(root,'data')));
- assert.ok(identity.argv.includes('127.0.0.1:'+new URL(metadata.url).port));
- let ancestor=process.pid,found=false;
- for(let depth=0;depth<12&&ancestor>1;depth++){
-  if(ancestor===identity.parentPid){found=true;break;}
-  ancestor=(await processIdentity(ancestor)).parentPid;
- }
- assert.ok(found,'Disposable server must belong to this test command’s launcher');
- const launcher=await processIdentity(identity.parentPid);
- assert.equal(await realpath(resolve(launcher.cwd,launcher.argv[1]!)),fileURLToPath(new URL('../scripts/with-surreal.py',import.meta.url)));
-}
 async function until<T>(read:()=>Promise<T>|T,ready:(v:T)=>boolean){const end=Date.now()+15000;while(true){const v=await read();if(ready(v))return v;assert.ok(Date.now()<end,'boundary deadline');await new Promise(r=>setTimeout(r,15));}}
 async function files(root:string):Promise<string[]>{const result:string[]=[];for(const d of await readdir(root,{withFileTypes:true})){const p=join(root,d.name);if(d.isDirectory())result.push(...await files(p));else result.push(p);}return result;}
 const skip=process.platform!=='linux'?'Linux /proc ownership verification required':!process.env.SURREAL_TEST_RUNTIME?'scripts/with-surreal.py disposable ownership proof required':false;
