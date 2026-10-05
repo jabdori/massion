@@ -26,7 +26,7 @@ The current fixture demonstrates useful portions of that path through actual loc
 | Memory/Growth | Actual held-out oracle scores, second-Work version use, observed effect and revert | General authority lifecycle; controlled marker routing is not autonomous learning |
 | Atomic persistence | Live Surreal tests for journals, revision races, replay and response-loss readback | Migration/load limits and broader aggregate contention evidence |
 | Interrupted effects | Real file write followed by injected receipt failure; reconnect refuses a second effect | Actual host process death at admission/write/receipt boundaries, durable owner detection and reconciled resumption |
-| Shared clients | Same-host links, isolated client storage, durable catch-up, reconnect write barrier, owner instruction conflict comparison, cancellation and exact receipt cleanup through actual HTTP/SurrealDB | Actual browser QA, retention/snapshot fallback, persistent approvals, conversation reconstruction and authenticated remote-PC access |
+| Shared clients | Same-host links, isolated client storage, durable catch-up, reconnect write barrier, owner instruction conflict comparison, cancellation and exact receipt cleanup through actual HTTP/SurrealDB | Broader keyboard/screen-reader/browser QA, retention/snapshot fallback, persistent approvals, conversation reconstruction and authenticated remote-PC access |
 | Backup/restore | Accepted bounded text Work/Records plus sealed artifacts restored into a fresh DB/root; CLI clean SurrealKV restore, lineage/checksums and no replay verified in `tests/portable-backup.test.ts` | General artifact formats, migration, operational backup/recovery drills and broader product restore |
 | Knowledge relationships | Domain multi-hop version/provenance test | Actual database graph queries, change-impact invalidation and readable product evidence |
 | Model/extensions | Native provider/host manifest selection and bounded explicit executor/verifier Run tested through local HTTP mocks, including usage/errors/cancel | Authorized live-provider compatibility/quality/spend evidence; external package lifecycle and isolation |
@@ -50,7 +50,7 @@ complete-product or later-source verification claim. Drafts remain unmerged.
 | Authorized live Mission/executor/verifier/Records and non-coding quality | Path implemented; local mocks verified; live/quality gate #5 remains open |
 | Wrong/correct/stale/tampered results | Controlled artifact/version contract verified; model judgment quality remains open |
 | Second client/interruption/cancel/steer/no blind replay | Bounded same-host HTTP/DB contract verified; general worker recovery/approvals remain open |
-| Actual browser visual/accessibility journey | Not run; see the [prepared browser QA plan](browser-qa.md) |
+| Actual browser visual/accessibility journey | Bounded actual Chrome click/visual/axe journey recorded in [browser QA](browser-qa.md); broader keyboard/screen-reader/platform review remains open |
 | Accepted Work plus sealed artifacts restored into clean environment | Bounded text/fixture path verified; general product restore remains open |
 | Final-candidate report and stale status reconciliation | This named code checkpoint has CI/review evidence; browser/live/general gaps remain explicit |
 

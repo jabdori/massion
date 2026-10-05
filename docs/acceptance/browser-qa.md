@@ -1,10 +1,9 @@
 # Actual browser QA for the existing local Work path
 
-Status: prepared, not run. No browser visual/accessibility evidence is claimed.
-Agent/browser tooling installation is owned by the existing setup session; this
-session does not install concurrently, change settings or select new permissions.
-After its confirmed installed paths/instructions arrive, inspect those instructions
-and run against the exact candidate in this same development session.
+Status: bounded actual Chrome QA executed on `6816adb0d4667131e13770c84c00c5c8a3fa9c6d`
+(unchanged product code from `e1c9a34`). Tooling setup completed in the existing
+setup session; this development session read the official agent-browser skill/core
+guide and used the installed CLI without installation or settings changes.
 
 ## Environment and evidence
 
@@ -38,9 +37,42 @@ Existing regression references: `tests/client-workbench.test.ts`,
 `tests/workbench.test.ts`, `tests/host-connections.test.ts`,
 `tests/provider-setup.test.ts` and the normal CLI fixture tests.
 
-## Current blocker
+## Executed evidence (2026-10-05)
 
-Installed agent-browser/computer-use-linux/find-skills paths and applicable usage
-instructions have not yet been delivered to this session. No setup result or
-browser test is inferred from an in-progress install. General conversation and
-remote identity decisions remain deferred; this plan tests already implemented UX.
+Agent-browser 0.38.2 / Chrome 154.0.8037.92, Node 24.19.0 and SurrealDB 3.3.0.
+Normal CLI host used a selected credential-free compatible manifest. Dedicated
+ports 18241–18244, namespace `massion13qa6816`, fresh task-owned profiles and
+browser sessions `massion13-6816-a`/`-b` kept other browser/host state separate.
+No user cookies/login, real keys, live/paid calls or new authentication were used.
+
+| Prepared row | Observed result |
+| --- | --- |
+| Mission/Work and blockers | Actual fill/click creates Mission and blocked Work; no substitute execution |
+| Declared connections and explicit Run | Local metadata discovery; selected executor/reviewer and explicit fixture scope; preflight Run requests 0; explicit Run requests 1; provider calls 2; accepted fixture Record displayed |
+| Second client link | Independent fresh profile opens same Mission with initial POST 0 |
+| Conflict/revised submission | Held original UI request loses to other browser; comparison and retained editable draft visible; manual new submission only |
+| Lost response/receipt | Server commit then dropped response and withheld events; unknown lock; revealing exact receipt clears draft/comparison; POST stays 2 |
+| Cancellation/navigation | Cancel click makes Work read-only; failed Mission navigation then actual Back restores matching original URL/Mission with POST unchanged |
+| Restart/reconnect | Owned host stops/restarts; barrier shown and reads enabled; POST stays 7, revision 24 and accepted Record retained; provider calls stay 2 |
+| DOM/keyboard/viewport | Wide and 390px screenshots inspected; narrow scroll width 390; no unlabelled inputs; Tab focus observed on SUMMARY; axe 4.12.1 reports 44 passes, 0 violations/incomplete in checked states |
+
+Eight screenshots (`01-mission` through `08-back-reconnect`), final DOM/call
+inventory, accessibility output, browser metadata and hashes are preserved in the
+local task's `browser-qa/evidence.json` and neighbouring files. These task-owned
+artifacts contain fixture data. Host/provider harness was external to the repo;
+product source was unchanged during QA. Two browsers were closed and the owned
+supervisor/DB were gracefully shut down.
+
+The CLI default wait for a hidden notice timed out because it waits for visibility;
+a direct DOM read confirmed the empty notice, receipt cleanup and no extra POST.
+This harness observation is not presented as a product failure.
+
+## Remaining coverage
+
+This is actual visual/click and automated accessibility evidence for the bounded
+existing fixture journey. Full keyboard traversal, screen-reader review, broader
+browser/platform coverage, real-provider semantic quality, remote-PC authentication,
+persistent approvals and general shared conversation remain open. Empty-draft and
+lock-wait edge cases also have automated client regressions; they are not newly
+claimed as separately clicked browser scenarios. Computer-use-linux's AT-SPI setup
+was not changed or used. No general conversation-to-Work choice is adopted.
