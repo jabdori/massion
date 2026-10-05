@@ -455,10 +455,11 @@ async function write(path, body, missionId, successMessage) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
+  const instructionSubmission = body.command?.type === 'steer' ? {missionId,workId:body.command.workId,draft:drafts.get(instructionKey(missionId,body.command.workId))} : null;
   busy = true; controls();
   if (!await persistPending(operation)) { busy = false; controls(); return false; }
   rememberMission(missionId);
-  if (body.command?.type === 'steer') instructionSubmissions.set(operationKey(operation),{missionId,workId:body.command.workId,draft:drafts.get(instructionKey(missionId,body.command.workId))});
+  if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},longRun ? 120000 : 15000);

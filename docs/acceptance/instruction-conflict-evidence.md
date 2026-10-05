@@ -37,7 +37,7 @@ this increment's completion.
 ## Local candidate evidence
 
 Pinned strict TypeScript passed. The affected suite with actual SurrealDB 3.3.0
-passed 46/46, zero failures/skips. The same-revision conflict comparison initially
+passed 47/47, zero failures/skips. The same-revision conflict comparison initially
 failed its scope regression because snapshot installation skipped rendering when
 the revision was unchanged; the conflict path now explicitly rebuilds the view
 after successful authoritative read. This was corrected before publication.
@@ -62,3 +62,9 @@ Direct and durable confirmation now use one operation-keyed cleanup path. A
 separate delayed-receipt regression preserves edits made after transmission; only
 the confirmed submitted draft is removed. Rejected or still-unknown operations
 do not clear drafts, and browser recovery storage still contains no draft text.
+
+A second Codex P2 reproduced editing while Web Lock admission waits: the original
+command body and newly read draft differed, causing deletion of unsent edits.
+Submission metadata now snapshots the draft before the first asynchronous wait.
+The held-lock regression confirms only the original text commits and the new draft
+survives, with exactly one POST.

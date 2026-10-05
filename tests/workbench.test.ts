@@ -466,3 +466,16 @@ test('late exact steering receipt clears conflict but preserves a draft edited a
  input=selectionField(app,'steer-work:test');input.value='A new unsent draft';await input.fire('input');visible=true;await app.tick();
  assert.equal(app.node('operation-notice').hidden,true);assert.equal(selectionField(app,'steer-work:test').value,'A new unsent draft');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);assert.match(app.node('work-list').textContent,/Latest owner instruction: Submitted direction/);await app.tick();assert.equal(posts,2);
 });
+
+test('editing while recovery lock admission waits preserves the unsent instruction draft',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];let revision=2,posts=0;
+ const locks=new SharedWebLocks();let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+ locks.request=async(name,_options,callback)=>{await gate;return callback({name});};
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){++posts;const body=JSON.parse(options.body);assert.equal(body.command.instruction,'Original submitted draft');mission.works[0]!.instructions=[{actorId:'owner',text:body.command.instruction}];revision=3;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest',locks});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='Original submitted draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();assert.equal(posts,0);
+ input.value='Edited while awaiting lock';await input.fire('input');release();await settle();assert.equal(posts,1);assert.equal(selectionField(app,'steer-work:test').value,'Edited while awaiting lock');assert.match(app.node('work-list').textContent,/Latest owner instruction: Original submitted draft/);
+});
