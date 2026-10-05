@@ -75,7 +75,24 @@ The feed preserves the complete stored event payload, including application-supp
 
 The global counter is a deliberate one-host bootstrap bottleneck. `SurrealStore` serializes its own submissions, capturing input before queueing; this avoids self-inflicted counter contention for concurrent host requests. The queue continues after rejection, and adds no retry or replay. Separate store instances/processes still contend on the same database key. Actual HTTP RPC 3.3.0 reports a structured `Query`/`TransactionConflict` error; the transport exposes this as `StorageContentionError` with `retryable: true`. The caller may deliberately re-read and retry a definitely rejected storage transition. Ambiguous outcomes never become retryable based on an error message.
 
-No pruning, retention policy, cross-database cursor portability, live subscription, efficient large-scale feed benchmark or snapshot-plus-cursor handshake is implemented. Privileged manual journal changes remain outside the append-only application contract. This is a durable catch-up primitive, not a production event-feed claim.
+`readState(id?)` reads the selected aggregate (or a null snapshot), feed head and
+database-local `feedId` in one explicit read transaction. `readCatchup(after,
+feedId?, limit)` checks that identity and reads its head/page in the same read
+transaction; identity mismatch and a cursor beyond head both require fresh reads.
+It retains the last-delivered cursor rule. Initialization assigns a UUID to new
+feeds and existing schema-2 feeds lacking it; repeated initialization keeps it.
+This metadata does not change journal operations, CAS or command receipts.
+Portable journal restore into a freshly initialized database retains its new feed
+identity, so even identical numeric cursors cannot masquerade as the previous DB.
+Numeric-only `readEvents` remains available for existing headless callers and
+cannot identify same-position database replacement by itself.
+
+No pruning, retention policy, cross-database cursor portability, live subscription
+or efficient large-scale feed benchmark is implemented. Raw database copies that
+preserve the feed identity, privileged manual journal/feed changes, and arbitrary
+rollback within that identity remain outside this bounded fresh-database recovery
+contract. This is not a production event-feed claim. See
+[replacement recovery evidence](../acceptance/cursor-recovery-evidence.md).
 
 ## Ambiguous outcomes and failure handling
 

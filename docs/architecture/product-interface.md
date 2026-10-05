@@ -25,7 +25,20 @@ Before transmitting a mutation, the browser persists only its nonsensitive comma
 
 The store serializes commits within one host/store instance because its atomic global cursor is a shared write point. Cross-store contention can produce a typed, definite rollback; this is distinct from ambiguous transport failure. There is no automatic write retry in either case.
 
-No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
+No retention/pruning is enabled. The loopback event route returns a database-local
+feed identity and validates the client's `X-Massion-Feed` header. A changed identity
+or cursor beyond head closes the write barrier before read-only recovery through
+`GET /read-state?mission=…`, which binds the selected snapshot to one feed/cursor
+boundary. The barrier remains closed until current host permissions/setup and a
+fresh matching read boundary are available. Missing selected Missions stay locked.
+Equal Mission revisions with changed snapshot contents are rendered again.
+Private drafts and unresolved command/fixture identities remain; a fresh snapshot
+does not settle a command. Pending receipt catch-up starts at zero after fresh
+synchronization and only its exact receipt permits clearing the command marker.
+No mutation or model dispatch is automatically replayed. See
+[bounded recovery evidence](../acceptance/cursor-recovery-evidence.md).
+Production retained-feed fallback/retention, identity-scoped feeds, event-stream
+transport, leases and multiple-host load behavior remain open.
 
 ## Explicit owner-instruction conflict comparison
 
