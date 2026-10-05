@@ -152,7 +152,7 @@ Do not run the crash test alongside other clients or parallel test files using t
 
 ## Remaining gates
 
-- Complete graph schema and actual database multi-hop impact/invalidation queries with version/provenance fidelity.
+- Complete typed/indexed graph schema and automatic invalidation remain open. The [bounded relation impact query](../acceptance/relation-impact-evidence.md) now traverses the existing persisted Relation array inside one actual database read transaction with exact-version/provenance fidelity; it adds no graph projection, index or invalidation policy.
 - Feed retention, pruning, snapshot/cursor handshake and fallback, production authorization/filtering, and measured counter contention under sustained load. The implemented cursor is database-global and unpruned.
 - Durable outbox claiming, leases/ownership, acknowledgement and effect reconciliation. Retaining an intent atomically does not execute it or make its outcome known.
 - Complete product-scenario restore, graceful host ownership/drain, crash at admission/effect/receipt boundaries and two-client reconstruction.
