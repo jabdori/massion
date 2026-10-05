@@ -37,7 +37,7 @@ this increment's completion.
 ## Local candidate evidence
 
 Pinned strict TypeScript passed. The affected suite with actual SurrealDB 3.3.0
-passed 45/45, zero failures/skips. The same-revision conflict comparison initially
+passed 46/46, zero failures/skips. The same-revision conflict comparison initially
 failed its scope regression because snapshot installation skipped rendering when
 the revision was unchanged; the conflict path now explicitly rebuilds the view
 after successful authoritative read. This was corrected before publication.
@@ -50,3 +50,15 @@ Whether lightweight conversation can exist without Work, how a conversation link
 to Work, message identity/history/retention and authenticated remote-PC access
 remain undecided here. Browser visual/accessibility conformance, general live
 model quality, permanent approvals and flexible bot collaboration remain open.
+
+## Response-loss review correction
+
+Codex P2 found that an exact durable receipt cleared the recovery lock but left
+the already committed revised instruction's conflict/draft resubmittable. The
+actual HTTP/Surreal regression commits the revised instruction, drops its response
+and withholds events; after revealing the receipt it must clear the comparison
+and submitted draft with no additional POST. The original code failed that check.
+Direct and durable confirmation now use one operation-keyed cleanup path. A
+separate delayed-receipt regression preserves edits made after transmission; only
+the confirmed submitted draft is removed. Rejected or still-unknown operations
+do not clear drafts, and browser recovery storage still contains no draft text.

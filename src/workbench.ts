@@ -70,8 +70,18 @@ if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
-const drafts = new Map(), instructionConflicts = new Map(), confirmedOperations = new Set();
+const drafts = new Map(), instructionConflicts = new Map(), instructionSubmissions = new Map(), confirmedOperations = new Set();
 const instructionKey = (missionId, workId) => JSON.stringify([missionId, workId]);
+function confirmOperation(operation) {
+  const operationId = operationKey(operation); confirmedOperations.add(operationId);
+  const submission = instructionSubmissions.get(operationId);
+  if (!submission) return;
+  instructionSubmissions.delete(operationId);
+  const key = instructionKey(submission.missionId, submission.workId);
+  if (drafts.get(key) === submission.draft) drafts.delete(key);
+  instructionConflicts.delete(key);
+  if (snapshot?.value.id === submission.missionId) renderMission();
+}
 function parsePending(raw) {
   const item = JSON.parse(raw);
   if (!item || Object.keys(item).length !== 3 || typeof item.commandId !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(item.commandId) || typeof item.missionId !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(item.missionId) || !Number.isSafeInteger(item.reconcileCursor) || item.reconcileCursor < 0) throw new Error('Invalid recovery reference');
@@ -110,6 +120,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
+  if (!confirmedOperations.has(operationKey(operation))) instructionSubmissions.delete(operationKey(operation));
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -418,7 +429,7 @@ async function pollEvents() {
     }
     if (unknownOperation) unknownOperation.reconcileCursor = body.cursor;
     activity.sort((a,b) => a.cursor - b.cursor);
-    if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmedOperations.add(operationKey(unknownOperation)); await clearPending(unknownOperation); controls(); report('Durable receipt found for ' + commandId + '. Refreshing current state; the command was not replayed.','success'); eventRefreshNeeded = true; }
+    if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmOperation(unknownOperation); await clearPending(unknownOperation); controls(); report('Durable receipt found for ' + commandId + '. Refreshing current state; the command was not replayed.','success'); eventRefreshNeeded = true; }
     activity = activity.slice(-100);
     cursor = Math.max(cursor, body.cursor); storage.set(cursorKey, String(cursor));
     $('event-state').textContent = 'Connected · ' + cursor; $('event-state').className = 'tag good';
@@ -447,6 +458,7 @@ async function write(path, body, missionId, successMessage) {
   busy = true; controls();
   if (!await persistPending(operation)) { busy = false; controls(); return false; }
   rememberMission(missionId);
+  if (body.command?.type === 'steer') instructionSubmissions.set(operationKey(operation),{missionId,workId:body.command.workId,draft:drafts.get(instructionKey(missionId,body.command.workId))});
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},longRun ? 120000 : 15000);
@@ -455,7 +467,7 @@ async function write(path, body, missionId, successMessage) {
     if(longRun){busy=false;ownsBusy=false;controls();}
     const {response, body:result} = await responsePromise;
     if(longRun && selectedId!==missionId){
-      if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmedOperations.add(operationKey(operation));await clearPending(operation);return result.status==='settled';}
+      if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
       if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
       throw new Error('Background run outcome requires durable readback.');
     }
@@ -476,11 +488,11 @@ async function write(path, body, missionId, successMessage) {
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || 'The host could not confirm the commit outcome.');
     if (!response.ok) { await clearPending(operation); report('Command rejected: ' + (result.error || 'HTTP ' + response.status) + '. No automatic retry.','error'); return false; }
     if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
-      confirmedOperations.add(operationKey(operation)); await clearPending(operation); if(selectedId===missionId && (!snapshot || snapshot.revision<=result.snapshot.revision)){++readSequence;installSnapshot(result.snapshot);}
+      confirmOperation(operation); await clearPending(operation); if(selectedId===missionId && (!snapshot || snapshot.revision<=result.snapshot.revision)){++readSequence;installSnapshot(result.snapshot);}
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
-    confirmedOperations.add(operationKey(operation)); await clearPending(operation); rememberMission(missionId); ++readSequence; installSnapshot(result);
+    confirmOperation(operation); await clearPending(operation); rememberMission(missionId); ++readSequence; installSnapshot(result);
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
@@ -499,9 +511,8 @@ async function write(path, body, missionId, successMessage) {
 }
 async function sendCommand(command) {
   if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
-  const missionId = snapshot.value.id, key = instructionKey(missionId,command.workId), submittedDraft = drafts.get(key);
-  const ok = await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'quarantine-runtime' ? 'Work permanently quarantined. External outcomes remain unresolved; no run was replayed.' : command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
-  if (ok && command.type === 'steer') { if (drafts.get(key) === submittedDraft) drafts.delete(key); instructionConflicts.delete(key); if(snapshot?.value.id === missionId)renderMission(); }
+  const missionId = snapshot.value.id;
+  await write('/missions/' + encodeURIComponent(missionId) + '/commands',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,command},missionId,command.type === 'quarantine-runtime' ? 'Work permanently quarantined. External outcomes remain unresolved; no run was replayed.' : command.type === 'cancel' ? 'Cancellation recorded.' : 'Steering instruction recorded. Inspect the current execution state below.');
 }
 $('mission-form').addEventListener('submit', async event => {
   event.preventDefault(); if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;

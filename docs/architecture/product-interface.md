@@ -35,6 +35,9 @@ unrecorded submission and attempted revision with the latest authoritative owner
 instruction and snapshot revision. A new action requires deliberate submission
 against the displayed revision with a fresh command identity; no conflict is
 merged or retried automatically. Repeated conflicts update the comparison.
+A direct success or exact durable operation receipt clears that submission's
+comparison and unchanged draft. Edits made after transmission remain a new unsent
+draft; unknown outcomes retain their lock and are never replayed.
 
 Durable events and reconnect reads refresh the canonical side while preserving
 local drafts. Closed Work retains the comparison/draft for reading and has no

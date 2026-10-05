@@ -448,3 +448,21 @@ test('instruction drafts and conflict comparisons are scoped to Mission plus Wor
  await app.navigateFragment('#mission=mission%3Aone');assert.equal(selectionField(app,'steer-work:test').value,'Private first Mission draft');assert.match(app.node('work-list').textContent,/Current first Mission direction/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
  await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'Second Mission draft');
 });
+
+test('late exact steering receipt clears conflict but preserves a draft edited after transmission',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];mission.works[0]!.instructions=[{actorId:'owner',text:'Current direction'}];let revision=2,posts=0,receipt:any,visible=false;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:visible?1:0,events:visible?[receipt]:[]});
+  if(options.method==='POST'){
+   ++posts;const body=JSON.parse(options.body);
+   if(posts===1){revision=3;return reply({status:'conflict',reason:'revision',revision},409);}
+   mission.works[0]!.instructions!.push({actorId:'owner',text:body.command.instruction});revision=4;receipt={cursor:1,aggregateId:mission.id,commandId:body.commandId,revision,events:[{type:'steer'}]};throw new Error('Response lost after commit');
+  }
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const form=()=>app.all().find(node=>node.className==='steer-form')!;
+ let input=selectionField(app,'steer-work:test');input.value='Submitted direction';await input.fire('input');await form().fire('submit');await settle();assert.equal(posts,1);
+ await form().fire('submit');await settle();assert.equal(posts,2);assert.equal(app.node('operation-notice').hidden,false);
+ input=selectionField(app,'steer-work:test');input.value='A new unsent draft';await input.fire('input');visible=true;await app.tick();
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(selectionField(app,'steer-work:test').value,'A new unsent draft');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);assert.match(app.node('work-list').textContent,/Latest owner instruction: Submitted direction/);await app.tick();assert.equal(posts,2);
+});
