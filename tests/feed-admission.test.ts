@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {once} from 'node:events';
+import type {Mission} from '../src/domain.ts';
+import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
+import type {Store} from '../src/storage.ts';
+import {ProductService} from '../src/product.ts';
+import {createWorkbench} from '../src/server.ts';
+import {ConnectionCatalog} from '../src/provider-profiles.ts';
+import {chatProfileFactory} from '../src/chat-profile-factory.ts';
+import {SelectableTextRuntime} from '../src/selectable-runtime.ts';
+import {TextArtifactStore} from '../src/text-artifacts.ts';
+for(const durable of [false,true])for(const scenario of ['create','admit','steer','run','fixture','run-after-start','fixture-after-start'])test(`${durable?'actual DB':'in-memory'} atomic feed admission rejects ${scenario} across binding switch`,{skip:durable&&!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
+ const action=scenario.split('-')[0]!,switchAt=scenario.includes('after-start')?(action==='run'?2:3):0;
+ const root=await mkdtemp(join(tmpdir(),'massion-feed-admission-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const id='mission:atomic',workId='work:atomic';
+ async function seed(label:string){let store:Store<Mission>;if(durable){const database='admission_'+crypto.randomUUID().replaceAll('-',''),transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);store=new SurrealStore<Mission>(transport);}else store=new InMemoryStore<Mission>();const product=new ProductService(store);await product.create({id,purpose:label,scope:'atomic',constraints:[],criteria:{version:1,description:'Controlled fixture only',oracle:'bounded-text-review/v1'}},'create:'+label);await product.admit(id,{commandId:'work:'+label,expectedRevision:1,workId,title:label,budget:16});return store;}
+ const original=await seed('Original'),replacement=await seed('Replacement');let current=original,armed=false,providerCalls=0,commits=0;
+ const routed:Store<Mission>={load:id=>current.load(id),readEvents:(a,l)=>current.readEvents(a,l),readState:async id=>{const state=await current.readState(id);if(armed&&switchAt===0&&id===undefined){armed=false;current=replacement;}return state;},readCatchup:(a,f,l)=>current.readCatchup(a,f,l),commit:c=>{if(armed&&switchAt>0&&++commits===switchAt){armed=false;current=replacement;}return current.commit(c);},reconcile:c=>current.reconcile(c),lookupOperation:c=>current.lookupOperation(c)};
+ const profiles=['executor','verifier'].map(id=>({id,label:id,backend:'model-provider' as const,providerKind:'fixture',protocol:'openai-chat-completions/v1',model:id,endpoint:'http://127.0.0.1:9999/v1/chat/completions',revision:'1',enabled:true,auth:{method:'none'},capabilities:['text-output'],usage:{inputTokens:'reported' as const,outputTokens:'reported' as const,cost:'unknown' as const},limits:{maxInputBytes:32768,maxOutputTokens:8,maxResponseBytes:32768,timeoutMs:2000}}));
+ const catalog=new ConnectionCatalog(profiles,[chatProfileFactory({mode:'local-http-mock',transport:async()=>{providerCalls++;throw new Error('Dispatch must not happen');}})]),permissions=catalog.list().map(p=>({profileId:p.id,configHash:p.configHash}));
+ const runtime=new SelectableTextRuntime(routed,catalog,[{id:'grant',scope:'atomic',mode:'mock-http',executor:permissions,verifier:permissions,maxOutputTokensPerCall:8}],new TextArtifactStore(join(root,'artifacts')));
+ const server=createWorkbench(routed,root,{runtime});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});const address=server.address();assert.ok(address&&typeof address==='object');const before=await replacement.readEvents(0,1000),feed=(await original.readState()).feedId;
+ const path=action==='create'?'/missions':action==='fixture'?'/fixture-run':'/missions/'+id+'/'+(action==='admit'?'work':action==='steer'?'commands':'run');
+ const body=action==='create'?{id:'mission:new',commandId:'new:create',purpose:'Explicit create',scope:'atomic',constraints:[],criteria:{version:1,description:'Controlled',oracle:'manual-review/v1'}}:action==='fixture'?{}:{commandId:'new:'+action,expectedRevision:2,workId:action==='admit'?'work:new':workId,title:'New work',budget:16,command:{type:'steer',workId,instruction:'New instruction'},selection:{executorProfileId:'executor',verifierProfileId:'verifier',authorizationId:'grant',outputTokenCap:8}};
+ armed=true;const response=await fetch('http://127.0.0.1:'+address.port+path,{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify(body)});await response.json();
+ assert.deepEqual(await replacement.readEvents(0,1000),before);assert.equal(providerCalls,0);assert.ok(response.status>=400);
+});

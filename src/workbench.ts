@@ -54,6 +54,7 @@ const storage = {
 };
 const missionKey = 'massion.workbench.mission';
 const cursorKey = 'massion.workbench.cursor';
+const feedKey = 'massion.workbench.feed';
 const pendingKey = 'massion.workbench.pending';
 const fixtureKey = 'massion.workbench.fixture-pending';
 function missionReference() {
@@ -67,6 +68,7 @@ const initialReference = missionReference();
 let selectedId = initialReference.present ? initialReference.id : storage.get(missionKey) || storage.get('massion.fixture.mission') || '';
 let cursor = Number(storage.get(cursorKey) || 0);
 if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
+let feedId = storage.get(feedKey) || '';
 let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
@@ -206,7 +208,7 @@ function clearSnapshot(message) {
   controls();
 }
 function installSnapshot(value) {
-  const changed = !snapshot || snapshot.revision !== value.revision || snapshot.value.id !== value.value.id;
+  const changed = !snapshot || JSON.stringify(snapshot) !== JSON.stringify({revision:value.revision,value:value.value});
   snapshot = {revision:value.revision, value:value.value};
   window.history.replaceState(null, '', '#mission=' + encodeURIComponent(value.value.id));
   $('empty-state').hidden = true;
@@ -221,12 +223,15 @@ async function loadMission(id = selectedId, announce = true) {
   rememberMission(id);
   if (changed) { clearSnapshot('Loading the selected Mission…'); activity = []; renderActivity(); }
   const sequence = ++readSequence;
+  const readFeed = feedId, epoch = connectionEpoch;
   loading = true; controls();
   if (announce && !unknownOperation) report('Reading authoritative Mission state…');
   try {
-    const {response, body} = await request('/missions/' + encodeURIComponent(id));
+    const {response, body:packet} = await request(readFeed ? '/read-state?mission=' + encodeURIComponent(id) : '/missions/' + encodeURIComponent(id));
     if (sequence !== readSequence || id !== selectedId) return false;
-    if (!response.ok) throw new Error(body.error || 'Mission read failed (' + response.status + ').');
+    if (epoch !== connectionEpoch || readFeed && packet.feedId !== readFeed) { requireReconnect(); throw new Error('Database or connection changed during Mission read; fresh permissions and state are required'); }
+    const body = readFeed ? packet.snapshot : packet;
+    if (!response.ok) throw new Error(packet.error || 'Mission read failed (' + response.status + ').');
     if (!validSnapshot(body, id)) throw new Error('The host returned an invalid Mission snapshot.');
     installSnapshot(body);
     if (announce && !unknownOperation) report('Loaded revision ' + body.revision + '. State is read from the host.', 'success');
@@ -237,6 +242,14 @@ async function loadMission(id = selectedId, announce = true) {
     report((unknownOperation ? 'Write outcome remains unknown. ' : '') + 'Refresh failed: ' + error.message, 'error');
     return false;
   } finally { if (sequence === readSequence) { loading = false; controls(); } }
+}
+async function verifyAcknowledgementFeed(origin, acknowledgementFeed, missionId) {
+  if (!origin) return null;
+  if (acknowledgementFeed !== origin) { requireReconnect(); throw new Error('Command acknowledgement feed is missing or differs from its originating database'); }
+  const epoch = connectionEpoch;
+  const {response,body} = await request('/read-state?mission=' + encodeURIComponent(missionId));
+  if (!response.ok || epoch !== connectionEpoch || body.feedId !== origin || !validSnapshot(body.snapshot,missionId)) { requireReconnect(); throw new Error('The acknowledgement belongs to a previous or unavailable database; current-feed receipt readback is required'); }
+  return body.snapshot;
 }
 function badge(text, state) { return element('span', text, 'tag' + (['accepted','passed','succeeded'].includes(state) ? ' good' : ['blocked','waiting','unknown','pending','stale'].includes(state) ? ' warn' : ['failed','cancelled'].includes(state) ? ' bad' : '')); }
 function addFact(list, title, value) { const group = element('div'); group.append(element('dt', title)); const detail = element('dd'); if (Array.isArray(value)) { const items = element('ul'); for (const item of value) items.append(element('li', item)); detail.append(items); } else detail.textContent = String(value); group.append(detail); list.append(group); }
@@ -428,18 +441,49 @@ function renderActivity() {
 function receiptObserved() {
   return unknownOperation && (confirmedOperations.has(operationKey(unknownOperation)) || activity.some(event => event.commandId === unknownOperation.commandId && event.aggregateId === unknownOperation.missionId));
 }
+async function refreshReadState(epoch, expectedFeed) {
+  const missionId = selectedId, sequence = ++readSequence;
+  loading = true; controls();
+  try {
+    const {response,body} = await request('/read-state' + (missionId ? '?mission=' + encodeURIComponent(missionId) : ''));
+    if (epoch !== connectionEpoch || sequence !== readSequence || missionId !== selectedId) throw new Error('Connection or selected Mission changed during read recovery');
+    if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? body.snapshot !== null && !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
+    if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
+    if (feedId && body.feedId !== feedId) {
+      activity = []; confirmedOperations.clear();
+    }
+    // Receipts predating this snapshot still matter; a fresh boundary is not command reconciliation.
+    if (unknownOperation) unknownOperation.reconcileCursor = 0;
+    if (missionId && body.snapshot === null) {
+      rememberMission(''); storage.remove('massion.fixture.mission');
+      clearSnapshot('This Mission is absent from the current database. Create or load current state after reconnecting.');
+    } else if (missionId) installSnapshot(body.snapshot);
+    feedId = body.feedId;
+    // Same-feed snapshot reads may be ahead of bounded event pages. Only reset
+    // the event boundary when recovering a replaced/invalid feed, not reconnecting.
+    if (!expectedFeed) cursor = body.cursor;
+    storage.set(feedKey,feedId); storage.set(cursorKey,String(cursor)); renderActivity();
+  } finally { loading = false; controls(); }
+}
 async function pollEvents() {
   if (polling) return;
-  polling = true; const epoch = connectionEpoch;
+  polling = true; let epoch = connectionEpoch;
   try {
     const after = unknownOperation ? Math.min(cursor, unknownOperation.reconcileCursor) : cursor;
-    const {response, body} = await request('/events?after=' + after);
+    const {response, body} = await request('/events?after=' + after,feedId ? {headers:{'X-Massion-Feed':feedId}} : {});
     if (response.status === 409) {
+      requireReconnect(); epoch = connectionEpoch;
+      if (feedId) {
+        await refreshReadState(epoch);
+        throw new Error('The database feed changed. Current reads were recovered; permissions must still refresh. No command was replayed.');
+      }
       cursor = 0; storage.set(cursorKey, '0'); activity = []; eventRefreshNeeded = true;
       if (unknownOperation) unknownOperation.reconcileCursor = 0;
       if (selectedId && !busy && !loading) await loadMission(selectedId, false);
       throw new Error('Saved cursor was ahead of the host. Catch-up will restart from the beginning.');
     }
+    if (epoch !== connectionEpoch) throw new Error('Connection changed during event read');
+    if (feedId && body.feedId !== feedId) throw new Error('Event feed identity changed or is missing');
     if (!response.ok || !Array.isArray(body.events) || !Number.isSafeInteger(body.cursor) || body.cursor < after || body.events.some(event => !Number.isSafeInteger(event.cursor) || event.cursor <= after || event.cursor > body.cursor)) throw new Error(body.error || 'Invalid event response.');
     for (const event of body.events) {
       if (!activity.some(old => old.cursor === event.cursor)) activity.push(event);
@@ -458,7 +502,8 @@ async function pollEvents() {
       if (!await refreshProviders()) throw new Error('Current host permissions could not be refreshed');
       await refreshConnections(); providerNotice();
       const missionId = selectedId;
-      if (missionId && !await loadMission(missionId, false)) throw new Error('Current Mission could not be refreshed');
+      if (body.feedId) await refreshReadState(epoch,body.feedId);
+      else if (missionId && !await loadMission(missionId, false)) throw new Error('Current Mission could not be refreshed');
       if (epoch !== connectionEpoch || missionId !== selectedId) throw new Error('Connection or selected Mission changed during refresh');
       if (snapshot) renderMission();
       reconnectRequired = false; eventRefreshNeeded = false; controls();
@@ -473,18 +518,23 @@ async function write(path, body, missionId, successMessage) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
+  const writeFeed = feedId;
   const instructionSubmission = body.command?.type === 'steer' ? {missionId,workId:body.command.workId,draft:drafts.get(instructionKey(missionId,body.command.workId))} : null;
   busy = true; controls();
   if (!await persistPending(operation)) { busy = false; controls(); return false; }
+  if (reconnectRequired || writeFeed !== feedId) { await clearPending(operation); busy = false; controls(); report('Host state changed before transmission. No command was sent; refresh before a deliberate new action.','warning'); return false; }
   rememberMission(missionId);
   if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
-    const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},longRun ? 120000 : 15000);
+    const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json',...(writeFeed ? {'X-Massion-Feed':writeFeed} : {})},body:JSON.stringify(body)},longRun ? 120000 : 15000);
     // Keep the durable pending lock only until admission is observed. Events can then
     // refresh the admitted run and owner controls while the provider HTTP call waits.
     if(longRun){busy=false;ownsBusy=false;controls();}
     const {response, body:result} = await responsePromise;
+    if (result.outcome === 'rejected' && result.reason === 'feed') { await clearPending(operation); requireReconnect(); report('Database changed before command admission. No command was executed or retried; refresh before a new action.','warning'); return false; }
+    if (writeFeed && writeFeed !== feedId) { requireReconnect(); throw new Error('The command response belongs to the previous database. Its outcome requires current-feed receipt readback; no replay occurred.'); }
+    const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId) : null;
     if(longRun && selectedId!==missionId){
       if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
       if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
@@ -507,11 +557,11 @@ async function write(path, body, missionId, successMessage) {
     if (response.status >= 500 || result.status === 'unknown') throw new Error(result.error || 'The host could not confirm the commit outcome.');
     if (!response.ok) { await clearPending(operation); report('Command rejected: ' + (result.error || 'HTTP ' + response.status) + '. No automatic retry.','error'); return false; }
     if (path.endsWith('/run') && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)) {
-      confirmOperation(operation); await clearPending(operation); if(selectedId===missionId && (!snapshot || snapshot.revision<=result.snapshot.revision)){++readSequence;installSnapshot(result.snapshot);}
+      confirmOperation(operation); await clearPending(operation); const current = currentAcknowledgedSnapshot || result.snapshot; if(selectedId===missionId && (!snapshot || snapshot.revision<=current.revision)){++readSequence;installSnapshot(current);}
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
-    confirmOperation(operation); await clearPending(operation); rememberMission(missionId); ++readSequence; installSnapshot(result);
+    confirmOperation(operation); await clearPending(operation); rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
@@ -556,16 +606,20 @@ $('work-form').addEventListener('submit', async event => {
 $('load-form').addEventListener('submit', event => { event.preventDefault(); if (!busy) void loadMission($('mission-id').value.trim()); });
 $('run-fixture').addEventListener('click', async () => {
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem || fixtureUnknown) return;
+  const fixtureFeed = feedId;
   busy = true; controls();
   if (!await claimFixture()) { busy = false; controls(); return; }
   controls(); report('Running the separate controlled development fixture. Real local file and process effects are in flight…');
   try {
-    const {response, body} = await request('/fixture-run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},120000);
+    const {response, body} = await request('/fixture-run',{method:'POST',headers:{'Content-Type':'application/json',...(fixtureFeed ? {'X-Massion-Feed':fixtureFeed} : {})},body:'{}'},120000);
+    if (body.outcome === 'rejected' && body.reason === 'feed') { await clearFixture(); requireReconnect(); report('Database changed before fixture admission. No fixture was executed or retried.','warning'); return; }
+    if (fixtureFeed && fixtureFeed !== feedId) { requireReconnect(); throw new Error('Fixture response belongs to the previous database'); }
     if (response.status >= 500) throw new Error(body.error || 'The fixture outcome was not confirmed.');
     if (!response.ok) { await clearFixture(); report('Fixture rejected: ' + (body.error || 'HTTP ' + response.status),'error'); return; }
     if (typeof body.missionId !== 'string') throw new Error('No fixture Mission ID was returned.');
-    await clearFixture();
-    const loaded = await loadMission(body.missionId,false); if (loaded) report('Controlled fixture returned. Inspect its Mission and fixture-class Records.','success');
+    await verifyAcknowledgementFeed(fixtureFeed,body.feedId,body.missionId);
+    const loaded = await loadMission(body.missionId,false); if (!loaded) throw new Error('Current fixture Mission could not be read from its originating feed');
+    await clearFixture(); report('Controlled fixture returned. Inspect its Mission and fixture-class Records.','success');
   } catch (error) {
     report('Fixture outcome unknown: ' + error.message + ' Do not restart it blindly. Inspect durable activity and the host logs to find its Mission.','warning');
     fixtureUnknown = true;

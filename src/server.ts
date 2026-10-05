@@ -6,7 +6,7 @@ import {createServer} from 'node:http';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import type {Store} from './storage.ts';
-import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from './storage.ts';
+import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema,withAdmissionFeed,FeedAdmissionError} from './storage.ts';
 import type {Mission} from './domain.ts';
 import {runGrowthScenario} from './scenario.ts';
 import type {ExecutionChoice} from './selectable-runtime.ts';
@@ -23,7 +23,8 @@ function decodeIdentifier(value:string):string {let decoded:string;try{decoded=d
 export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench}={}) {
  let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime);
  const server=createServer(async(req,res)=>{
-  const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));};
+  let mutationFeed='';
+  const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(mutationFeed && value && typeof value==='object' ? {...value,feedId:mutationFeed} : value));};
   const address=server.address();const port=typeof address==='object'&&address?address.port:0;
   const expected=`127.0.0.1:${port}`;
   if(req.headers.host!==expected){send(403,{error:'Loopback host required'});return;}
@@ -37,6 +38,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
   const sendCommit=(result:{status:string;revision:number},created=false)=>send(result.status==='conflict'?409:created&&result.status==='committed'?201:200,result);
   try{
    const url=new URL(req.url??'/',`http://${expected}`);
+   if(req.method==='POST'&&(url.pathname==='/missions'||url.pathname.startsWith('/missions/')||url.pathname==='/fixture-run')){mutationFeed=(await store.readState()).feedId;const requested=req.headers['x-massion-feed'];if(requested!==undefined){identifier(requested,'Feed identity');if(requested!==mutationFeed){send(409,{error:'Database changed before admission',reason:'feed',outcome:'rejected'});return;}}}
+   const execute=async()=>{
    if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
    if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
@@ -45,7 +48,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(req.method==='POST'&&url.pathname==='/connection-authorizations'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.authorize(await readBody()));return;}
    const connectionRoute=/^\/connections\/([^/]+)\/(models|profiles)$/.exec(url.pathname);
    if(req.method==='POST'&&connectionRoute){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const connectionId=decodeIdentifier(connectionRoute[1]!);const input=await readBody();if(connectionRoute[2]==='models'){if(Object.keys(input).length!==1||typeof input.expectedConfigHash!=='string')throw new RequestError(400,'Exact discovery fields required');send(200,await options.connections.discover(connectionId,input.expectedConfigHash));}else send(200,options.connections.selectModel(connectionId,input));return;}
-   if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');send(200,await store.readEvents(after,limit));return;}
+   if(req.method==='GET'&&url.pathname==='/read-state'){const id=url.searchParams.get('mission')??undefined;if(id!==undefined)identifier(id,'Mission identifier');send(200,await store.readState(id));return;}
+   if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');send(200,await store.readCatchup(after,feedId,limit));return;}
    if(req.method==='POST'&&url.pathname==='/missions'){
     const body=await readBody();identifier(body.id,'Mission identifier');identifier(body.commandId,'command identity');
     const {id,purpose,scope,constraints,criteria}=body;
@@ -70,7 +74,9 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     running=true;try{const result=await runGrowthScenario(store,workspaceRoot);send(201,{missionId:result.missionId,revision:result.snapshot?.revision,evidenceClass:'fixture'});}finally{running=false;}return;
    }
    send(404,{error:'Unknown route'});
-  }catch(error){if(error instanceof Error&&error.name==='RunUnsettledError'){const run=error as Error&{runId:string;snapshot?:unknown};send(503,{error:run.message,outcome:'admitted-unsettled',retryable:false,runId:run.runId,snapshot:run.snapshot});return;}if(error instanceof RequestError){send(error.status,{error:error.message});return;}if(error instanceof DomainError){send(error.code==='denied'?403:400,{error:error.message});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event cursor does not belong to this database head; reload a snapshot and restart catch-up at zero.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
+   };
+   if(mutationFeed)await withAdmissionFeed(mutationFeed,execute);else await execute();
+  }catch(error){if(error instanceof FeedAdmissionError){send(503,{error:error.message,reason:'feed',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='RunUnsettledError'){const run=error as Error&{runId:string;snapshot?:unknown};send(503,{error:run.message,outcome:'admitted-unsettled',retryable:false,runId:run.runId,snapshot:run.snapshot});return;}if(error instanceof RequestError){send(error.status,{error:error.message});return;}if(error instanceof DomainError){send(error.code==='denied'?403:400,{error:error.message});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event feed identity or cursor no longer matches this database; read /read-state before resuming catch-up.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
  });
  return server;
 }

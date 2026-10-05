@@ -25,7 +25,37 @@ Before transmitting a mutation, the browser persists only its nonsensitive comma
 
 The store serializes commits within one host/store instance because its atomic global cursor is a shared write point. Cross-store contention can produce a typed, definite rollback; this is distinct from ambiguous transport failure. There is no automatic write retry in either case.
 
-No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
+No retention/pruning is enabled. The loopback event route returns a database-local
+feed identity and validates the client's `X-Massion-Feed` header. A changed identity
+or cursor beyond head closes the write barrier before read-only recovery through
+`GET /read-state?mission=…`, which binds the selected snapshot to one feed/cursor
+boundary. The barrier remains closed until current host permissions/setup and a
+fresh matching read boundary are available. If the selected Mission is absent,
+recovery adopts the validated new feed boundary and clears that selection; Mission
+creation becomes available after permissions refresh. Unresolved command/fixture
+markers independently retain their write locks and are never cleared by absence.
+Equal Mission revisions with changed snapshot contents are rendered again.
+Private drafts and unresolved command/fixture identities remain; a fresh snapshot
+does not settle a command. Pending receipt catch-up starts at zero after fresh
+synchronization and only its exact receipt permits clearing the command marker.
+No mutation or model dispatch is automatically replayed. See
+[bounded recovery evidence](../acceptance/cursor-recovery-evidence.md).
+Routine Mission refreshes also use the atomic read endpoint once feed identity is
+known; a different feed or newer connection closes the write barrier. Commands and
+fixture requests carry `X-Massion-Feed`; the host rejects a stale identity before
+admission and tags acknowledgements with the checked originating feed. Before a
+successful acknowledgement can settle a marker, the client reads the current
+snapshot/feed boundary again. This also detects replacement before event polling
+has noticed it. Delayed fixture responses retain their unknown marker on either
+feed mismatch or failed current-Mission read. A read boundary is not a replay or
+an authorization for a new effect.
+The host's initial feed check is backed by an atomic expected-feed condition in
+every request-scoped application/runtime/fixture commit. Replacement after that
+initial read cannot write into or admit a provider effect on the new database.
+If a multi-commit request has already started, mismatch remains an unknown overall
+outcome: earlier effects are not undone or replayed and its marker is retained.
+Production retained-feed fallback/retention, identity-scoped feeds, event-stream
+transport, leases and multiple-host load behavior remain open.
 
 ## Explicit owner-instruction conflict comparison
 
