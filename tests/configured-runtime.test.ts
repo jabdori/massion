@@ -164,3 +164,26 @@ test('actual configured accepted Record restores original descriptor metadata an
  const bundle=await exportPortableBackup(store,s.config.artifacts);const destination=createHttpRpcTransport({...options,database:'restored'});await initializeSurrealSchema(destination);const target=new SurrealStore<Mission>(destination);
  const restored=await restorePortableBackup(bundle,target,join(s.root,'accepted-restored'));assert.deepEqual(await target.load(s.missionId),accepted.snapshot);assert.equal(await restored.artifacts.read(record.artifact),artifactText);assert.equal(s.calls.length,2);
 });
+
+test('executor and independent verifier receive original pinned memory content after the owner advances it',async t=>{
+ const s=await setup(t);await s.product.create({id:s.missionId,purpose:'Apply an owner instruction',scope:'local-contract',constraints:['No outside actions'],criteria:{version:1,description:'Identify two open blockers',oracle:TEXT_REVIEW_ORACLE}},'create-memory-runtime');
+ await s.product.saveMemory(s.missionId,{commandId:'mem1',expectedRevision:1,memory:{id:'owner-note',version:1,content:'Retain original terminology',source:'Owner v1'}});
+ await s.product.admit(s.missionId,{commandId:'old-admit',expectedRevision:2,workId:'old',title:'Old wording',budget:128});
+ await s.product.saveMemory(s.missionId,{commandId:'mem2',expectedRevision:3,memory:{id:'owner-note',version:2,content:'Explain terminology in plain language',source:'Owner v2'}});
+ await s.product.admit(s.missionId,{commandId:'new-admit',expectedRevision:4,workId:'new',title:'New wording',budget:128});
+ const old=await s.product.run(s.missionId,'old','old-run',5);assert.equal(old.status,'settled');assert.deepEqual(old.snapshot.value.works[0]?.record?.memoryVersions,['owner-note@1']);
+ const newer=await s.product.run(s.missionId,'new','new-run',old.snapshot.revision);assert.equal(newer.status,'settled');assert.equal(s.calls.length,4);
+ for(const [offset,version,content,source] of [[0,1,'Retain original terminology','Owner v1'],[2,2,'Explain terminology in plain language','Owner v2']] as const){
+  const expected=[{id:'owner-note',version,scope:'local-contract',authority:'explicit',content,source}];
+  assert.deepEqual(s.calls[offset]?.prompt.work.memories,expected);assert.deepEqual(s.calls[offset+1]?.prompt.requirements.memories,expected);
+ }
+ assert.deepEqual(newer.snapshot.value.works[1]?.record?.memoryVersions,['owner-note@2']);assert.ok(newer.snapshot.value.works.every(w=>w.record?.evidenceClass==='fixture'));assert.ok(newer.snapshot.value.works.every(w=>w.assignments.every(a=>a.extensionVersion==='massion.builtin.bounded-text@2')));
+ t.diagnostic('Four credential-free loopback mock role calls; original immutable memory task data retained for both roles, no live-provider proof.');
+});
+test('missing pinned memory blocks configured run before intent, budget or mock provider dispatch',async t=>{
+ const s=await setup(t);await s.admit();const snapshot=(await s.store.load(s.missionId))!;
+ const value=structuredClone(snapshot.value);value.works[0]!.appliedMemoryVersions=['missing@1'];
+ await s.store.commit({id:s.missionId,expectedRevision:snapshot.revision,commandId:'corrupt-fixture-pin',fingerprint:'controlled-missing-pin-fixture',value,events:[],outbox:[]});
+ const before=(await s.store.load(s.missionId))!;const result=await s.product.run(s.missionId,s.workId,'never-dispatched',before.revision);
+ assert.equal(result.status,'blocked');assert.match(result.reason??'',/missing/);assert.equal(s.calls.length,0);assert.deepEqual(await s.store.load(s.missionId),before);
+});

@@ -58,10 +58,17 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
+    if(workRoute[2]==='memory'){
+     if(Object.keys(body).some(key=>!['commandId','expectedRevision','memory'].includes(key)))throw new RequestError(400,'Only explicit memory fields are accepted');
+     const memory=body.memory;
+     if(!memory||typeof memory!=='object'||Array.isArray(memory)||Object.keys(memory).some(key=>!['id','version','content','source'].includes(key)))throw new RequestError(400,'Explicit memory requires id, version, content and owner-supplied source only');
+     identifier((memory as Record<string,unknown>).id,'Memory identifier');
+     sendCommit(await product.saveMemory(missionId,body as Parameters<ProductService['saveMemory']>[1]),true);return;
+    }
     if(workRoute[2]==='preflight'){identifier(body.workId,'Work identifier');const result=await product.preflight(missionId,body.workId,Number(body.expectedRevision),body.selection as ExecutionChoice);if(!result)throw new RequestError(404,'Unknown Mission or Work');send(result.diagnostics.some(d=>d.code==='revision_conflict')?409:200,result);return;}
     if(workRoute[2]==='run'){identifier(body.workId,'Work identifier');if(!product.runtime){send(503,{error:'No explicitly configured Work runtime. No provider request was made.',outcome:'rejected'});return;}const result=await product.run(missionId,body.workId,body.commandId,Number(body.expectedRevision),body.selection as ExecutionChoice);send(result.status==='conflict'?409:200,result);return;}
     if(workRoute[2]==='work'){identifier(body.workId,'Work identifier');sendCommit(await product.admit(missionId,body as Parameters<ProductService['admit']>[1]),true);return;}

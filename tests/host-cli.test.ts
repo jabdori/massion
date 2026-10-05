@@ -62,3 +62,26 @@ test('normal CLI host setup reaches native fixture Work and preserves accepted/c
  const impact=await restarted.call('/missions/accepted/impact?entity=artifact&version=1');assert.equal(impact.status,200);assert.equal(impact.value.missionId,'accepted');assert.equal(impact.value.revision,accepted.revision);assert.deepEqual(impact.value.affected,[]);assert.deepEqual(impact.value.relations,[]);assert.deepEqual((await restarted.call('/missions/accepted')).value,accepted);assert.deepEqual(sends,['exec','review','slow','unknown'],'Normal CLI impact read never invokes a provider');
  const app=harness(async(path,init)=>{const response=await fetch(restarted.base+path,init);return reply(await response.json(),response.status);},{'massion.workbench.mission':'accepted'},undefined,{network:true});await until(async()=>app.node('work-list').textContent,text=>text.includes('Acceptance: accepted'));assert.equal(app.node('connection-fields').disabled,true);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);assert.deepEqual(sends,['exec','review','slow','unknown']);assert.doesNotMatch(JSON.stringify(reload),/"secretRef"|"environment"/);await stop(restarted.child);
 });
+
+test('normal default CLI saves explicit owner memory and retains old/future Work inputs on restart without a model setup',{skip:!process.env.SURREAL_TEST_RUNTIME||process.platform!=='linux'},async t=>{
+ const {verifyDisposableDatabase,stopOwnedChild}=await import('./support/owned-process.ts');await verifyDisposableDatabase();
+ const root=await mkdtemp(join(tmpdir(),'massion-owned-memory-cli-'));const rpc=process.env.MASSION_TEST_SURREAL_RPC!,namespace=process.env.MASSION_TEST_SURREAL_NAMESPACE!,database='memory_cli_'+crypto.randomUUID().replaceAll('-','');const transport=createHttpRpcTransport({endpoint:rpc,namespace,database});await transport.query('DEFINE DATABASE '+database+';',{});
+ const children:ChildProcess[]=[];const argv=[process.execPath,entrypoint];t.after(async()=>{for(const child of children)await stopOwnedChild(child,{cwd:root,argv});await rm(root,{recursive:true,force:true});});
+ async function start(){
+  const port=await freePort(),child=spawn(process.execPath,[entrypoint],{cwd:root,env:{MASSION_SURREAL_RPC:rpc,MASSION_SURREAL_NAMESPACE:namespace,MASSION_SURREAL_DATABASE:database,MASSION_PORT:String(port)},stdio:['ignore','pipe','pipe']});children.push(child);let logs='';child.stdout!.on('data',d=>logs+=String(d));child.stderr!.on('data',d=>logs+=String(d));await until(async()=>logs,text=>text.includes('Massion development workbench:'));
+  const base='http://127.0.0.1:'+port;const state=await (await fetch(base+'/read-state')).json();
+  async function call(path:string,body?:unknown){const response=await fetch(base+path,{...(body?{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':state.feedId},body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)});return {status:response.status,value:await response.json()};}
+  return {child,call};
+ }
+ let host=await start();assert.equal((await host.call('/connections')).value.runtime.connections.length,0);const id='mission:normal-cli-memory';
+ assert.equal((await host.call('/missions',{id,commandId:'create-memory',purpose:'Remember explicit local instructions',scope:'owned-scope',constraints:[],criteria:{version:1,description:'Inspect immutable history',oracle:'manual-review/v1'}})).status,201);
+ const memory={id:'note',version:1,content:'Retain original units',source:'Owner instruction'};
+ assert.equal((await host.call('/missions/'+id+'/memory',{commandId:'mem1',expectedRevision:1,memory})).status,201);
+ assert.equal((await host.call('/missions/'+id+'/work',{commandId:'old',expectedRevision:2,workId:'old',title:'Earlier Work',budget:0})).status,201);
+ assert.equal((await host.call('/missions/'+id+'/memory',{commandId:'mem2',expectedRevision:3,memory:{...memory,version:2,content:'Show original units and conversions'}})).status,201);
+ assert.equal((await host.call('/missions/'+id+'/work',{commandId:'future',expectedRevision:4,workId:'future',title:'Later Work',budget:0})).status,201);
+ const before=(await host.call('/missions/'+id)).value;assert.deepEqual(before.value.works.map((w:any)=>w.appliedMemoryVersions),[['note@1'],['note@2']]);assert.ok(before.value.works.every((w:any)=>w.execution==='blocked'&&!w.effects.length&&!w.runtimeRun&&!w.record));
+ await stopOwnedChild(host.child,{cwd:root,argv});host=await start();assert.deepEqual((await host.call('/missions/'+id)).value,before);assert.equal((await host.call('/connections')).value.runtime.connections.length,0);
+ const replay=await host.call('/missions/'+id+'/memory',{commandId:'mem1',expectedRevision:1,memory});assert.equal(replay.value.status,'replayed');assert.deepEqual((await host.call('/missions/'+id)).value,before);
+ t.diagnostic(JSON.stringify({normalCLI:entrypoint,store:'actual SurrealDB 3.3.0',immutableVersions:2,oldAndFuturePinsRetainedOnRestart:true,providerProfiles:0,liveProviderCalls:0}));
+});

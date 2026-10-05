@@ -1,0 +1,21 @@
+# Explicit Mission memory evidence
+
+Issue19 connects existing immutable explicit memory semantics to the normal owner product path above PR18 `fdf572f787852ef737f3439a28d80691e412efc0`. An owner saves/revises an instruction; old Work retains its original version/content and future Work pins the new effective version. This advances MEM-01 without completing general retrieval, conflicts, expiry/deletion, automatic learned adoption or conversation continuity.
+
+## Implemented boundaries
+
+The owner HTTP route accepts only identity/version/content/source plus command/revision identity. Mission scope, explicit authority and effective state are assigned by ProductService under the existing trusted owner role. Feed/revision/idempotency and atomic journals use the existing application/store contract. Caller scope, authority and effective overrides are rejected; versions cannot overwrite history. Saving/admitting Work does not invoke a provider or accept a Record.
+
+The UI shows all memory versions, authority/effective status and owner-supplied source/content, and each Work's original pinned content. It uses text nodes, Mission-scoped drafts and the existing pending/reconnect write barrier. Conflict refresh retains text without retry; a lost acknowledgement can be confirmed through durable receipts, while unknown outcomes retain draft/lock. Focus moves are respected and submitted controls wait for enabled fields. History and pinned text are keyboard-reachable, pending actual keyboard proof below.
+
+Pure bounded preflight resolves exact original pins, excluding mutable effective flags, with a 65536-byte UTF-8 task-data contribution limit. Missing/ambiguous/malformed/out-of-scope memory blocks before run intent/budget/provider dispatch. Both executor and independent verifier receive original content/source/authority. Revision bounded-text@2 distinguishes this input contract; prior Records/assignments stay unchanged and runs cannot replay to adopt it. Prompt policy distinguishes explicit owner constraints from learned context; no real model compliance is established.
+
+## Tests and evidence classes
+
+`tests/memory-input.test.ts`: owner v1 → old Work → v2 → future Work, immutable/replayed/stale writes, six invalid pinned-memory classes and stable explicit/learned task data. `tests/explicit-memory-http.test.ts`: supporting in-memory and actual SurrealDB HTTP route boundaries/history/reopen without provider effects. `tests/configured-runtime.test.ts`: credential-free loopback HTTP mock executor/verifier see original v1/v2 data after owner revision, plus missing pin blocks before intent/budget/call. `tests/memory-panel.test.ts`: actual inline UI with real HTTP and optional actual DB; safe text, original/future pins, fresh-client history, scoped drafts, conflict, lost/unknown responses and moved focus. `tests/host-cli.test.ts`: actual normal default CLI/actual DB saves/reopens both versions/pins with no configured provider.
+
+CachyOS, pinned Node24.19.0/SurrealDB3.3.0; focused actual checks passed112/112 (fail/skip0) before the subsequent normal-CLI test and prompt revision were added. Initial aggregate399/399 (fail/skip0) covers normal CLI/restart. Final exact-head aggregate, CI and independent review are recorded in the Draft/local evidence manifest after affected validation. Logs are retained under `task-11/explicit-memory-fdf572f`. Initial driver failures (wrong CommitInput fields; releasing held HTTP before its response arrived) remain preserved; fixes changed driver ordering/types, never assertions or product acceptance.
+
+## GUI status and open gates
+
+Actual memory visual/keyboard QA has not run. Shared GUI belongs to Youngcha until coordinator handoff; headless source/DOM/API checks are supporting evidence only. No new GUI session/input has been started for this increment. Actual owned CLI and disposable test DB processes are stopped by their test launchers. No live provider/account/access/resource changes, merge or deployment. Issue19 and MEM-01 remain open until their full bounded acceptance has evidence; broader product gates remain open afterward.
