@@ -6,7 +6,7 @@ Evidence classes: **domain** = deterministic transition checks; **fixture** = co
 
 | ID | Preserved responsibility | Current implementation and test evidence | Remaining gate |
 | --- | --- | --- | --- |
-| MIS-01 | Versioned purpose, constraints and acceptance | `src/domain.ts`; pinned-criteria tests; user-authored Mission form/API in `src/product.ts` and `src/workbench.ts` | Model-assisted interpretation, general Mission lifecycle and richer revisions |
+| MIS-01 | Versioned purpose, constraints and acceptance | `src/domain.ts`; pinned-criteria tests; owner purpose/criteria revision API with old/future Work bindings in `tests/mission-revision.test.ts`; user-authored Mission form/API in `src/product.ts` and `src/workbench.ts` | Model-assisted interpretation, general Mission lifecycle and richer revisions |
 | ORG-01 | Durable responsibilities, capabilities and staffing | Assignment records and distinct executor/verifier actors in `src/domain.ts` and `src/scenario.ts` | Persistent organization revisions/departments, semantic staffing/reuse, organization changes; fixture actors are fixed |
 | COL-01 | Product-owned causal delegation | `tests/domain.test.ts`: “delegation requires child settlement, assignment and parent consumption”; integrated parent/child fixture | Actual multi-agent communication, questions/decisions, shared context and concurrency ownership |
 | WRK-01 | Durable Work/Task/Attempt and truthful lifecycle | Execution and acceptance states are separate; prior attempt results retained; `tests/scenario.test.ts` includes fresh-client live-store reconstruction | General scheduler, ownership/leases, full host recovery and shared conversational continuity |
