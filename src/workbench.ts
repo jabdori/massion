@@ -636,7 +636,7 @@ async function write(path, body, missionId, successMessage) {
     await loadMission(missionId,false);
     await pollEvents();
     return false;
-  } finally { if(ownsBusy)busy = false; controls(); if (eventRefreshNeeded && !unknownOperation) { eventRefreshNeeded = false; void loadMission(selectedId,false); } }
+  } finally { if(ownsBusy)busy = false; controls(); if (eventRefreshNeeded && !unknownOperation) { eventRefreshNeeded = false; await loadMission(selectedId,false); } }
 }
 async function sendCommand(command, restoreFocus = false) {
   if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;

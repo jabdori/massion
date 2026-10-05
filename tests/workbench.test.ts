@@ -572,3 +572,23 @@ for(const kind of ['summary','pre','select'])test(`a pending owner response pres
  const descendants=(node:any):any[]=>[node,...node.children.flatMap(descendants)];const other=app.node('work-list').children[1]!;const target=descendants(other).find(node=>node.tagName===kind.toUpperCase());assert.ok(target);target.focus();release();await settle();const active=(app.context as any).document.activeElement;
  assert.ok(descendants(app.node('work-list').children[1]!).includes(active),'focus must refer to the newly rendered other Work');assert.equal(active.tagName,kind.toUpperCase());assert.equal(active.textContent,target.textContent);
 });
+
+for(const form of ['mission','work'])for(const moved of [false,true])test(`${form} admission waits for an event-before-response refresh and ${moved?'preserves moved focus':'restores its enabled submit control'}`,async()=>{
+ let submitted:any,releasePost!:(r:Reply)=>void,releaseRead!:(r:Reply)=>void,refresh=false;
+ const original=fixtureMission(),app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({events:submitted?[{aggregateId:submitted.id||original.id,commandId:submitted.commandId,revision:form==='mission'?1:2,cursor:1,events:[]}]:[],cursor:submitted?1:0});
+  if(options.method==='POST'){submitted=JSON.parse(options.body);return new Promise<Reply>(r=>releasePost=r);}
+  if(path.startsWith('/missions/'))return refresh?new Promise<Reply>(r=>releaseRead=r):reply({revision:1,value:original});
+  throw new Error('Unexpected '+path);
+ },form==='work'?{'massion.workbench.mission':original.id}:{});await settle();
+ const fields=app.node(form+'-fields'),button=app.node(form==='mission'?'create-mission':'admit-work'),doc=(app.context as any).document;
+ // Match the browser's fieldset ancestry and refusal to focus disabled descendants.
+ app.node(form+'-form').append(fields);fields.append(button);button.onFocus=()=>{if(!fields.disabled)doc.activeElement=button;};
+ app.node('purpose').value='Queued refresh';app.node('scope').value='fixture';app.node('criteria').value='Inspect focus';app.node('work-title').value='Queued refresh Work';button.focus();
+ let finished=false;const pending=app.submit(form+'-form').then(()=>finished=true);await settle();assert.ok(submitted);
+ doc.activeElement={tagName:'BODY',id:''};await app.tick();
+ const value=form==='mission'?fixtureMission(submitted.id):{...original,works:[{...work(original),id:submitted.workId}]},revision=form==='mission'?1:2;
+ refresh=true;releasePost(reply({status:'committed',revision,value},201));await settle();assert.ok(releaseRead,'event polling queued an authoritative refresh');assert.equal(finished,false,'admission settles after the queued read, not while its fieldset is disabled');
+ assert.equal(fields.disabled,true);if(moved)app.node('mission-id').focus();releaseRead(reply({revision,value}));await pending;
+ assert.equal(fields.disabled,false);assert.equal(doc.activeElement.id,moved?'mission-id':button.id);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);
+});
