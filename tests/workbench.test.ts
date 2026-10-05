@@ -431,3 +431,100 @@ test('a later offline event fences an in-flight reconnect and successful sync ca
  const mission=fixtureMission();let hold=false,release!:(value:Reply)=>void;const providers=()=>reply({providers:[],selection:{status:'unavailable',reason:'No model'},runtime:null});const handler:Handler=path=>path==='/health'?reply({status:'ready'}):path==='/providers'?hold?new Promise<Reply>(resolve=>release=resolve):providers():path==='/connections'?reply({},503):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission});const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();hold=true;await app.windowEvent('offline');await app.tick();assert.equal(typeof release,'function');await app.windowEvent('offline');hold=false;release(providers());await settle();assert.equal(app.node('mission-fields').disabled,true);await app.tick();assert.equal(app.node('mission-fields').disabled,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
  const marker=JSON.stringify({commandId:'unconfirmed',missionId:mission.id,reconcileCursor:0});const pending=harness(handler,{'massion.workbench.pending':marker},undefined,{network:true});await settle();await pending.windowEvent('offline');await pending.tick();assert.equal(pending.node('sync-notice').hidden,true);assert.equal(pending.node('mission-fields').disabled,true);assert.equal(pending.storage.get('massion.workbench.pending'),marker);assert.equal(pending.calls.filter(c=>c.options.method==='POST').length,0);
 });
+
+test('instruction drafts and conflict comparisons are scoped to Mission plus Work identities',async()=>{
+ const one=fixtureMission('mission:one'),two=fixtureMission('mission:two');one.works=[work(one)];two.works=[work(two)];one.works[0]!.instructions=[{actorId:'owner',text:'Current first Mission direction'}];
+ const states=new Map([[one.id,{revision:2,value:one}],[two.id,{revision:2,value:two}]]);
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST')return reply({status:'conflict',reason:'revision',revision:2},409);
+  return reply(states.get(decodeURIComponent(path.slice('/missions/'.length))));
+ },{},undefined,{fragment:'#mission=mission%3Aone'});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='Private first Mission draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
+ assert.match(app.node('work-list').textContent,/Private first Mission draft/);assert.match(app.node('work-list').textContent,/owner: Current first Mission direction/);
+ const writes=app.calls.filter(call=>call.options.method==='POST').length;
+ await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);
+ selectionField(app,'steer-work:test').value='Second Mission draft';await selectionField(app,'steer-work:test').fire('input');
+ await app.navigateFragment('#mission=mission%3Aone');assert.equal(selectionField(app,'steer-work:test').value,'Private first Mission draft');assert.match(app.node('work-list').textContent,/Current first Mission direction/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
+ await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'Second Mission draft');
+ await app.navigateFragment('#mission=mission%3Aone');selectionField(app,'steer-work:test').value='';await selectionField(app,'steer-work:test').fire('input');
+ await app.navigateFragment('#mission=mission%3Atwo');one.works[0]!.execution='cancelled';states.set(one.id,{revision:3,value:one});await app.navigateFragment('#mission=mission%3Aone');
+ const comparison=app.all().find(node=>node.className==='instruction-conflict')!;assert.equal(comparison.children.at(-1)!.tagName,'PRE');assert.equal(comparison.children.at(-1)!.textContent,'');assert.match(comparison.textContent,/Your unrecorded submissionPrivate first Mission draft/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
+});
+
+test('late exact steering receipt clears conflict but preserves a draft edited after transmission',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];mission.works[0]!.instructions=[{actorId:'owner',text:'Current direction'}];let revision=2,posts=0,receipt:any,visible=false;
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:visible?1:0,events:visible?[receipt]:[]});
+  if(options.method==='POST'){
+   ++posts;const body=JSON.parse(options.body);
+   if(posts===1){revision=3;return reply({status:'conflict',reason:'revision',revision},409);}
+   mission.works[0]!.instructions!.push({actorId:'owner',text:body.command.instruction});revision=4;receipt={cursor:1,aggregateId:mission.id,commandId:body.commandId,revision,events:[{type:'steer'}]};throw new Error('Response lost after commit');
+  }
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const form=()=>app.all().find(node=>node.className==='steer-form')!;
+ let input=selectionField(app,'steer-work:test');input.value='Submitted direction';await input.fire('input');await form().fire('submit');await settle();assert.equal(posts,1);
+ await form().fire('submit');await settle();assert.equal(posts,2);assert.equal(app.node('operation-notice').hidden,false);
+ input=selectionField(app,'steer-work:test');input.value='A new unsent draft';await input.fire('input');visible=true;await app.tick();
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(selectionField(app,'steer-work:test').value,'A new unsent draft');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);assert.match(app.node('work-list').textContent,/Latest owner instruction: Submitted direction/);await app.tick();assert.equal(posts,2);
+});
+
+test('editing while recovery lock admission waits preserves the unsent instruction draft',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];let revision=2,posts=0;
+ const locks=new SharedWebLocks();let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+ locks.request=async(name,_options,callback)=>{await gate;return callback({name});};
+ const app=harness((path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){++posts;const body=JSON.parse(options.body);assert.equal(body.command.instruction,'Original submitted draft');mission.works[0]!.instructions=[{actorId:'owner',text:body.command.instruction}];revision=3;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest',locks});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='Original submitted draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();assert.equal(posts,0);
+ input.value='Edited while awaiting lock';await input.fire('input');release();await settle();assert.equal(posts,1);assert.equal(selectionField(app,'steer-work:test').value,'Edited while awaiting lock');assert.match(app.node('work-list').textContent,/Latest owner instruction: Original submitted draft/);
+});
+
+for(const kind of ['steer','cancel','conflict'])test(`keyboard ${kind} returns focus to the same Work without stealing another target`,async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];let revision=2,release!:()=>void,moveFocus=false;
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){
+   if(moveFocus)await new Promise<void>(resolve=>release=resolve);
+   const body=JSON.parse(options.body);++revision;
+   if(kind==='cancel')mission.works[0]!.execution='cancelled';else mission.works[0]!.instructions=[{actorId:'owner',text:body.command.instruction}];
+   return kind==='conflict'?reply({status:'conflict',reason:'revision',revision},409):reply({status:'committed',revision,value:mission});
+  }
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const form=()=>app.all().find(node=>node.className==='steer-form')!;
+ const input=selectionField(app,'steer-work:test');input.value='Keyboard draft';await input.fire('input');const button=form().children.find(node=>node.className==='row')!.children.find(node=>node.textContent===(kind==='cancel'?'Cancel Work':'Record instruction'))!;button.focus();
+ if(kind==='cancel')await button.fire('click');else await form().fire('submit');await settle();
+ assert.equal((app.context as any).document.activeElement.id,kind==='cancel'?'work-heading-work:test':'steer-work:test');
+ if(kind!=='cancel'){
+  moveFocus=true;selectionField(app,'steer-work:test').value='Next draft';const current=form(),submit=current.children.find(node=>node.className==='row')!.children[0]!;submit.focus();await current.fire('submit');await settle();
+  app.node('mission-id').focus();release();await settle();assert.equal((app.context as any).document.activeElement.id,'mission-id');
+ }
+});
+
+test('a pending owner command does not steal focus from another Work after snapshot replacement',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission),{...work(mission,'Other Work'),id:'work:other'}];let revision=2,release!:()=>void;
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){await new Promise<void>(resolve=>release=resolve);++revision;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='First direction';await input.fire('input');const form=app.all().find(node=>node.className==='steer-form')!;form.children.find(node=>node.className==='row')!.children[0]!.focus();await form.fire('submit');await settle();
+ const other=selectionField(app,'steer-work:other');other.value='Unsent other direction';await other.fire('input');other.focus();release();await settle();assert.equal((app.context as any).document.activeElement.id,'steer-work:other');assert.equal(selectionField(app,'steer-work:other').value,'Unsent other direction');
+});
+
+for(const kind of ['summary','pre','select'])test(`a pending owner response preserves another Work's focused ${kind}`,async()=>{
+ const mission=fixtureMission();mission.works=[work(mission),{...work(mission,'Other Work'),id:'work:other'}];let revision=2,release!:()=>void;
+ const app=harness(async(path,options)=>{
+  if(path==='/providers')return reply({providers:[],selection:{status:'unavailable'},runtime:{connections:[],authorizations:[]}});
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){await new Promise<void>(resolve=>release=resolve);++revision;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();configureSelection(app);
+ const input=selectionField(app,'steer-work:test');input.value='First direction';await input.fire('input');const form=app.all().find(node=>node.className==='steer-form')!;form.children.find(node=>node.className==='row')!.children[0]!.focus();await form.fire('submit');await settle();
+ const descendants=(node:any):any[]=>[node,...node.children.flatMap(descendants)];const other=app.node('work-list').children[1]!;const target=descendants(other).find(node=>node.tagName===kind.toUpperCase());assert.ok(target);target.focus();release();await settle();const active=(app.context as any).document.activeElement;
+ assert.ok(descendants(app.node('work-list').children[1]!).includes(active),'focus must refer to the newly rendered other Work');assert.equal(active.tagName,kind.toUpperCase());assert.equal(active.textContent,target.textContent);
+});

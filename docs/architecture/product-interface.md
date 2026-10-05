@@ -27,6 +27,28 @@ The store serializes commits within one host/store instance because its atomic g
 
 No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
 
+## Explicit owner-instruction conflict comparison
+
+A rejected owner instruction retains its submitted text and editable draft in
+browser memory, scoped by Mission and Work together. Its Work card compares the
+unrecorded submission and attempted revision with the latest authoritative owner
+instruction and snapshot revision. A new action requires deliberate submission
+against the displayed revision with a fresh command identity; no conflict is
+merged or retried automatically. Repeated conflicts update the comparison.
+A direct success or exact durable operation receipt clears that submission's
+comparison and unchanged draft. Edits made after transmission remain a new unsent
+draft; unknown outcomes retain their lock and are never replayed.
+
+Durable events and reconnect reads refresh the canonical side while preserving
+local drafts. Closed Work retains the comparison/draft for reading and has no
+resubmit controls. Detached controls cannot submit to a different Mission or a
+newer/closed Work snapshot. Another Work's draft remains independent. Drafts are
+volatile browser memory, not shared conversation state or persisted server input;
+reload/new clients reconstruct committed instructions, not rejected private drafts.
+Existing owner resolution, revision admission, no-replay and effect gates apply.
+This advances #4/SUR-01 without choosing conversation/session or identity/auth
+semantics. General shared conversation remains a separate product decision.
+
 ## Reconnection synchronization barrier
 
 Startup, an offline notification or a failed/invalid event read pauses new writes.
@@ -78,3 +100,14 @@ The cursor schema is version 2. A nonempty foundation database without cursor me
 ## Verification limits
 
 Actual SurrealDB tests cover user Work persistence, a fresh HTTP host/transport reading the same snapshot, and event catch-up after restart. JavaScript/DOM-harness tests exercise client logic. `tests/client-workbench.test.ts` also connects the actual inline client to a real loopback HTTP host, selected local HTTP fixture adapters, and optional actual SurrealDB, then checks host restart/client reload without provider replay. This is client/HTTP integration evidence, not browser rendering evidence. The real cloud browser cannot open the loopback URL in this environment; visual layout, browser behavior and accessibility remain unverified. Real model quality, credential configuration, execution spend, OS/VM isolation and production deployment remain separate gates.
+
+
+Keyboard owner actions restore focus to the same Work instruction or its result/
+closed heading after DOM replacement. Model/scope setup and selection checking
+restore the relevant control. Pending responses respect a user who moved focus;
+rendering preserves a focused Work instruction and its caret, as well as stable
+Work summary, evidence and selection targets. Implicit Enter submission from
+model/scope inputs restores the submitted input after replacement. Scrollable evidence
+and authoritative snapshot text are keyboard reachable with visible focus. See the
+[bounded Chrome keyboard evidence](../acceptance/browser-qa.md); screen-reader and
+broader platform coverage remain open.
