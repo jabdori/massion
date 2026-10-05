@@ -482,3 +482,36 @@ test('editing while recovery lock admission waits preserves the unsent instructi
  const input=selectionField(app,'steer-work:test');input.value='Original submitted draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();assert.equal(posts,0);
  input.value='Edited while awaiting lock';await input.fire('input');release();await settle();assert.equal(posts,1);assert.equal(selectionField(app,'steer-work:test').value,'Edited while awaiting lock');assert.match(app.node('work-list').textContent,/Latest owner instruction: Original submitted draft/);
 });
+
+for(const kind of ['steer','cancel','conflict'])test(`keyboard ${kind} returns focus to the same Work without stealing another target`,async()=>{
+ const mission=fixtureMission();mission.works=[work(mission)];let revision=2,release!:()=>void,moveFocus=false;
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){
+   if(moveFocus)await new Promise<void>(resolve=>release=resolve);
+   const body=JSON.parse(options.body);++revision;
+   if(kind==='cancel')mission.works[0]!.execution='cancelled';else mission.works[0]!.instructions=[{actorId:'owner',text:body.command.instruction}];
+   return kind==='conflict'?reply({status:'conflict',reason:'revision',revision},409):reply({status:'committed',revision,value:mission});
+  }
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const form=()=>app.all().find(node=>node.className==='steer-form')!;
+ const input=selectionField(app,'steer-work:test');input.value='Keyboard draft';await input.fire('input');const button=form().children.find(node=>node.className==='row')!.children.find(node=>node.textContent===(kind==='cancel'?'Cancel Work':'Record instruction'))!;button.focus();
+ if(kind==='cancel')await button.fire('click');else await form().fire('submit');await settle();
+ assert.equal((app.context as any).document.activeElement.id,kind==='cancel'?'work-heading-work:test':'steer-work:test');
+ if(kind!=='cancel'){
+  moveFocus=true;selectionField(app,'steer-work:test').value='Next draft';const current=form(),submit=current.children.find(node=>node.className==='row')!.children[0]!;submit.focus();await current.fire('submit');await settle();
+  app.node('mission-id').focus();release();await settle();assert.equal((app.context as any).document.activeElement.id,'mission-id');
+ }
+});
+
+test('a pending owner command does not steal focus from another Work after snapshot replacement',async()=>{
+ const mission=fixtureMission();mission.works=[work(mission),{...work(mission,'Other Work'),id:'work:other'}];let revision=2,release!:()=>void;
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){await new Promise<void>(resolve=>release=resolve);++revision;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
+ const input=selectionField(app,'steer-work:test');input.value='First direction';await input.fire('input');const form=app.all().find(node=>node.className==='steer-form')!;form.children.find(node=>node.className==='row')!.children[0]!.focus();await form.fire('submit');await settle();
+ const other=selectionField(app,'steer-work:other');other.value='Unsent other direction';await other.fire('input');other.focus();release();await settle();assert.equal((app.context as any).document.activeElement.id,'steer-work:other');assert.equal(selectionField(app,'steer-work:other').value,'Unsent other direction');
+});

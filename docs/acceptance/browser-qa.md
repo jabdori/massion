@@ -70,9 +70,58 @@ This harness observation is not presented as a product failure.
 ## Remaining coverage
 
 This is actual visual/click and automated accessibility evidence for the bounded
-existing fixture journey. Full keyboard traversal, screen-reader review, broader
+existing fixture journey. Screen-reader review, broader
 browser/platform coverage, real-provider semantic quality, remote-PC authentication,
 persistent approvals and general shared conversation remain open. Empty-draft and
 lock-wait edge cases also have automated client regressions; they are not newly
 claimed as separately clicked browser scenarios. Computer-use-linux's AT-SPI setup
 was not changed or used. No general conversation-to-Work choice is adopted.
+
+
+## Keyboard focus follow-up (2026-10-05)
+
+Tracked in [LAZ-7](https://linear.app/lazybased/issue/LAZ-7/workbench-키보드-초점-복구와-전체-tab-흐름-검증).
+This follow-up changes product code above the historical `0854b96` checkpoint.
+The final published commit and tested source hashes are recorded with PR #13 and
+in the task-owned `keyboard-final/evidence.json`; earlier QA results above retain
+their original code checkpoints.
+
+Actual Chrome keyboard input reproduced focus falling to the document body after
+instruction submission, cancellation, model/scope configuration, selection check
+and explicit Run. The affected handlers now restore the corresponding instruction,
+configuration/check control or closed/result Work heading. Restoration respects a
+user who moved focus elsewhere while waiting. Mission rendering preserves another
+Work's focused instruction, unsent draft and selection range. Evidence and snapshot
+text regions support Tab, keyboard scrolling and a visible focus indicator.
+
+The final normal CLI host used a separate disposable SurrealDB 3.3.0 and local
+credential-free compatible fixture, ports 18361–18364 and dedicated browser
+profiles. No real model/account, OS setting or existing user browser was used.
+
+| Keyboard observation | Result |
+| --- | --- |
+| Mission/Work forms and native validation | Tab/Enter creates actual Mission/Work; empty Mission focuses required Purpose and sends zero POST |
+| Owner direction/cancel | Submission focuses the same Work instruction; cancellation focuses its closed Work heading with 3px outline |
+| Focus moved while request waits | Other Work's unsent direction, focus and caret survive authoritative snapshot replacement |
+| Revision conflict | Independent browser wins held original request; losing draft/comparison and input focus retained with one POST; deliberate keyboard resubmission alone raises it to two |
+| Model/scope configuration | Keyboard submission returns focus to model input / executor scope selector |
+| Selection/error and explicit Run | Invalid zero-budget/cap check retains check-button focus; corrected check sends zero Run requests; deliberate Run sends one and displays an accepted fixture Record, two local provider calls |
+| Expanded detail/Records/snapshot traversal | All 61 eligible controls/text regions visited with 366 Tab/Shift+Tab presses; no missing target or trap; fixture action reached without activating it |
+| Narrow view and automated accessibility | 390px view has scroll width 390 and visible Work focus; expanded-state axe 4.12.1 reports 46 passes, zero violations/incomplete after fixing six inaccessible scrolling text regions |
+| Native select dismissal / modal | Arrow-key choice and Escape exercised; no application modal/dialog exists in this surface, so modal cancellation is not applicable |
+
+Pinned static types and affected real HTTP/SurrealDB regressions passed 64/64,
+zero skips/failures. Four added client regressions cover successful direction,
+conflict, cancellation and another Work's focused draft during response handling;
+existing integration cases also assert scope/check/Run focus. Exact published-head
+CI and independent review are tracked on PR #13 separately.
+
+Screen-reader testing was not performed (Orca was not available). Broader browser,
+platform and assistive-technology review, remote-PC authentication and live-model
+quality remain open. This is bounded keyboard evidence, not full WCAG certification.
+
+A first held-conflict harness attempt exceeded the client's request timeout and
+entered its expected unknown-outcome barrier. It was released without replay and
+kept as diagnostic evidence; the bounded two-client reproduction above then passed.
+The test driver also corrected its admission budget/cap and waits for closed detail
+state. Those driver corrections are recorded separately from product defects.

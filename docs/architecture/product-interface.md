@@ -100,3 +100,12 @@ The cursor schema is version 2. A nonempty foundation database without cursor me
 ## Verification limits
 
 Actual SurrealDB tests cover user Work persistence, a fresh HTTP host/transport reading the same snapshot, and event catch-up after restart. JavaScript/DOM-harness tests exercise client logic. `tests/client-workbench.test.ts` also connects the actual inline client to a real loopback HTTP host, selected local HTTP fixture adapters, and optional actual SurrealDB, then checks host restart/client reload without provider replay. This is client/HTTP integration evidence, not browser rendering evidence. The real cloud browser cannot open the loopback URL in this environment; visual layout, browser behavior and accessibility remain unverified. Real model quality, credential configuration, execution spend, OS/VM isolation and production deployment remain separate gates.
+
+
+Keyboard owner actions restore focus to the same Work instruction or its result/
+closed heading after DOM replacement. Model/scope setup and selection checking
+restore the relevant control. Pending responses respect a user who moved focus;
+rendering preserves a focused Work instruction and its caret. Scrollable evidence
+and authoritative snapshot text are keyboard reachable with visible focus. See the
+[bounded Chrome keyboard evidence](../acceptance/browser-qa.md); screen-reader and
+broader platform coverage remain open.
