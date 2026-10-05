@@ -651,17 +651,20 @@ $('mission-form').addEventListener('submit', async event => {
   event.preventDefault(); if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
   const purpose = $('purpose').value.trim(), scope = $('scope').value.trim(), description = $('criteria').value.trim();
   if (!purpose || !scope || !description) { report('Purpose, scope and success criteria are required.','error'); return; }
+  const submittedFocus = document.activeElement;
   const id = 'mission:' + crypto.randomUUID();
   const body = {id,commandId:crypto.randomUUID(),purpose,scope,constraints:$('constraints').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean),criteria:{version:1,description,oracle:$('criteria-oracle').value || 'manual-review/v1'}};
   if (await write('/missions',body,id,'Mission created.')) $('mission-form').reset();
+  if (selectedId === id && snapshot?.value.id === id && $('mission-form').contains(submittedFocus)) restoreControlFocus(submittedFocus,submittedFocus.id);
 });
 $('work-form').addEventListener('submit', async event => {
   event.preventDefault(); if (!snapshot || reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return;
   const title = $('work-title').value.trim(), budgetText = $('work-budget').value, budget = Number(budgetText);
   if (!title || !budgetText || !Number.isFinite(budget) || budget < 0) { report('Enter a Work title and a nonnegative finite budget.','error'); return; }
-  const id = snapshot.value.id;
+  const id = snapshot.value.id, submittedFocus = document.activeElement;
   const body = {commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,workId:'work:' + crypto.randomUUID(),title,budget};
   if (await write('/missions/' + encodeURIComponent(id) + '/work',body,id,'Work admitted. No model execution was started.')) $('work-form').reset();
+  if (selectedId === id && snapshot?.value.id === id && $('work-form').contains(submittedFocus)) restoreControlFocus(submittedFocus,submittedFocus.id);
 });
 $('load-form').addEventListener('submit', event => { event.preventDefault(); if (!busy) void loadMission($('mission-id').value.trim()); });
 $('run-fixture').addEventListener('click', async () => {

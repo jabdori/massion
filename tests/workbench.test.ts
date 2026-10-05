@@ -92,12 +92,14 @@ for(const oracle of ['manual-review/v1','bounded-text-review/v1'])test(`Mission 
   app.node('criteria-oracle').value=selected;await app.node('criteria-oracle').fire('change');await settle();
   assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
  }
- await app.submit('mission-form');
+ app.node('create-mission').focus();await app.submit('mission-form');
+ assert.equal((app.context as any).document.activeElement.id,'create-mission');
  const created=JSON.parse(app.node('snapshot-json').textContent);
  assert.equal(created.value.criteria.oracle,oracle);assert.deepEqual(created.value.works,[]);
  assert.equal(JSON.parse(app.calls.find(call=>call.path==='/missions')!.options.body).criteria.oracle,oracle);
  assert.deepEqual(app.calls.filter(call=>call.options.method==='POST').map(call=>call.path),['/missions']);
- app.node('work-title').value='Admitted responsibility';await app.submit('work-form');
+ app.node('work-title').value='Admitted responsibility';app.node('admit-work').focus();await app.submit('work-form');
+ assert.equal((app.context as any).document.activeElement.id,'admit-work');
  const admitted=JSON.parse(app.node('snapshot-json').textContent).value.works[0];
  assert.equal(admitted.criteria.oracle,oracle);assert.equal(admitted.execution,'queued');assert.equal(admitted.acceptance,'pending');assert.equal(admitted.record,undefined);
  assert.match(app.node('work-list').textContent,/Acceptance: pending/);assert.doesNotMatch(app.node('work-list').textContent,/Acceptance: accepted/);
