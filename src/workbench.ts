@@ -450,13 +450,16 @@ async function refreshReadState(epoch, expectedFeed) {
     if (response.ok && missionId && body.snapshot === null) { clearSnapshot('This Mission is absent from the current database. Load an existing Mission to continue reading.'); throw new Error('Selected Mission is absent from the current database'); }
     if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
     if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
-    if (body.feedId !== feedId) {
+    if (feedId && body.feedId !== feedId) {
       activity = []; confirmedOperations.clear();
     }
     // Receipts predating this snapshot still matter; a fresh boundary is not command reconciliation.
     if (unknownOperation) unknownOperation.reconcileCursor = 0;
     if (missionId) installSnapshot(body.snapshot);
-    feedId = body.feedId; cursor = body.cursor;
+    feedId = body.feedId;
+    // Same-feed snapshot reads may be ahead of bounded event pages. Only reset
+    // the event boundary when recovering a replaced/invalid feed, not reconnecting.
+    if (!expectedFeed) cursor = body.cursor;
     storage.set(feedKey,feedId); storage.set(cursorKey,String(cursor)); renderActivity();
   } finally { loading = false; controls(); }
 }

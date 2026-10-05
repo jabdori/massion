@@ -128,3 +128,17 @@ isolated journals remain at their two seeds. Task evidence is in
 actual-store/crash/restore aggregate is 343 passed, 0 failed/skipped; earlier
 329/329 and 324/324 remain historical, separate checkpoints. Current published
 head/base, CI and independent review disposition are recorded in Draft #14.
+
+## Paginated reconnect follow-up
+
+Re-review of `87fe3d8` found that reconnect snapshot recovery could overwrite a
+bounded event page's delivered cursor with the newer snapshot head. A 205-event
+client regression failed before correction (205 instead of the first page's 100).
+Same-feed recovery now preserves the delivered event cursor, so subsequent pages
+advance 100 → 200 → 205 and display the latest activity without any POST.
+Replacement/invalid-feed recovery still resets its boundary to the new snapshot.
+The new final aggregate is 344 passed, 0 failed/skipped; the earlier 343/343
+checkpoint verifies the atomic admission commit and remains separately recorded.
+The related client/setup regressions passed 72, with one conditional DB skip;
+the actual aggregate includes that DB path. Prior focused Chrome admission
+evidence retains its exact source hashes and is not relabeled as this new client.
