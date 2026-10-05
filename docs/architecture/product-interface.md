@@ -105,7 +105,9 @@ Actual SurrealDB tests cover user Work persistence, a fresh HTTP host/transport 
 Keyboard owner actions restore focus to the same Work instruction or its result/
 closed heading after DOM replacement. Model/scope setup and selection checking
 restore the relevant control. Pending responses respect a user who moved focus;
-rendering preserves a focused Work instruction and its caret. Scrollable evidence
+rendering preserves a focused Work instruction and its caret, as well as stable
+Work summary, evidence and selection targets. Implicit Enter submission from
+model/scope inputs restores the submitted input after replacement. Scrollable evidence
 and authoritative snapshot text are keyboard reachable with visible focus. See the
 [bounded Chrome keyboard evidence](../acceptance/browser-qa.md); screen-reader and
 broader platform coverage remain open.

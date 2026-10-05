@@ -159,9 +159,10 @@ async function clearFixture() {
 }
 $('mission-id').value = selectedId;
 function element(tag, text, className) { const item = document.createElement(tag); if (tag === 'pre') item.tabIndex = 0; if (text !== undefined) item.textContent = String(text); if (className) item.className = className; return item; }
+function workElement(work, tag, text, key) { const item = element(tag,text); item.id = 'work-' + key + '-' + work.id; return item; }
 function restoreControlFocus(previous, targetId) {
   const active = document.activeElement;
-  if (!active || active.tagName === 'BODY' || active === previous) document.getElementById(targetId)?.focus();
+  if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
 function report(message, tone = '') { $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : ''); }
 function controls() {
@@ -264,7 +265,7 @@ const executionDrafts = new Map(), executionForms = new Map();
 function renderExecutionSelection(work) {
   const missionId = snapshot.value.id, revision = snapshot.revision;
   const configuration = runtimeConfiguration;
-  const area = element('details',undefined,'controls'); area.append(element('summary','Choose execution and review connections'));
+  const area = element('details',undefined,'controls'); area.append(workElement(work,'summary','Choose execution and review connections','selection-summary'));
   const form = element('form',undefined,'execution-form');
   const draftKey = missionId + '\u0000' + work.id;
   executionForms.set(draftKey,form);
@@ -321,21 +322,21 @@ function renderExecutionSelection(work) {
     } catch(error) { if (stillCurrent()) { result.textContent = 'Selection could not be checked: ' + error.message; result.className = 'status warning'; } }
     finally { if (stillCurrent()) { checking = false; check.disabled = false; check.textContent = 'Check selection'; if(submittedFocus === check)restoreControlFocus(submittedFocus,check.id); } }
   });
-  const run = element('button','Run with selected connections'); run.type = 'submit'; run.setAttribute('data-write',''); run.setAttribute('aria-describedby',plan.id);
+  const run = workElement(work,'button','Run with selected connections','run'); run.type = 'submit'; run.setAttribute('data-write',''); run.setAttribute('aria-describedby',plan.id);
   form.addEventListener('submit',async event => { event.preventDefault(); if(!current())return; const submittedFocus=document.activeElement; refresh(); await write('/missions/' + encodeURIComponent(missionId) + '/run',{commandId:crypto.randomUUID(),expectedRevision:revision,workId:work.id,selection:choice()},missionId,'Run finished. Inspect its execution and independent assurance below.'); if(submittedFocus === run && snapshot?.value.id === missionId && selectedId === missionId)restoreControlFocus(submittedFocus,'work-heading-' + work.id); });
   for(const connection of configuration.connections.filter(c=>c.diagnostics.length))form.append(element('p',connection.label + ': ' + connection.diagnostics.map(d=>d.message).join(' '),'hint'));
   form.append(detail,plan,check,run,result,element('p','No automatic fallback, retry or provider change. The same connection may serve both roles through separate stateless calls; independent review is not a quality guarantee.','hint'));area.append(form);return area;
 }
 
 function renderWork(work) {
-  const card = element('article', undefined, 'work-card');
+  const card = element('article', undefined, 'work-card'); card.id = 'work-card-' + work.id;
   const title = element('h3', work.title, 'work-title'); title.id = 'work-heading-' + work.id; title.tabIndex = -1; card.append(title, element('div', work.id, 'id'));
   const tags = element('div', undefined, 'badge-row'); tags.append(badge('Execution: ' + work.execution, work.execution), badge('Acceptance: ' + work.acceptance, work.acceptance));
   if (work.record) tags.append(badge(work.record.evidenceClass + ' evidence', work.record.evidenceClass)); card.append(tags);
   const metrics = element('dl', undefined, 'metrics'); metrics.append(metric('Attempts', (work.attempts || []).length), metric('Budget · reserved / limit', work.budget.reserved + ' / ' + work.budget.limit), metric('Measured usage', work.budget.measured === null ? 'Unknown' : work.budget.measured)); card.append(metrics);
   card.append(element('p', workBlocker(work), 'work-note' + (['queued','blocked','waiting'].includes(work.execution) ? ' warning' : '')));
   if ((work.instructions || []).length) card.append(element('p', 'Latest owner instruction: ' + work.instructions.at(-1).text, 'work-note'));
-  const evidence = element('details'); evidence.append(element('summary', 'Criteria, memory pins & evidence'));
+  const evidence = element('details'); evidence.append(workElement(work,'summary','Criteria, memory pins & evidence','evidence-summary'));
   const body = element('div', undefined, 'detail-content');
   body.append(element('h4', 'Pinned criteria'), element('p', 'v' + work.criteria.version + ' · ' + work.criteria.description), element('p', 'Oracle: ' + work.criteria.oracle, 'id'));
   body.append(element('h4', 'Pinned memory versions'), element('p', work.appliedMemoryVersions.length ? work.appliedMemoryVersions.join(', ') : 'None pinned for this Work.'));
@@ -344,24 +345,24 @@ function renderWork(work) {
   body.append(element('h4', 'Independent assurance'), element('p', work.verdict ? work.verdict.status + ' · artifact v' + work.verdict.artifactVersion + ' · criteria v' + work.verdict.criteriaVersion : 'No independent verdict yet.'));
   if (work.verdict) { const items = element('ul'); for (const proof of work.verdict.evidence) items.append(element('li', proof.kind + ': ' + proof.detail + ' · source: ' + proof.source)); body.append(items); }
   if ((work.instructions || []).length) { body.append(element('h4', 'Recorded owner instructions')); const instructions = element('ul'); for (const instruction of work.instructions) instructions.append(element('li', instruction.actorId + ': ' + instruction.text)); body.append(instructions); }
-  if (work.runtimeRecovery) { body.append(element('h4', 'Owner quarantine decision'), element('p', work.runtimeRecovery.actorId + ': ' + work.runtimeRecovery.reason), element('pre', JSON.stringify(work.runtimeRecovery, null, 2))); }
+  if (work.runtimeRecovery) { body.append(element('h4', 'Owner quarantine decision'), element('p', work.runtimeRecovery.actorId + ': ' + work.runtimeRecovery.reason), workElement(work,'pre',JSON.stringify(work.runtimeRecovery,null,2),'recovery')); }
   body.append(element('h4', 'Effect receipts'));
   if (!work.effects.length) body.append(element('p', 'No effects admitted.'));
   for (const effect of work.effects) body.append(element('p', effect.id + ' · ' + effect.status + ' · ' + effect.target + (effect.receipt ? ' · receipt: ' + effect.receipt : ' · no receipt')));
   body.append(element('h4', 'Accepted Record'));
-  if (work.record) { body.append(element('p', work.record.id + ' · ' + work.record.evidenceClass), element('p', 'Checksum: ' + work.record.checksum, 'id')); const record = element('details'); record.append(element('summary', 'Inspect Record bundle'), element('pre', JSON.stringify(work.record, null, 2))); body.append(record); }
+  if (work.record) { body.append(element('p', work.record.id + ' · ' + work.record.evidenceClass), element('p', 'Checksum: ' + work.record.checksum, 'id')); const record = element('details'); record.append(workElement(work,'summary','Inspect Record bundle','record-summary'), workElement(work,'pre',JSON.stringify(work.record,null,2),'record')); body.append(record); }
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
-  const attempts = element('details'); attempts.append(element('summary', 'Attempts, tasks & assignments'), element('pre', JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments}, null, 2))); body.append(attempts); evidence.append(body); card.append(evidence);
-  if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),element('pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2)));
+  const attempts = element('details'); attempts.append(workElement(work,'summary','Attempts, tasks & assignments','attempts-summary'), workElement(work,'pre',JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments},null,2),'attempts')); body.append(attempts); evidence.append(body); card.append(evidence);
+  if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),workElement(work,'pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2),'connections'));
   if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
   if (work.runtimeRun && !work.runtimeRecovery && work.acceptance !== 'accepted' && work.effects.some(effect => effect.status === 'pending' || effect.status === 'unknown')) {
-    const area = element('details', undefined, 'controls'); area.append(element('summary', 'Quarantine interrupted run'));
+    const area = element('details', undefined, 'controls'); area.append(workElement(work,'summary','Quarantine interrupted run','quarantine-summary'));
     area.append(element('p', 'Permanent local closure: pending effects become unknown, reservations remain held, and late provider responses cannot change this Work. An already admitted effect may still execute remotely. This does not resume completion or authorize replay.', 'work-note warning'));
     const form = element('form', undefined, 'quarantine-form');
     const label = element('label', 'Why are you quarantining this run?'); const reason = element('textarea'); reason.id = 'quarantine-reason-' + work.id; label.htmlFor = reason.id; reason.rows = 2; reason.maxLength = 16000; reason.required = true;
     const acknowledgement = element('input'); acknowledgement.type = 'checkbox'; acknowledgement.id = 'quarantine-ack-' + work.id; acknowledgement.required = true; acknowledgement.style.width = 'auto';
     const ackLabel = element('label', 'I understand that external effects and usage may remain unknown and this Work cannot be reopened.'); ackLabel.htmlFor = acknowledgement.id;
-    const submit = element('button', 'Permanently quarantine run', 'danger'); submit.type = 'submit'; submit.setAttribute('data-write','');
+    const submit = element('button', 'Permanently quarantine run', 'danger'); submit.id = 'work-quarantine-' + work.id; submit.type = 'submit'; submit.setAttribute('data-write','');
     form.addEventListener('submit', event => { event.preventDefault(); const text = reason.value.trim(); if (!text || !acknowledgement.checked) { report('Enter a reason and explicitly acknowledge the uncertain external outcome.','warning'); return; } sendCommand({type:'quarantine-runtime',workId:work.id,runId:work.runtimeRun.id,reason:text,acknowledgeUncertainOutcome:true}); });
     form.append(label,reason,acknowledgement,ackLabel,submit); area.append(form); card.append(area);
   }
@@ -370,11 +371,11 @@ function renderWork(work) {
   if (conflict) {
     const comparison = element('section', undefined, 'instruction-conflict'); comparison.setAttribute('role','status');
     comparison.append(element('h4','Instruction was not recorded'),element('p','Your submission at revision ' + conflict.revision + ' conflicted. No instruction was retried.'));
-    comparison.append(element('h4','Your unrecorded submission'),element('pre',conflict.text));
+    comparison.append(element('h4','Your unrecorded submission'),workElement(work,'pre',conflict.text,'unrecorded'));
     const latest = (work.instructions || []).at(-1);
     comparison.append(element('h4','Latest recorded owner instruction · current revision ' + revision),element('p',latest ? latest.actorId + ': ' + latest.text : 'No owner instruction is recorded.'));
     comparison.append(element('p',work.execution === 'cancelled' || work.acceptance === 'accepted' ? 'This Work is closed. Your draft remains available here; it cannot be resubmitted.' : 'Compare the current direction with your draft below. Edit it or deliberately submit it against the displayed revision.','hint'));
-    if (work.execution === 'cancelled' || work.acceptance === 'accepted') comparison.append(element('h4','Retained draft'),element('pre',drafts.get(key) ?? conflict.text));
+    if (work.execution === 'cancelled' || work.acceptance === 'accepted') comparison.append(element('h4','Retained draft'),workElement(work,'pre',drafts.get(key) ?? conflict.text,'draft'));
     card.append(comparison);
   }
   if (work.execution !== 'cancelled' && work.acceptance !== 'accepted') {
@@ -382,8 +383,8 @@ function renderWork(work) {
     const form = element('form', undefined, 'steer-form');
     const label = element('label', 'Steering instruction'); const input = element('textarea'); input.id = 'steer-' + work.id; label.htmlFor = input.id; input.rows = 2; input.maxLength = 16000; input.required = true; input.placeholder = 'Record a change of direction'; input.value = drafts.get(key) || ''; input.addEventListener('input', () => drafts.set(key, input.value));
     const buttons = element('div', undefined, 'row'); buttons.style.marginTop = '9px';
-    const steer = element('button', conflict ? 'Submit revised instruction at revision ' + revision : 'Record instruction', 'secondary'); steer.type = 'submit'; steer.setAttribute('data-write','');
-    const cancel = element('button', 'Cancel Work', 'danger'); cancel.type = 'button'; cancel.setAttribute('data-write','');
+    const steer = element('button', conflict ? 'Submit revised instruction at revision ' + revision : 'Record instruction', 'secondary'); steer.id = 'work-steer-' + work.id; steer.type = 'submit'; steer.setAttribute('data-write','');
+    const cancel = element('button', 'Cancel Work', 'danger'); cancel.id = 'work-cancel-' + work.id; cancel.type = 'button'; cancel.setAttribute('data-write','');
     const current = () => snapshot && selectedId === missionId && snapshot.value.id === missionId && snapshot.revision === revision && snapshot.value.works.some(item => item.id === work.id && item.execution !== 'cancelled' && item.acceptance !== 'accepted');
     cancel.addEventListener('click', () => { if (current()) sendCommand({type:'cancel',workId:work.id}, document.activeElement === cancel); });
     form.addEventListener('submit', event => { event.preventDefault(); if (!current()) return; const instruction = input.value.trim(); drafts.set(key,input.value); if (instruction) sendCommand({type:'steer',workId:work.id,instruction}, document.activeElement === input || document.activeElement === steer); });
@@ -394,7 +395,8 @@ function renderWork(work) {
 function renderMission() {
   if (!snapshot) return;
   const focused = document.activeElement;
-  const focusedInstruction = focused?.id?.startsWith('steer-') && $('work-list').contains(focused) ? {id:focused.id,start:focused.selectionStart,end:focused.selectionEnd} : null;
+  let card = focused; while (card && !card.id?.startsWith('work-card-')) card = card.parentElement;
+  const workFocus = focused?.id && $('work-list').contains(focused) ? {id:focused.id,heading:card ? 'work-heading-' + card.id.slice(10) : null,start:focused.selectionStart,end:focused.selectionEnd,scroll:focused.scrollTop} : null;
   const mission = snapshot.value;
   executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
@@ -407,10 +409,14 @@ function renderMission() {
   $('work-list').replaceChildren(...(mission.works.length ? mission.works.map(renderWork) : [element('p','No Work admitted yet. Add the first bounded responsibility below.','work-note')]));
   $('snapshot-json').textContent = JSON.stringify(snapshot, null, 2);
   controls();
-  if (focusedInstruction) {
-    const target = document.getElementById(focusedInstruction.id) || document.getElementById('work-heading-' + focusedInstruction.id.slice(6));
+  if (workFocus) {
+    const target = document.getElementById(workFocus.id) || (workFocus.heading && document.getElementById(workFocus.heading));
+    for (let parent = target?.parentElement; parent && parent !== $('work-list'); parent = parent.parentElement) {
+      if (parent.tagName === 'DETAILS' && !(target.tagName === 'SUMMARY' && parent === target.parentElement)) parent.open = true;
+    }
     target?.focus();
-    if (target?.tagName === 'TEXTAREA' && Number.isInteger(focusedInstruction.start) && Number.isInteger(focusedInstruction.end)) target.setSelectionRange(focusedInstruction.start,focusedInstruction.end);
+    if (target?.tagName === 'TEXTAREA' && Number.isInteger(workFocus.start) && Number.isInteger(workFocus.end)) target.setSelectionRange(workFocus.start,workFocus.end);
+    if (target?.tagName === 'PRE' && typeof workFocus.scroll === 'number') target.scrollTop = workFocus.scroll;
   }
 }
 function renderActivity() {
@@ -590,10 +596,10 @@ function renderConnections(){
   discover.addEventListener('click',async()=>{if(connectionBusy||connectionLocked())return;const sequence=++connectionSequence;connectionReading=true;connectionBusy=true;connectionControls();connectionDiscovery?.abort();const controller=new AbortController();connectionDiscovery=controller;discover.disabled=true;notice.textContent='Reading provider model metadata…';try{const {response,body}=await request('/connections/'+encodeURIComponent(c.id)+'/models',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({expectedConfigHash:c.configHash}),signal:controller.signal},20000);if(sequence!==connectionSequence)return;if(!response.ok)throw new Error(body.error||'Discovery failed');notice.textContent=body.message;if(body.status==='stale')return;const current=connectionCatalog.connections.find(x=>x.id===c.id&&x.configHash===c.configHash);if(current){current.models=body.models;current.discovery=body.status==='listed'?'models-discovered':'discovery-failed';populate();}}catch(error){if(sequence===connectionSequence)notice.textContent='Model discovery unavailable. Enter an exact model ID manually.';}finally{if(sequence===connectionSequence){connectionReading=false;connectionBusy=false;connectionControls();}}});card.append(discover,notice);
   const form=element('form');form.className='model-connect-form';const models=element('select');models.id='discovered-'+c.id;const model=element('input');model.id='manual-model-'+c.id;model.required=true;model.maxLength=256;const name=element('input');name.id='model-label-'+c.id;name.required=true;name.maxLength=512;
   function populate(){models.replaceChildren();const empty=element('option','Choose discovered model or enter manually');empty.value='';models.append(empty);for(const m of c.models){const option=element('option',m.label+' · '+m.id);option.value=m.id;models.append(option);}}
-  populate();models.addEventListener('change',()=>{model.value=models.value;name.value=c.label+' / '+models.value;});connectionField(form,'Discovered models',models);connectionField(form,'Exact model ID (manual fallback)',model);connectionField(form,'Model connection name',name);const save=element('button','Use this model');save.type='submit';connectionButtons.add(save);form.append(save);form.addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked())return;const submittedFocus=document.activeElement;connectionBusy=true;connectionControls();save.disabled=true;try{installConnections(await connectionWrite('/connections/'+encodeURIComponent(c.id)+'/profiles',{model:model.value,label:name.value,expectedConfigHash:c.configHash}));$('connection-status').textContent='Model configuration saved. Choose executor/reviewer roles and explicit permitted use before running.';}catch(error){notice.textContent=error.message;}finally{connectionBusy=false;connectionControls();if(submittedFocus===save)restoreControlFocus(submittedFocus,'manual-model-'+c.id);}});card.append(form);area.append(card);
+  populate();models.addEventListener('change',()=>{model.value=models.value;name.value=c.label+' / '+models.value;});connectionField(form,'Discovered models',models);connectionField(form,'Exact model ID (manual fallback)',model);connectionField(form,'Model connection name',name);const save=element('button','Use this model');save.type='submit';connectionButtons.add(save);form.append(save);form.addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked())return;const submittedFocus=document.activeElement;connectionBusy=true;connectionControls();save.disabled=true;try{installConnections(await connectionWrite('/connections/'+encodeURIComponent(c.id)+'/profiles',{model:model.value,label:name.value,expectedConfigHash:c.configHash}));$('connection-status').textContent='Model configuration saved. Choose executor/reviewer roles and explicit permitted use before running.';}catch(error){notice.textContent=error.message;}finally{connectionBusy=false;connectionControls();if(form.contains(submittedFocus))restoreControlFocus(submittedFocus,submittedFocus.id || 'manual-model-'+c.id);}});card.append(form);area.append(card);
  }
  if(connectionCatalog.runtime.connections.length){
-  const form=element('form');form.className='connection-authorization-form';form.append(element('h3','Permit selected models for a Mission scope'));const exec=element('select'),verify=element('select');exec.id='grant-executor';verify.id='grant-verifier';for(const field of [exec,verify]){const blank=element('option','Choose exact model connection');blank.value='';field.append(blank);for(const p of connectionCatalog.runtime.connections){const option=element('option',p.label+(p.diagnostics.length?' · credential or configuration required':''));option.value=p.id;option.disabled=p.diagnostics.length>0;field.append(option);}}connectionField(form,'Executor',exec);connectionField(form,'Independent verifier',verify);const scope=element('input');scope.id='grant-scope';scope.value=snapshot?.value.scope||$('scope').value;scope.required=true;connectionField(form,'Mission scope',scope);const cap=element('input');cap.id='grant-cap';cap.type='number';cap.value='1024';cap.min='1';cap.max='4096';cap.required=true;connectionField(form,'Maximum output tokens per call',cap);const button=element('button','Permit these models for this scope');button.type='submit';connectionButtons.add(button);form.append(button,element('p','Permission does not run a model. Cost and total token usage remain unknown. Live execution also requires a separately authorized host integration.','hint'));form.addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked())return;const submittedFocus=document.activeElement;connectionBusy=true;connectionControls();button.disabled=true;try{installConnections(await connectionWrite('/connection-authorizations',{id:'authorization:'+crypto.randomUUID(),scope:scope.value,executorProfileId:exec.value,verifierProfileId:verify.value,maxOutputTokensPerCall:Number(cap.value),expectedConfigHash:connectionCatalog.configHash}));$('connection-status').textContent='Scoped permission saved. Open a Work, check the selection and request its run explicitly.';}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();if(submittedFocus===button)restoreControlFocus(submittedFocus,'grant-executor');}});area.append(form);
+  const form=element('form');form.className='connection-authorization-form';form.append(element('h3','Permit selected models for a Mission scope'));const exec=element('select'),verify=element('select');exec.id='grant-executor';verify.id='grant-verifier';for(const field of [exec,verify]){const blank=element('option','Choose exact model connection');blank.value='';field.append(blank);for(const p of connectionCatalog.runtime.connections){const option=element('option',p.label+(p.diagnostics.length?' · credential or configuration required':''));option.value=p.id;option.disabled=p.diagnostics.length>0;field.append(option);}}connectionField(form,'Executor',exec);connectionField(form,'Independent verifier',verify);const scope=element('input');scope.id='grant-scope';scope.value=snapshot?.value.scope||$('scope').value;scope.required=true;connectionField(form,'Mission scope',scope);const cap=element('input');cap.id='grant-cap';cap.type='number';cap.value='1024';cap.min='1';cap.max='4096';cap.required=true;connectionField(form,'Maximum output tokens per call',cap);const button=element('button','Permit these models for this scope');button.type='submit';connectionButtons.add(button);form.append(button,element('p','Permission does not run a model. Cost and total token usage remain unknown. Live execution also requires a separately authorized host integration.','hint'));form.addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked())return;const submittedFocus=document.activeElement;connectionBusy=true;connectionControls();button.disabled=true;try{installConnections(await connectionWrite('/connection-authorizations',{id:'authorization:'+crypto.randomUUID(),scope:scope.value,executorProfileId:exec.value,verifierProfileId:verify.value,maxOutputTokensPerCall:Number(cap.value),expectedConfigHash:connectionCatalog.configHash}));$('connection-status').textContent='Scoped permission saved. Open a Work, check the selection and request its run explicitly.';}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();if(form.contains(submittedFocus))restoreControlFocus(submittedFocus,submittedFocus.id || 'grant-executor');}});area.append(form);
  }
  connectionControls();
 }

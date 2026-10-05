@@ -5,7 +5,7 @@ import {workbenchPage} from '../../src/workbench.ts';
 // It checks transitions and rendered text, not browser layout/accessibility conformance.
 export class Node {
  tagName:string; id=''; className=''; value=''; disabled=false; hidden=false; required=false;
- rows=0; maxLength=0; type=''; htmlFor=''; style:Record<string,string>={}; children:Node[]=[];
+ parentElement:Node|null=null; open=false; rows=0; maxLength=0; type=''; htmlFor=''; style:Record<string,string>={}; children:Node[]=[];
  attributes=new Map<string,string>(); listeners=new Map<string,((event:any)=>unknown)[]>();
  private text=''; resets=0; onFocus?:()=>void;
  focus(){this.onFocus?.();}
@@ -13,8 +13,8 @@ export class Node {
  constructor(tag='div'){this.tagName=tag.toUpperCase();}
  set textContent(value:string){this.text=String(value);this.children=[];}
  get textContent():string{return this.text+this.children.map(child=>child.textContent).join('');}
- append(...items:Node[]){this.children.push(...items);}
- replaceChildren(...items:Node[]){this.text='';this.children=items;}
+ append(...items:Node[]){for(const item of items)item.parentElement=this;this.children.push(...items);}
+ replaceChildren(...items:Node[]){this.text='';for(const child of this.children)child.parentElement=null;this.children=[];this.append(...items);}
  setAttribute(key:string,value:string){this.attributes.set(key,value);}
  hasAttribute(key:string){return this.attributes.has(key);}
  addEventListener(name:string,fn:(event:any)=>unknown){this.listeners.set(name,[...(this.listeners.get(name)||[]),fn]);}

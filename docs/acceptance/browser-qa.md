@@ -125,3 +125,33 @@ entered its expected unknown-outcome barrier. It was released without replay and
 kept as diagnostic evidence; the bounded two-client reproduction above then passed.
 The test driver also corrected its admission budget/cap and waits for closed detail
 state. Those driver corrections are recorded separately from product defects.
+
+
+## Independent keyboard review follow-up
+
+Codex review of `87b4740` found two P2 focus cases: moving to another Work's
+summary/evidence/selection while an owner response waits, and implicit Enter
+submission from a model/authorization input. Both were reproduced in actual Chrome
+and in regression tests before fixing. Work controls now have stable logical focus
+identities; rendering restores the corresponding target, necessary ancestor details
+and evidence scroll position, or its Work heading when that target disappears.
+Model/authorization forms accept implicit submission focus and restore its original
+input after replacement while respecting focus moved elsewhere.
+
+The corrected candidate passed pinned types and 67/67 affected actual-store
+regressions, zero failures/skips. Actual Chrome separately verified implicit model
+name/cap submission and held-request summary/pre/select focus; each target remained
+visible in the new DOM. A normal selected fixture Run still made one explicit Run
+and two provider calls, produced an accepted fixture Record and focused its Work
+heading. Keyboard cancellation also focused the closed Work heading. The final
+2-Work/accepted Record fixture state visited all 45 eligible targets with 270
+Tab/Shift+Tab presses, no missing target; axe reported 46 passes, zero violations or
+incomplete, and the inspected 390px layout retained scroll width 390.
+
+Task-owned `keyboard-review/evidence.json` names the final published HEAD/source
+hashes and stores before/after diagnostics, screenshots and the latest CI/review
+links. The 61-target earlier fixture remains evidence for its own checkpoint rather
+than being relabelled as this smaller fixture state. A stopped QA host caused one
+intermediate retry to remain behind the expected reconnect barrier; that attempt
+was not counted as passing. A fresh disposable DB/profile completed the final run.
+No live provider, OS setting, auth policy or human browser was changed.

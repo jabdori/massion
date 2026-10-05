@@ -515,3 +515,16 @@ test('a pending owner command does not steal focus from another Work after snaps
  const input=selectionField(app,'steer-work:test');input.value='First direction';await input.fire('input');const form=app.all().find(node=>node.className==='steer-form')!;form.children.find(node=>node.className==='row')!.children[0]!.focus();await form.fire('submit');await settle();
  const other=selectionField(app,'steer-work:other');other.value='Unsent other direction';await other.fire('input');other.focus();release();await settle();assert.equal((app.context as any).document.activeElement.id,'steer-work:other');assert.equal(selectionField(app,'steer-work:other').value,'Unsent other direction');
 });
+
+for(const kind of ['summary','pre','select'])test(`a pending owner response preserves another Work's focused ${kind}`,async()=>{
+ const mission=fixtureMission();mission.works=[work(mission),{...work(mission,'Other Work'),id:'work:other'}];let revision=2,release!:()=>void;
+ const app=harness(async(path,options)=>{
+  if(path==='/providers')return reply({providers:[],selection:{status:'unavailable'},runtime:{connections:[],authorizations:[]}});
+  if(path.startsWith('/events'))return reply({cursor:0,events:[]});
+  if(options.method==='POST'){await new Promise<void>(resolve=>release=resolve);++revision;return reply({status:'committed',revision,value:mission});}
+  return reply({revision,value:mission});
+ },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();configureSelection(app);
+ const input=selectionField(app,'steer-work:test');input.value='First direction';await input.fire('input');const form=app.all().find(node=>node.className==='steer-form')!;form.children.find(node=>node.className==='row')!.children[0]!.focus();await form.fire('submit');await settle();
+ const descendants=(node:any):any[]=>[node,...node.children.flatMap(descendants)];const other=app.node('work-list').children[1]!;const target=descendants(other).find(node=>node.tagName===kind.toUpperCase());assert.ok(target);target.focus();release();await settle();const active=(app.context as any).document.activeElement;
+ assert.ok(descendants(app.node('work-list').children[1]!).includes(active),'focus must refer to the newly rendered other Work');assert.equal(active.tagName,kind.toUpperCase());assert.equal(active.textContent,target.textContent);
+});
