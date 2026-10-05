@@ -30,7 +30,10 @@ feed identity and validates the client's `X-Massion-Feed` header. A changed iden
 or cursor beyond head closes the write barrier before read-only recovery through
 `GET /read-state?mission=…`, which binds the selected snapshot to one feed/cursor
 boundary. The barrier remains closed until current host permissions/setup and a
-fresh matching read boundary are available. Missing selected Missions stay locked.
+fresh matching read boundary are available. If the selected Mission is absent,
+recovery adopts the validated new feed boundary and clears that selection; Mission
+creation becomes available after permissions refresh. Unresolved command/fixture
+markers independently retain their write locks and are never cleared by absence.
 Equal Mission revisions with changed snapshot contents are rendered again.
 Private drafts and unresolved command/fixture identities remain; a fresh snapshot
 does not settle a command. Pending receipt catch-up starts at zero after fresh
