@@ -155,3 +155,24 @@ than being relabelled as this smaller fixture state. A stopped QA host caused on
 intermediate retry to remain behind the expected reconnect barrier; that attempt
 was not counted as passing. A fresh disposable DB/profile completed the final run.
 No live provider, OS setting, auth policy or human browser was changed.
+
+
+### Latest setup focus during response handling
+
+A subsequent Codex P2 on `a1fd32f` showed that moving within or between setup
+forms after an implicit submission could still be undone: replacement lost the
+newer focused field, then restored the original submitted input. The minimal
+renderer follow-up captures the active setup field immediately before replacement
+and restores that stable ID before submission completion chooses a fallback.
+
+Before-code actual Chrome and three regressions reproduced model-to-name,
+authorization-cap-to-scope and model-to-adjacent-cap movement being discarded.
+Corrected code preserves all three newly connected focus targets with one POST
+per request; affected actual-store tests pass 70/70, zero skips/failures. The final
+setup state reports axe 41 passes, zero violations/incomplete, with inspected
+390px/390px layout and visible focus. No provider request or Run was made for this
+setup-only follow-up. Task-owned `keyboard-setup-focus/evidence.json` names its
+exact final source/HEAD and before/after artifacts. Earlier full Tab/Records/Run
+journeys retain their named checkpoints; tab structure did not change in this
+minimal renderer follow-up. Latest-head CI and independent review are recorded
+with PR #13. Screen-reader and broader platform gates remain open.
