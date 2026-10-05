@@ -68,3 +68,8 @@ command body and newly read draft differed, causing deletion of unsent edits.
 Submission metadata now snapshots the draft before the first asynchronous wait.
 The held-lock regression confirms only the original text commits and the new draft
 survives, with exactly one POST.
+
+A third Codex P2 reproduced an intentionally emptied draft being replaced by the
+old rejected submission when Work closed. Missing-entry fallback now preserves
+a valid empty string. The scope regression verifies the rejected submission stays
+visible as historical submission while the retained current draft remains empty.

@@ -369,7 +369,7 @@ function renderWork(work) {
     const latest = (work.instructions || []).at(-1);
     comparison.append(element('h4','Latest recorded owner instruction · current revision ' + revision),element('p',latest ? latest.actorId + ': ' + latest.text : 'No owner instruction is recorded.'));
     comparison.append(element('p',work.execution === 'cancelled' || work.acceptance === 'accepted' ? 'This Work is closed. Your draft remains available here; it cannot be resubmitted.' : 'Compare the current direction with your draft below. Edit it or deliberately submit it against the displayed revision.','hint'));
-    if (work.execution === 'cancelled' || work.acceptance === 'accepted') comparison.append(element('h4','Retained draft'),element('pre',drafts.get(key) || conflict.text));
+    if (work.execution === 'cancelled' || work.acceptance === 'accepted') comparison.append(element('h4','Retained draft'),element('pre',drafts.get(key) ?? conflict.text));
     card.append(comparison);
   }
   if (work.execution !== 'cancelled' && work.acceptance !== 'accepted') {

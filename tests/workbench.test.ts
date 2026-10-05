@@ -447,6 +447,9 @@ test('instruction drafts and conflict comparisons are scoped to Mission plus Wor
  selectionField(app,'steer-work:test').value='Second Mission draft';await selectionField(app,'steer-work:test').fire('input');
  await app.navigateFragment('#mission=mission%3Aone');assert.equal(selectionField(app,'steer-work:test').value,'Private first Mission draft');assert.match(app.node('work-list').textContent,/Current first Mission direction/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
  await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'Second Mission draft');
+ await app.navigateFragment('#mission=mission%3Aone');selectionField(app,'steer-work:test').value='';await selectionField(app,'steer-work:test').fire('input');
+ await app.navigateFragment('#mission=mission%3Atwo');one.works[0]!.execution='cancelled';states.set(one.id,{revision:3,value:one});await app.navigateFragment('#mission=mission%3Aone');
+ const comparison=app.all().find(node=>node.className==='instruction-conflict')!;assert.equal(comparison.children.at(-1)!.tagName,'PRE');assert.equal(comparison.children.at(-1)!.textContent,'');assert.match(comparison.textContent,/Your unrecorded submissionPrivate first Mission draft/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
 });
 
 test('late exact steering receipt clears conflict but preserves a draft edited after transmission',async()=>{
