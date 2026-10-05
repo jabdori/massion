@@ -1,0 +1,85 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import type {ChildProcess} from 'node:child_process';
+import {createServer} from 'node:http';
+import {once} from 'node:events';
+import {readFile,writeFile,mkdtemp,readlink,realpath,stat,rm,readdir} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {runInContext} from 'node:vm';
+import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
+import type {Mission} from '../src/domain.ts';
+import {ProductService} from '../src/product.ts';
+import {harness,reply,selectionField} from './support/workbench-client.ts';
+const entry=fileURLToPath(new URL('./support/host-kill-child.ts',import.meta.url));
+async function processIdentity(pid:number){
+ const raw=await readFile('/proc/'+pid+'/stat','utf8');
+ return {parentPid:Number(raw.slice(raw.lastIndexOf(')')+2).split(' ')[1]),argv:(await readFile('/proc/'+pid+'/cmdline','utf8')).split('\0').filter(Boolean),cwd:await readlink('/proc/'+pid+'/cwd')};
+}
+/** Reject unrelated RPC services before any database request or process signal. */
+async function verifyDisposableDatabase(){
+ const root=process.env.SURREAL_TEST_RUNTIME!;
+ assert.equal(await realpath(root),root);
+ assert.equal(resolve(root,'..'),await realpath(tmpdir()));
+ assert.match(root.split('/').at(-1)!,/^disposable-/);
+ assert.equal((await stat(root)).uid,process.getuid!());
+ const metadata=JSON.parse(await readFile(join(root,'server.json'),'utf8'));
+ const pid=Number(process.env.SURREAL_TEST_PID);
+ assert.ok(Number.isSafeInteger(pid)&&pid>1);
+ assert.equal(metadata.pid_in_this_exec_namespace,pid);
+ assert.equal(metadata.runtime,root);
+ assert.equal(metadata.url+'/rpc',process.env.MASSION_TEST_SURREAL_RPC);
+ assert.equal(metadata.version,'3.3.0');
+ const identity=await processIdentity(pid);
+ assert.equal(await realpath(identity.argv[0]!),await realpath(metadata.binary));
+ assert.ok(identity.argv.includes('surrealkv://'+join(root,'data')));
+ assert.ok(identity.argv.includes('127.0.0.1:'+new URL(metadata.url).port));
+ let ancestor=process.pid,found=false;
+ for(let depth=0;depth<12&&ancestor>1;depth++){
+  if(ancestor===identity.parentPid){found=true;break;}
+  ancestor=(await processIdentity(ancestor)).parentPid;
+ }
+ assert.ok(found,'Disposable server must belong to this test command’s launcher');
+ const launcher=await processIdentity(identity.parentPid);
+ assert.equal(await realpath(resolve(launcher.cwd,launcher.argv[1]!)),fileURLToPath(new URL('../scripts/with-surreal.py',import.meta.url)));
+}
+async function until<T>(read:()=>Promise<T>|T,ready:(v:T)=>boolean){const end=Date.now()+15000;while(true){const v=await read();if(ready(v))return v;assert.ok(Date.now()<end,'boundary deadline');await new Promise(r=>setTimeout(r,15));}}
+async function files(root:string):Promise<string[]>{const result:string[]=[];for(const d of await readdir(root,{withFileTypes:true})){const p=join(root,d.name);if(d.isDirectory())result.push(...await files(p));else result.push(p);}return result;}
+const skip=process.platform!=='linux'?'Linux /proc ownership verification required':!process.env.SURREAL_TEST_RUNTIME?'scripts/with-surreal.py disposable ownership proof required':false;
+for(const stage of ['before-admission','after-admission','during-call','before-receipt','after-receipt','artifact-before-receipt'])test('owned host SIGKILL preserves no-replay contract: '+stage,{skip,timeout:45000},async t=>{
+ await verifyDisposableDatabase();
+ const root=await mkdtemp(join(tmpdir(),'massion-owned-host-kill-'));const database='hostkill_'+crypto.randomUUID().replaceAll('-','');const options={endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database};assert.match(options.endpoint,/^http:\/\/127\.0\.0\.1:/);
+ const transport=createHttpRpcTransport(options);await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);const store=new SurrealStore<Mission>(transport),product=new ProductService(store);const id='mission:host-kill',workId='work:host-kill';
+ await product.create({id,purpose:'Owned host kill fixture',scope:'host-kill',constraints:['Fixture only'],criteria:{version:1,description:'Host kill fixture output',oracle:'bounded-text-review/v1'}},'seed:create');await product.admit(id,{commandId:'seed:admit',expectedRevision:1,workId,title:'Interrupted bounded Work',budget:16});
+ const calls:{model:string;correlation:unknown}[]=[];let release!:()=>void;const held=new Promise<void>(r=>{release=r;});
+ const provider=createServer(async(req,res)=>{let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);calls.push({model:body.model,correlation:req.headers['x-client-request-id']});if(stage==='during-call')await held;res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content:'Host kill fixture output'}}],usage:{prompt_tokens:3,completion_tokens:2,total_tokens:5}}));});
+ provider.listen(0,'127.0.0.1');await once(provider,'listening');const pa=provider.address();assert.ok(pa&&typeof pa==='object');const endpoint='http://127.0.0.1:'+pa.port+'/v1/chat/completions';let child:ChildProcess|undefined,base='';
+ async function start(restarted:boolean){const configFile=join(root,restarted?'restart-config.json':'config.json');await writeFile(configFile,JSON.stringify({stage,restarted,database:options,provider:endpoint}));const spawned=spawn(process.execPath,[entry,configFile],{cwd:root,env:{PATH:'/usr/bin:/bin'},stdio:['ignore','pipe','pipe','ipc']});child=spawned;let ready:any,boundary:any;let log='';spawned.stdout?.on('data',c=>{log+=c;});spawned.stderr?.on('data',c=>{log+=c;});spawned.on('message',(message:any)=>{if(message.type==='ready')ready=message;if(message.type==='boundary')boundary=message;});await until(()=>{assert.equal(spawned.exitCode,null,'Fixture child exited before readiness: '+log);return ready;},Boolean);assert.equal(ready.pid,spawned.pid);assert.equal(ready.cwd,root);base=ready.base;return {spawned,ready,boundary:()=>boundary};}
+ async function verifyOwned(spawned:ChildProcess){assert.ok(spawned.pid&&spawned.pid!==process.pid&&spawned===child&&spawned.exitCode===null&&spawned.signalCode===null);const pid=spawned.pid;const cwd=await readlink('/proc/'+pid+'/cwd');const argv=(await readFile('/proc/'+pid+'/cmdline','utf8')).split('\0').filter(Boolean);const stat=await readFile('/proc/'+pid+'/stat','utf8');const ppid=Number(stat.slice(stat.lastIndexOf(')')+2).split(' ')[1]);assert.equal(ppid,process.pid);assert.equal(cwd,root);assert.equal(argv[0],process.execPath);assert.equal(argv[1],entry);assert.ok(argv[2]!.startsWith(root+'/'));const proof={pid,parentPid:ppid,expectedParentPid:process.pid,cwd,argv,temporaryDatabase:options,verifiedAt:new Date().toISOString()};return proof;}
+ try{
+  const host=await start(false);const app=harness(async(path,init)=>{const response=await fetch(base+path,init);return reply(await response.json(),response.status);},{},undefined,{network:true,fragment:'#mission='+encodeURIComponent(id),identity:crypto.randomUUID()});await until(()=>app.node('sync-notice').hidden&&app.node('snapshot-json').textContent.includes(workId),Boolean);
+  app.node('purpose').value='Private creation draft';const direction=selectionField(app,'steer-'+workId);direction.value='Private Work direction';await direction.fire('input');
+  const running=runInContext(`write('/missions/${id}/run',{commandId:'run',expectedRevision:2,workId:'${workId}'},'${id}','Fixture run')`,app.context) as Promise<unknown>;void running.catch(()=>{});
+  if(stage==='during-call')await until(()=>calls.length,v=>v===1);else await until(host.boundary,Boolean);
+  const before=await store.load(id);assert.ok(before);const journalBefore=await store.exportJournal(),callsBefore=calls.length;const work=before.value.works[0]!;assert.equal(work.runtimeRun?.id,'run');assert.equal(work.record,undefined);
+  if(stage==='before-admission')assert.equal(work.effects.length,0);else if(stage==='after-receipt')assert.equal(work.effects[0]!.status,'succeeded');else assert.equal(work.effects.at(-1)!.status,'pending');
+  assert.equal(callsBefore,['before-admission','after-admission'].includes(stage)?0:1);
+  const artifactFiles=stage==='artifact-before-receipt'?await files(join(root,'artifacts')):[];if(stage==='artifact-before-receipt'){assert.ok(artifactFiles.length);assert.ok(await Promise.all(artifactFiles.map(p=>readFile(p,'utf8'))).then(values=>values.some(s=>s==='Host kill fixture output')));}
+  const proof=await verifyOwned(host.spawned);t.diagnostic(JSON.stringify({stage,pid:proof.pid,parentPid:proof.parentPid,temporaryCwd:root.split('/').at(-1),entry:'tests/support/host-kill-child.ts',ownership:'verified before SIGKILL'}));const killed=once(host.spawned,'exit');assert.equal(host.spawned.kill('SIGKILL'),true);const [code,signal]=await killed;assert.equal(code,null);assert.equal(signal,'SIGKILL');release();await running;await app.tick();assert.equal(app.node('sync-notice').hidden,false);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);const marker=app.storage.get('massion.workbench.pending');assert.ok(marker);
+  assert.deepEqual(await store.load(id),before);assert.deepEqual(await store.exportJournal(),journalBefore);
+  const restarted=await start(true);assert.equal(restarted.ready.grantEnabled,false);await app.windowEvent('online');await until(()=>app.node('sync-notice').hidden,Boolean);assert.equal(app.node('purpose').value,'Private creation draft');assert.equal(selectionField(app,'steer-'+workId).value,'Private Work direction');assert.equal(app.storage.get('massion.workbench.pending'),undefined,'Exact activation receipt clears only command admission uncertainty');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);assert.equal(calls.length,callsBefore);assert.deepEqual(await store.load(id),before);assert.deepEqual(await store.exportJournal(),journalBefore);
+  const fresh=harness(async(path,init)=>{const response=await fetch(base+path,init);return reply(await response.json(),response.status);},{},undefined,{network:true,fragment:'#mission='+encodeURIComponent(id),identity:crypto.randomUUID()});await until(()=>fresh.node('sync-notice').hidden,Boolean);assert.equal(fresh.calls.filter(c=>c.options.method==='POST').length,0);
+  async function post(path:string,body:unknown){const response=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};}
+  for(const commandId of ['run','deliberate-no-replay-probe']){const retry=await post('/missions/'+id+'/run',{commandId,expectedRevision:before.revision,workId});assert.equal(retry.body.status,'already-started');assert.equal(calls.length,callsBefore);assert.deepEqual(await store.exportJournal(),journalBefore);}
+  const command={commandId:'owner:quarantine',expectedRevision:before.revision,command:{type:'quarantine-runtime',workId,runId:'run',reason:'Owner fixture inspected interrupted host; no external success is inferred.',acknowledgeUncertainOutcome:true}};
+  const result=await post('/missions/'+id+'/commands',command);const unresolved=work.effects.some(e=>e.status==='pending'||e.status==='unknown');let disposition:string;
+  if(unresolved){assert.equal(result.status,200);const quarantined=(await store.load(id))!;const w=quarantined.value.works[0]!;assert.equal(w.execution,'cancelled');assert.ok(w.runtimeRecovery);assert.equal(w.record,undefined);assert.equal(w.budget.measured,null);assert.equal(w.budget.reserved,work.budget.reserved);for(const e of w.effects){const old=work.effects.find(old=>old.id===e.id)!;if(old.status==='pending'){assert.equal(e.status,'unknown');assert.equal(e.receipt,undefined);}else assert.deepEqual(e,old);}const replay=await post('/missions/'+id+'/commands',command);assert.equal(replay.body.status,'replayed');const again=await post('/missions/'+id+'/run',{commandId:'after-quarantine',expectedRevision:quarantined.revision,workId});assert.equal(again.body.status,'already-started');assert.deepEqual(await store.load(id),quarantined);const after=await store.exportJournal();assert.equal(after.operations.length,journalBefore.operations.length+1);assert.deepEqual(after.operations.at(-1)!.outbox,[]);disposition='permanent quarantine; pending effects become receipt-free unknown; settled effects retained';}
+  else{assert.equal(result.status,400);assert.deepEqual(await store.exportJournal(),journalBefore);disposition='quarantine refused: no unresolved effect; admitted run not resumed/replayed; general recovery remains open';}
+  assert.equal(calls.length,callsBefore);await app.tick();assert.equal(app.calls.filter(c=>c.options.method==='POST').length,1);
+  const finalState=await store.load(id),events=await store.readEvents(0,1000);assert.equal(new Set(events.events.map(e=>e.cursor)).size,events.events.length);for(let i=1;i<events.events.length;i++)assert.equal(events.events[i]!.cursor,events.events[i-1]!.cursor+1);assert.equal(events.events.filter(e=>e.commandId==='run').length,1);
+  assert.ok(calls.every(call=>call.model==='executor'),'No verifier or unexpected model was dispatched');
+  t.diagnostic(JSON.stringify({stage,providerCallsBeforeKill:callsBefore,providerCallsAfterRecovery:calls.length,automaticClientPosts:0,disposition}));
+ }finally{release();if(child&&child.exitCode===null&&child.signalCode===null){await verifyOwned(child);const exited=once(child,'exit');child.kill('SIGTERM');await exited;}provider.closeAllConnections();await new Promise<void>(r=>provider.close(()=>r()));await rm(root,{recursive:true,force:true});}
+});
