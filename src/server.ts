@@ -14,7 +14,7 @@ import type {ExecutionChoice} from './selectable-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
 import {ProviderRegistry} from './providers.ts';
 import {ProductService} from './product.ts';
-import {readWorkBudgetHistory} from './work-budget-history.ts';
+import {readWorkBudgetHistory,readWorkInterventionHistory} from './work-budget-history.ts';
 import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
 import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
@@ -93,16 +93,16 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer and quarantine-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
-   const budgetHistoryRoute=/^\/missions\/([^/]+)\/work-budget-history$/.exec(url.pathname);
+   const budgetHistoryRoute=/^\/missions\/([^/]+)\/work-(budget|intervention)-history$/.exec(url.pathname);
    if(req.method==='GET'&&budgetHistoryRoute){
     const id=decodeIdentifier(budgetHistoryRoute[1]!),workId=url.searchParams.get('work');identifier(workId,'Work identifier');
     const allowed=['work','after','limit','through'];
-    if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1))throw new RequestError(400,'Only unique budget history query fields are accepted');
-    const bound=(key:string,fallback?:number)=>{const raw=url.searchParams.get(key);if(raw===null)return fallback;if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw new RequestError(400,'Invalid budget history '+key);return Number(raw);};
+    if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1))throw new RequestError(400,'Only unique Work history query fields are accepted');
+    const bound=(key:string,fallback?:number)=>{const raw=url.searchParams.get(key);if(raw===null)return fallback;if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw new RequestError(400,'Invalid Work history '+key);return Number(raw);};
     const after=bound('after',0)!,limit=bound('limit',100)!,through=bound('through'),feedId=req.headers['x-massion-feed'];
     if(feedId!==undefined)identifier(feedId,'Feed identity');
-    if(limit<1||limit>100||through!==undefined&&through<after||after>0&&through===undefined||(after>0||through!==undefined)&&!feedId)throw new RequestError(400,'Invalid budget history bounds or missing continuation feed/boundary');
-    const history=await readWorkBudgetHistory(store,id,workId,{after,limit,...(through===undefined?{}:{through}),...(feedId===undefined?{}:{feedId})});
+    if(limit<1||limit>100||through!==undefined&&through<after||after>0&&through===undefined||(after>0||through!==undefined)&&!feedId)throw new RequestError(400,'Invalid Work history bounds or missing continuation feed/boundary');
+    const history=await (budgetHistoryRoute[2]==='intervention'?readWorkInterventionHistory:readWorkBudgetHistory)(store,id,workId,{after,limit,...(through===undefined?{}:{through}),...(feedId===undefined?{}:{feedId})});
     send(history?200:404,history??{error:'Unknown Mission or Work'});return;
    }
    const impactRoute=/^\/missions\/([^/]+)\/impact$/.exec(url.pathname);
