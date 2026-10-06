@@ -1,5 +1,6 @@
 # Explicit Mission memory evidence
 
+Current published source, review corrections and follow-up keyboard evidence are reconciled in [the final bounded candidate](memory-mission-final-candidate.md). Earlier counts, API-only exclusions and publication-wait statements below are historical checkpoints, not current approval or completion status.
 Issue19 connects existing immutable explicit memory semantics to the normal owner product path above PR18 `fdf572f787852ef737f3439a28d80691e412efc0`. An owner saves/revises an instruction; old Work retains its original version/content and future Work pins the new effective version. This advances MEM-01 without completing general retrieval, conflicts, expiry/deletion, automatic learned adoption or conversation continuity.
 
 ## Implemented boundaries
