@@ -1,6 +1,8 @@
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
+import {RecordArtifactError} from './record-artifact.ts';
+import type {ArtifactReader} from './record-artifact.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
 import {createServer} from 'node:http';
@@ -24,8 +26,8 @@ function identifier(value:unknown,name:string):asserts value is string {if(typeo
 
 function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader}={}) {
- let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime);
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader}={}) {
+ let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime,options.artifacts);
  const server=createServer(async(req,res)=>{
   let mutationFeed='';
   const send=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(mutationFeed && value && typeof value==='object' ? {...value,feedId:mutationFeed} : value));};
@@ -100,6 +102,12 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer and quarantine-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
+   const recordArtifactRoute=/^\/missions\/([^/]+)\/record-artifact$/.exec(url.pathname);
+   if(req.method==='GET'&&recordArtifactRoute){
+    const id=decodeIdentifier(recordArtifactRoute[1]!),workId=url.searchParams.get('work'),recordId=url.searchParams.get('record'),version=url.searchParams.get('version'),sha256=url.searchParams.get('sha256');identifier(workId,'Work identifier');identifier(recordId,'Record identifier');
+    const allowed=['work','record','version','sha256'];if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1)||!version||!/^\d+$/.test(version)||!Number.isSafeInteger(Number(version))||Number(version)<1||!sha256||!/^[a-f0-9]{64}$/.test(sha256))throw new RequestError(400,'Unique exact accepted Record/artifact query fields required');
+    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const result=await product.readAcceptedText(id,workId,{recordId,artifactVersion:Number(version),artifactSha256:sha256,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or Work'});return;
+   }
    const budgetHistoryRoute=/^\/missions\/([^/]+)\/work-(budget|intervention)-history$/.exec(url.pathname);
    if(req.method==='GET'&&budgetHistoryRoute){
     const id=decodeIdentifier(budgetHistoryRoute[1]!),workId=url.searchParams.get('work');identifier(workId,'Work identifier');
@@ -130,7 +138,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    send(404,{error:'Unknown route'});
    };
    if(mutationFeed)await withAdmissionFeed(mutationFeed,execute);else await execute();
-  }catch(error){if(error instanceof FeedAdmissionError){send(503,{error:error.message,reason:'feed',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='RunUnsettledError'){const run=error as Error&{runId:string;snapshot?:unknown};send(503,{error:run.message,outcome:'admitted-unsettled',retryable:false,runId:run.runId,snapshot:run.snapshot});return;}if(error instanceof RequestError){send(error.status,{error:error.message});return;}if(error instanceof DomainError){send(error.code==='denied'?403:400,{error:error.message});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event feed identity or cursor no longer matches this database; read /read-state before resuming catch-up.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
+  }catch(error){if(error instanceof RecordArtifactError){send(error.status,{error:error.message});return;}if(error instanceof FeedAdmissionError){send(503,{error:error.message,reason:'feed',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='RunUnsettledError'){const run=error as Error&{runId:string;snapshot?:unknown};send(503,{error:run.message,outcome:'admitted-unsettled',retryable:false,runId:run.runId,snapshot:run.snapshot});return;}if(error instanceof RequestError){send(error.status,{error:error.message});return;}if(error instanceof DomainError){send(error.code==='denied'?403:400,{error:error.message});return;}if(error instanceof Error&&error.name==='CommitOutcomeUnknownError'){send(503,{error:'Commit outcome is unknown. Read durable events before deciding any next action.',outcome:'unknown'});return;}if(error instanceof Error&&error.name==='StorageContentionError'){send(503,{error:'The transaction was rolled back due to contention. Refresh before a deliberate retry.',outcome:'rejected',retryable:true});return;}if(error instanceof Error&&error.name==='EventCursorError'){send(409,{error:'Event feed identity or cursor no longer matches this database; read /read-state before resuming catch-up.'});return;}console.error(error instanceof Error?error.message:'Workbench failure');send(500,{error:'Operation failed; inspect local host logs. Unresolved effects are not replayed automatically.'});}
  });
  return server;
 }
@@ -142,7 +150,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
- const server=createWorkbench(store,workspaceRoot,{connections,knowledge:new SurrealRelationImpact(transport)});
+ const server=createWorkbench(store,workspaceRoot,{connections,artifacts,knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{server.close(()=>process.exit(0));});
 }
