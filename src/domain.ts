@@ -53,9 +53,9 @@ export type Command =
   | { type: 'retire-memory'; memoryId: string; version: number; reason: string }
   | { type: 'propose-growth'; proposal: Growth }
   | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string }
-  | { type: 'adopt-growth'; growthId: string }
+  | { type: 'adopt-growth'; growthId: string; baseline?:string; candidate?:string }
   | { type: 'observe-growth'; growthId: string; workId: string; metric: number }
-  | { type: 'revert-growth'; growthId: string }
+  | { type: 'revert-growth'; growthId: string; baseline?:string; candidate?:string }
   | { type: 'relate'; relation: Relation };
 
 export class DomainError extends Error {
@@ -173,10 +173,10 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       role(actor,'evaluator'); const g=growth(); ensure(g.status==='proposed'&&g.proposer!==actor.id,'Independent evaluation required'); ensure(finite(command.baseline)&&finite(command.candidate),'Invalid evaluation metrics'); text(command.heldOut,'held-out evidence'); g.evaluator=actor.id; g.scores={baseline:command.baseline,candidate:command.candidate,heldOut:command.heldOut}; g.status='evaluated'; break;
     }
     case 'adopt-growth': {
-      role(actor,'owner'); const g=growth(); ensure(g.status==='evaluated'&&g.scores&&g.scores.candidate>g.scores.baseline,'Independently measured improvement required'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Growth baseline is no longer effective'); g.previousEffective=state.memories.filter(m=>m.effective).map(m=>`${m.id}@${m.version}`); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=false; candidate.effective=true; g.status='adopted'; break;
+      role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='evaluated'&&g.scores&&g.scores.candidate>g.scores.baseline,'Independently measured improvement required'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Growth baseline is no longer effective'); g.previousEffective=state.memories.filter(m=>m.effective).map(m=>`${m.id}@${m.version}`); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=false; candidate.effective=true; g.status='adopted'; break;
     }
     case 'observe-growth': { role(actor,'evaluator'); const g=growth(); const w=state.works.find(w=>w.id===command.workId); ensure(g.status==='adopted'&&w?.appliedMemoryVersions.includes(g.candidate)&&w.acceptance==='accepted','Accepted later work under candidate required'); ensure(finite(command.metric),'Invalid observation'); g.observation={workId:command.workId,metric:command.metric}; break; }
-    case 'revert-growth': { role(actor,'owner'); const g=growth(); ensure(g.status==='adopted'&&g.previousEffective,'No adoption to revert'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&m.effective),'Cannot revert a superseded adoption'); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=g.previousEffective.includes(`${m.id}@${m.version}`); g.status='reverted'; break; }
+    case 'revert-growth': { role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='adopted'&&g.previousEffective,'No adoption to revert'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&m.effective),'Cannot revert a superseded adoption'); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=g.previousEffective.includes(`${m.id}@${m.version}`); g.status='reverted'; break; }
     case 'relate': { role(actor,'representative','verifier'); const r=command.relation; text(r.from,'relation source'); text(r.to,'relation target'); text(r.provenance,'provenance'); ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type'); ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions'); state.relations.push(structuredClone(r)); break; }
     default: throw new DomainError('Unknown command');
   }

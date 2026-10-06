@@ -310,9 +310,9 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'] },
   'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'] },
-  'adopt-growth': { required: ['growthId'] },
+  'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
-  'revert-growth': { required: ['growthId'] },
+  'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   relate: { required: ['relation'] },
 };
 
