@@ -306,6 +306,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   cancel: { required: ['workId'] },
   steer: { required: ['workId', 'instruction'] },
   'save-memory': { required: ['memory'] },
+  'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'] },
   'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'] },
   'adopt-growth': { required: ['growthId'] },
