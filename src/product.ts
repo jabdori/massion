@@ -1,4 +1,5 @@
 import {Application} from './application.ts';
+import {DomainError} from './domain.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
@@ -15,6 +16,10 @@ export class ProductService {
   // Even a configured model does not imply a permitted execution/assurance runtime.
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(executionGate?{executionGate}:{})}});
+ }
+ async saveMemory(missionId:string,input:{commandId:string;expectedRevision:number;memory:{id:string;version:number;content:string;source:string}}) {
+  const current=await this.app.store.load(missionId);if(!current)throw new DomainError('Unknown Mission');
+  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'save-memory',memory:{id:input.memory.id,version:input.memory.version,content:input.memory.content,source:input.memory.source,scope:current.value.scope,authority:'explicit',effective:true}}});
  }
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<SelectionPreflight|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
