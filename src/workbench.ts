@@ -78,13 +78,14 @@ let unknownOperation = null, providerSelection = null, providerKnown = false, ru
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 let impactSequence = 0, impactReading = false, impactFocus = null;
 let revisionMission = "", revisionFocus = null;
-const revisionDrafts = new Map(), revisionIds = ["revision-purpose","revision-version","revision-criteria","revision-oracle"];
+const revisionSubmissions = new Map(), revisionDrafts = new Map(), revisionIds = ["revision-purpose","revision-version","revision-criteria","revision-oracle"];
 let memoryMission = "", memoryFocus = null;
 const memoryDrafts = new Map(), memoryIds = ["memory-id","memory-version","memory-content","memory-source"];
 const drafts = new Map(), instructionConflicts = new Map(), instructionSubmissions = new Map(), confirmedOperations = new Set();
 const instructionKey = (missionId, workId) => JSON.stringify([missionId, workId]);
 function confirmOperation(operation) {
   const operationId = operationKey(operation); confirmedOperations.add(operationId);
+  if (revisionSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRevision();
   const submission = instructionSubmissions.get(operationId);
   if (!submission) return;
   instructionSubmissions.delete(operationId);
@@ -131,7 +132,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) instructionSubmissions.delete(operationKey(operation));
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -602,7 +603,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -613,6 +614,7 @@ async function write(path, body, missionId, successMessage) {
   if (reconnectRequired || writeFeed !== feedId) { await clearPending(operation); busy = false; controls(); report('Host state changed before transmission. No command was sent; refresh before a deliberate new action.','warning'); return false; }
   rememberMission(missionId);
   if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
+  if (revisionSubmission) revisionSubmissions.set(operationKey(operation),revisionSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json',...(writeFeed ? {'X-Massion-Feed':writeFeed} : {})},body:JSON.stringify(body)},longRun ? 120000 : 15000);
@@ -692,6 +694,13 @@ function switchRevisionDraft(id) {
 }
 function renderRevision() {
   switchRevisionDraft(snapshot.value.id);
+  for (const [key, submission] of revisionSubmissions) {
+    if (submission.missionId !== revisionMission || !confirmedOperations.has(key) || snapshot.revision <= submission.expectedRevision) continue;
+    const unchanged = JSON.stringify(revisionValues()) === JSON.stringify(submission.values);
+    if (unchanged) revisionDrafts.set(revisionMission,newRevisionDraft());
+    revisionSubmissions.delete(key);
+    $('revision-status').textContent = 'Mission revision confirmed. ' + (unchanged ? 'Only future Work uses the new purpose and criteria.' : 'Your later edits are retained for review.');
+  }
   let draft = revisionDrafts.get(revisionMission);
   if (!draft || !draft.dirty) { draft = newRevisionDraft(); revisionDrafts.set(revisionMission,draft); for(let i=0;i<revisionIds.length;i++) $(revisionIds[i]).value = draft.values[i]; }
   $('revision-current').textContent = 'Current revision ' + snapshot.revision + ' · Mission v' + snapshot.value.version + ': ' + snapshot.value.purpose + ' · Criteria: ' + revisionCriteriaText(snapshot.value.criteria);
@@ -709,7 +718,7 @@ $('revision-form').addEventListener('submit',async event => {
   const missionId = selectedId, submittedFocus = document.activeElement;
   const body = {commandId:crypto.randomUUID(),expectedRevision:draft.baseRevision,purpose:values[0],criteria:{version,description:values[2],oracle:values[3]}};
   $('revision-status').textContent = 'Saving Mission revision. No Work is restarted or model invoked…';
-  const saved = await write('/missions/' + encodeURIComponent(missionId) + '/revision',body,missionId,'Mission revision saved. Earlier Work retains its original purpose and criteria.');
+  const saved = await write('/missions/' + encodeURIComponent(missionId) + '/revision',body,missionId,'Mission revision saved. Earlier Work retains its original purpose and criteria.',{missionId,values:[...values],expectedRevision:body.expectedRevision});
   const confirmed = saved || confirmedOperations.has(operationKey({missionId,commandId:body.commandId}));
   if (snapshot?.value.id === missionId && selectedId === missionId) {
     if (confirmed && JSON.stringify(revisionValues()) === JSON.stringify(values)) { revisionDrafts.set(missionId,newRevisionDraft()); renderRevision(); }

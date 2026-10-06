@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createWorkbench} from '../src/server.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
+import {ProductService} from '../src/product.ts';
 import type {Mission} from '../src/domain.ts';
 import {verifyDisposableDatabase} from './support/owned-process.ts';
 
@@ -32,4 +33,13 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  const committed=await journal();assert.equal((await post(route,{...revision,commandId:'stale',expectedRevision:2,criteria:{...revision.criteria,version:3}})).status,409);const replay=await post(route,revision);assert.equal(replay.body.status,'replayed');assert.deepEqual(replay.body.value,changed.body.value);assert.deepEqual(await journal(),committed);
  await stop();server=createWorkbench(store,root);await start();assert.deepEqual(await (await fetch(base+'/missions/'+id)).json(),current);assert.deepEqual(await journal(),committed);
  t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',missionVersion:2,oldWorkUnchanged:true,futureWorkRevised:true,feedCasAndReplay:true,freshHostSameState:true,providerCalls:0}));
+});
+
+test('revision command captures caller criteria before asynchronous dispatch and preserves exact replay',async()=>{
+ const store=new InMemoryStore<Mission>(),product=new ProductService(store),id='mission:criteria-binding';
+ await product.create({id,purpose:'Original',scope:'project',constraints:[],criteria:{version:1,description:'Original criteria',oracle:'manual-review/v1'}},'create-binding');
+ const original={version:2,description:'Submitted criteria',oracle:'manual-review/v1'},criteria={...original},input={commandId:'revise-binding',expectedRevision:1,purpose:'Submitted purpose',criteria};
+ const pending=product.reviseMission(id,input);criteria.version=42;criteria.description='Caller changed criteria';criteria.oracle='bounded-text-review/v1';await pending;
+ assert.deepEqual((await store.load(id))?.value.criteria,original);const journal=store.inspect();
+ const replay=await product.reviseMission(id,{...input,criteria:{...original}});assert.equal(replay.status,'replayed');assert.deepEqual((await store.load(id))?.value.criteria,original);assert.deepEqual(store.inspect(),journal);
 });
