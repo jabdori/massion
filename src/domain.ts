@@ -33,6 +33,7 @@ export interface Mission { id: string; version: number; purpose: string; scope: 
 export type Command =
   | { type: 'revise-mission'; purpose: string; criteria: Criteria }
   | { type: 'admit-work'; workId: string; title: string; budget: number; executionGate?:ExecutionGate }
+  | { type: 'revise-budget'; workId: string; limit: number; reason: string }
   | { type: 'assign'; workId: string; assignment: Assignment }
   | { type: 'revise-work'; workId: string }
   | { type: 'activate-runtime';workId:string;run:RuntimeRun }
@@ -95,6 +96,14 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     case 'admit-work': {
       role(actor,'owner','representative'); text(command.workId,'work id'); text(command.title,'title'); ensure(!work,'Work already exists'); ensure(finite(command.budget),'Invalid budget');
       if(command.executionGate){ensure(['provider_unavailable','runtime_unavailable'].includes(command.executionGate.code),'Invalid execution gate');text(command.executionGate.detail,'execution gate detail');} state.works.push({... (command.executionGate?{blocker:structuredClone(command.executionGate)}:{}),id:command.workId,title:command.title,missionVersion:state.version,missionSnapshot:{version:state.version,purpose:state.purpose,scope:state.scope,constraints:structuredClone(state.constraints)},criteria:structuredClone(state.criteria),execution:command.executionGate?'blocked':'queued',acceptance:'pending',tasks:[{id:`${command.workId}:root`,parentId:null,status:'queued'}],attempts:[{id:`${command.workId}:attempt:1`,number:1,criteria:structuredClone(state.criteria),status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:state.memories.filter(m=>m.effective&&m.scope===state.scope).map(m=>`${m.id}@${m.version}`),budget:{limit:command.budget,reserved:0,measured:0}}); break;
+    }
+    case 'revise-budget': {
+      role(actor,'owner'); const w=needWork(); open(w); text(command.reason,'budget change reason');
+      ensure(w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution),'Only fresh Work budget may change');
+      ensure(!w.runtimeRun&&!w.runtimeRecovery&&!w.effects.length&&!w.assignments.length&&!w.artifact&&!w.verdict&&!w.record,'Work already has execution evidence');
+      ensure(w.attempts.length===1&&w.attempts[0]?.status==='queued'&&w.tasks.length===1&&w.tasks[0]?.status==='queued'&&!w.tasks[0]?.result,'Work already has task progress');
+      ensure(finite(command.limit)&&command.limit>=w.budget.reserved,'Invalid budget limit');
+      ensure(command.limit!==w.budget.limit,'Budget limit must change'); w.budget.limit=command.limit; break;
     }
     case 'activate-runtime': {role(actor,'owner');const w=needWork();open(w);ensure(!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&!w.artifact,'A run is already admitted; do not replay it');text(command.run.id,'run identity');text(command.run.authorizationId,'authorization identity');ensure(command.run.criteriaHash===hash(w.criteria),'Run criteria binding mismatch');ensure(w.missionSnapshot&&command.run.inputHash===hash({mission:w.missionSnapshot,title:w.title,instructions:w.instructions??[],memoryVersions:w.appliedMemoryVersions}),'Run input binding mismatch');ensure(['mock-http','live'].includes(command.run.mode),'Invalid runtime mode');ensure(Number.isSafeInteger(command.run.outputTokenCap)&&command.run.outputTokenCap>0,'Invalid output cap');ensure(w.budget.limit-w.budget.reserved>=command.run.outputTokenCap*2,'Budget cannot reserve executor and verifier');if(command.run.connectionBindings){for(const binding of [command.run.connectionBindings.executor,command.run.connectionBindings.verifier]){ensure(binding&&/^[a-zA-Z0-9:_-]{1,128}$/.test(binding.profileId)&&/^[a-f0-9]{64}$/.test(binding.configHash),'Invalid connection binding');}}w.runtimeRun=structuredClone(command.run);w.budget.unit='output-tokens';delete w.blocker;w.execution='queued';break;}
     case 'quarantine-runtime': {
