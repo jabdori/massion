@@ -782,15 +782,16 @@ function renderBudgetHistory() {
 }
 function renderBudget() {
   if (!snapshot) return;
-  const missionId = snapshot.value.id;
-  if (budgetMission !== missionId) { budgetMission = missionId; $('budget-target').value = budgetSelections.get(missionId) || ''; }
+  const missionId = snapshot.value.id, select = $('budget-target');
+  // Preserve the intended ID independently of the previous Mission's native options.
+  const workId = budgetMission !== missionId ? budgetSelections.get(missionId) || '' : select.value;
+  budgetMission = missionId;
   for (const [key,submission] of budgetSubmissions) {
     if (submission.missionId !== missionId || !confirmedOperations.has(key) || snapshot.revision <= submission.expectedRevision) continue;
     const draftKey = instructionKey(missionId,submission.workId), draft = budgetDrafts.get(draftKey), work = budgetWork(submission.workId);
     if (draft && JSON.stringify(draft.values) === JSON.stringify(submission.values)) budgetDrafts.set(draftKey,freshBudgetDraft(work));
     budgetStatuses.set(draftKey,'Confirmed budget change for Work ' + submission.workId + '. No execution or permission was granted. Later draft edits are retained.'); budgetSubmissions.delete(key);
   }
-  const select = $('budget-target'), workId = select.value;
   select.replaceChildren(); const prompt = element('option','Choose exact fresh Work'); prompt.value = ''; select.append(prompt);
   for (const work of snapshot.value.works.filter(budgetFresh)) { const option = element('option',work.title + ' · ' + work.id); option.value = work.id; select.append(option); }
   if (workId && !budgetFresh(budgetWork(workId))) { const stale = element('option',workId + ' is no longer fresh; no other Work is substituted'); stale.value = workId; select.append(stale); }
