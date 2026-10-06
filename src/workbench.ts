@@ -42,6 +42,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <details id="impact-panel" class="impact-panel"><summary>Inspect relation impact</summary><h3 id="impact-heading">Exact-version impact</h3><p id="impact-scope" class="hint"></p><p id="impact-hint" class="hint">Read stored dependencies for an exact entity ID and version in this Mission. Provenance and inferred flags describe recorded relations, not an independent truth verdict. This read does not invalidate results, start Work or call a model.</p><form id="impact-form"><div class="field"><label for="impact-entity">Target entity ID</label><input id="impact-entity" required maxlength="16000" aria-describedby="impact-hint" placeholder="Exact Work, artifact or evidence ID"></div><div class="field"><label for="impact-version">Exact version</label><input id="impact-version" type="number" min="1" max="9007199254740991" step="1" value="1" required aria-describedby="impact-hint"></div><button id="impact-read" type="submit">Read impact</button></form><p id="impact-status" class="status" role="status" aria-live="polite">Choose a target and exact version, then read its impact.</p><div id="impact-results" class="impact-results" tabindex="0" role="region" aria-label="Relation impact results" hidden></div></details>
 <details id="memory-panel" class="impact-panel"><summary>Manage Mission memory</summary><h3>Owner-authored instructions for future Work</h3><p id="memory-hint" class="hint">Save an explicit instruction for this Mission. New Work pins its effective version; earlier Work keeps its original memory. This does not run a model or adopt learned memory. Sources are owner-supplied context, not independent verification. Instruction and source each allow up to 16,000 characters; the complete JSON command must fit 32 KiB of UTF-8, including escaping and metadata.</p><p id="memory-scope" class="hint"></p><form id="memory-form"><fieldset id="memory-fields"><label for="memory-id">Memory ID</label><input id="memory-id" required maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" aria-describedby="memory-hint" placeholder="memory:instruction"><label for="memory-version">New immutable version</label><input id="memory-version" type="number" min="1" max="9007199254740991" step="1" value="1" required><label for="memory-content">Explicit instruction</label><textarea id="memory-content" rows="3" maxlength="16000" required></textarea><label for="memory-source">Owner-supplied source or reason</label><textarea id="memory-source" rows="2" maxlength="16000" required></textarea><button id="save-memory" type="submit" data-write>Save explicit memory</button></fieldset></form><p id="memory-status" class="status" role="status" aria-live="polite">Save a new ID at version 1, or advance an existing ID to a higher version.</p><h3>Stop an instruction for future Work</h3><p id="retirement-hint" class="hint">Choose one exact active explicit memory version. This stops its application to newly admitted Work. Its original content, history and earlier Work pins stay available; nothing is deleted.</p><form id="retirement-form"><fieldset id="retirement-fields"><label for="retirement-target">Exact active explicit memory</label><select id="retirement-target" required aria-describedby="retirement-hint retirement-base"></select><label for="retirement-reason">Reason for stopping future application</label><textarea id="retirement-reason" rows="2" maxlength="16000" required aria-describedby="retirement-hint"></textarea><p id="retirement-base" class="hint"></p><button id="stop-memory" type="submit" data-write>Stop this version for future Work</button><button id="review-retirement" type="button" class="secondary">Keep exact target against current revision</button><button id="cancel-retirement" type="button" class="secondary">Cancel stop draft</button></fieldset></form><p id="retirement-status" class="status" role="status" aria-live="polite">Choose an exact version and review what will remain.</p><div id="memory-history" class="impact-results" tabindex="0" role="region" aria-label="Mission memory history"></div></details>
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
+<details id="budget-panel" style="margin-top:22px"><summary>Change fresh Work budget</summary><p id="budget-hint" class="hint">Only fresh, unstarted Work may change. Existing inputs, history, reservations and measured usage remain. This does not grant permission, start execution or change an active run cap. Output tokens are not a money or total-token ceiling. When unit is absent it is not pinned yet. Reason and prior limits remain in the host journal.</p><form id="budget-form"><fieldset id="budget-fields"><label for="budget-target">Exact fresh Work</label><select id="budget-target" required aria-describedby="budget-hint budget-current budget-base"></select><p id="budget-current" class="hint"></p><label for="budget-limit">New budget limit in the shown unit</label><input id="budget-limit" type="number" min="0" step="any" required><label for="budget-reason">Reason for changing the limit</label><textarea id="budget-reason" rows="2" maxlength="16000" required></textarea><p id="budget-base" class="hint"></p><div class="row"><button id="save-budget" type="submit" data-write>Change budget limit</button><button id="review-budget" type="button" class="secondary">Review exact Work at current revision</button><button id="cancel-budget" type="button" class="secondary">Cancel budget draft</button></div></fieldset></form><p id="budget-status" class="status" role="status"></p><details><summary>Recent observed budget reasons</summary><p class="hint">Up to eight changes observed by this browser, not complete history. Refreshing or using another browser may show fewer events.</p><div id="budget-history"></div></details></details>
 <details style="margin-top:22px"><summary>Authoritative snapshot</summary><pre id="snapshot-json" tabindex="0"></pre></details></section>
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
 </div>
@@ -80,6 +81,8 @@ let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 let impactSequence = 0, impactReading = false, impactFocus = null;
 let revisionMission = "", revisionFocus = null;
 const revisionSubmissions = new Map(), revisionDrafts = new Map(), revisionIds = ["revision-purpose","revision-version","revision-criteria","revision-oracle"];
+let budgetMission = "", budgetFocus = null;
+const budgetDrafts = new Map(), budgetSelections = new Map(), budgetStatuses = new Map(), budgetSubmissions = new Map();
 let retirementMission = "", retirementFocus = null;
 const retirementDrafts = new Map(), retirementSubmissions = new Map();
 let memoryMission = "", memoryFocus = null;
@@ -90,6 +93,7 @@ function confirmOperation(operation) {
   const operationId = operationKey(operation); confirmedOperations.add(operationId);
   if (revisionSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRevision();
   if (retirementSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRetirement();
+  if (budgetSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderBudget();
   const submission = instructionSubmissions.get(operationId);
   if (!submission) return;
   instructionSubmissions.delete(operationId);
@@ -136,7 +140,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); }
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -201,10 +205,16 @@ function controls() {
   if (snapshot && snapshot.value.id === selectedId && !$('retirement-fields').disabled && $('retirement-fields').contains(retirementActive)) retirementFocus = {missionId:selectedId,previous:retirementActive,targetId:retirementActive.id};
   $('retirement-fields').disabled = locked || !snapshot || snapshot.value.id !== selectedId;
   if (retirementFocus && !$('retirement-fields').disabled) { const focus = retirementFocus; retirementFocus = null; if (snapshot.value.id === focus.missionId && selectedId === focus.missionId) restoreControlFocus(focus.previous,focus.targetId); }
+  const budgetActive = document.activeElement;
+  if (snapshot && snapshot.value.id === selectedId && !$('budget-fields').disabled && $('budget-fields').contains(budgetActive)) budgetFocus = {missionId:selectedId,previous:budgetActive,targetId:budgetActive.id};
+  $('budget-fields').disabled = locked || !snapshot || snapshot.value.id !== selectedId;
+  if (budgetFocus && !$('budget-fields').disabled) { const focus = budgetFocus; budgetFocus = null; if (selectedId === focus.missionId) restoreControlFocus(focus.previous,focus.targetId); }
   $('load-mission').disabled = busy;
   $('mission-id').disabled = busy;
   $('run-fixture').disabled = locked || fixtureUnknown;
   for (const button of document.querySelectorAll('[data-write]')) button.disabled = locked;
+  $('save-budget').disabled = locked || !snapshot || !budgetFresh(budgetWork());
+  $('review-budget').disabled = locked || !snapshot || !budgetFresh(budgetWork());
   $('create-mission').textContent = busy ? 'Command in flight…' : 'Create Mission';
   $('mission-panel').setAttribute('aria-busy', String(busy || loading));
   const notice = $('operation-notice');
@@ -509,6 +519,7 @@ function renderMission() {
   renderRevision();
   renderMemoryHistory();
   renderRetirement();
+  renderBudget();
   executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
   $('loaded-id').textContent = mission.id;
@@ -534,6 +545,7 @@ function renderActivity() {
   const list = $('event-list'); list.replaceChildren();
   const shown = activity.filter(event => !selectedId || event.aggregateId === selectedId).slice(-8).reverse();
   if (!shown.length) list.append(element('li',selectedId ? 'No newly observed events for this Mission.' : 'Select a Mission to follow its events.'));
+  renderBudgetHistory();
   for (const event of shown) { const row = element('li'); const label = (event.events || []).map(item => item.type).filter(Boolean).join(', ') || 'Committed change'; row.append(element('span',String(label).replaceAll('-',' ')),element('small','revision ' + event.revision + ' · cursor ' + event.cursor)); list.append(row); }
 }
 function receiptObserved() {
@@ -548,7 +560,7 @@ async function refreshReadState(epoch, expectedFeed) {
     if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? body.snapshot !== null && !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
     if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
     if (feedId && body.feedId !== feedId) {
-      activity = []; confirmedOperations.clear(); retirementSubmissions.clear();
+      activity = []; confirmedOperations.clear(); retirementSubmissions.clear(); budgetSubmissions.clear(); budgetStatuses.clear();
     }
     // Receipts predating this snapshot still matter; a fresh boundary is not command reconciliation.
     if (unknownOperation) unknownOperation.reconcileCursor = 0;
@@ -612,7 +624,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -625,6 +637,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
   if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
   if (revisionSubmission) revisionSubmissions.set(operationKey(operation),revisionSubmission);
   if (retirementSubmission) retirementSubmissions.set(operationKey(operation),retirementSubmission);
+  if (budgetSubmission) budgetSubmissions.set(operationKey(operation),budgetSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json',...(writeFeed ? {'X-Massion-Feed':writeFeed} : {})},body:JSON.stringify(body)},longRun ? 120000 : 15000);
@@ -756,6 +769,70 @@ function renderMemoryHistory() {
   }
   if (focused) restoreControlFocus(previous,focused);
 }
+function budgetValues() { return [$('budget-limit').value,$('budget-reason').value]; }
+function budgetWork(id = $('budget-target').value) { return snapshot?.value.works.find(work => work.id === id); }
+function budgetFresh(work) { return !!work && work.acceptance === 'pending' && ['queued','blocked','waiting'].includes(work.execution) && !work.runtimeRun && !work.runtimeRecovery && !work.effects.length && !work.assignments.length && !work.artifact && !work.verdict && !work.record && work.attempts.length === 1 && work.attempts[0].status === 'queued' && work.tasks.length === 1 && work.tasks[0].status === 'queued' && !work.tasks[0].result; }
+function budgetDraftKey(workId = $('budget-target').value) { return instructionKey(budgetMission,workId); }
+function freshBudgetDraft(work) { return {values:[work ? String(work.budget.limit) : '', ''],baseRevision:snapshot?.revision || null,feed:feedId}; }
+function renderBudgetHistory() {
+  const area = $('budget-history'); area.replaceChildren();
+  const shown = activity.filter(event => event.aggregateId === budgetMission).flatMap(event => (event.events || []).filter(item => item.type === 'revise-budget' && item.command?.workId === $('budget-target').value).map(item => ({event,item}))).slice(-8).reverse();
+  if (!shown.length) area.append(element('p','No recent budget changes observed here. This is not complete history.'));
+  for (const {event,item} of shown) area.append(element('p','Work ' + item.command.workId + ' · limit ' + item.command.limit + ' · revision ' + event.revision),element('p','Recorded reason: ' + item.command.reason));
+}
+function renderBudget() {
+  if (!snapshot) return;
+  const missionId = snapshot.value.id, select = $('budget-target');
+  // Preserve the intended ID independently of the previous Mission's native options.
+  const workId = budgetMission !== missionId ? budgetSelections.get(missionId) || '' : select.value;
+  budgetMission = missionId;
+  for (const [key,submission] of budgetSubmissions) {
+    if (submission.missionId !== missionId || !confirmedOperations.has(key) || snapshot.revision <= submission.expectedRevision) continue;
+    const draftKey = instructionKey(missionId,submission.workId), draft = budgetDrafts.get(draftKey), work = budgetWork(submission.workId);
+    if (draft && JSON.stringify(draft.values) === JSON.stringify(submission.values)) budgetDrafts.set(draftKey,freshBudgetDraft(work));
+    budgetStatuses.set(draftKey,'Confirmed budget change for Work ' + submission.workId + '. No execution or permission was granted. Later draft edits are retained.'); budgetSubmissions.delete(key);
+  }
+  select.replaceChildren(); const prompt = element('option','Choose exact fresh Work'); prompt.value = ''; select.append(prompt);
+  for (const work of snapshot.value.works.filter(budgetFresh)) { const option = element('option',work.title + ' · ' + work.id); option.value = work.id; select.append(option); }
+  if (workId && !budgetFresh(budgetWork(workId))) { const stale = element('option',workId + ' is no longer fresh; no other Work is substituted'); stale.value = workId; select.append(stale); }
+  select.value = workId;
+  const work = budgetWork(workId), key = budgetDraftKey(), draft = budgetDrafts.get(key);
+  $('budget-limit').value = draft?.values[0] || ''; $('budget-reason').value = draft?.values[1] || '';
+  $('budget-current').textContent = work ? 'Work ' + work.id + ' · Current limit ' + work.budget.limit + ' · Unit: ' + (work.budget.unit || 'host units (unit not pinned yet)') + ' · Reserved ' + work.budget.reserved + ' · Measured ' + (work.budget.measured === null ? 'Unknown' : work.budget.measured) : 'Choose Work to inspect its actual budget.';
+  $('budget-base').textContent = 'Current revision ' + snapshot.revision + (draft ? ' · Draft based on revision ' + draft.baseRevision + (draft.baseRevision !== snapshot.revision || draft.feed !== feedId ? ' · State changed. Review this exact Work against current state before a deliberate submission.' : '') : ' · No Work selected.');
+  if (workId && !budgetFresh(work)) $('budget-base').textContent += ' This Work is no longer eligible; no replacement is selected.';
+  $('budget-status').textContent = budgetStatuses.get(key) || 'Review the exact Work, changed limit and reason. No execution will start.';
+  renderBudgetHistory();
+}
+$('budget-target').addEventListener('change',() => {
+  if (!revisionEditable()) return;
+  const workId = $('budget-target').value; budgetSelections.set(budgetMission,workId); const key = budgetDraftKey();
+  if (workId && !budgetDrafts.has(key)) budgetDrafts.set(key,freshBudgetDraft(budgetWork(workId)));
+  renderBudget(); controls();
+});
+for (const id of ['budget-limit','budget-reason']) $(id).addEventListener('input',() => { const draft = budgetDrafts.get(budgetDraftKey()); if (draft) draft.values = budgetValues(); });
+$('review-budget').addEventListener('click',() => {
+  if (!revisionEditable() || !budgetFresh(budgetWork())) return;
+  const key = budgetDraftKey(); budgetDrafts.set(key,{values:budgetValues(),baseRevision:snapshot.revision,feed:feedId}); budgetStatuses.set(key,'Exact Work reviewed against current state. No command was sent.'); renderBudget(); controls();
+});
+$('cancel-budget').addEventListener('click',() => {
+  if (!revisionEditable()) return; const key = budgetDraftKey(); budgetDrafts.set(key,freshBudgetDraft(budgetWork())); budgetStatuses.set(key,'Budget draft canceled. No command was sent.'); renderBudget(); controls();
+});
+$('budget-form').addEventListener('submit',async event => {
+  event.preventDefault(); if (!revisionEditable()) return;
+  const missionId = selectedId, work = budgetWork(), values = budgetValues(), key = budgetDraftKey(), draft = budgetDrafts.get(key), limit = Number(values[0]);
+  if (!budgetFresh(work) || !values[0].trim() || !Number.isFinite(limit) || limit < work.budget.reserved || limit < 0 || limit === work.budget.limit || !values[1].trim() || values[1].length > 16000 || !draft?.baseRevision || draft.feed !== feedId) { budgetStatuses.set(key,'Choose exact fresh Work, a changed finite nonnegative limit and reason against this host. No command was sent.'); $('budget-status').textContent = budgetStatuses.get(key); return; }
+  const body = {commandId:crypto.randomUUID(),expectedRevision:draft.baseRevision,workId:work.id,limit,reason:values[1]};
+  if (!commandBodyFits(body)) { budgetStatuses.set(key,'Request exceeds 32 KiB UTF-8. Shorten the reason. No command was sent.'); $('budget-status').textContent = budgetStatuses.get(key); return; }
+  const submittedFocus = document.activeElement; budgetStatuses.set(key,'Awaiting a durable budget receipt. No execution is requested.'); $('budget-status').textContent = budgetStatuses.get(key);
+  const saved = await write('/missions/' + encodeURIComponent(missionId) + '/work-budget',body,missionId,'Owner budget change confirmed; no execution requested.',null,null,{missionId,workId:work.id,values:[...values],expectedRevision:body.expectedRevision});
+  if (snapshot?.value.id === missionId && selectedId === missionId) {
+    if (saved || confirmedOperations.has(operationKey({missionId,commandId:body.commandId}))) renderBudget();
+    else { budgetStatuses.set(key,'Budget change not confirmed here. Exact Work, limit and reason are retained. Inspect command status; no command is retried.'); $('budget-status').textContent = budgetStatuses.get(key); }
+    if ($('budget-form').contains(submittedFocus)) { budgetFocus = {missionId,previous:submittedFocus,targetId:submittedFocus.id}; controls(); }
+  }
+});
+
 function retirementValues() { return [$('retirement-target').value,$('retirement-reason').value]; }
 function retirementLabel(value) { try { const target = JSON.parse(value); if (Array.isArray(target) && target.length === 2) return String(target[0]) + ' · version ' + String(target[1]); } catch {} return 'invalid exact selection'; }
 function freshRetirementDraft() { return {values:['',''],baseRevision:null,feed:''}; }
