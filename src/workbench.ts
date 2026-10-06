@@ -88,6 +88,7 @@ let storedBudgetState = null, storedBudgetSequence = 0, storedBudgetController =
 const storedBudgetSelections = new Map();
 let storedInterventionState = null, storedInterventionSequence = 0, storedInterventionController = null;
 const storedInterventionSelections = new Map();
+const recordTextReads = new Map();
 let retirementMission = "", retirementFocus = null;
 const retirementDrafts = new Map(), retirementSubmissions = new Map();
 const growthDrafts = new Map(), growthSubmissions = new Map();
@@ -228,7 +229,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls();
+  impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); recordTextControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -478,6 +479,7 @@ function renderWork(work) {
   body.append(element('h4', 'Accepted Record'));
   if (work.record) { body.append(element('p', work.record.id + ' · ' + work.record.evidenceClass), element('p', 'Checksum: ' + work.record.checksum, 'id')); const record = element('details'); record.append(workElement(work,'summary','Inspect Record bundle','record-summary'), workElement(work,'pre',JSON.stringify(work.record,null,2),'record')); body.append(record); }
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
+  if(work.record && work.acceptance==='accepted')body.append(recordTextPanel(work));
   const attempts = element('details'); attempts.append(workElement(work,'summary','Attempts, tasks & assignments','attempts-summary'), workElement(work,'pre',JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments},null,2),'attempts')); body.append(attempts); evidence.append(body); card.append(evidence);
   if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),workElement(work,'pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2),'connections'));
   if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
@@ -815,6 +817,51 @@ function renderBudget() {
   renderBudgetHistory(); renderStoredBudget(); renderStoredIntervention();
 }
 
+
+function recordTextChoice(work) { return {missionId:snapshot.value.id,workId:work.id,recordId:work.record.id,recordChecksum:work.record.checksum,artifactId:work.record.artifact.id,artifactVersion:work.record.artifact.version,artifactSha256:work.record.artifact.sha256,criteriaVersion:work.record.criteria.version,evidenceClass:work.record.evidenceClass,feedId,epoch:connectionEpoch}; }
+function recordTextKey(choice) { return JSON.stringify([choice.missionId,choice.workId,choice.recordId,choice.recordChecksum,choice.artifactVersion,choice.artifactSha256,choice.feedId]); }
+function currentRecordText(choice) {
+  if(reconnectRequired || selectedId!==choice.missionId || snapshot?.value.id!==choice.missionId || feedId!==choice.feedId || connectionEpoch!==choice.epoch)return false;
+  const w=snapshot.value.works.find(work=>work.id===choice.workId);return w?.acceptance==='accepted' && w.record?.id===choice.recordId && w.record.checksum===choice.recordChecksum && w.record.artifact.version===choice.artifactVersion && w.record.artifact.sha256===choice.artifactSha256;
+}
+function recordTextNode(workId,part) { return document.getElementById('work-record-text-'+part+'-'+workId); }
+function recordTextPanel(work) {
+  const choice=recordTextChoice(work),state=recordTextReads.get(recordTextKey(choice)),details=element('details');details.append(workElement(work,'summary','Read exact accepted text','record-text-summary'));
+  details.append(element('p','Read only the text pinned by this accepted Record. Host checks the Record and exact UTF-8 bytes/SHA-256. This is not a new independent quality verdict; no execution or file path input. Other artifact kinds remain unsupported.','hint'));
+  const row=element('div',undefined,'row'),read=workElement(work,'button','Read exact Record text','record-text-read'),cancel=workElement(work,'button','Cancel text read','record-text-cancel');read.type=cancel.type='button';read.disabled=work.record.artifact.kind!=='text'||!feedId||!currentRecordText(choice)||loading||!!state?.busy;cancel.disabled=!state?.busy;
+  read.addEventListener('click',()=>readRecordText(choice));cancel.addEventListener('click',()=>cancelRecordText(choice));row.append(read,cancel);
+  const status=workElement(work,'p',state?.message || (work.record.artifact.kind==='text'?'Read the exact stored text deliberately.':'This accepted artifact is not UTF-8 text; no filesystem fallback is available.'),'record-text-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  const content=workElement(work,'pre',state?.content || '','record-text-content');content.setAttribute('role','region');content.setAttribute('aria-label','Exact accepted text for '+work.id);content.setAttribute('aria-busy',String(!!state?.busy));details.append(row,status,content);return details;
+}
+function recordTextControls() {
+  for(const [key,state] of recordTextReads)if(!currentRecordText(state.choice)){state.sequence++;state.controller?.abort();recordTextReads.delete(key);const content=recordTextNode(state.choice.workId,'content');if(content){content.replaceChildren();content.setAttribute('aria-busy','false');}const status=recordTextNode(state.choice.workId,'status');if(status)status.textContent='Text read invalidated by context change. Choose the exact accepted result and read again deliberately.';}
+  if(!snapshot || snapshot.value.id!==selectedId)return;
+  for(const work of snapshot.value.works){if(!work.record || work.acceptance!=='accepted')continue;const choice=recordTextChoice(work),state=recordTextReads.get(recordTextKey(choice)),read=recordTextNode(work.id,'read'),cancel=recordTextNode(work.id,'cancel');if(read)read.disabled=work.record.artifact.kind!=='text'||!feedId||!currentRecordText(choice)||loading||!!state?.busy;if(cancel)cancel.disabled=!state?.busy;}
+}
+function renderRecordText(choice) {
+  const state=recordTextReads.get(recordTextKey(choice));if(!state || !currentRecordText(choice))return;
+  const status=recordTextNode(choice.workId,'status'),content=recordTextNode(choice.workId,'content');if(status)status.textContent=state.message;if(content){content.textContent=state.content || '';content.setAttribute('aria-busy',String(state.busy));}recordTextControls();
+}
+function cancelRecordText(choice) {
+  const state=recordTextReads.get(recordTextKey(choice));if(!state?.busy)return;const previous=document.activeElement;state.sequence++;state.controller?.abort();state.controller=null;state.busy=false;state.content='';state.message='Text read canceled. No write or execution was sent.';renderRecordText(choice);if(previous===recordTextNode(choice.workId,'cancel'))restoreControlFocus(previous,'work-record-text-read-'+choice.workId);
+}
+async function validRecordText(body,choice) {
+  if(!body || body.missionId!==choice.missionId || body.workId!==choice.workId || body.recordId!==choice.recordId || body.recordChecksum!==choice.recordChecksum || body.feedId!==choice.feedId || body.criteriaVersion!==choice.criteriaVersion || body.evidenceClass!==choice.evidenceClass || !Number.isSafeInteger(body.revision)||body.revision<1 || body.artifact?.id!==choice.artifactId || body.artifact.kind!=='text' || body.artifact.version!==choice.artifactVersion || body.artifact.sha256!==choice.artifactSha256 || typeof body.content!=='string' || !body.content.isWellFormed() || !body.content.length || !Number.isSafeInteger(body.byteLength))return false;
+  const bytes=new TextEncoder().encode(body.content);if(bytes.length>32768 || bytes.length!==body.byteLength || !crypto.subtle)return false;const digest=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('')===choice.artifactSha256;
+}
+async function readRecordText(choice) {
+  recordTextControls();const button=recordTextNode(choice.workId,'read');if(!button || button.disabled || !currentRecordText(choice))return;
+  const key=recordTextKey(choice),old=recordTextReads.get(key);old?.controller?.abort();const state={choice,sequence:(old?.sequence || 0)+1,controller:new AbortController(),busy:true,content:'',message:'Reading and checking exact accepted text…'},sequence=state.sequence,submittedFocus=document.activeElement;recordTextReads.set(key,state);renderRecordText(choice);const timer=setTimeout(()=>state.controller?.abort(),15000);
+  try{
+    const path='/missions/'+encodeURIComponent(choice.missionId)+'/record-artifact?work='+encodeURIComponent(choice.workId)+'&record='+encodeURIComponent(choice.recordId)+'&version='+choice.artifactVersion+'&sha256='+choice.artifactSha256;
+    const response=await fetch(path,{headers:{'X-Massion-Feed':choice.feedId},signal:state.controller.signal,cache:'no-store'}),body=await response.json();
+    if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
+    if(!response.ok)throw new Error(body?.error || 'Exact text read unavailable.');if(!await validRecordText(body,choice))throw new Error('Text reply failed exact Record, feed, UTF-8 byte or SHA-256 checks.');
+    if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
+    state.content=body.content;state.message='Exact stored text verified against Record '+choice.recordId+' · artifact v'+choice.artifactVersion+' · SHA-256 '+choice.artifactSha256+' · '+body.byteLength+' UTF-8 bytes · read at Mission revision '+body.revision+' · recorded evidence '+body.evidenceClass+'. Viewing text creates no new acceptance.';
+  }catch(error){if(recordTextReads.get(key)===state && sequence===state.sequence && currentRecordText(choice)){state.content='';state.message='Read not verified: '+(error?.message || 'Unavailable.')+' Retry deliberately; no other artifact, write or execution is substituted.';}}
+  finally{clearTimeout(timer);if(recordTextReads.get(key)===state && sequence===state.sequence && currentRecordText(choice)){state.controller=null;state.busy=false;renderRecordText(choice);if(submittedFocus===button)restoreControlFocus(submittedFocus,'work-record-text-read-'+choice.workId);}}
+}
 function selectedGrowth() { return snapshot?.value.id === selectedId ? (snapshot.value.growth || []).find(g => g.id === $('growth-target').value) : null; }
 function growthDraft(g) { return {target:g.id,baseline:g.baseline,candidate:g.candidate,action:g.status==='adopted'?'revert':'adopt',baseRevision:snapshot.revision,feed:feedId,message:'Exact proposal selected. Inspect evidence and memory versions before a deliberate action.'}; }
 function growthMatches(g,draft) { return g && draft && g.id===draft.target && g.target==='memory' && g.baseline===draft.baseline && g.candidate===draft.candidate && draft.feed===feedId; }
