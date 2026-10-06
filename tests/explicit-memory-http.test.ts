@@ -33,3 +33,23 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  await stop();server=createWorkbench(store,root);await start();assert.deepEqual(await (await fetch(base+'/missions/'+id)).json(),current);assert.deepEqual(await journal(),operations);
  t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',immutableMemoryVersions:2,pinnedOldAndFutureWork:true,forgedAuthorityAndScopeRejected:true,freshHostSameSnapshot:true,providerCalls:0}));
 });
+
+for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} owner memory captures submitted identity and content before paused scope lookup`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async()=>{
+ let transport;
+ if(durable){await verifyDisposableDatabase();const database='memory_capture_'+crypto.randomUUID().replaceAll('-','');transport=createHttpRpcTransport({endpoint:process.env.MASSION_TEST_SURREAL_RPC!,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE!,database});await transport.query('DEFINE DATABASE '+database+';',{});await initializeSurrealSchema(transport);}
+ const store=transport?new SurrealStore<Mission>(transport):new InMemoryStore<Mission>();
+ const {ProductService}=await import('../src/product.ts');const product=new ProductService(store),id='mission:capture';
+ await product.create({id,purpose:'Exact owner input',scope:'owned',constraints:[],criteria:{version:1,description:'Preserve input',oracle:'manual-review/v1'}},'create');
+ const memory={id:'instruction',version:1,content:'Original v1',source:'Owner v1'};
+ await product.saveMemory(id,{commandId:'v1',expectedRevision:1,memory});await product.admit(id,{commandId:'old',expectedRevision:2,workId:'old',title:'Old Work',budget:0});
+ const old=structuredClone((await store.load(id))!.value.works[0]);
+ const submitted={commandId:'v2',expectedRevision:3,memory:{...memory,version:2,content:'Submitted v2',source:'Submitted provenance'}};const original=structuredClone(submitted);
+ const load=store.load.bind(store);let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),started=new Promise<void>(r=>entered=r);let first=true;
+ store.load=async key=>{if(first){first=false;entered();await held;}return load(key);};
+ const pending=product.saveMemory(id,submitted);await started;
+ submitted.commandId='mutated';submitted.expectedRevision=99;submitted.memory.id='other';submitted.memory.version=42;submitted.memory.content='Mutated content';submitted.memory.source='Mutated provenance';
+ release();await pending;store.load=load;
+ const saved=(await store.load(id))!;assert.equal(saved.revision,4);assert.deepEqual(saved.value.memories[1],{...original.memory,scope:'owned',authority:'explicit',effective:true});assert.deepEqual(saved.value.works[0],old);
+ const journal=()=>store instanceof SurrealStore?store.exportJournal():Promise.resolve(store.inspect());const before=await journal();assert.equal((await product.saveMemory(id,original)).status,'replayed');assert.deepEqual(await journal(),before);
+ await product.admit(id,{commandId:'new',expectedRevision:4,workId:'new',title:'Future Work',budget:0});const fresh=await load(id);assert.deepEqual(fresh!.value.works[0],old);assert.deepEqual(fresh!.value.works[1]!.appliedMemoryVersions,['instruction@2']);assert.equal(fresh!.value.memories[0]!.content,'Original v1');
+});
