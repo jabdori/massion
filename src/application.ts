@@ -27,7 +27,12 @@ export class Application {
     if(prior.status!=='unknown')return prior;
     const snapshot=await this.store.load(envelope.missionId);
     if(!snapshot)throw new DomainError('Unknown Mission');
-    if(snapshot.revision!==envelope.expectedRevision)return {status:'conflict',revision:snapshot.revision,reason:'revision'};
+    if(snapshot.revision!==envelope.expectedRevision) {
+      // A duplicate may have committed after the initial operation lookup.
+      const concurrent=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});
+      if(concurrent.status!=='unknown')return concurrent;
+      return {status:'conflict',revision:snapshot.revision,reason:'revision'};
+    }
     const {value,events}=apply(snapshot.value,envelope.command,actor);
     const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
     return this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
