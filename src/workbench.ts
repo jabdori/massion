@@ -39,6 +39,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <section id="empty-state" class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>No Mission selected</h2><p id="empty-message">Start with a purpose and clear success criteria. Your Mission and Work will appear here after the host confirms them.</p></section>
 <section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><p><a id="mission-link" href="#" hidden>Open this Mission in another browser</a></p><p class="hint">Copy this link to continue on the same host. Opening it reads current state; it does not start Work or grant access.</p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
 <details id="revision-panel" class="impact-panel"><summary>Revise Mission purpose and acceptance</summary><p class="hint">Only future Work uses these changes. Existing Work keeps its original Mission input and criteria. Scope and constraints stay fixed; editing does not run a model or re-evaluate Work.</p><div id="revision-comparison" tabindex="0" role="region" aria-label="Current Mission and revision draft comparison" class="impact-results"><p id="revision-current" class="hint"></p><p id="revision-base" class="hint"></p></div><form id="revision-form"><fieldset id="revision-fields"><label for="revision-purpose">Revised purpose</label><textarea id="revision-purpose" rows="2" maxlength="16000" required></textarea><label for="revision-version">New criteria version</label><input id="revision-version" type="number" min="1" max="9007199254740991" step="1" required><label for="revision-criteria">Revised success criteria</label><textarea id="revision-criteria" rows="3" maxlength="16000" required></textarea><label for="revision-oracle">Acceptance method</label><select id="revision-oracle"><option value="manual-review/v1">Manual review (no model execution)</option><option value="bounded-text-review/v1">Bounded text with independent model review</option></select><button id="save-revision" type="submit" data-write>Save Mission revision</button><button id="rebase-revision" type="button" class="secondary">Keep draft against current revision</button><button id="discard-revision" type="button" class="secondary">Discard revision draft</button></fieldset></form><p id="revision-status" class="status" role="status" aria-live="polite">Review current purpose and criteria before saving.</p></details>
+<details id="growth-panel"><summary>Inspect evaluated memory Growth</summary><p id="growth-hint" class="hint">Inspect stored proposal and evaluation evidence before a deliberate owner adoption or revert. Scores and held-out evidence are recorded evaluation claims, not new model verification. Exact memory versions affect only future Work; existing Work pins remain. No automatic adoption or execution. This development host uses a local owner; remote authentication remains unimplemented.</p><label for="growth-target">Exact stored proposal</label><select id="growth-target" aria-describedby="growth-hint"><option value="">Choose exact proposal</option></select><div id="growth-evidence" tabindex="0" role="region" aria-label="Stored Growth evaluation evidence"></div><p id="growth-base" class="hint"></p><form id="growth-form"><fieldset id="growth-fields"><div class="row"><button id="adopt-growth" type="button">Adopt exact evaluated memory</button><button id="revert-growth" type="button">Revert exact adoption</button><button id="review-growth" type="button" class="secondary">Review exact proposal at current revision</button><button id="cancel-growth" type="button" class="secondary">Clear private selection</button></div></fieldset></form><p id="growth-status" class="status" role="status" aria-live="polite">Choose a stored proposal to inspect its evidence.</p></details>
 <details id="impact-panel" class="impact-panel"><summary>Inspect relation impact</summary><h3 id="impact-heading">Exact-version impact</h3><p id="impact-scope" class="hint"></p><p id="impact-hint" class="hint">Read stored dependencies for an exact entity ID and version in this Mission. Provenance and inferred flags describe recorded relations, not an independent truth verdict. This read does not invalidate results, start Work or call a model.</p><form id="impact-form"><div class="field"><label for="impact-entity">Target entity ID</label><input id="impact-entity" required maxlength="16000" aria-describedby="impact-hint" placeholder="Exact Work, artifact or evidence ID"></div><div class="field"><label for="impact-version">Exact version</label><input id="impact-version" type="number" min="1" max="9007199254740991" step="1" value="1" required aria-describedby="impact-hint"></div><button id="impact-read" type="submit">Read impact</button></form><p id="impact-status" class="status" role="status" aria-live="polite">Choose a target and exact version, then read its impact.</p><div id="impact-results" class="impact-results" tabindex="0" role="region" aria-label="Relation impact results" hidden></div></details>
 <details id="memory-panel" class="impact-panel"><summary>Manage Mission memory</summary><h3>Owner-authored instructions for future Work</h3><p id="memory-hint" class="hint">Save an explicit instruction for this Mission. New Work pins its effective version; earlier Work keeps its original memory. This does not run a model or adopt learned memory. Sources are owner-supplied context, not independent verification. Instruction and source each allow up to 16,000 characters; the complete JSON command must fit 32 KiB of UTF-8, including escaping and metadata.</p><p id="memory-scope" class="hint"></p><form id="memory-form"><fieldset id="memory-fields"><label for="memory-id">Memory ID</label><input id="memory-id" required maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" aria-describedby="memory-hint" placeholder="memory:instruction"><label for="memory-version">New immutable version</label><input id="memory-version" type="number" min="1" max="9007199254740991" step="1" value="1" required><label for="memory-content">Explicit instruction</label><textarea id="memory-content" rows="3" maxlength="16000" required></textarea><label for="memory-source">Owner-supplied source or reason</label><textarea id="memory-source" rows="2" maxlength="16000" required></textarea><button id="save-memory" type="submit" data-write>Save explicit memory</button></fieldset></form><p id="memory-status" class="status" role="status" aria-live="polite">Save a new ID at version 1, or advance an existing ID to a higher version.</p><h3>Stop an instruction for future Work</h3><p id="retirement-hint" class="hint">Choose one exact active explicit memory version. This stops its application to newly admitted Work. Its original content, history and earlier Work pins stay available; nothing is deleted.</p><form id="retirement-form"><fieldset id="retirement-fields"><label for="retirement-target">Exact active explicit memory</label><select id="retirement-target" required aria-describedby="retirement-hint retirement-base"></select><label for="retirement-reason">Reason for stopping future application</label><textarea id="retirement-reason" rows="2" maxlength="16000" required aria-describedby="retirement-hint"></textarea><p id="retirement-base" class="hint"></p><button id="stop-memory" type="submit" data-write>Stop this version for future Work</button><button id="review-retirement" type="button" class="secondary">Keep exact target against current revision</button><button id="cancel-retirement" type="button" class="secondary">Cancel stop draft</button></fieldset></form><p id="retirement-status" class="status" role="status" aria-live="polite">Choose an exact version and review what will remain.</p><div id="memory-history" class="impact-results" tabindex="0" role="region" aria-label="Mission memory history"></div></details>
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
@@ -89,6 +90,8 @@ let storedInterventionState = null, storedInterventionSequence = 0, storedInterv
 const storedInterventionSelections = new Map();
 let retirementMission = "", retirementFocus = null;
 const retirementDrafts = new Map(), retirementSubmissions = new Map();
+const growthDrafts = new Map(), growthSubmissions = new Map();
+let growthFocus = null;
 let memoryMission = "", memoryFocus = null;
 const memoryDrafts = new Map(), memoryIds = ["memory-id","memory-version","memory-content","memory-source"];
 const drafts = new Map(), instructionConflicts = new Map(), instructionSubmissions = new Map(), confirmedOperations = new Set();
@@ -98,6 +101,7 @@ function confirmOperation(operation) {
   if (revisionSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRevision();
   if (retirementSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRetirement();
   if (budgetSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderBudget();
+  if (growthSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderGrowth();
   const submission = instructionSubmissions.get(operationId);
   if (!submission) return;
   instructionSubmissions.delete(operationId);
@@ -144,7 +148,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); }
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); growthSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -224,7 +228,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  impactControls(); storedBudgetControls(); storedInterventionControls();
+  impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -524,6 +528,7 @@ function renderMission() {
   renderMemoryHistory();
   renderRetirement();
   renderBudget();
+  renderGrowth();
   executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
   $('loaded-id').textContent = mission.id;
@@ -628,7 +633,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -642,6 +647,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
   if (revisionSubmission) revisionSubmissions.set(operationKey(operation),revisionSubmission);
   if (retirementSubmission) retirementSubmissions.set(operationKey(operation),retirementSubmission);
   if (budgetSubmission) budgetSubmissions.set(operationKey(operation),budgetSubmission);
+  if (growthSubmission) growthSubmissions.set(operationKey(operation),growthSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json',...(writeFeed ? {'X-Massion-Feed':writeFeed} : {})},body:JSON.stringify(body)},longRun ? 120000 : 15000);
@@ -808,6 +814,71 @@ function renderBudget() {
   $('budget-status').textContent = budgetStatuses.get(key) || 'Review the exact Work, changed limit and reason. No execution will start.';
   renderBudgetHistory(); renderStoredBudget(); renderStoredIntervention();
 }
+
+function selectedGrowth() { return snapshot?.value.id === selectedId ? (snapshot.value.growth || []).find(g => g.id === $('growth-target').value) : null; }
+function growthDraft(g) { return {target:g.id,baseline:g.baseline,candidate:g.candidate,action:g.status==='adopted'?'revert':'adopt',baseRevision:snapshot.revision,feed:feedId,message:'Exact proposal selected. Inspect evidence and memory versions before a deliberate action.'}; }
+function growthMatches(g,draft) { return g && draft && g.id===draft.target && g.target==='memory' && g.baseline===draft.baseline && g.candidate===draft.candidate && draft.feed===feedId; }
+function growthEligible(g,action) {
+  if(!g || g.target!=='memory')return false;
+  const memory = ref => (snapshot.value.memories || []).find(m => m.id+'@'+m.version===ref && m.scope===snapshot.value.scope);
+  const candidate=memory(g.candidate),baseline=memory(g.baseline);
+  if(!candidate || !baseline)return false;
+  return action==='adopt' ? g.status==='evaluated' && !!g.evaluator && g.evaluator!==g.proposer && g.scores && Number.isFinite(g.scores.baseline) && Number.isFinite(g.scores.candidate) && g.scores.candidate>g.scores.baseline && typeof g.scores.heldOut==='string' && !!g.scores.heldOut.trim() && baseline.effective : g.status==='adopted' && Array.isArray(g.previousEffective) && candidate.effective;
+}
+function growthControls() {
+  const g=selectedGrowth(),draft=growthDrafts.get(selectedId),ready=revisionEditable();
+  $('growth-target').disabled=!snapshot || snapshot.value.id!==selectedId || loading;
+  const previous=document.activeElement;
+  if(snapshot?.value.id===selectedId && !$('growth-fields').disabled && $('growth-fields').contains(previous))growthFocus={missionId:selectedId,previous,targetId:previous.id};
+  $('growth-fields').disabled=!ready;
+  for(const action of ['adopt','revert'])$(''+action+'-growth').disabled=!ready || !growthMatches(g,draft) || draft.action!==action || !growthEligible(g,action);
+  $('review-growth').disabled=!ready || !g || g.target!=='memory';
+  $('cancel-growth').disabled=!ready || !draft;
+  if(growthFocus && ready){const pending=growthFocus;growthFocus=null;if(pending.missionId===selectedId)restoreControlFocus(pending.previous,$(pending.targetId).disabled?'review-growth':pending.targetId);}
+}
+function renderGrowth() {
+  if(!snapshot || snapshot.value.id!==selectedId)return;
+  for(const [key,submission] of growthSubmissions){
+    if(submission.missionId!==selectedId || !confirmedOperations.has(key) || snapshot.revision<=submission.expectedRevision)continue;
+    if(growthDrafts.get(selectedId)===submission.draft)submission.draft.message='Confirmed '+submission.action+' for '+submission.draft.target+'. Existing Work pins remain. Review the exact proposal at current revision before another action.';
+    growthSubmissions.delete(key);
+  }
+  const draft=growthDrafts.get(selectedId),select=$('growth-target'),previous=document.activeElement,area=$('growth-evidence'),focused=area.contains(previous)?previous?.id:null;
+  select.replaceChildren();const prompt=element('option','Choose exact proposal');prompt.value='';select.append(prompt);
+  for(const g of snapshot.value.growth || []){const option=element('option',g.id+' · '+g.status+' · '+g.candidate);option.value=g.id;select.append(option);}
+  if(draft && !(snapshot.value.growth || []).some(g=>g.id===draft.target)){const missing=element('option',draft.target+' unavailable; no replacement selected');missing.value=draft.target;select.append(missing);}
+  select.value=draft?.target || '';const g=selectedGrowth();area.replaceChildren();
+  if(g){
+    area.append(element('p','Proposal '+g.id+' · target '+g.target+' · status '+g.status+' · proposer '+g.proposer));
+    for(const [label,ref] of [['Baseline',g.baseline],['Candidate',g.candidate]]){
+      area.append(element('h4',label+' exact memory '+ref));const matches=(snapshot.value.memories || []).filter(m=>m.id+'@'+m.version===ref && m.scope===snapshot.value.scope);
+      if(matches.length!==1){area.append(element('p','Exact scoped memory unavailable; current versions are not substituted.','warning'));continue;}
+      const m=matches[0];area.append(element('p','Scope '+m.scope+' · authority '+m.authority+' · effective '+m.effective),element('pre',m.content),element('p','Stored source: '+m.source,'hint'));
+    }
+    area.append(element('h4','Counterevidence'),element('pre',g.counterevidence),element('p','Recorded independent evaluator: '+(g.evaluator || 'None')));
+    if(g.scores)area.append(element('p','Recorded baseline score '+g.scores.baseline+' · candidate score '+g.scores.candidate),element('h4','Stored held-out evaluation evidence'),element('pre',g.scores.heldOut));
+    else area.append(element('p','No stored evaluation; adoption is unavailable.'));
+    if(g.previousEffective)area.append(element('p','Effective pins recorded before adoption: '+g.previousEffective.join(', ')));
+    if(g.observation)area.append(element('p','Stored later observation: Work '+g.observation.workId+' · metric '+g.observation.metric));
+  }else area.append(element('p','Choose an exact stored proposal. No evaluation is created here.'));
+  $('growth-base').textContent='Current Mission revision '+snapshot.revision+(draft?' · Reviewed revision '+draft.baseRevision+' · proposal '+draft.target+' · baseline '+draft.baseline+' · candidate '+draft.candidate+' · action '+draft.action+(draft.baseRevision!==snapshot.revision || draft.feed!==feedId?' · State changed; review current evidence deliberately. Original confirmation is retained.':''):' · No proposal selected.');
+  $('growth-status').textContent=draft?.message || 'Choose a stored proposal to inspect its evidence.';growthControls();if(focused)restoreControlFocus(previous,focused);
+}
+$('growth-target').addEventListener('change',()=>{const g=selectedGrowth();if(g)growthDrafts.set(selectedId,growthDraft(g));else growthDrafts.delete(selectedId);renderGrowth();});
+$('review-growth').addEventListener('click',()=>{if(!revisionEditable())return;const g=selectedGrowth();if(!g)return;growthDrafts.set(selectedId,growthDraft(g));renderGrowth();$('growth-status').textContent='Exact proposal and memory versions retained at current revision. Inspect recorded evidence before a deliberate action. No command was sent.';});
+$('cancel-growth').addEventListener('click',()=>{if(!revisionEditable())return;growthDrafts.delete(selectedId);renderGrowth();$('growth-status').textContent='Private selection cleared. No adoption or revert was sent.';});
+async function submitGrowth(action) {
+  if(!revisionEditable())return;const g=selectedGrowth(),draft=growthDrafts.get(selectedId);if(!growthMatches(g,draft) || draft.action!==action || !growthEligible(g,action))return;
+  const missionId=selectedId,submittedFocus=document.activeElement,body={commandId:crypto.randomUUID(),expectedRevision:draft.baseRevision,growthId:draft.target,baseline:draft.baseline,candidate:draft.candidate,action};
+  draft.message='Awaiting durable '+action+' receipt for exact proposal '+draft.target+'. No execution is requested.';renderGrowth();
+  const saved=await write('/missions/'+encodeURIComponent(missionId)+'/growth',body,missionId,'Exact Growth '+action+' confirmed; existing Work pins retained.',null,null,null,{missionId,action,expectedRevision:body.expectedRevision,draft});
+  if(snapshot?.value.id===missionId && selectedId===missionId){
+    if(growthDrafts.get(missionId)===draft && !saved && !confirmedOperations.has(operationKey({missionId,commandId:body.commandId})))draft.message='Action not confirmed here. Exact proposal, memory versions and reviewed revision are retained. Inspect command status; no automatic retry.';
+    renderGrowth();if($('growth-form').contains(submittedFocus)){growthFocus={missionId,previous:submittedFocus,targetId:submittedFocus.id};controls();}
+  }
+}
+$('adopt-growth').addEventListener('click',()=>submitGrowth('adopt'));
+$('revert-growth').addEventListener('click',()=>submitGrowth('revert'));
 function currentStoredBudget(choice) {
   return !reconnectRequired && snapshot?.value.id === choice.missionId && selectedId === choice.missionId && feedId === choice.feedId && connectionEpoch === choice.epoch && $('stored-budget-target').value === choice.workId;
 }
