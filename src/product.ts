@@ -21,8 +21,10 @@ export class ProductService {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-mission',purpose:input.purpose,criteria:{version:input.criteria.version,description:input.criteria.description,oracle:input.criteria.oracle}}});
  }
  async saveMemory(missionId:string,input:{commandId:string;expectedRevision:number;memory:{id:string;version:number;content:string;source:string}}) {
+  const {commandId,expectedRevision}=input;
+  const memory={id:input.memory.id,version:input.memory.version,content:input.memory.content,source:input.memory.source};
   const current=await this.app.store.load(missionId);if(!current)throw new DomainError('Unknown Mission');
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'save-memory',memory:{id:input.memory.id,version:input.memory.version,content:input.memory.content,source:input.memory.source,scope:current.value.scope,authority:'explicit',effective:true}}});
+  return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'save-memory',memory:{...memory,scope:current.value.scope,authority:'explicit',effective:true}}});
  }
  async retireMemory(missionId:string,input:{commandId:string;expectedRevision:number;memoryId:string;version:number;reason:string}) {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'retire-memory',memoryId:input.memoryId,version:input.version,reason:input.reason}});
