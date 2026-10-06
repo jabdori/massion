@@ -17,6 +17,8 @@ export class Application {
     return this.store.commit({id:input.id,expectedRevision:0,commandId,fingerprint,value,events:[{type:'mission-created',actor:actor.id}],outbox:[]});
   }
   async dispatch(envelope:Envelope):Promise<CommitResult<Mission>> {
+    // Keep identity, authority and applied command bound across asynchronous store reads.
+    envelope=structuredClone(envelope);
     const actor=this.actor(envelope.actorId);
     if(!Number.isSafeInteger(envelope.expectedRevision)||envelope.expectedRevision<1)throw new DomainError('Invalid expected revision');
     if(typeof envelope.commandId!=='string'||!envelope.commandId.length)throw new DomainError('Missing command identity');
