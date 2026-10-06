@@ -1,3 +1,4 @@
+import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
@@ -33,7 +34,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
   if(req.headers.origin&&req.headers.origin!==`http://${expected}`){send(403,{error:'Cross-origin request denied'});return;}
   const readBody=async():Promise<Record<string,unknown>>=>{
    if(req.headers['content-type']!=='application/json')throw new RequestError(415,'JSON required');
-   let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>32768)throw new RequestError(413,'Request too large');}
+   let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>MAX_REQUEST_BODY_BYTES)throw new RequestError(413,'Request too large');}
    let input:unknown;try{input=JSON.parse(body);}catch{throw new RequestError(400,'Invalid JSON');}
    if(!input||typeof input!=='object'||Array.isArray(input))throw new RequestError(400,'JSON object required');return input as Record<string,unknown>;
   };
