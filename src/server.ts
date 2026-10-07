@@ -1,4 +1,4 @@
-import {searchDocuments,readDocument,DocumentReadError} from './documents.ts';
+import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
@@ -114,11 +114,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer and quarantine-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
-   const documentRoute=/^\/missions\/([^/]+)\/(documents|document)$/.exec(url.pathname);
+   const documentRoute=/^\/missions\/([^/]+)\/(documents|document|document-usage)$/.exec(url.pathname);
    if(req.method==='GET'&&documentRoute){
     const id=decodeIdentifier(documentRoute[1]!),feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');
     const search=documentRoute[2]==='documents',allowed=search?['query']:['id','version','sha256'];if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1)||allowed.some(key=>!url.searchParams.has(key)))throw new RequestError(400,'Unique exact document query fields required');
-    const result=search?await searchDocuments(store,id,{query:url.searchParams.get('query')!,...(feedId===undefined?{}:{feedId})}):await readDocument(store,id,{id:url.searchParams.get('id')!,version:Number(url.searchParams.get('version')),contentSha256:url.searchParams.get('sha256')!,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or document version'});return;
+    const result=search?await searchDocuments(store,id,{query:url.searchParams.get('query')!,...(feedId===undefined?{}:{feedId})}):await (documentRoute[2]==='document-usage'?readDocumentUsage:readDocument)(store,id,{id:url.searchParams.get('id')!,version:Number(url.searchParams.get('version')),contentSha256:url.searchParams.get('sha256')!,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or document version'});return;
    }
    const recordArtifactRoute=/^\/missions\/([^/]+)\/record-artifact$/.exec(url.pathname);
    if(req.method==='GET'&&recordArtifactRoute){
