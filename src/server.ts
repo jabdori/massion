@@ -131,6 +131,12 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     const search=documentRoute[2]==='documents',allowed=search?['query']:['id','version','sha256'];if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1)||allowed.some(key=>!url.searchParams.has(key)))throw new RequestError(400,'Unique exact document query fields required');
     const result=search?await searchDocuments(store,id,{query:url.searchParams.get('query')!,...(feedId===undefined?{}:{feedId})}):await (documentRoute[2]==='document-usage'?readDocumentUsage:readDocument)(store,id,{id:url.searchParams.get('id')!,version:Number(url.searchParams.get('version')),contentSha256:url.searchParams.get('sha256')!,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or document version'});return;
    }
+   const rejectedRoute=/^\/missions\/([^/]+)\/rejected-artifact$/.exec(url.pathname);
+   if(req.method==='GET'&&rejectedRoute){
+    const id=decodeIdentifier(rejectedRoute[1]!),workId=url.searchParams.get('work'),binding=url.searchParams.get('binding'),version=url.searchParams.get('version'),sha256=url.searchParams.get('sha256');identifier(workId,'Work identifier');const allowed=['work','binding','version','sha256'];
+    if([...url.searchParams.keys()].some(k=>!allowed.includes(k)||url.searchParams.getAll(k).length!==1)||!binding||!/^[a-f0-9]{64}$/.test(binding)||!version||!/^\d+$/.test(version)||!Number.isSafeInteger(Number(version))||Number(version)<1||!sha256||!/^[a-f0-9]{64}$/.test(sha256))throw new RequestError(400,'Unique exact rejected candidate query fields required');
+    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const result=await product.readRejectedText(id,workId,{binding,artifactVersion:Number(version),artifactSha256:sha256,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or Work'});return;
+   }
    const recordArtifactRoute=/^\/missions\/([^/]+)\/record-artifact$/.exec(url.pathname);
    if(req.method==='GET'&&recordArtifactRoute){
     const id=decodeIdentifier(recordArtifactRoute[1]!),workId=url.searchParams.get('work'),recordId=url.searchParams.get('record'),version=url.searchParams.get('version'),sha256=url.searchParams.get('sha256');identifier(workId,'Work identifier');identifier(recordId,'Record identifier');
