@@ -1,3 +1,4 @@
+import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
@@ -179,13 +180,15 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  const hostStartup=await loadHostStartup(process.argv.slice(2));
+ const workspaceRoot=resolve('.runtime/workspaces'),artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));
+ const artifactReader=hostStartup.restoredArtifacts?await loadRestoredArtifactReader(hostStartup.restoredArtifacts,artifacts):artifacts;
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
  const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
- const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
- const server=createWorkbench(store,workspaceRoot,{connections,artifacts,knowledge:new SurrealRelationImpact(transport)});
+ const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
+ const server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{void server.drain().then(result=>{console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);},()=>{console.error('Local host drain failed; inspect original durable state. No remote stop or replay inferred.');process.exit(1);});});
 }

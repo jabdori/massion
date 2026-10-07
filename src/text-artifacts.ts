@@ -251,6 +251,11 @@ export class TextArtifactStore {
     return bytes;
   }
 
+  /** Validate an existing root without initialization or filesystem writes. */
+  async verifyReadRoot(): Promise<void> {
+    await serialized(this.root, async () => { await this.marker(this.root, 'root', false); });
+  }
+
   /** Explicitly initialize an empty owned root without creating a Work artifact. */
   async initialize(): Promise<void> {
     await serialized(this.root, async () => { await this.marker(this.root, 'root', true); });
