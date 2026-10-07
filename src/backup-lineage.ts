@@ -320,6 +320,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
   'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
+  'record-relation':{required:['relation']},
   relate: { required: ['relation'] },
 };
 
