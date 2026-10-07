@@ -1,11 +1,11 @@
 import {providerRequestHash,validateProviderDispatch} from './provider-dispatch.ts';
-import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
+import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,RunDeadlineError,HostDrainError,invokeOwned} from './runtime-lifetime.ts';
 import {resolvedPrerequisites} from './work-prerequisites.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {Application} from './application.ts';
 import {hash,DomainError,workInputHash,pinnedOrganization,pinnedWorkSources} from './domain.ts';
 import type {Mission,Work,Command,Actor,ModelSelection,Artifact,RuntimeConnectionBindings,ProviderDispatchClaim} from './domain.ts';
-import type {Store,Snapshot} from './storage.ts';
+import type {Store,Snapshot,CommitResult} from './storage.ts';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
@@ -26,12 +26,17 @@ export class RunUnsettledError extends Error {
  readonly missionId:string;readonly workId:string;readonly runId:string;readonly snapshot?:Snapshot<Mission>;
  constructor(missionId:string,workId:string,runId:string,snapshot:Snapshot<Mission>|undefined,cause:unknown){super('Run admission committed, but a later stage is unresolved. Inspect durable state; do not replay the run.',{cause});this.name='RunUnsettledError';this.missionId=missionId;this.workId=workId;this.runId=runId;this.snapshot=snapshot;}
 }
+export class RunAdmissionUnknownError extends Error {
+ readonly runId:string;constructor(runId:string,cause:unknown){super('Runtime admission outcome is unknown. Inspect original durable state; no replay is inferred.',{cause});this.name='RunAdmissionUnknownError';this.runId=runId;}
+}
 export interface WorkRuntime {
  availability(mission:Mission):{ready:boolean;reason:string};
  run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>;
  configuration?():unknown;
  preflight?(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight;
  owns?(missionId:string,workId:string,runId:string):boolean;
+ beginDrain?():void;
+ drain?():Promise<void>;
  interrupt(missionId:string,workId:string):void;
 }
 /** Pure admission checks shared by preflight and dispatch. A check never reserves a run or budget. */
@@ -64,6 +69,8 @@ const selection=(adapter:ProviderAdapter,role:string):ModelSelection=>({...adapt
 const validTokens=(n:unknown)=>n===null||typeof n==='number'&&Number.isSafeInteger(n)&&n>=0;
 export class ConfiguredTextRuntime implements WorkRuntime {
  readonly app:Application; private readonly options:ConfiguredRuntimeOptions;
+ private draining=false;
+ private readonly runs=new Set<Promise<RuntimeResult>>();
  private readonly controllers=new Map<string,{runId:string;controller:AbortController}>();
  constructor(store:Store<Mission>,options:ConfiguredRuntimeOptions){
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
@@ -74,7 +81,10 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const actors:Actor[]=[{id:'local-owner',roles:['owner']},{id:'runtime-representative',roles:['representative']},{id:options.executor.identity,roles:['executor']},{id:options.verifier.identity,roles:['verifier']}];
   this.app=new Application(store,actors);
  }
+ beginDrain(){this.draining=true;for(const owned of this.controllers.values())owned.controller.abort(new HostDrainError());}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs]);if(results.some(result=>result.status==='rejected'&&!(result.reason instanceof HostDrainError)&&!(result.reason instanceof DomainError)&&!(result.reason instanceof Error&&result.reason.name==='StorageContentionError')))throw new Error('Owned runtime did not settle durably during local host drain');}
  availability(mission:Mission){
+  if(this.draining)return {ready:false,reason:"Local host is draining; no new run is admitted."};
   const {authorization:g,executor,verifier,outputTokenCap,enabled}=this.options;
   if(!enabled||!g)return {ready:false,reason:'Runtime has no explicit enabled authorization configuration.'};
   if(typeof g.id!=='string'||!g.id||!Number.isSafeInteger(g.maxOutputTokensPerCall)||g.maxOutputTokensPerCall<1||g.scope!==mission.scope||g.maxOutputTokensPerCall<outputTokenCap)return {ready:false,reason:'Authorization scope or output cap does not match this Mission.'};
@@ -141,15 +151,23 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   await this.send(missionId,{type:'receipt',workId,effectId,...(claim?{providerDispatchId:claim.id}:{}),outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
   return outcome;
  }
- async run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{
+ run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{const task=this.runOwned(missionId,workId,runId,expectedRevision);this.runs.add(task);void task.finally(()=>this.runs.delete(task)).catch(()=>{});return task;}
+ private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{
   const initial=await this.current(missionId,workId);const preflight=this.preflight(initial.snapshot,workId,expectedRevision);
   if(!preflight.ready)return rejectedRun(preflight,initial.snapshot);
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};
-  const g=this.options.authorization!;const activation=await this.app.dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});
+  let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor('local-owner')]).dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
+   if(activationFenced||error instanceof Error&&error.name==='StorageContentionError')throw error;
+   let snapshot:Snapshot<Mission>|undefined;try{snapshot=await this.snapshot(missionId);}catch{/* Admission remains unknown when exact readback is unavailable. */}
+   const retained=snapshot?.value.works.find(work=>work.id===workId)?.runtimeRun;
+   if(snapshot&&retained?.id===runId&&retained.ownership?.dispatchId===ownership.dispatchId&&retained.ownership.hostSessionId===HOST_SESSION_ID){if(this.draining)return this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}
+   if(snapshot&&error instanceof DomainError)throw error;
+   throw new RunAdmissionUnknownError(runId,error);
+  }
   if(activation.status==='conflict')return {status:'conflict',snapshot:await this.snapshot(missionId)};
   if(activation.status==='replayed')return {status:'already-started',snapshot:await this.snapshot(missionId)};
-  const controller=new AbortController();this.controllers.set(`${missionId}\0${workId}`,{runId,controller});const expire=()=>controller.abort(new RunDeadlineError());const timer=setTimeout(expire,Math.max(0,ownership.deadlineAt-Date.now()));if(Date.now()>=ownership.deadlineAt)expire();
+  const controller=new AbortController();this.controllers.set(`${missionId}\0${workId}`,{runId,controller});if(this.draining)controller.abort(new HostDrainError());const expire=()=>controller.abort(new RunDeadlineError());const timer=setTimeout(expire,Math.max(0,ownership.deadlineAt-Date.now()));if(Date.now()>=ownership.deadlineAt)expire();
   try{
    controller.signal.throwIfAborted();for(const stage of ['executor','verifier'] as const)await this.send(missionId,{type:'delegate',workId,taskId:`${workId}:${stage}`,parentId:`${workId}:root`},'runtime-representative');
    const assignments=[{id:`${runId}:root`,actorId:this.options.executor.identity,role:'executor' as const,taskId:`${workId}:root`,model:selection(this.options.executor.adapter,'executor')},...(['executor','verifier'] as const).map(stage=>({id:`${runId}:${stage}:assignment`,actorId:this.options[stage].identity,role:stage,taskId:`${workId}:${stage}`,model:selection(this.options[stage].adapter,stage)}))];
@@ -181,11 +199,11 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    await this.send(missionId,{type:'settle-task',workId,taskId:`${workId}:root`,result:'Consumed separate executor and verifier results'},this.options.executor.identity);
    if(verdict==='passed'){controller.signal.throwIfAborted();const snapshot=await this.options.artifacts.snapshot(artifact);controller.signal.throwIfAborted();await this.send(missionId,{type:'accept',workId,recordId:`${runId}:record`,artifactSnapshot:snapshot},'runtime-representative');}
    return this.result(missionId,workId);
-  }catch(error){if(controller.signal.reason instanceof RunDeadlineError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.deadlineAt));let s:Snapshot<Mission>|undefined;try{s=await this.snapshot(missionId);}catch{/* Keep the admitted-run classification even if readback also fails. */}const w=s?.value.works.find(w=>w.id===workId);if(s&&w?.runtimeRun?.id===runId&&w.acceptance==='accepted'&&w.record?.id===`${runId}:record`)return {status:'settled',snapshot:s};if(s&&w&&(w.execution==='cancelled'||w.execution==='waiting'))return {status:w.execution==='cancelled'?'cancelled':'blocked',snapshot:s,reason:'Owner interrupted the run; inspect any admitted effects before deciding further action.'};throw new RunUnsettledError(missionId,workId,runId,s,error);}
+  }catch(error){if(controller.signal.reason instanceof HostDrainError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');if(controller.signal.reason instanceof RunDeadlineError)return await this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.deadlineAt));let s:Snapshot<Mission>|undefined;try{s=await this.snapshot(missionId);}catch{/* Keep the admitted-run classification even if readback also fails. */}const w=s?.value.works.find(w=>w.id===workId);if(s&&w?.runtimeRun?.id===runId&&w.acceptance==='accepted'&&w.record?.id===`${runId}:record`)return {status:'settled',snapshot:s};if(s&&w&&(w.execution==='cancelled'||w.execution==='waiting'))return {status:w.execution==='cancelled'?'cancelled':'blocked',snapshot:s,reason:'Owner interrupted the run; inspect any admitted effects before deciding further action.'};throw new RunUnsettledError(missionId,workId,runId,s,error);}
   finally{clearTimeout(timer);this.controllers.delete(`${missionId}\0${workId}`);}
  }
- private async expire(missionId:string,workId:string,runId:string,dispatchId:string,observedAt:number):Promise<RuntimeResult>{
-  const command:Command={type:'expire-runtime',workId,runId,dispatchId,observedAt},commandId='deadline:'+hash({missionId,workId,runId,dispatchId}).slice(0,40);
+ private async expire(missionId:string,workId:string,runId:string,dispatchId:string,observedAt:number,reason:'deadline'|'host-shutdown'='deadline'):Promise<RuntimeResult>{
+  const command:Command=reason==='deadline'?{type:'expire-runtime',workId,runId,dispatchId,observedAt}:{type:'stop-owned-runtime',workId,runId,dispatchId,observedAt,hostSessionId:HOST_SESSION_ID},commandId=(reason==='deadline'?'deadline:':'shutdown:')+hash({missionId,workId,runId,dispatchId}).slice(0,40);
   for(let attempt=0;attempt<3;attempt++){const {snapshot,work}=await this.current(missionId,workId);if(work.runtimeRecovery||work.runtimeInterruption||work.acceptance==='accepted')return this.result(missionId,workId);const envelope={missionId,commandId,expectedRevision:snapshot.revision,actorId:'runtime-representative',command};try{const result=await this.app.dispatch(envelope);if(result.status==='conflict'){if(result.reason==='revision')continue;throw new Error('Deadline command identity conflict');}return this.result(missionId,workId);}catch(error){const prior=await this.app.store.lookupOperation({id:missionId,commandId,fingerprint:hash({actorId:envelope.actorId,command,expectedRevision:envelope.expectedRevision})});if(prior.status==='committed'||prior.status==='replayed')return this.result(missionId,workId);throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}}throw new RunUnsettledError(missionId,workId,runId,await this.snapshot(missionId),new Error('Deadline closure contention; inspect durable state without replay'));
  }
  private async result(missionId:string,workId:string):Promise<RuntimeResult>{const {snapshot,work}=await this.current(missionId,workId);return {status:work.execution==='cancelled'?'cancelled':work.acceptance==='accepted'?'settled':'blocked',snapshot};}
