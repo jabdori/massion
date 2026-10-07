@@ -1,3 +1,5 @@
+import {runSequence} from './run-sequence.ts';
+import type {RunSequenceInput} from './run-sequence.ts';
 import {readWorkConversation} from './work-conversation.ts';
 import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
@@ -91,6 +93,7 @@ export class ProductService {
   const result=workAdmissionPreflight(snapshot,workId,expectedRevision);
   return {...result,ready:false,diagnostics:[...result.diagnostics,{code:'selection_unavailable',message:'No runtime with execution preflight is configured.'}]};
  }
+ async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');return runSequence(this.app.store,this.runtime,missionId,input);}
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');return this.runtime.run(missionId,workId,runId,expectedRevision,choice);}
  async intervene(missionId:string,input:{commandId:string;expectedRevision:number;command:Command}) {
   input=structuredClone(input);

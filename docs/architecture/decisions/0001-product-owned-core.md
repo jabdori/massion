@@ -72,3 +72,7 @@ Above PR46, retain no-replay admission after crash and provide one owner decisio
 ## Bounded local admission capacity follow-up
 
 Above PR47, supervise one distinct Work admission at a time in the normal top-level Work runtime using existing local promise/active tracking. Reuse pure fresh Work/CAS/no-replay conditions; an occupied admission rejects another fresh Work without a durable state/queue or automatic future dispatch. Reservation precedes asynchronous admission reads; exact settlement releases only local capacity and never settles or replays unknown external effects. Validate controlled actual DB/normal CLI and existing browser preflight diagnostics. [Scope and acceptance](../host-admission.md) distinguish this local bound from global/remote concurrency, leases, budgets and complete scheduling/recovery.
+
+## Explicit bounded sequence follow-up
+
+Above PR48, connect owner-declared exact existing fresh Work in bounded order to the same run/Assurance/Records path. Each next Work requires prior accepted evidence and original revision/configuration, with no replay or silently resumed plan after error/restart. Reuse Work/journal/claims and local admission rather than adding a scheduler entity/queue/state. [Preimplementation purpose and acceptance](../run-sequence.md) preserve partial-progress and unknown boundaries.
