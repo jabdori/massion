@@ -85,3 +85,18 @@ A completed checkpoint should say precisely what was demonstrated. Do not call t
 ## Bounded database replacement recovery
 
 [Same-host read recovery](cursor-recovery-evidence.md) extends issue #4’s second-client/interruption criterion: isolated fresh database replacement, including the same numeric cursor with different Mission state, obtains a consistent snapshot/feed boundary while retaining drafts and unknown command/fixture markers. Fresh reads and current permissions gate writes; recovery never resends commands or invokes models. This does not close the full recovery, remote-authentication or live-quality acceptance criteria. Exact published-candidate checks/review are linked from the Draft PR and issue #4 follow-up.
+
+## Current bounded path audit above PR54
+
+Audit of requirements/ADR/issue #4 against normal CLI/UI (2026-10-07): historical checkpoints above retain their own counts. The following maps current bounded implementations, not full-product closure.
+
+| Issue #4 criterion | Current disposition | Unverified or separate requirement |
+| --- | --- | --- |
+| User-authored Mission → executor → separate verifier → Record, including non-coding quality | Normal CLI/UI fixture path implemented and exercised | Authorized real-provider account/input/auth/usage-spend and independent semantic quality evaluation; no live call authorized here |
+| Wrong → corrected → accepted; stale/tampered exact versions | Rejected-text inspection and distinct correction Work → separate explicit Run → new Record through normal UI verified; original retained | Real model judgment quality, beyond fixture process independence |
+| Second client/interruption/cancel/steer/no replay | Same-host actual DB/HTTP/client continuation, owned CLI kill/drain, exact expired closure UI, private drafts and unknown receipt barriers verified | General workers/recovery, remote identity and persistent approvals; no unknown outcome/retry authority inferred |
+| Actual browser visual/accessibility journey | Named Chrome native-keyboard/visual/narrow-layout journeys and earlier bounded axe checks exist | Full latest-head journey-wide assistive-technology/screen-reader and multi-browser/platform certification not established |
+| Accepted Work + sealed artifact clean restore | Real backup CLI clean DB/root and lineage already verified; this follow-up adds missing normal CLI/UI relocated original-text inspection and restart without effects | General artifact formats/migrations/operational recovery drills; not blanket recovery authority |
+| Final-candidate evidence and truthful docs | Each Draft carries exact-head CI/raw counts/review; this audit reconciles normal restore and stale byte-serving prose | Keep full issue #4 open; local/CI conditional browser skips and live/not-run gates stay separate |
+
+The wider requirements rows remain partial. Model-assisted interpretation/staffing/collaboration, further Growth targets, native graph/ingestion, extension lifecycle, packaging and production operations remain unimplemented or unverified; this audit does not classify all of them as automatically authorized implementation or as all needing external permission. They require an independently selected scope/acceptance. This increment selects only the normal restored-text inspection gap. Live providers, remote authentication/credentials, unknown recovery authority, merge/deployment and paid resources require their respective explicit authorization and were not performed.

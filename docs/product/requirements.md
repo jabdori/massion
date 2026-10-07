@@ -1,6 +1,6 @@
 # Requirements and evidence ledger
 
-Status: development foundation plus same-host Mission/Work continuation; bounded checkpoint through PR48 `a933b12` with explicit bounded causal sequencing below, 2026-10-07. Links identify actual source and tests; the presence of a test is not proof that it ran against every environment. No row claims full-product completion.
+Status: development foundation plus same-host Mission/Work continuation; bounded current checkpoint through PR54 `c1786c0` with explicit sequence/correction/expired-closure UI and the normal restored-text read follow-up below, 2026-10-07. Links identify actual source and tests; the presence of a test is not proof that it ran against every environment. No row claims full-product completion.
 
 Evidence classes: **domain** = deterministic transition checks; **fixture** = controlled artifacts and real local effects; **live store** = explicitly enabled actual SurrealDB tests; **open** = required product behavior not established. Fixture evidence must never be relabeled real-provider evidence.
 
@@ -189,3 +189,7 @@ Above PR52 `732c84b`, WRK-01/ASR-01/GOV-01/SUR-01 and issue [#4](https://github.
 ### Expired original closure through the normal owner UI
 
 Above PR53, RUN-01/WRK-01/GOV-01 and issue #4's interruption inspection gain a private exact Work/reason/uncertainty decision with ownership Review, Cancel and explicit Close. Activation-only host crashes and retained pending/unknown effects can be closed only against original ownership and elapsed server observation at the reviewed current revision/feed. Existing claims, receipts, reservations, Work and Records remain evidence; local closure proves neither external cessation nor success. Unknown responses and restart do not replay commands/effects or restore grants. This closes the API-to-UI gap only; it does not authorize unknown recovery, authentication changes or live-provider evaluation.
+
+### Normal inspection after clean text restore
+
+Issue #4/REC-01/OPS-01 audit above PR54 found that backup CLI/custom resolver and injected HTTP tests could restore/read exact accepted artifacts, while normal server startup could not resolve immutable old paths. The [explicit normal-host read binding](../architecture/restored-artifact-reader.md) closes this one core path: owner-selected private bundle/root, exact inventory/byte validation, existing accepted/rejected query only, original checksum/journal/held outbox unchanged, zero restored grants/effect replay. Current bounded evidence and unresolved acceptance are mapped in [first-slice audit](../acceptance/first-slice.md#current-bounded-path-audit-above-pr54). This does not complete the wider partial rows or authorize unknown recovery/live execution.

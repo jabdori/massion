@@ -1,3 +1,5 @@
+import {validateRestoredSelection} from './restored-artifact-reader.ts';
+import type {RestoredArtifactSelection} from './restored-artifact-reader.ts';
 /** Explicit owner-selected host bindings. No credential search, persistence or startup sends. */
 import {open} from 'node:fs/promises';
 import {constants} from 'node:fs';
@@ -17,7 +19,7 @@ interface HostConnection {
  credential?:{ref:string;environment:string};
 }
 export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[]}
-export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean}
+export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean;restoredArtifacts?:RestoredArtifactSelection}
 function requireHost(condition:unknown,message:string):asserts condition {if(!condition)throw new DomainError('Host configuration: '+message);}
 function fields(value:unknown,required:string[],optional:string[]=[]):asserts value is Record<string,unknown> {
  requireHost(!!value&&typeof value==='object'&&!Array.isArray(value),'object required');
@@ -59,16 +61,18 @@ export async function loadHostManifest(path:string):Promise<HostManifest> {
 
 /** Manifest selection and live capability are separate explicit startup decisions. */
 export async function loadHostStartup(args:readonly string[]):Promise<HostStartup> {
- let path:string|undefined,allowLiveExecution=false;
+ let path:string|undefined,bundlePath:string|undefined,artifactRoot:string|undefined,allowLiveExecution=false;
  for(let index=0;index<args.length;index++){
   const argument=args[index];if(argument==='--host-config'){requireHost(path===undefined&&typeof args[index+1]==='string'&&!args[index+1]!.startsWith('--'),'one explicit host configuration path required');path=args[++index];}
+  else if(argument==='--restored-bundle'||argument==='--restored-artifact-root'){const next=args[index+1];requireHost(typeof next==='string'&&!next.startsWith('--'),'explicit restored path required');if(argument==='--restored-bundle'){requireHost(bundlePath===undefined,'duplicate restored bundle');bundlePath=next;}else{requireHost(artifactRoot===undefined,'duplicate restored artifact root');artifactRoot=next;}index++;}
   else if(argument==='--allow-live-model-calls'){requireHost(!allowLiveExecution,'duplicate live option');allowLiveExecution=true;}
   else throw new DomainError('Host configuration: unknown startup option');
  }
+ requireHost((bundlePath===undefined)===(artifactRoot===undefined),'restored bundle and artifact root must be selected together');const restoredArtifacts=bundlePath===undefined?undefined:{bundlePath,artifactRoot:artifactRoot!};if(restoredArtifacts)validateRestoredSelection(restoredArtifacts);
  requireHost(!allowLiveExecution||path!==undefined,'live option requires an explicit host manifest');
  const manifest=path===undefined?undefined:await loadHostManifest(path);
  requireHost(!allowLiveExecution||manifest?.mode==='https','live option requires an HTTPS manifest');
- return {manifest,allowLiveExecution};
+ return {manifest,allowLiveExecution,...(restoredArtifacts?{restoredArtifacts}:{})};
 }
 
 /** Compile immutable identity/destination bindings; construction never calls the supplied accessor. */

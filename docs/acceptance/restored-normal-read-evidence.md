@@ -1,0 +1,13 @@
+# Normal restored outcome evidence
+
+Base PR54 `c1786c0ef9ede9a33127ed352b805926e48c2c0b`; issue #4/REC-01/OPS-01 missing normal CLI/UI restored result inspection. Protocol and preimplementation acceptance: [restored read binding](../architecture/restored-artifact-reader.md). Actual acceptance audit: [first slice](first-slice.md#current-bounded-path-audit-above-pr54).
+
+Before implementation, real backup CLI restore succeeded, default normal host returned 503 for the original unavailable path, and proposed explicit startup options were rejected. Raw proof `restored-before-default-proof.log` retained outside checkout. Earlier fixture DB-provisioning failure and independent reader-test adapter failures are retained separately, not passes.
+
+Final local affected gate 66/66, fail 0, skip 0, with disposable SurrealDB 3.3.0, Node 24.21.0/TypeScript 7.0.2 and headless Chromium 151.0.7922.34. Files: restored reader/CLI, portable backup, accepted Record API/panel, host connections and text artifacts. Types, runtime syntax and whitespace checks pass. Final command uses `scripts/with-surreal.py --port 18080 --timeout 240 -- node --test --test-concurrency=1` with these seven test files and explicit local browser runtime; raw log `restored-final-actual.log` and screenshot `restored-browser-final.png` retained outside checkout.
+
+Real backup CLI export/restore creates separate clean DB/artifact root. Original path is unavailable but preserved in the owned fixture. Normal CLI exact accepted-text query and Chrome native-keyboard reading return the exact UTF-8 bytes, literal markup, original checksum/evidence class; narrow/desktop 390/1280 layout and reload/restart pass. Snapshot/journal/restored-held outbox unchanged, restored grants 0, replay/model calls 0. Default host cannot silently guess relocation. Unknown effects are not resolved or retried. Source/original user work is not touched.
+
+Independent review: three validation-driver findings (memory journal adapter, effective checksum mutation, actual child argv cleanup) fixed; independent rejection tests 13/13 pass, fail/skip 0; final rereview finding 0. Reviewer did not execute actual DB/CLI/Chrome. Raw independent failure/final logs preserved. Final exact-head push/PR CI counts and conditional skips are recorded in the Draft and outside-checkout final report, avoiding another source head merely to record CI results.
+
+Full issue #4 stays open for authorized live quality and broader browser/accessibility/recovery requirements. No new remote auth, scheduler/retry, live provider, paid resource, merge or deployment. Original task11 dirty files/locks/provider-only/task4, prior PR50–54 clones and failed evidence preserved.
