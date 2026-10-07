@@ -106,3 +106,5 @@ Expose only original exact-version memory/Work/Record relationships from one aut
 Read only the owner's selected bounded UTF-8 File in the client, retain truthful raw-file versus normalized draft provenance, then reuse existing separate exact document admission. No host path access or source execution/verification authority follows from ingestion. [Preimplementation acceptance](../owner-file-document-draft.md).
 
 Owner-authored first-execution clarification is a bounded COL-01/WRK-01 increment: [contract](../owner-work-clarification.md). Unanswered questions block admission; immutable answers alone never start execution. General agent questioning and shared conversation remain open.
+
+Above PR61 `5d39dbdd`, normal fresh-client continuation can discover stored Mission identities without a remembered ID. The read-only bounded catalog remains database/feed/cursor bound and loads current state through existing controls, with no readiness or execution claim. [Preimplementation scope and acceptance](../stored-mission-catalog.md). Full MIS-01/SUR-01 and issue #4 remain partial.
