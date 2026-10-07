@@ -57,7 +57,7 @@ complete-product or later-source verification claim. Drafts remain unmerged.
 SUR-01 describes shared Work state demonstrated on one loopback host, not shared
 conversation or authenticated remote PC deployment. Local drafts are volatile and
 private; committed owner instructions are durable Work inputs. The general
-conversation-to-Work choice is deferred. The established central core and distinct
+conversation-to-Work choice remains deferred; the separately adopted [single owner-message draft](../architecture/conversation-work-draft.md) permits only an explicitly reviewed new Work through ordinary admission. The established central core and distinct
 conversation/Work/Agent/execution-session concepts are preserved.
 
 ## Required final-candidate evidence
