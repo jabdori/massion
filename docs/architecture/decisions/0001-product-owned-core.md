@@ -76,3 +76,7 @@ Above PR47, supervise one distinct Work admission at a time in the normal top-le
 ## Explicit bounded sequence follow-up
 
 Above PR48, connect owner-declared exact existing fresh Work in bounded order to the same run/Assurance/Records path. Each next Work requires prior accepted evidence and original revision/configuration, with no replay or silently resumed plan after error/restart. Reuse Work/journal/claims and local admission rather than adding a scheduler entity/queue/state. [Preimplementation purpose and acceptance](../run-sequence.md) preserve partial-progress and unknown boundaries.
+
+## Explicit sequence GUI follow-up
+
+Above PR49, give the owner exact private plan controls connected to the existing headless sequence API. Review remains revision/feed/configuration bound; first individual admission receipt is not an outer completion receipt. Preserve unknown/no replay, actual Work cancellation and private drafts without a new durable scheduler/queue/state. [Scope and acceptance](../run-sequence-panel.md).
