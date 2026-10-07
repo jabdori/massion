@@ -91,7 +91,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|organization|revision|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
@@ -121,6 +121,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(workRoute[2]==='documents'){sendCommit(await product.captureDocument(missionId,body as Parameters<ProductService['captureDocument']>[1]));return;}
     if(workRoute[2]==='relations'){sendCommit(await product.recordRelation(missionId,body as Parameters<ProductService['recordRelation']>[1]));return;}
     if(workRoute[2]==='organization'){sendCommit(await product.reviseOrganization(missionId,body as Parameters<ProductService['reviseOrganization']>[1]));return;}
+    if(workRoute[2]==='mission-constraints'){sendCommit(await product.reviseMissionConstraints(missionId,body as Parameters<ProductService['reviseMissionConstraints']>[1]));return;}
     if(workRoute[2]==='revision'){
      if(Object.keys(body).some(key=>!['commandId','expectedRevision','purpose','criteria'].includes(key)))throw new RequestError(400,'Only Mission purpose and acceptance revision fields are accepted');
      const criteria=body.criteria;
