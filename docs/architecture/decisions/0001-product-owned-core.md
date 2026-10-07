@@ -108,3 +108,7 @@ Read only the owner's selected bounded UTF-8 File in the client, retain truthful
 Owner-authored first-execution clarification is a bounded COL-01/WRK-01 increment: [contract](../owner-work-clarification.md). Unanswered questions block admission; immutable answers alone never start execution. General agent questioning and shared conversation remain open.
 
 Above PR61 `5d39dbdd`, normal fresh-client continuation can discover stored Mission identities without a remembered ID. The read-only bounded catalog remains database/feed/cursor bound and loads current state through existing controls, with no readiness or execution claim. [Preimplementation scope and acceptance](../stored-mission-catalog.md). Full MIS-01/SUR-01 and issue #4 remain partial.
+
+Above PR62 `b89a3868`, an explicitly read-only unresolved Work inbox connects the preserved global inbox purpose to stored owner questions, execution blockers, failed/stale Assurance and unknown/closed pending outcomes across Missions. Current evidence and owner decisions remain in the existing fresh Load/Work controls; no list becomes a grant or resolved receipt. [Preimplementation scope and acceptance](../unresolved-work-inbox.md). Full WRK-01/GOV-01/SUR-01 and issue #4 remain partial.
+
+[Unresolved Work inbox bounded verification](../../acceptance/unresolved-work-inbox-evidence.md).
