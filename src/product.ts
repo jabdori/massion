@@ -22,6 +22,10 @@ export class ProductService {
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(executionGate?{executionGate}:{})}});
  }
+ async recordRelation(missionId:string,input:{commandId:string;expectedRevision:number;relation:Omit<import('./domain.ts').Relation,'inferred'>}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','relation']);keys(input.relation,['from','to','type','fromVersion','toVersion','provenance']);
+  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'record-relation',relation:input.relation}});
+ }
  async reviseOrganization(missionId:string,input:{commandId:string;expectedRevision:number;version:number;reason:string;responsibilities:import('./domain.ts').OrganizationResponsibility[]}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','version','reason','responsibilities']);
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-organization',version:input.version,reason:input.reason,responsibilities:input.responsibilities}});
