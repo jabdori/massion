@@ -1,3 +1,4 @@
+import {correctionInput} from './work-correction.ts';
 import {validateConversations} from './work-conversation.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
@@ -106,13 +107,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
   if(work.runtimeRun?.ownership)equal(record.runtimeOwnership,work.runtimeRun.ownership,'Record exact runtime ownership');else ensure(!Object.hasOwn(record,'runtimeOwnership'),'Legacy Record has runtime ownership');
+  if(work.correction)equal(record.correction,correctionInput(work),'Record original correction decision');else ensure(!Object.hasOwn(record,'correction'),'Legacy Record has correction provenance');
   if(Object.hasOwn(work,'prerequisites')){equal(record.prerequisites,work.prerequisites,'Record exact prerequisite pins');equal(record.prerequisiteRecords,resolvedPrerequisites(mission,work),'Record prerequisite evidence');}else ensure(!Object.hasOwn(record,'prerequisites')&&!Object.hasOwn(record,'prerequisiteRecords'),'Legacy Record has prerequisites');
   if(Object.hasOwn(work,'sourceDocuments'))equal(record.sourceDocuments,work.sourceDocuments,'Record exact source pins');else ensure(!Object.hasOwn(record,'sourceDocuments'),'legacy Record has source pins');
   if(work.organizationSnapshot)equal(record.organizationSnapshot,work.organizationSnapshot,'Record organization pin');
@@ -134,7 +136,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+    ['correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+  correctionInput(value as Work);
   validateProviderDispatchClaims(value as Work);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
@@ -315,7 +318,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission': { required: ['purpose', 'criteria'] },
-  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate'] },
+  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate','correction'] },
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },

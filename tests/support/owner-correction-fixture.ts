@@ -1,0 +1,8 @@
+import type {TestContext} from 'node:test';
+import {rejectedFixture} from './rejected-text-fixture.ts';
+import {harness,reply} from './workbench-client.ts';
+export async function correctionFixture(t:TestContext,durable=false,mode?:'held'|'unknown'|'held-unknown'|'held-rejected'|'wrong-feed'){
+ const f=await rejectedFixture(t,durable);let release!:(()=>void);const gate=new Promise<void>(r=>release=r);let writes=0;
+ const handler=async(path:string,options:any)=>{if(path.endsWith('/work')&&options.method==='POST'){writes++;if(mode==='held-rejected'){await gate;return reply({status:'conflict',reason:'revision'},409);}}const res=await fetch(f.base+path,options),body=await res.json();if(path.endsWith('/work')&&options.method==='POST'){if(['held','held-unknown'].includes(mode||''))await gate;if(['unknown','held-unknown'].includes(mode||''))throw Error('Controlled lost committed correction response');if(mode==='wrong-feed')body.feedId='another-db';}return reply(body,res.status);};async function client(){const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission'});await f.until(()=>app.node('loaded-id').textContent==='mission'&&app.node('sync-notice').hidden);return app;}return {...f,client,release:()=>release(),writes:()=>writes};
+}
+export async function chooseCorrection(app:any,title='Fixed requested output',id='fixed'){for(const [key,value] of Object.entries({'correction-source':'fresh','correction-id':id,'correction-title':title,'correction-reason':'Correct the known incorrect original','correction-budget':'8'})){app.node(key).value=value;await app.node(key).fire('change');}}
