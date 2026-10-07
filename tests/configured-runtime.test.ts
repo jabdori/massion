@@ -86,8 +86,8 @@ test('actual Surreal persists mock-provider receipts, independent binding and or
  const s=await setup(t,{},new SurrealStore<Mission>(transport));await s.admit();const result=await s.product.run(s.missionId,s.workId,'run',2);assert.equal(result.status,'settled');assert.deepEqual(await new SurrealStore<Mission>(createHttpRpcTransport(options)).load(s.missionId),result.snapshot);assert.equal(result.snapshot.value.works[0]?.record?.evidenceClass,'fixture');
 });
 test('owner steering between preflight and effect admission atomically prevents artifact execution',async t=>{
- const s=await setup(t);await s.admit();const target=s.runtime as any;const original=target.active.bind(s.runtime);let calls=0;
- target.active=async(...args:any[])=>{const value=await original(...args);if(++calls===2){const snapshot=await s.store.load(s.missionId);await s.product.intervene(s.missionId,{commandId:'steer-at-boundary',expectedRevision:snapshot!.revision,command:{type:'steer',workId:s.workId,instruction:'Stop here; do not write more artifacts'}});}return value;};
+ const s=await setup(t);await s.admit();const target=s.runtime as any;const original=target.active.bind(s.runtime);let steered=false;
+ target.active=async(...args:any[])=>{const value=await original(...args);if(!steered&&value.effects.some((effect:any)=>effect.id==='run:executor'&&effect.status==='succeeded')&&!value.artifact){steered=true;const snapshot=await s.store.load(s.missionId);await s.product.intervene(s.missionId,{commandId:'steer-at-boundary',expectedRevision:snapshot!.revision,command:{type:'steer',workId:s.workId,instruction:'Stop here; do not write more artifacts'}});}return value;};
  const result=await s.product.run(s.missionId,s.workId,'run',2);const w=result.snapshot.value.works[0]!;assert.equal(w.execution,'waiting');assert.equal(w.effects.length,1);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
 });
 test('owner steering before final task settlement cannot be erased into accepted completion',async t=>{
@@ -131,13 +131,19 @@ test('quarantine during a held provider call fences late receipt, artifact, veri
  const w=quarantined.value.works[0]!;assert.equal(w.effects.length,1);assert.equal(w.effects[0]!.receipt,undefined);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
 });
 
-test('quarantine does not claim that an already admitted dispatch in another worker stopped',async t=>{
+test('other host quarantine after effect intent and before provider claim prevents zero-start dispatch',async t=>{
  let admitted!:()=>void;const admission=new Promise<void>(resolve=>admitted=resolve);let resume!:()=>void;const pause=new Promise<void>(resolve=>resume=resolve);
  class PausedStore extends InMemoryStore<Mission>{override async commit(input:import('../src/storage.ts').CommitInput<Mission>){const result=await super.commit(input);if(input.events.some(event=>(event as {type:string}).type==='admit-effect')){admitted();await pause;}return result;}}
  const s=await setup(t,{},new PausedStore());await s.admit();const running=s.product.run(s.missionId,s.workId,'interrupted-run',2);await admission;
  const before=(await s.store.load(s.missionId))!;const otherHost=new ProductService(s.store);await otherHost.intervene(s.missionId,{commandId:'other-host-recovery',expectedRevision:before.revision,command:recoveryCommand(s.workId)});
- const quarantined=await s.store.load(s.missionId);resume();const result=await running;assert.equal(result.status,'cancelled');assert.equal(s.calls.length,1,'previously admitted effect may still dispatch; no stop proof is inferred');assert.deepEqual(await s.store.load(s.missionId),quarantined);
+ const quarantined=await s.store.load(s.missionId);resume();const result=await running;assert.equal(result.status,'cancelled');assert.equal(s.calls.length,0,'fresh durable provider claim is rejected before any adapter dispatch');assert.deepEqual(await s.store.load(s.missionId),quarantined);
  assert.equal(quarantined!.value.works[0]!.effects.length,1);assert.equal(quarantined!.value.works[0]!.record,undefined);
+});
+
+test('other host quarantine after final claim state read cannot certify a remote stop or retract already admitted call attempt',async t=>{
+ const s=await setup(t);await s.admit();let reached!:()=>void,resume!:()=>void;const boundary=new Promise<void>(r=>reached=r),gate=new Promise<void>(r=>resume=r);t.after(()=>resume());const target=s.runtime as any,active=target.active.bind(target);let held=false;
+ target.active=async(...args:any[])=>{const work=await active(...args);if(!held&&work.effects.some((e:any)=>e.providerDispatch&&e.status==='pending')){held=true;reached();await gate;}return work;};
+ const running=s.product.run(s.missionId,s.workId,'interrupted-run',2);await boundary;const before=(await s.store.load(s.missionId))!;await new ProductService(s.store).intervene(s.missionId,{commandId:'stop-after-final-local-read',expectedRevision:before.revision,command:recoveryCommand(s.workId)});const quarantined=await s.store.load(s.missionId);resume();assert.equal((await running).status,'cancelled');assert.equal(s.calls.length,1,'local database observation and remote provider invocation are not one transaction');assert.deepEqual(await s.store.load(s.missionId),quarantined);assert.equal(quarantined!.value.works[0]!.effects[0]!.receipt,undefined);assert.equal(quarantined!.value.works[0]!.record,undefined);
 });
 
 test('actual Surreal receipt failure recovers in fresh client and restores quarantined history without dispatch', {skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{

@@ -1,11 +1,12 @@
+import {providerRequestHash,validateProviderDispatch} from './provider-dispatch.ts';
 import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,RunDeadlineError,invokeOwned} from './runtime-lifetime.ts';
 import {resolvedPrerequisites} from './work-prerequisites.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {Application} from './application.ts';
 import {hash,DomainError,workInputHash,pinnedOrganization,pinnedWorkSources} from './domain.ts';
-import type {Mission,Work,Command,Actor,ModelSelection,Artifact,RuntimeConnectionBindings} from './domain.ts';
+import type {Mission,Work,Command,Actor,ModelSelection,Artifact,RuntimeConnectionBindings,ProviderDispatchClaim} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
-import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome} from './providers.ts';
+import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
 import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
@@ -94,7 +95,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.controller.abort();}
  private async snapshot(missionId:string){const s=await this.app.store.load(missionId);if(!s)throw new DomainError('Unknown Mission');return s;}
  private async current(missionId:string,workId:string){const snapshot=await this.snapshot(missionId);const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new DomainError('Unknown Work');return {snapshot,work};}
- private async send(missionId:string,command:Command,actorId:string,commandId=randomUUID()){
+ private async dispatch(missionId:string,command:Command,actorId:string,commandId:string=randomUUID()){
   const s=await this.snapshot(missionId);
   const workId='workId' in command?command.workId:undefined,owned=workId?this.controllers.get(`${missionId}\0${workId}`):undefined;
   const ownership=workId?s.value.works.find(w=>w.id===workId)?.runtimeRun?.ownership:undefined;
@@ -109,7 +110,10 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
   }}):store;
   const result=await new Application(guarded,[this.app.actor(actorId)]).dispatch({missionId,commandId,expectedRevision:s.revision,actorId,command});
-  if(result.status==='conflict')throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');return result.value;
+  return result;
+ }
+ private async send(missionId:string,command:Command,actorId:string,commandId:string=randomUUID()){
+  const result=await this.dispatch(missionId,command,actorId,commandId);if(result.status==='conflict')throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');return result.value;
  }
  private async block(missionId:string,workId:string,reason:string,code:'provider_failed'|'budget_exceeded'|'verification_failed'='provider_failed'){
   const {work}=await this.current(missionId,workId);if(work.execution!=='cancelled'&&work.execution!=='waiting')await this.send(missionId,{type:'block-work',workId,blocker:{code,detail:reason}},'runtime-representative');
@@ -118,14 +122,23 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private async invoke(missionId:string,workId:string,runId:string,stage:'executor'|'verifier',instruction:string,binding:Record<string,unknown>,controller:AbortController):Promise<ProviderOutcome>{
   const current=await this.current(missionId,workId);const available=this.availability({...current.snapshot.value,criteria:current.work.criteria});if(!available.ready)throw new DomainError(available.reason);await this.active(missionId,workId,controller);const role=this.options[stage],ownership=current.work.runtimeRun!.ownership!;const taskId=`${workId}:${stage}`;const effectId=`${runId}:${stage}`;
   await this.send(missionId,{type:'admit-effect',workId,effect:{id:effectId,taskId,status:'pending',target:`${role.adapter.descriptor.provider}/${role.adapter.descriptor.model}`,authority:this.options.authorization!.id},reserve:this.options.outputTokenCap},role.identity);
+  const request:ProviderRequest={invocationId:effectId,workId,instruction,inputReferences:[],maxOutputTokens:this.options.outputTokenCap,signal:controller.signal};let claim:ProviderDispatchClaim|undefined;
+  if(!controller.signal.aborted&&Date.now()<ownership.deadlineAt){
+   if(ownership.hostSessionId!==HOST_SESSION_ID||!this.owns(missionId,workId,runId))throw new DomainError('Only the original active host dispatch may attempt a provider claim');
+   const descriptor=role.adapter.descriptor;claim={id:randomUUID(),runId,hostSessionId:ownership.hostSessionId,dispatchId:ownership.dispatchId,actorId:role.identity,assignmentId:`${runId}:${stage}:assignment`,provider:descriptor.provider,model:descriptor.model,configVersion:descriptor.configVersion,requestHash:providerRequestHash(request),claimedAt:Date.now()};
+   const admitted=await this.dispatch(missionId,{type:'claim-provider-dispatch',workId,effectId,claim},role.identity,claim.id);
+   if(admitted.status!=='committed')throw new DomainError('Provider claim is not a fresh committed admission; inspect original evidence without invoking again');
+   const fresh=await this.active(missionId,workId,controller),effect=fresh.effects.find(e=>e.id===effectId);if(!effect||hash(effect.providerDispatch)!==hash(claim))throw new DomainError('Original provider dispatch claim is unavailable');validateProviderDispatch(fresh,effect,claim);
+   if(providerRequestHash(request)!==claim.requestHash)throw new DomainError('Provider request changed after dispatch claim');
+  }
   let outcome:ProviderOutcome;
-  try{outcome=await invokeOwned(role.adapter,{invocationId:effectId,workId,instruction,inputReferences:[],maxOutputTokens:this.options.outputTokenCap,signal:controller.signal},ownership);}
+  try{outcome=await invokeOwned(role.adapter,request,ownership);}
   catch{outcome={status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'Provider invocation threw after admission; external outcome is unknown.'};}
   if(Date.now()>=ownership.deadlineAt&&!controller.signal.aborted)controller.abort(new RunDeadlineError());
   if(!outcome||!['completed','failed','cancelled','unknown'].includes(outcome.status)||(outcome.output!==null&&typeof outcome.output!=='string')||typeof outcome.reason!=='string'||!outcome.usage||!validTokens(outcome.usage.inputTokens)||!validTokens(outcome.usage.outputTokens)||outcome.usage.outputTokens!==null&&outcome.usage.outputTokens>this.options.outputTokenCap||outcome.status==='completed'&&(typeof outcome.output!=='string'||!outcome.output.trim()))outcome={status:'unknown',output:null,usage:{inputTokens:null,outputTokens:null},reason:'Provider contract or output cap was violated; no success is inferred.'};
   if(outcome.status==='completed'&&Buffer.byteLength(outcome.output!,'utf8')>Math.min(this.options.artifacts.maxBytes,32768))outcome={...outcome,status:'failed',output:null,reason:'Provider output exceeds the bounded text runtime byte limit.'};
-  const receipt=JSON.stringify({stage,binding,provider:role.adapter.descriptor,status:outcome.status,usage:outcome.usage,reason:outcome.reason,output:outcome.output,outputSha256:outcome.output===null?null:digest(outcome.output)});
-  await this.send(missionId,{type:'receipt',workId,effectId,outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
+  const receipt=JSON.stringify({stage,binding,...(claim?{providerDispatchId:claim.id,requestHash:claim.requestHash}:{}),provider:role.adapter.descriptor,status:outcome.status,usage:outcome.usage,reason:outcome.reason,output:outcome.output,outputSha256:outcome.output===null?null:digest(outcome.output)});
+  await this.send(missionId,{type:'receipt',workId,effectId,...(claim?{providerDispatchId:claim.id}:{}),outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
   return outcome;
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{
