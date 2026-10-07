@@ -334,6 +334,13 @@ function jsonVariableBindings(sql: string, variables: Record<string, unknown>): 
   return { sql: bindings.length ? `${bindings.join('\n')}\n${sql}` : sql, variables: encoded, statementCount: bindings.length };
 }
 
+/** Same UTF-8 HTTP envelope for measurement and the one actual transmission. */
+function httpRpcQueryBody(sql:string,variables:Record<string,unknown>,id:string) {
+  const bound=jsonVariableBindings(sql,variables);
+  return {body:JSON.stringify({id,method:'query',params:[bound.sql,bound.variables]}),statementCount:bound.statementCount};
+}
+const MEASURE_UUID='00000000-0000-4000-8000-000000000000';
+
 /** Structured values travel losslessly in the RPC body, never SQL or URL interpolation. */
 export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport {
   const endpoint = new URL(options.endpoint);
@@ -352,10 +359,10 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
   return {
     async query(sql, variables) {
       const id = randomUUID();
-      const bound = jsonVariableBindings(sql, variables);
+      const bound = httpRpcQueryBody(sql, variables, id);
       const response = await request(endpoint, {
         method: 'POST', headers, redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({ id, method: 'query', params: [bound.sql, bound.variables] }),
+        body: bound.body,
       });
       if (!response.ok) throw new StorageProtocolError(`SurrealDB HTTP status ${response.status}`);
       const envelope: unknown = await response.json();
@@ -609,6 +616,20 @@ function commitResult<T>(value: unknown): CommitResult<T> {
   throw new StorageProtocolError('Invalid commit result');
 }
 
+function journalRestoreVariables<T>(journal:PortableJournal<T>,restoreId:string) {
+  const operations=journal.operations.map(operation=>{
+    const operationKey=hash(operation.commandId);
+    const rows=(values:readonly unknown[])=>values.map((payload,ordinal)=>({key:`${operationKey}_${ordinal}`,ordinal,payload}));
+    return {operation,operationKey,aggregateKey:hash(operation.aggregateId),eventRows:rows(operation.events),outboxRows:rows(operation.outbox)};
+  });
+  return {operations,head:journal.head,checksum:journalChecksum(journal),restoreId};
+}
+/** Offline byte measurement only; neither a server-capacity probe nor a write. */
+export function journalRestoreRpcRequestBytes<T>(value:PortableJournal<T>):number {
+  const journal=validateJournal<T>(value);
+  return Buffer.byteLength(httpRpcQueryBody(RESTORE_JOURNAL_QUERY,journalRestoreVariables(journal,MEASURE_UUID),MEASURE_UUID).body,'utf8');
+}
+
 export class SurrealStore<T> implements Store<T> {
   private commitQueue: Promise<void> = Promise.resolve();
   private readonly transport: QueryTransport;
@@ -657,14 +678,9 @@ export class SurrealStore<T> implements Store<T> {
   private async restoreOnce(journal: PortableJournal<T>): Promise<JournalRestoreResult> {
     const checksum = journalChecksum(journal);
     const restoreId = randomUUID();
-    const operations = journal.operations.map((operation) => {
-      const operationKey = hash(operation.commandId);
-      const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
-      return { operation, operationKey, aggregateKey: hash(operation.aggregateId),
-        eventRows: rows(operation.events), outboxRows: rows(operation.outbox) };
-    });
+    const variables=journalRestoreVariables(journal,restoreId);
     try {
-      const result = oneResult(await this.transport.query(RESTORE_JOURNAL_QUERY, { operations, head: journal.head, checksum, restoreId }));
+      const result = oneResult(await this.transport.query(RESTORE_JOURNAL_QUERY, variables));
       if (!object(result) || result.status !== 'restored' || result.head !== journal.head ||
         result.checksum !== checksum || result.restoreId !== restoreId) {
         throw new StorageProtocolError('Invalid journal restore result');
