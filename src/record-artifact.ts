@@ -1,3 +1,4 @@
+import {clarificationInput,requireAnswered} from './work-clarification.ts';
 import {conversationSourceInput,validateConversationSources} from './conversation-work.ts';
 import {correctionInput} from './work-correction.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
@@ -17,7 +18,7 @@ function record(mission:Mission,work:Work,input:RecordArtifactInput):AcceptedRec
  const r=work.record;
  if(work.acceptance!=='accepted'||!r||r.id!==input.recordId||r.workId!==work.id||r.artifact.version!==input.artifactVersion||r.artifact.sha256!==input.artifactSha256)conflict();
  try{const records=resolvedPrerequisites(mission,work);if(hash(r!.prerequisites??null)!==hash(work.prerequisites??null)||hash(r!.prerequisiteRecords??null)!==hash(records??null))throw Error();}catch{throw new RecordArtifactError(503,'Exact prerequisite evidence is unavailable; no artifact fallback.');}
- try{validateConversationSources(mission);if(hash(r!.conversationSource??null)!==hash(conversationSourceInput(work)??null))conflict();if(hash(r!.correction??null)!==hash(correctionInput(work)??null))conflict();validateProviderDispatchClaims(work);if(Object.hasOwn(work.runtimeRun??{},'ownership'))validateRuntimeOwnership(work.runtimeRun!.ownership!);}catch{conflict();}
+ try{requireAnswered(work);if(hash(r!.questions??null)!==hash(clarificationInput(work)??null))conflict();validateConversationSources(mission);if(hash(r!.conversationSource??null)!==hash(conversationSourceInput(work)??null))conflict();if(hash(r!.correction??null)!==hash(correctionInput(work)??null))conflict();validateProviderDispatchClaims(work);if(Object.hasOwn(work.runtimeRun??{},'ownership'))validateRuntimeOwnership(work.runtimeRun!.ownership!);}catch{conflict();}
  if(hash(r!.runtimeOwnership??null)!==hash(work.runtimeRun?.ownership??null))conflict();
  const {checksum,...bundle}=r!;
  if(checksum!==hash(bundle)||work.execution!=='settled'||!work.artifact||!work.verdict||hash(work.artifact)!==hash(r!.artifact)||hash(work.criteria)!==hash(r!.criteria)||hash(work.verdict)!==hash(r!.verdict)||hash(work.effects)!==hash(r!.receipts)||hash(work.assignments)!==hash(r!.assignments)||hash(work.appliedMemoryVersions)!==hash(r!.memoryVersions)||r!.verdict.status!=='passed'||r!.verdict.artifactSha256!==r!.artifact.sha256||r!.verdict.artifactVersion!==r!.artifact.version||r!.verdict.criteriaVersion!==r!.criteria.version||!r!.receipts.length||r!.receipts.some(e=>!['succeeded','failed'].includes(e.status))||!r!.receipts.some(e=>e.status==='succeeded')||!['fixture','real-provider'].includes(r!.evidenceClass))conflict();

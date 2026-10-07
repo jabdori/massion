@@ -1,5 +1,6 @@
 import {fileDocumentPanel,fileDocumentClient} from './owner-file-document-draft.ts';
 import {memoryUsagePanel,memoryUsageClient} from './memory-usage-panel.ts';
+import {clarificationPanel,clarificationClient} from './work-clarification-panel.ts';
 import {conversationWorkPanel,conversationWorkClient} from './conversation-work-panel.ts';
 import {expiredPanel,expiredClient} from './expired-run-panel.ts';
 import {correctionPanel,correctionClient} from './work-correction-panel.ts';
@@ -64,6 +65,7 @@ ${fileDocumentPanel}
 <details id="impact-panel" class="impact-panel"><summary>Inspect relation impact</summary><h3 id="impact-heading">Exact-version impact</h3><p id="impact-scope" class="hint"></p><p id="impact-hint" class="hint">Read stored dependencies for an exact entity ID and version in this Mission. Provenance and inferred flags describe recorded relations, not an independent truth verdict. This read does not invalidate results, start Work or call a model.</p><form id="impact-form"><div class="field"><label for="impact-entity">Target entity ID</label><input id="impact-entity" required maxlength="16000" aria-describedby="impact-hint" placeholder="Exact Work, artifact or evidence ID"></div><div class="field"><label for="impact-version">Exact version</label><input id="impact-version" type="number" min="1" max="9007199254740991" step="1" value="1" required aria-describedby="impact-hint"></div><button id="impact-read" type="submit">Read impact</button></form><p id="impact-status" class="status" role="status" aria-live="polite">Choose a target and exact version, then read its impact.</p><div id="impact-results" class="impact-results" tabindex="0" role="region" aria-label="Relation impact results" hidden></div></details>
 <details id="memory-panel" class="impact-panel"><summary>Manage Mission memory</summary><h3>Owner-authored instructions for future Work</h3><p id="memory-hint" class="hint">Save an explicit instruction for this Mission. New Work pins its effective version; earlier Work keeps its original memory. This does not run a model or adopt learned memory. Sources are owner-supplied context, not independent verification. Instruction and source each allow up to 16,000 characters; the complete JSON command must fit 32 KiB of UTF-8, including escaping and metadata.</p><p id="memory-scope" class="hint"></p><form id="memory-form"><fieldset id="memory-fields"><label for="memory-id">Memory ID</label><input id="memory-id" required maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" aria-describedby="memory-hint" placeholder="memory:instruction"><label for="memory-version">New immutable version</label><input id="memory-version" type="number" min="1" max="9007199254740991" step="1" value="1" required><label for="memory-content">Explicit instruction</label><textarea id="memory-content" rows="3" maxlength="16000" required></textarea><label for="memory-source">Owner-supplied source or reason</label><textarea id="memory-source" rows="2" maxlength="16000" required></textarea><button id="save-memory" type="submit" data-write>Save explicit memory</button></fieldset></form><p id="memory-status" class="status" role="status" aria-live="polite">Save a new ID at version 1, or advance an existing ID to a higher version.</p><h3>Stop an instruction for future Work</h3><p id="retirement-hint" class="hint">Choose one exact active explicit memory version. This stops its application to newly admitted Work. Its original content, history and earlier Work pins stay available; nothing is deleted.</p><form id="retirement-form"><fieldset id="retirement-fields"><label for="retirement-target">Exact active explicit memory</label><select id="retirement-target" required aria-describedby="retirement-hint retirement-base"></select><label for="retirement-reason">Reason for stopping future application</label><textarea id="retirement-reason" rows="2" maxlength="16000" required aria-describedby="retirement-hint"></textarea><p id="retirement-base" class="hint"></p><button id="stop-memory" type="submit" data-write>Stop this version for future Work</button><button id="review-retirement" type="button" class="secondary">Keep exact target against current revision</button><button id="cancel-retirement" type="button" class="secondary">Cancel stop draft</button></fieldset></form><p id="retirement-status" class="status" role="status" aria-live="polite">Choose an exact version and review what will remain.</p><div id="memory-history" class="impact-results" tabindex="0" role="region" aria-label="Mission memory history"></div></details>
 ${conversationWorkPanel}
+${clarificationPanel}
 ${memoryUsagePanel}
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria, effective memory and the current organization revision. It does not start model execution.</p></fieldset></form>
 <details id="conversation-panel" style="margin-top:22px"><summary id="conversation-summary">Work conversation · messages and replies</summary><p id="conversation-hint" class="hint">Owner discussion is saved for this exact Work and shared through the host. It does not steer execution, change accepted evidence or authorize retries. Up to 100 messages per thread; each message is at most 4 KiB of UTF-8. Private drafts stay in this open client during state refresh.</p><form id="conversation-form"><fieldset id="conversation-fields"><label for="conversation-target">Exact Work conversation</label><select id="conversation-target" required aria-describedby="conversation-hint conversation-base"></select><div id="conversation-messages" tabindex="0" role="region" aria-label="Stored original Work conversation"></div><p id="conversation-base" class="hint"></p><label for="conversation-reply">Reply to an exact earlier message</label><select id="conversation-reply"><option value="">New message</option></select><label for="conversation-text">Message · owner discussion</label><textarea id="conversation-text" rows="3" maxlength="4096" required></textarea><div class="row"><button id="conversation-send" type="submit" data-write>Save owner message</button><button id="conversation-review" type="button" class="secondary">Review draft against current state</button><button id="conversation-cancel" type="button" class="secondary">Clear private message draft</button></div></fieldset></form><p id="conversation-status" class="status" role="status" aria-live="polite">Choose exact Work to read its discussion or write a message.</p></details>
@@ -134,6 +136,7 @@ function confirmOperation(operation) {
   const operationId = operationKey(operation); confirmedOperations.add(operationId);
   if(prerequisiteSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderPrerequisites();
   if(expiredSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderExpired();
+  if(clarificationSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderClarification();
   if(conversationWorkSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderConversationWork();
   if(correctionSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderCorrections();
   if(sourceSubmissions.has(operationId) && snapshot?.value.id===operation.missionId && selectedId===operation.missionId)renderSources();
@@ -192,7 +195,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); prerequisiteSubmissions.delete(operationKey(operation)); correctionSubmissions.delete(operationKey(operation)); expiredSubmissions.delete(operationKey(operation)); sourceSubmissions.delete(operationKey(operation)); documentSubmissions.delete(operationKey(operation)); relationSubmissions.delete(operationKey(operation)); organizationSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); growthSubmissions.delete(operationKey(operation)); conversationSubmissions.delete(operationKey(operation));conversationWorkSubmissions.delete(operationKey(operation)); }
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); prerequisiteSubmissions.delete(operationKey(operation)); correctionSubmissions.delete(operationKey(operation)); expiredSubmissions.delete(operationKey(operation)); sourceSubmissions.delete(operationKey(operation)); documentSubmissions.delete(operationKey(operation)); relationSubmissions.delete(operationKey(operation)); organizationSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); growthSubmissions.delete(operationKey(operation)); conversationSubmissions.delete(operationKey(operation));conversationWorkSubmissions.delete(operationKey(operation));clarificationSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -289,7 +292,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  conversationControls();conversationWorkControls();memoryUsageControls();fileDocumentControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls(); expiredControls();
+  clarificationControls();conversationControls();conversationWorkControls();memoryUsageControls();fileDocumentControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls(); expiredControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -525,6 +528,7 @@ function renderWork(work) {
   const body = element('div', undefined, 'detail-content');
   body.append(element('h4','Original selected source documents'),workElement(work,'pre',work.sourceDocuments ? JSON.stringify(work.sourceDocuments,null,2) : 'No document source selected for this Work; current documents are not substituted.','source-input'));
   if(work.runtimeRun?.ownership)body.append(element('h4','Original host dispatch ownership & deadline'),workElement(work,'pre',JSON.stringify({runId:work.runtimeRun.id,ownership:work.runtimeRun.ownership,interruption:work.runtimeInterruption || null,providerDispatchClaims:work.effects.filter(effect=>effect.providerDispatch).map(effect=>({effectId:effect.id,status:effect.status,claim:effect.providerDispatch}))},null,2),'runtime-ownership'),element('p','A declared deadline or another host identity is not remote stop proof. A provider dispatch claim records admission, not proof of a call or outcome. Admitted runs and claims are never reclaimed or replayed.','hint'));
+  if(work.questions)body.append(element('h4',work.questions.some(q=>q.answer===null)?'Open questions · first Run blocked':'Answered owner clarification'),workElement(work,'pre',JSON.stringify(work.questions,null,2),'questions'));
   if(work.conversationSource)body.append(element('h4','Original conversation provenance'),workElement(work,'pre',JSON.stringify(work.conversationSource,null,2),'conversationSource'));
   if(work.correction)body.append(element('h4','Original owner correction admission decision'),workElement(work,'pre',JSON.stringify(work.correction,null,2),'correction'));
   if(work.prerequisites)body.append(element('h4','Explicit execution prerequisites'),workElement(work,'pre',JSON.stringify({pins:work.prerequisites,acceptedRecords:work.prerequisiteRecords || []},null,2),'prerequisites'));
@@ -606,7 +610,7 @@ function renderMission() {
   renderMemoryHistory();renderMemoryUsage();renderFileDocument();
   renderRetirement();
   renderBudget();
-  renderConversation();renderConversationWork();
+  renderClarification();renderConversation();renderConversationWork();
   renderSequence();
   renderGrowth();
   executionForms.clear();
@@ -649,7 +653,7 @@ async function refreshReadState(epoch, expectedFeed) {
     if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? body.snapshot !== null && !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
     if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
     if (feedId && body.feedId !== feedId) {
-      activity = []; confirmedOperations.clear(); conversationSubmissions.clear(); conversationStatuses.clear();conversationWorkSubmissions.clear();conversationWorkStatuses.clear(); prerequisiteSubmissions.clear(); prerequisiteStatuses.clear(); correctionSubmissions.clear(); correctionStatuses.clear(); sourceSubmissions.clear(); sourceStatuses.clear(); documentSubmissions.clear(); documentStatuses.clear(); relationSubmissions.clear(); relationStatuses.clear(); organizationSubmissions.clear(); organizationStatuses.clear(); retirementSubmissions.clear(); budgetSubmissions.clear(); budgetStatuses.clear();
+      activity = []; confirmedOperations.clear(); conversationSubmissions.clear(); conversationStatuses.clear();conversationWorkSubmissions.clear();conversationWorkStatuses.clear();clarificationSubmissions.clear();clarificationStatuses.clear(); prerequisiteSubmissions.clear(); prerequisiteStatuses.clear(); correctionSubmissions.clear(); correctionStatuses.clear(); sourceSubmissions.clear(); sourceStatuses.clear(); documentSubmissions.clear(); documentStatuses.clear(); relationSubmissions.clear(); relationStatuses.clear(); organizationSubmissions.clear(); organizationStatuses.clear(); retirementSubmissions.clear(); budgetSubmissions.clear(); budgetStatuses.clear();
     }
     // Receipts predating this snapshot still matter; a fresh boundary is not command reconciliation.
     if (unknownOperation) unknownOperation.reconcileCursor = 0;
@@ -714,7 +718,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null, organizationSubmission = null, relationSubmission = null, documentSubmission = null, sourceSubmission = null, conversationSubmission = null, prerequisiteSubmission = null, correctionSubmission = null, expiredSubmission = null, conversationWorkSubmission = null) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null, organizationSubmission = null, relationSubmission = null, documentSubmission = null, sourceSubmission = null, conversationSubmission = null, prerequisiteSubmission = null, correctionSubmission = null, expiredSubmission = null, conversationWorkSubmission = null, clarificationSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -725,6 +729,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
   if (reconnectRequired || writeFeed !== feedId) { await clearPending(operation); busy = false; controls(); report('Host state changed before transmission. No command was sent; refresh before a deliberate new action.','warning'); return false; }
   rememberMission(missionId);
   if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
+  if(clarificationSubmission)clarificationSubmissions.set(operationKey(operation),clarificationSubmission);
   if(conversationWorkSubmission)conversationWorkSubmissions.set(operationKey(operation),conversationWorkSubmission);
   if(conversationSubmission)conversationSubmissions.set(operationKey(operation),conversationSubmission);
   if(prerequisiteSubmission)prerequisiteSubmissions.set(operationKey(operation),prerequisiteSubmission);
@@ -748,8 +753,8 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     if (result.outcome === 'rejected' && result.reason === 'feed') { await clearPending(operation); requireReconnect(); report('Database changed before command admission. No command was executed or retried; refresh before a new action.','warning'); return false; }
     if (writeFeed && writeFeed !== feedId) { requireReconnect(); throw new Error('The command response belongs to the previous database. Its outcome requires current-feed receipt readback; no replay occurred.'); }
     const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId) : null;
-    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission) && selectedId!==missionId){
-      if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
+    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission || clarificationSubmission) && selectedId!==missionId){
+      if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
       if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
       if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
       throw new Error('Background run outcome requires durable readback.');
@@ -775,11 +780,11 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
-    confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
+    confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
-    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission) && selectedId!==missionId){if(!confirmedOperations.has(operationKey(operation)) && (!unknownOperation || operationKey(unknownOperation)===operationKey(operation)))unknownOperation=operation;await pollEvents();return false;}
+    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission || clarificationSubmission) && selectedId!==missionId){if(!confirmedOperations.has(operationKey(operation)) && (!unknownOperation || operationKey(unknownOperation)===operationKey(operation)))unknownOperation=operation;await pollEvents();return false;}
     if (confirmedOperations.has(operationKey(operation))) {
       const loaded = await loadMission(missionId, false);
       if (loaded) report('The host confirmed this command. Its current state was refreshed without replaying it.','success');
@@ -1580,6 +1585,7 @@ ${runSequenceClient}
 ${prerequisiteClient}
 ${correctionClient}
 ${conversationWorkClient}
+${clarificationClient}
 ${memoryUsageClient}
 ${fileDocumentClient}
 ${expiredClient}

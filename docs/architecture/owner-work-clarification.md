@@ -1,0 +1,7 @@
+# Owner clarification before first execution
+
+COL-01 and WRK-01 require unresolved questions to be visible before execution. This bounded increment lets the existing owner record up to three questions on a fresh unstarted Work, then review and save one immutable answer per question. A stored discussion message alone does not imply a question or an answer.
+
+Acceptance: private drafts, review and Cancel perform no write; Save requires the exact current Mission revision and database feed. Open questions block both preflight and domain runtime admission before any reservation or provider call. Answering changes neither execution authority nor runtime state; a separate existing Run decision is required. Original questions and answers are pinned in the input hash, executor/verifier task data and accepted Record, and validated during portable restore. Existing Work, Record, unknown receipts and legacy hashes remain unchanged. Started, cancelled or accepted Work rejects these mutations. Stale, late, uncertain and restarted UI never retries a write or a run.
+
+Questions and answers are owner-authored literal task data, not model-generated requests, grants, new roles, automatic continuation or general multi-agent conversation. Each text is nonempty, well-formed UTF-8 and bounded to 4096 bytes. Questions cannot be edited, removed, reopened or answered twice. Additional clarification after execution requires a separately admitted fresh Work under the existing contract.
