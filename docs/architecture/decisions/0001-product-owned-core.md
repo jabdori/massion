@@ -96,3 +96,7 @@ Restore capacity prevention above PR56 measures the exact normal HTTP RPC envelo
 ## Explicit owner conversation-to-Work draft
 
 Above PR57, adopt one owner-selected saved message as provenance for a separately reviewed new Work. Discussion remains unchanged and does not become a runtime grant. The edited task, current admission pins and immutable source message are distinct; existing CAS/receipt/no-replay and separate explicit Run govern all effects. [Design and preimplementation acceptance](../conversation-work-draft.md).
+
+## Exact memory usage inspection
+
+Expose only original exact-version memory/Work/Record relationships from one authoritative read boundary, with explicit bounds and current effective versus historical pin semantics. No read result becomes permission, inferred applicability or task rebinding. [Scope and acceptance](../memory-usage.md).

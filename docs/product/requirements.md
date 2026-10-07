@@ -197,3 +197,7 @@ Issue #4/REC-01/OPS-01 audit above PR54 found that backup CLI/custom resolver an
 ## Selected next bounded increment: owner conversation-to-Work draft
 
 COL-01/SUR-01/WRK-01 and issue #4 owner-authored responsibility: explicitly select one saved owner message, inspect literal provenance, edit a private new Work title/budget and deliberately save through existing admission. This adopts the previously deferred bounded conversation-to-Work choice. It does not close model conversation, general interpretation, scheduler or quality gates. [Preimplementation design/acceptance](../architecture/conversation-work-draft.md).
+
+## Selected bounded memory retrieval increment
+
+MEM-01 and issue #4 original pinned evidence: [exact-version usage inspection](../architecture/memory-usage.md) connects historical literal memory to actual Work/Record pins through read-only API/UI. Existing memoryVersionHash excludes current effective state; original version is never replaced. General retrieval/ranking/conflict/expiry/deletion and learning quality remain open.

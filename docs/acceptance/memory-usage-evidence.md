@@ -1,0 +1,11 @@
+# Exact original memory usage evidence
+
+Base: Draft PR58 `c359b3c2dffe3578019f5e3855ea40efd538d411`. [Preimplementation acceptance](../architecture/memory-usage.md) selects bounded MEM-01 retrieval, independent of conversation-to-Work admission.
+
+Normal read-only exact-version API/UI validates one authoritative snapshot and all original memory/Work/Record lineage. Existing version hash excludes mutable effective state, so retirement preserves original task content and actual historical uses. Explicit total plus limit20 distinguishes empty/truncated result from general retrieval/ranking. No automatic applicability, adoption, mutation or execution is introduced.
+
+Final affected local gate: **26/26 pass, 0 fail, 0 skip**, Node24.21.0/TypeScript7.0.2/actual disposable SurrealDB3.3.0, normal CLI/native headless Chrome151. Keyboard original selection/read/Cancel, literal hostile-looking text rendered inert, 390/1280 no horizontal overflow, original journal/Works exact and query provider calls0. v1 accepted old Work/Record, v2 later Work, retirement, unused version,22uses/20display, corrupt Record rejection, portable fresh-store original pins, late target/Cancel/Mission and same-ID feed replacement covered. Setup uses credential-free controlled adapters only; no live quality claim.
+
+Independent review found a cross-Mission/feed selection substitution risk: ID/version persisted across identity replacement. Fixed by clearing selection at identity boundary and requiring explicit reselection; paired feed replacement regression. Initial tests retained: first7 had3pass/4fail (two wrong runtime Record identity expectations and two HTTP helper response-shape errors); second7 had5pass/2fail for helper misuse. Corrected original `${runId}:record` expectation and actual helper `{response,body}` use, without weakening original binding. Final source rereview no further confirmed defects; it did not repeat actual DB/browser tests.
+
+Strict typecheck/runtime syntax/whitespace pass. Exact published head, remote CI/local counts and remaining gates are recorded separately in the Draft report. This is not full memory retrieval/conflict/expiry/deletion, learning quality, live-provider, screen-reader/other-platform or complete issue #4 evidence. No merge/deploy/new permissions/paid resources; original worktrees, uncommitted files and failed logs retained.
