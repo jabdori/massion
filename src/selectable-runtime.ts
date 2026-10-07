@@ -1,5 +1,5 @@
 /** User choices bind to host-authorized immutable profiles before any runtime effect. */
-import {ConfiguredTextRuntime,workAdmissionPreflight,rejectedRun} from './configured-runtime.ts';
+import {ConfiguredTextRuntime,workAdmissionPreflight,rejectedRun,hostBusyPreflight,hasUnsettledRuns} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeResult} from './configured-runtime.ts';
 import type {Mission} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
@@ -15,7 +15,8 @@ export interface SelectionPreflight {missionId:string;workId:string;revision:num
 export class SelectableTextRuntime implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #catalog:ConnectionCatalog;readonly #grants:readonly ExecutionAuthorization[];readonly #artifacts:TextArtifactStore;
  #draining=false;
- readonly #active=new Map<string,ConfiguredTextRuntime>();
+ readonly #active=new Map<string,ConfiguredTextRuntime|undefined>();
+ readonly #runs=new Set<Promise<RuntimeResult>>();
  constructor(store:Store<Mission>,catalog:ConnectionCatalog,authorizations:readonly ExecutionAuthorization[],artifacts:TextArtifactStore){
   this.#store=store;this.#catalog=catalog;this.#grants=structuredClone(authorizations);this.#artifacts=artifacts;
   for(const grant of this.#grants){if(!grant||typeof grant.id!=='string'||!grant.id||typeof grant.scope!=='string'||!grant.scope||!['mock-http','live'].includes(grant.mode)||!Number.isSafeInteger(grant.maxOutputTokensPerCall)||grant.maxOutputTokensPerCall<1||Object.keys(grant).some(k=>!['id','scope','mode','executor','verifier','maxOutputTokensPerCall'].includes(k))||![grant.executor,grant.verifier].every(list=>Array.isArray(list)&&list.every(p=>p&&typeof p.profileId==='string'&&/^[a-f0-9]{64}$/.test(p.configHash)&&Object.keys(p).every(k=>['profileId','configHash'].includes(k)))))throw new Error('Invalid execution authorization');}
@@ -52,22 +53,21 @@ export class SelectableTextRuntime implements WorkRuntime {
   const work=snapshot.value.works.find(w=>w.id===workId)!;const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
   return {...result,ready:prepared.diagnostics.length===0,diagnostics:prepared.diagnostics};
  }
- private admission(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight {
+ private admission(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice,owned=false):SelectionPreflight {
   const cap=choice&&Number.isSafeInteger(choice.outputTokenCap)&&choice.outputTokenCap>0?choice.outputTokenCap:undefined;
   const result=workAdmissionPreflight(snapshot,workId,expectedRevision,cap);
-  if(this.#active.has(`${snapshot.value.id}\0${workId}`))result.diagnostics.push({code:'work_already_started',message:'This Work already has an active dispatch.'});
-  return {...result,ready:result.diagnostics.length===0};
+  if(!owned&&this.#active.has(`${snapshot.value.id}\0${workId}`))result.diagnostics.push({code:'work_already_started',message:'This Work already has an active dispatch.'});
+  const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&[...this.#active.keys()].some(key=>key!==`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
- beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));}
- async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>{
+ beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime?.beginDrain();}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.#runs]);if(hasUnsettledRuns(results))throw new Error('Local Work admission did not settle during host drain');}
+ run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>{const key=`${missionId}\0${workId}`,owned=this.#active.size===0,busy=this.#active.size>0&&!this.#active.has(key);if(owned)this.#active.set(key,undefined);const task=this.runOwned(missionId,workId,runId,expectedRevision,choice,owned,busy);this.#runs.add(task);void task.finally(()=>{if(owned)this.#active.delete(key);this.#runs.delete(task);}).catch(()=>{});return task;}
+ private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,choice:ExecutionChoice|undefined,owned:boolean,busy:boolean):Promise<RuntimeResult>{
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new Error('Unknown Work');
-  if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};const admission=this.admission(snapshot,workId,expectedRevision,choice);if(!admission.ready)return rejectedRun(admission,snapshot);
+  if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};let admission=this.admission(snapshot,workId,expectedRevision,choice,owned);if(!owned&&admission.ready)admission=busy?hostBusyPreflight(admission):{...admission,ready:false,diagnostics:[{code:'work_already_started',message:'At request admission this Work already had a local dispatch.'}]};if(!admission.ready)return rejectedRun(admission,snapshot);
   const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
   if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
-  const key=`${missionId}\0${workId}`;if(this.#active.has(key))return {status:'already-started',snapshot,reason:'This Work already has an active dispatch.'};
-  this.#active.set(key,prepared.runtime);
-  try{return await prepared.runtime.run(missionId,workId,runId,expectedRevision);}finally{this.#active.delete(key);}
+  const key=`${missionId}\0${workId}`;this.#active.set(key,prepared.runtime);return prepared.runtime.run(missionId,workId,runId,expectedRevision);
  }
  owns(missionId:string,workId:string,runId:string){return this.#active.get(`${missionId}\0${workId}`)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(`${missionId}\0${workId}`)?.interrupt(missionId,workId);}
