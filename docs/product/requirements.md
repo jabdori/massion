@@ -1,6 +1,6 @@
 # Requirements and evidence ledger
 
-Status: development foundation plus same-host Mission/Work continuation; bounded checkpoint through PR45 `063b2f8` with owned host drain below, 2026-10-07. Links identify actual source and tests; the presence of a test is not proof that it ran against every environment. No row claims full-product completion.
+Status: development foundation plus same-host Mission/Work continuation; bounded checkpoint through PR46 `e2b1704` with explicit expired-run closure below, 2026-10-07. Links identify actual source and tests; the presence of a test is not proof that it ran against every environment. No row claims full-product completion.
 
 Evidence classes: **domain** = deterministic transition checks; **fixture** = controlled artifacts and real local effects; **live store** = explicitly enabled actual SurrealDB tests; **open** = required product behavior not established. Fixture evidence must never be relabeled real-provider evidence.
 
@@ -157,3 +157,7 @@ Above PR44 `771f9d4`, SUR-01/COL-01/GOV-01 add separate append-only owner discus
 ## Bounded owned host drain (2026-10-07)
 
 Above PR45 `063b2f8`, RUN-01/WRK-01/EFF-01 normal CLI SIGINT/SIGTERM fences new local HTTP/runtime admissions, interrupts exact local controllers, awaits owned run closure even after client disconnect, and records original run/dispatch/host-bound local shutdown cause while preserving claims/unknown reservations/conversations/accepted Records. Committed activation ACK loss closes by exact readback without invoke or reports unsettled. Ten-second timeout and unresolved durable closure exit nonzero; no false clean or remote-stop/replay permission. [Protocol](../architecture/host-drain.md) and [evidence](../acceptance/host-drain-evidence.md) retain general supervisor/leases/scheduler/recovery, OS isolation, remote authentication and real-model usefulness as open.
+
+## Explicit closure after original owned run expiry
+
+Above PR46 e2b1704, RUN-01/WRK-01/GOV-01 add a deliberate owner `close-expired-runtime` through the normal commands API. Exact original Work/run/host/dispatch/deadline, stable observation time, reason and uncertainty acknowledgment bind the atomic decision; server clock prohibits future observations and original deadline must have elapsed. Activation-only crash runs now have a permanent local closure path without requiring an unresolved effect. Pending/unknown receipts, claims and reservations remain truthful, cancelled stays cancelled, accepted/closed originals reject, late progression and replay remain fenced. Existing stored intervention history reads the original owner decision. [Protocol](../architecture/expired-run.md) and [evidence](../acceptance/expired-run-evidence.md) document actual CLI SIGKILL/restart/unchanged120second deadline and scoped native read-only history validation. No automatic startup scan/retry/lease/reclaim, successor, permission restoration, remote stop or complete supervisor/recovery claim.

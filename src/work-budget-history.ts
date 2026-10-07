@@ -11,7 +11,7 @@ const object=(value:unknown):value is Record<string,unknown>=>!!value&&typeof va
 export async function readWorkBudgetHistory(store:Store<Mission>,missionId:string,workId:string,input:BudgetHistoryInput):Promise<BudgetHistoryPage|null> {
  return readWorkCommandHistory(store,missionId,workId,input,'budget') as Promise<BudgetHistoryPage|null>;
 }
-export interface InterventionHistoryChange {cursor:number;revision:number;commandId:string;actor:string;action:'steer'|'cancel'|'quarantine-runtime';instruction?:string;reason?:string;runId?:string}
+export interface InterventionHistoryChange {cursor:number;revision:number;commandId:string;actor:string;action:'steer'|'cancel'|'quarantine-runtime'|'close-expired-runtime';instruction?:string;reason?:string;runId?:string}
 export interface InterventionHistoryPage extends Omit<BudgetHistoryPage,'changes'> {changes:InterventionHistoryChange[]}
 export function readWorkInterventionHistory(store:Store<Mission>,missionId:string,workId:string,input:BudgetHistoryInput):Promise<InterventionHistoryPage|null> {return readWorkCommandHistory(store,missionId,workId,input,'intervention') as Promise<InterventionHistoryPage|null>;}
 async function readWorkCommandHistory(store:Store<Mission>,missionId:string,workId:string,input:BudgetHistoryInput,kind:'budget'|'intervention'):Promise<BudgetHistoryPage|InterventionHistoryPage|null> {
@@ -34,11 +34,11 @@ async function readWorkCommandHistory(store:Store<Mission>,missionId:string,work
    if(!object(event)||!object(event.command)||event.command.workId!==workId)continue;
    const {command}=event;
    if(kind==='intervention') {
-    if(!['steer','cancel','quarantine-runtime'].includes(String(event.type)))continue;
+    if(!['steer','cancel','quarantine-runtime','close-expired-runtime'].includes(String(event.type)))continue;
     if(command.type!==event.type||typeof event.actor!=='string'||!event.actor||event.actor.length>128)throw new StorageProtocolError('Invalid recorded intervention');
     const row:InterventionHistoryChange={cursor:batch.cursor,revision:batch.revision,commandId:batch.commandId,actor:event.actor,action:event.type as InterventionHistoryChange['action']};
     if(event.type==='steer'){if(typeof command.instruction!=='string'||!command.instruction.trim()||command.instruction.length>16000)throw new StorageProtocolError('Invalid recorded instruction');row.instruction=command.instruction;}
-    if(event.type==='quarantine-runtime'){if(typeof command.reason!=='string'||!command.reason.trim()||command.reason.length>16000||typeof command.runId!=='string'||!command.runId||command.runId.length>128||command.acknowledgeUncertainOutcome!==true)throw new StorageProtocolError('Invalid recorded quarantine');row.reason=command.reason;row.runId=command.runId;}
+    if(event.type==='quarantine-runtime'||event.type==='close-expired-runtime'){if(typeof command.reason!=='string'||!command.reason.trim()||command.reason.length>16000||typeof command.runId!=='string'||!command.runId||command.runId.length>128||command.acknowledgeUncertainOutcome!==true)throw new StorageProtocolError('Invalid recorded quarantine');row.reason=command.reason;row.runId=command.runId;}
     changes.push(row);continue;
    }
    if(event.type!=='revise-budget')continue;
