@@ -1,3 +1,4 @@
+import {readWorkConversation} from './work-conversation.ts';
 import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
@@ -23,6 +24,10 @@ export class ProductService {
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(executionGate?{executionGate}:{})}});
  }
+ async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
+ }
+ async readWorkConversation(missionId:string,workId:string,feedId?:string){return readWorkConversation(this.app.store,missionId,workId,feedId);}
  async attachWorkPrerequisite(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;prerequisiteId:string;criteriaHash:string;inputHash:string;reason:string}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','prerequisiteId','criteriaHash','inputHash','reason']);const {commandId,expectedRevision,...pin}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'attach-work-prerequisite',...pin}});
  }

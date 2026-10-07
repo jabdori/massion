@@ -56,3 +56,7 @@ Revisit this ADR when a conformance gate fails, the measured relationship/worklo
 ## Bounded provider dispatch ownership follow-up (2026-10-07)
 
 Above PR43, add an explicit one-shot claim between durable provider effect intent and adapter invocation. The claim binds the original host/dispatch, registered assignment/model and canonical bounded request hash. Only a fresh committed claim authorizes the current caller to attempt its invocation; a replayed or ambiguous response cannot be used as a retry instruction. Claim/intent is not evidence of an external call or success. Unknown effects and original Records survive crash/restart without reclaim, lease expiry or effect replay. This is a prerequisite for a later durable worker, not that worker or a distributed transaction. PR43 commit-call admission fencing and its in-flight transaction/remote stop limits remain unchanged.
+
+## Durable owner Work conversation follow-up (2026-10-07)
+
+Above PR44, retain a separate bounded conversation entity for an exact existing Work. Owner-authored messages and explicit earlier same-thread replies append through the normal application CAS/idempotency boundary and durable feed. They are conversation provenance, not automatic task inputs, grants, effect receipts, runtime recovery decisions or accepted Record data. Clients can share original messages across host lifetime while retaining private reviewed drafts. This is an owner discussion foundation; model/Representative answers, general questions, authentication and conversational autonomy require separate acceptance.
