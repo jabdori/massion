@@ -497,6 +497,7 @@ function renderWork(work) {
   const evidence = element('details'); evidence.append(workElement(work,'summary','Criteria, memory pins & evidence','evidence-summary'));
   const body = element('div', undefined, 'detail-content');
   body.append(element('h4','Original selected source documents'),workElement(work,'pre',work.sourceDocuments ? JSON.stringify(work.sourceDocuments,null,2) : 'No document source selected for this Work; current documents are not substituted.','source-input'));
+  if(work.prerequisites)body.append(element('h4','Explicit execution prerequisites'),workElement(work,'pre',JSON.stringify({pins:work.prerequisites,acceptedRecords:work.prerequisiteRecords || []},null,2),'prerequisites'));
   body.append(element('h4','Original organization responsibilities'),workElement(work,'pre',work.organizationSnapshot ? JSON.stringify(work.organizationSnapshot,null,2) : 'No organization revision pinned at Work admission; current organization is not substituted.','organization-input'));
   body.append(element('h4','Original Mission input'),workElement(work,'pre',work.missionSnapshot ? JSON.stringify(work.missionSnapshot,null,2) : 'Original Mission input is unavailable; current input is not substituted.','mission-input'));
   body.append(element('h4', 'Pinned criteria'), element('p', 'v' + work.criteria.version + ' · ' + work.criteria.description), element('p', 'Oracle: ' + work.criteria.oracle, 'id'));

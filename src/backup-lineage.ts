@@ -1,3 +1,4 @@
+import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
  * This verifies retained structure and evidence bindings, not historical
  * authorization, provider truth, or the current bytes behind an artifact.
@@ -101,13 +102,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
     ensure(value.artifactSha256 === work.artifact.sha256 && value.artifactVersion === work.artifact.version, 'verdict artifact binding mismatch');
   }
 }
-function checkRecord(work: Work): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments']);
+function checkRecord(work: Work,mission:Mission): void {
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
+  if(Object.hasOwn(work,'prerequisites')){equal(record.prerequisites,work.prerequisites,'Record exact prerequisite pins');equal(record.prerequisiteRecords,resolvedPrerequisites(mission,work),'Record prerequisite evidence');}else ensure(!Object.hasOwn(record,'prerequisites')&&!Object.hasOwn(record,'prerequisiteRecords'),'Legacy Record has prerequisites');
   if(Object.hasOwn(work,'sourceDocuments'))equal(record.sourceDocuments,work.sourceDocuments,'Record exact source pins');else ensure(!Object.hasOwn(record,'sourceDocuments'),'legacy Record has source pins');
   if(work.organizationSnapshot)equal(record.organizationSnapshot,work.organizationSnapshot,'Record organization pin');
   else ensure(!Object.hasOwn(record,'organizationSnapshot'),'legacy Record has organization');
@@ -128,8 +130,9 @@ function checkRecord(work: Work): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments']);
+    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords']);
   pinnedWorkSources(mission,value as Work);
+  prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
   text(item.id, 'Work ID'); text(item.title, 'Work title'); integer(item.missionVersion, 'Work Mission version'); criteria(item.criteria);
   ensure(item.missionVersion <= mission.version && item.criteria.version <= mission.criteria.version, 'Work references future Mission or criteria');
@@ -235,7 +238,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (work.verdict) checkVerdictBinding(work, work.acceptance !== 'stale');
   if (work.acceptance === 'failed') ensure(work.verdict?.status === 'failed', 'failed acceptance has no failed verdict');
   if (work.acceptance === 'stale') ensure(work.verdict, 'stale acceptance has no verdict');
-  if (work.acceptance === 'accepted') checkRecord(work);
+  if (work.acceptance === 'accepted') checkRecord(work,mission);
   else ensure(!Object.hasOwn(item, 'record'), 'unaccepted Work contains a Record');
 }
 
@@ -297,6 +300,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate'] },
