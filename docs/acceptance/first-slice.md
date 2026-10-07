@@ -64,7 +64,7 @@ conversation/Work/Agent/execution-session concepts are preserved.
 
 For each run, retain the source revision, runtime/store/provider versions, command, result counts, skipped checks, artifact identities and limitations. Fixture results must carry `evidenceClass: fixture`. A passing test that used an in-memory store is not durable database evidence.
 
-Run `npm run check` for strict TypeScript, runtime syntax and the ordinary test suite. Actual-store tests require the configured disposable SurrealDB endpoint; without it they are skipped. The opt-in storage crash test kills its own test server and must run separately from clients sharing that server. See [storage reproduction instructions](../architecture/storage.md).
+Run `npm run check` for strict TypeScript, runtime syntax and the ordinary test suite. Actual-store tests require the configured disposable SurrealDB endpoint; without it they are skipped. The opt-in storage crash test owns a nested isolated DB lifetime and preserves the outer suite server for later fresh clients. See [storage reproduction instructions](../architecture/storage.md).
 
 The complete-slice fault matrix must cover:
 
