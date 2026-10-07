@@ -1,3 +1,4 @@
+import {rejectedTextClient} from './rejected-text-panel.ts';
 import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts';
 import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
@@ -274,7 +275,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  conversationControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); sequenceControls(); prerequisiteControls();
+  conversationControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -534,6 +535,7 @@ function renderWork(work) {
   if (work.record) { body.append(element('p', work.record.id + ' · ' + work.record.evidenceClass), element('p', 'Checksum: ' + work.record.checksum, 'id')); const record = element('details'); record.append(workElement(work,'summary','Inspect Record bundle','record-summary'), workElement(work,'pre',JSON.stringify(work.record,null,2),'record')); body.append(record); }
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
   if(work.record && work.acceptance==='accepted')body.append(recordTextPanel(work));
+  if(work.execution==='settled'&&work.acceptance==='failed'&&work.verdict?.status==='failed'&&work.artifact)body.append(rejectedTextPanel(work));
   const attempts = element('details'); attempts.append(workElement(work,'summary','Attempts, tasks & assignments','attempts-summary'), workElement(work,'pre',JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments},null,2),'attempts')); body.append(attempts); evidence.append(body); card.append(evidence);
   if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),workElement(work,'pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2),'connections'));
   if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
@@ -1557,6 +1559,7 @@ async function connect() {
 }
 ${runSequenceClient}
 ${prerequisiteClient}
+${rejectedTextClient}
 controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
