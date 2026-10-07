@@ -31,8 +31,10 @@ export interface Work {
 export interface Memory { id: string; version: number; scope: string; authority: 'explicit' | 'learned'; content: string; source: string; effective: boolean }
 export interface Growth { id: string; proposer: string; target: 'memory' | 'prompt' | 'policy' | 'organization'; baseline: string; candidate: string; counterevidence: string; evaluator?: string; scores?: { baseline: number; candidate: number; heldOut: string }; status: 'proposed' | 'evaluated' | 'adopted' | 'reverted'; observation?: { workId: string; metric: number }; previousEffective?: string[] }
 export interface Relation { from: string; to: string; type: 'depends-on' | 'evidenced-by' | 'contains'; fromVersion: number; toVersion: number; provenance: string; inferred: boolean }
-export interface Mission { organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
+export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
+export interface Mission { documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | {type:'capture-document';document:Pick<DocumentVersion,'id'|'version'|'title'|'content'|'source'>}
   | { type:'revise-organization';version:number;reason:string;responsibilities:OrganizationResponsibility[] }
   | { type: 'revise-mission'; purpose: string; criteria: Criteria }
   | { type: 'admit-work'; workId: string; title: string; budget: number; executionGate?:ExecutionGate }
@@ -108,6 +110,21 @@ export function createMission(input: {id:string; purpose:string; scope:string; c
   role(actor, 'owner', 'representative'); text(input.id, 'id'); text(input.purpose, 'purpose'); text(input.scope, 'scope'); criteriaValid(input.criteria);
   ensure(Array.isArray(input.constraints) && input.constraints.every(x => typeof x === 'string'), 'Invalid constraints');
   return structuredClone({...input, version:1, works:[], memories:[], growth:[], relations:[]});
+}
+export const DOCUMENT_CONTENT_BYTES=16384,DOCUMENT_VERSIONS=100,DOCUMENT_TOTAL_BYTES=1048576;
+export function documentContentHash(content:string):string{return createHash('sha256').update(content,'utf8').digest('hex');}
+export function validateDocumentInput(value:unknown):asserts value is Pick<DocumentVersion,'id'|'version'|'title'|'content'|'source'> {
+ ensure(value&&typeof value==='object'&&!Array.isArray(value),'Exact document object required');const d=value as DocumentVersion;
+ ensure(Object.keys(d).length===5&&Object.keys(d).every(k=>['id','version','title','content','source'].includes(k)),'Only owner document fields accepted');
+ ensure(typeof d.id==='string'&&/^document:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(d.id),'Document identity must be document: followed by a bounded local name');
+ ensure(Number.isSafeInteger(d.version)&&d.version>0,'Invalid document version');
+ for(const [key,limit] of [['title',200],['source',2000],['content',DOCUMENT_CONTENT_BYTES]] as const){text(d[key],key,limit);ensure(d[key].isWellFormed(),'Invalid document Unicode');}
+ ensure(Buffer.byteLength(d.content,'utf8')<=DOCUMENT_CONTENT_BYTES,'Document content exceeds UTF-8 byte bound');
+}
+export function validateDocumentHistory(value:unknown):asserts value is DocumentVersion[] {
+ ensure(Array.isArray(value)&&value.length>0&&value.length<=DOCUMENT_VERSIONS&&Object.keys(value).length===value.length,'Invalid document history bound');const versions=new Map<string,number>();let bytes=0;
+ for(const d of value){ensure(d&&typeof d==='object'&&!Array.isArray(d)&&Object.keys(d).length===7&&Object.keys(d).every(k=>['id','version','title','content','source','contentSha256','actorId'].includes(k)),'Invalid document history fields');const {actorId,contentSha256,...input}=d;validateDocumentInput(input);text(actorId,'document author',2000);ensure(actorId.isWellFormed()&&contentSha256===documentContentHash(d.content),'Document original content hash mismatch');ensure(d.version===(versions.get(d.id)??0)+1,'Document history must advance by one');versions.set(d.id,d.version);bytes+=Buffer.byteLength(d.content,'utf8');}
+ ensure(bytes<=DOCUMENT_TOTAL_BYTES,'Document total UTF-8 bound exceeded');
 }
 export function apply(current: Mission, command: Command, actor: Actor): { value: Mission; events: unknown[] } {
   text(actor.id, 'actor');
@@ -214,6 +231,11 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     }
     case 'observe-growth': { role(actor,'evaluator'); const g=growth(); const w=state.works.find(w=>w.id===command.workId); ensure(g.status==='adopted'&&w?.appliedMemoryVersions.includes(g.candidate)&&w.acceptance==='accepted','Accepted later work under candidate required'); ensure(finite(command.metric),'Invalid observation'); g.observation={workId:command.workId,metric:command.metric}; break; }
     case 'revert-growth': { role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='adopted'&&g.previousEffective,'No adoption to revert'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&m.effective),'Cannot revert a superseded adoption'); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=g.previousEffective.includes(`${m.id}@${m.version}`); g.status='reverted'; break; }
+    case 'capture-document': {
+      role(actor,'owner');ensure(Object.keys(command).length===2,'Invalid document command fields');validateDocumentInput(command.document);if(state.documents)validateDocumentHistory(state.documents);
+      const history=state.documents??[],d=command.document;ensure(d.version===(history.filter(v=>v.id===d.id).at(-1)?.version??0)+1,'Document version must advance by one');
+      const next=[...history,{...structuredClone(d),contentSha256:documentContentHash(d.content),actorId:actor.id}];validateDocumentHistory(next);state.documents=next;break;
+    }
     case 'record-relation': {
       role(actor,'owner');ensure(Object.keys(command).length===2,'Invalid owner relation command fields');const r=command.relation;
       ensure(r&&typeof r==='object'&&!Array.isArray(r)&&Object.keys(r).length===6&&Object.keys(r).every(key=>['from','to','type','fromVersion','toVersion','provenance'].includes(key)),'Only exact owner relation fields accepted');
