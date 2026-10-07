@@ -311,6 +311,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'append-work-message':{required:['workId','messageId','replyTo','text']},
   'claim-provider-dispatch': {required:['workId','effectId','claim']},
   'expire-runtime': {required:['workId','runId','dispatchId','observedAt']},
+  'stop-owned-runtime': {required:['workId','runId','dispatchId','hostSessionId','observedAt']},
   'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission': { required: ['purpose', 'criteria'] },

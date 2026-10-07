@@ -14,6 +14,7 @@ export interface ExecutionAuthorization {
 export interface SelectionPreflight {missionId:string;workId:string;revision:number;expectedRevision:number;ready:boolean;diagnostics:ConnectionDiagnostic[]}
 export class SelectableTextRuntime implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #catalog:ConnectionCatalog;readonly #grants:readonly ExecutionAuthorization[];readonly #artifacts:TextArtifactStore;
+ #draining=false;
  readonly #active=new Map<string,ConfiguredTextRuntime>();
  constructor(store:Store<Mission>,catalog:ConnectionCatalog,authorizations:readonly ExecutionAuthorization[],artifacts:TextArtifactStore){
   this.#store=store;this.#catalog=catalog;this.#grants=structuredClone(authorizations);this.#artifacts=artifacts;
@@ -57,9 +58,11 @@ export class SelectableTextRuntime implements WorkRuntime {
   if(this.#active.has(`${snapshot.value.id}\0${workId}`))result.diagnostics.push({code:'work_already_started',message:'This Work already has an active dispatch.'});
   return {...result,ready:result.diagnostics.length===0};
  }
+ beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime.beginDrain();}
+ async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));}
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>{
   const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new Error('Unknown Work');
-  const admission=this.admission(snapshot,workId,expectedRevision,choice);if(!admission.ready)return rejectedRun(admission,snapshot);
+  if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};const admission=this.admission(snapshot,workId,expectedRevision,choice);if(!admission.ready)return rejectedRun(admission,snapshot);
   const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
   if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
   const key=`${missionId}\0${workId}`;if(this.#active.has(key))return {status:'already-started',snapshot,reason:'This Work already has an active dispatch.'};
