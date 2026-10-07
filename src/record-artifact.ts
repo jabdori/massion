@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {hash,pinnedOrganization} from './domain.ts';
+import {hash,pinnedOrganization,pinnedWorkSources} from './domain.ts';
 import type {Artifact,Mission,AcceptedRecord,Work} from './domain.ts';
 import type {Store} from './storage.ts';
 import {EventCursorError} from './storage.ts';
@@ -13,6 +13,7 @@ function record(mission:Mission,work:Work,input:RecordArtifactInput):AcceptedRec
  if(work.acceptance!=='accepted'||!r||r.id!==input.recordId||r.workId!==work.id||r.artifact.version!==input.artifactVersion||r.artifact.sha256!==input.artifactSha256)conflict();
  const {checksum,...bundle}=r!;
  if(checksum!==hash(bundle)||work.execution!=='settled'||!work.artifact||!work.verdict||hash(work.artifact)!==hash(r!.artifact)||hash(work.criteria)!==hash(r!.criteria)||hash(work.verdict)!==hash(r!.verdict)||hash(work.effects)!==hash(r!.receipts)||hash(work.assignments)!==hash(r!.assignments)||hash(work.appliedMemoryVersions)!==hash(r!.memoryVersions)||r!.verdict.status!=='passed'||r!.verdict.artifactSha256!==r!.artifact.sha256||r!.verdict.artifactVersion!==r!.artifact.version||r!.verdict.criteriaVersion!==r!.criteria.version||!r!.receipts.length||r!.receipts.some(e=>!['succeeded','failed'].includes(e.status))||!r!.receipts.some(e=>e.status==='succeeded')||!['fixture','real-provider'].includes(r!.evidenceClass))conflict();
+ try{const sources=pinnedWorkSources(mission,work);if(sources){if(!r!.sourceDocuments||hash(r!.sourceDocuments)!==hash(sources))conflict();}else if(Object.hasOwn(r!,'sourceDocuments'))conflict();}catch{conflict();}
  try{const organization=pinnedOrganization(mission,work);if(organization){if(!r!.organizationSnapshot||hash(r!.organizationSnapshot)!==hash(organization)||r!.assignments.some(a=>a.organizationVersion!==organization.version))conflict();}else if(Object.hasOwn(r!,'organizationSnapshot')||r!.assignments.some(a=>Object.hasOwn(a,'organizationVersion')))conflict();}catch{conflict();}
  const verifier=r!.assignments.find(a=>a.id===r!.verdict.verifierAssignmentId&&a.role==='verifier');if(!verifier||r!.assignments.some(a=>a.role==='executor'&&a.actorId===verifier.actorId))conflict();
  if(r!.artifact.kind!=='text')throw new RecordArtifactError(422,'Only exact accepted UTF-8 text artifacts are readable through this host.');

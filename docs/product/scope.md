@@ -41,3 +41,7 @@ Deferral is sequencing, not deletion. An interface, test fixture or unused helpe
 ## Repository principles
 
 This is the clean implementation in `jabdori/massion`. `jabdori/massion-archive` is historical reference, not an automatically adopted code baseline. Preserve useful requirements and verified assets without copying an abandoned implementation wholesale. Product responsibilities outrank a database, runtime or framework preference. Primary repository prose and conventional commit messages are English.
+
+### Explicit source selection for fresh Work
+
+After local document capture/inspection, the owner may deliberately pin exact stored ID/version/SHA plus reason to a fresh Work. Up to three distinct originals, 64KiB serialized source input, immutable original snapshots and checked Record lineage. Both bounded text roles see untrusted reference data; saving starts no execution. No automatic latest source, replacement, relations, invalidation, accounts or live-model quality claim. [Protocol](../architecture/work-sources.md), [evidence](../acceptance/work-sources-evidence.md).

@@ -110,3 +110,5 @@ executor/verifier permission, current preflight and explicit Run. The unconfigur
 CLI reads no provider credential. See [CLI host setup](docs/architecture/cli-host-connections.md)
 for the manifest, lazy environment binding, credential-free loopback fixture mode
 and restart/no-replay limits. No live account has been validated.
+
+Owners can now [attach an exact stored source to fresh Work](docs/architecture/work-sources.md), preserving original ID/version/SHA, provenance and decision through runtime inputs and Records. [Scoped acceptance evidence](docs/acceptance/work-sources-evidence.md) keeps fixture and live quality claims separate.

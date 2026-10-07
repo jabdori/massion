@@ -12,7 +12,7 @@ export interface ModelSelection { provider: string; model: string; configVersion
 export interface Effect { id: string; taskId: string; status: 'pending' | 'succeeded' | 'failed' | 'unknown'; target: string; authority: string; receipt?: string }
 export interface Task { id: string; parentId: string | null; status: 'queued' | 'active' | 'settled'; result?: string }
 export interface Verdict { id: string; verifierAssignmentId: string; artifactSha256: string; artifactVersion: number; criteriaVersion: number; status: 'passed' | 'failed' | 'stale'; evidence: Evidence[] }
-export interface AcceptedRecord { organizationSnapshot?:OrganizationRevision; id: string; workId: string; criteria: Criteria; artifact: Artifact; verdict: Verdict; receipts: Effect[]; assignments: Assignment[]; memoryVersions: string[]; evidenceClass: 'fixture' | 'real-provider'; checksum: string; artifactSnapshot?: {sha256:string;path:string} }
+export interface AcceptedRecord { sourceDocuments?:WorkSource[]; organizationSnapshot?:OrganizationRevision; id: string; workId: string; criteria: Criteria; artifact: Artifact; verdict: Verdict; receipts: Effect[]; assignments: Assignment[]; memoryVersions: string[]; evidenceClass: 'fixture' | 'real-provider'; checksum: string; artifactSnapshot?: {sha256:string;path:string} }
 export interface Attempt { id: string; number: number; criteria: Criteria; status: 'queued' | 'active' | 'settled'; modelVersions: string[]; results?: {taskId:string;result:string}[] }
 export interface ExecutionGate { code:'provider_unavailable'|'runtime_unavailable'|'provider_failed'|'budget_exceeded'|'verification_failed';detail:string }
 export interface ConnectionBinding {profileId:string;configHash:string}
@@ -21,7 +21,7 @@ export interface RuntimeRun {connectionBindings?:RuntimeConnectionBindings;id:st
 /** Owner decision only: never a provider receipt or proof that external work stopped. */
 export interface RuntimeRecovery {runId:string;actorId:string;reason:string;pendingEffectIds:string[];unknownEffectIds:string[]}
 export interface Work {
-  id: string; title: string; organizationSnapshot?:OrganizationRevision; runtimeRun?:RuntimeRun; runtimeRecovery?:RuntimeRecovery; blocker?:ExecutionGate; instructions?:{actorId:string;text:string}[]; missionVersion: number; missionSnapshot?:{version:number;purpose:string;scope:string;constraints:string[]}; criteria: Criteria;
+  id: string; title: string; sourceDocuments?:WorkSource[]; organizationSnapshot?:OrganizationRevision; runtimeRun?:RuntimeRun; runtimeRecovery?:RuntimeRecovery; blocker?:ExecutionGate; instructions?:{actorId:string;text:string}[]; missionVersion: number; missionSnapshot?:{version:number;purpose:string;scope:string;constraints:string[]}; criteria: Criteria;
   execution: 'queued' | 'active' | 'waiting' | 'blocked' | 'cancelled' | 'settled';
   acceptance: 'pending' | 'failed' | 'stale' | 'accepted';
   tasks: Task[]; attempts: Attempt[]; assignments: Assignment[]; effects: Effect[];
@@ -32,8 +32,10 @@ export interface Memory { id: string; version: number; scope: string; authority:
 export interface Growth { id: string; proposer: string; target: 'memory' | 'prompt' | 'policy' | 'organization'; baseline: string; candidate: string; counterevidence: string; evaluator?: string; scores?: { baseline: number; candidate: number; heldOut: string }; status: 'proposed' | 'evaluated' | 'adopted' | 'reverted'; observation?: { workId: string; metric: number }; previousEffective?: string[] }
 export interface Relation { from: string; to: string; type: 'depends-on' | 'evidenced-by' | 'contains'; fromVersion: number; toVersion: number; provenance: string; inferred: boolean }
 export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
+export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
 export interface Mission { documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | {type:'attach-work-source';workId:string;documentId:string;version:number;contentSha256:string;reason:string}
   | {type:'capture-document';document:Pick<DocumentVersion,'id'|'version'|'title'|'content'|'source'>}
   | { type:'revise-organization';version:number;reason:string;responsibilities:OrganizationResponsibility[] }
   | { type: 'revise-mission'; purpose: string; criteria: Criteria }
@@ -104,7 +106,7 @@ export function pinnedOrganization(mission:Mission,work:Work):OrganizationRevisi
   return structuredClone(work.organizationSnapshot);
 }
 export function workInputHash(work:Work):string {
-  return hash({mission:work.missionSnapshot,title:work.title,instructions:work.instructions??[],memoryVersions:work.appliedMemoryVersions,...(work.organizationSnapshot?{organization:work.organizationSnapshot}:{})});
+  return hash({mission:work.missionSnapshot,title:work.title,instructions:work.instructions??[],memoryVersions:work.appliedMemoryVersions,...(Object.hasOwn(work,'sourceDocuments')?{sourceDocuments:work.sourceDocuments}:{}),...(work.organizationSnapshot?{organization:work.organizationSnapshot}:{})});
 }
 export function createMission(input: {id:string; purpose:string; scope:string; constraints:string[]; criteria:Criteria}, actor:Actor): Mission {
   role(actor, 'owner', 'representative'); text(input.id, 'id'); text(input.purpose, 'purpose'); text(input.scope, 'scope'); criteriaValid(input.criteria);
@@ -125,6 +127,24 @@ export function validateDocumentHistory(value:unknown):asserts value is Document
  ensure(Array.isArray(value)&&value.length>0&&value.length<=DOCUMENT_VERSIONS&&Object.keys(value).length===value.length,'Invalid document history bound');const versions=new Map<string,number>();let bytes=0;
  for(const d of value){ensure(d&&typeof d==='object'&&!Array.isArray(d)&&Object.keys(d).length===7&&Object.keys(d).every(k=>['id','version','title','content','source','contentSha256','actorId'].includes(k)),'Invalid document history fields');const {actorId,contentSha256,...input}=d;validateDocumentInput(input);text(actorId,'document author',2000);ensure(actorId.isWellFormed()&&contentSha256===documentContentHash(d.content),'Document original content hash mismatch');ensure(d.version===(versions.get(d.id)??0)+1,'Document history must advance by one');versions.set(d.id,d.version);bytes+=Buffer.byteLength(d.content,'utf8');}
  ensure(bytes<=DOCUMENT_TOTAL_BYTES,'Document total UTF-8 bound exceeded');
+}
+/** Exact reference data, never instructions, verification or permission grants. */
+export function pinnedWorkSources(mission:Mission,work:Work):WorkSource[]|undefined {
+ if(!Object.hasOwn(work,'sourceDocuments'))return undefined;
+ const pins=work.sourceDocuments;ensure(Array.isArray(pins)&&pins.length>0&&pins.length<=3&&Object.keys(pins).length===pins.length,'Invalid Work source bound');
+ validateDocumentHistory(mission.documents);const ids=new Set<string>();
+ for(const pin of pins){
+  ensure(pin&&typeof pin==='object'&&!Array.isArray(pin)&&Object.keys(pin).length===3&&Object.keys(pin).every(k=>['document','actorId','reason'].includes(k)),'Invalid Work source fields');
+  text(pin.actorId,'source decision author',2000);text(pin.reason,'source decision reason',2000);ensure(pin.actorId.isWellFormed()&&pin.reason.isWellFormed(),'Invalid source decision Unicode');
+  const d=pin.document;ensure(d&&typeof d==='object','Exact source snapshot required');
+  const originals=mission.documents!.filter(v=>v.id===d.id&&v.version===d.version);
+  ensure(originals.length===1&&hash(originals[0])===hash(d),'Exact pinned document original unavailable');
+  ensure(!ids.has(d.id),'Only one exact version per source identity');ids.add(d.id);
+ }
+ ensure(Buffer.byteLength(canonical(pins),'utf8')<=65536,'Work source input exceeds serialized bound');return structuredClone(pins);
+}
+export function freshSourceWork(w:Work):boolean {
+ return w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution)&&!w.runtimeRun&&!w.runtimeRecovery&&!w.effects.length&&!w.assignments.length&&!w.artifact&&!w.verdict&&!w.record&&w.attempts.length===1&&w.attempts[0]?.status==='queued'&&w.tasks.length===1&&w.tasks[0]?.status==='queued'&&!w.tasks[0]?.result;
 }
 export function apply(current: Mission, command: Command, actor: Actor): { value: Mission; events: unknown[] } {
   text(actor.id, 'actor');
@@ -157,7 +177,7 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       ensure(finite(command.limit)&&command.limit>=w.budget.reserved,'Invalid budget limit');
       ensure(command.limit!==w.budget.limit,'Budget limit must change'); w.budget.limit=command.limit; break;
     }
-    case 'activate-runtime': {role(actor,'owner');const w=needWork();open(w);pinnedOrganization(state,w);ensure(!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&!w.artifact,'A run is already admitted; do not replay it');text(command.run.id,'run identity');text(command.run.authorizationId,'authorization identity');ensure(command.run.criteriaHash===hash(w.criteria),'Run criteria binding mismatch');ensure(w.missionSnapshot&&command.run.inputHash===workInputHash(w),'Run input binding mismatch');ensure(['mock-http','live'].includes(command.run.mode),'Invalid runtime mode');ensure(Number.isSafeInteger(command.run.outputTokenCap)&&command.run.outputTokenCap>0,'Invalid output cap');ensure(w.budget.limit-w.budget.reserved>=command.run.outputTokenCap*2,'Budget cannot reserve executor and verifier');if(command.run.connectionBindings){for(const binding of [command.run.connectionBindings.executor,command.run.connectionBindings.verifier]){ensure(binding&&/^[a-zA-Z0-9:_-]{1,128}$/.test(binding.profileId)&&/^[a-f0-9]{64}$/.test(binding.configHash),'Invalid connection binding');}}w.runtimeRun=structuredClone(command.run);w.budget.unit='output-tokens';delete w.blocker;w.execution='queued';break;}
+    case 'activate-runtime': {role(actor,'owner');const w=needWork();open(w);pinnedOrganization(state,w);pinnedWorkSources(state,w);ensure(!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&!w.artifact,'A run is already admitted; do not replay it');text(command.run.id,'run identity');text(command.run.authorizationId,'authorization identity');ensure(command.run.criteriaHash===hash(w.criteria),'Run criteria binding mismatch');ensure(w.missionSnapshot&&command.run.inputHash===workInputHash(w),'Run input binding mismatch');ensure(['mock-http','live'].includes(command.run.mode),'Invalid runtime mode');ensure(Number.isSafeInteger(command.run.outputTokenCap)&&command.run.outputTokenCap>0,'Invalid output cap');ensure(w.budget.limit-w.budget.reserved>=command.run.outputTokenCap*2,'Budget cannot reserve executor and verifier');if(command.run.connectionBindings){for(const binding of [command.run.connectionBindings.executor,command.run.connectionBindings.verifier]){ensure(binding&&/^[a-zA-Z0-9:_-]{1,128}$/.test(binding.profileId)&&/^[a-f0-9]{64}$/.test(binding.configHash),'Invalid connection binding');}}w.runtimeRun=structuredClone(command.run);w.budget.unit='output-tokens';delete w.blocker;w.execution='queued';break;}
     case 'quarantine-runtime': {
       role(actor,'owner'); const w=needWork();
       ensure(Object.keys(command).length===5 && Object.keys(command).every(key=>['type','workId','runId','reason','acknowledgeUncertainOutcome'].includes(key)),'Invalid quarantine command fields');
@@ -203,7 +223,7 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       role(actor,'verifier'); const w=needWork(); open(w); const v=command.verdict; text(v.id,'verdict identity'); const a=w.assignments.find(a=>a.id===v.verifierAssignmentId&&a.role==='verifier'&&a.actorId===actor.id); ensure(a,'Verifier not independently assigned'); ensure(!w.assignments.some(a=>a.actorId===actor.id&&a.role==='executor'),'Self-verification prohibited'); ensure(w.artifact,'No candidate artifact'); ensure(v.artifactSha256===w.artifact.sha256&&v.artifactVersion===w.artifact.version&&v.criteriaVersion===w.criteria.version,'Stale verification binding'); ensure(['passed','failed','stale'].includes(v.status),'Invalid verdict'); ensure(Array.isArray(v.evidence)&&v.evidence.length>0&&v.evidence.every(e=>e.kind&&e.detail&&e.source),'Independent evidence required'); w.verdict=structuredClone(v); w.acceptance=v.status==='failed'?'failed':v.status==='stale'?'stale':'pending'; break;
     }
     case 'accept': {
-      role(actor,'owner','representative'); const w=needWork(); open(w); ensure(w.execution==='settled','Execution is not settled'); ensure(w.artifact&&w.verdict&&w.verdict.status==='passed','Independent pass required'); ensure(w.verdict.artifactSha256===w.artifact.sha256&&w.verdict.artifactVersion===w.artifact.version&&w.verdict.criteriaVersion===w.criteria.version,'Stale evidence cannot be accepted'); ensure(w.effects.length>0&&w.effects.every(e=>e.status==='succeeded'||e.status==='failed'),'Required effect outcomes unresolved'); ensure(w.effects.some(e=>e.status==='succeeded'),'No successful effect evidence'); text(command.recordId,'record'); if(command.artifactSnapshot) { ensure(command.artifactSnapshot.sha256===w.artifact.sha256,'Snapshot hash mismatch'); text(command.artifactSnapshot.path,'snapshot path'); } const bundle={...(w.organizationSnapshot?{organizationSnapshot:structuredClone(w.organizationSnapshot)}:{}),...(command.artifactSnapshot?{artifactSnapshot:command.artifactSnapshot}:{}),id:command.recordId,workId:w.id,criteria:w.criteria,artifact:w.artifact,verdict:w.verdict,receipts:w.effects,assignments:w.assignments,memoryVersions:w.appliedMemoryVersions,evidenceClass:w.assignments.some(a=>a.model.evidenceClass==='fixture')?'fixture' as const:'real-provider' as const}; w.record=structuredClone({...bundle,checksum:hash(bundle)}); w.acceptance='accepted'; break;
+      role(actor,'owner','representative'); const w=needWork(); open(w); ensure(w.execution==='settled','Execution is not settled'); ensure(w.artifact&&w.verdict&&w.verdict.status==='passed','Independent pass required'); ensure(w.verdict.artifactSha256===w.artifact.sha256&&w.verdict.artifactVersion===w.artifact.version&&w.verdict.criteriaVersion===w.criteria.version,'Stale evidence cannot be accepted'); ensure(w.effects.length>0&&w.effects.every(e=>e.status==='succeeded'||e.status==='failed'),'Required effect outcomes unresolved'); ensure(w.effects.some(e=>e.status==='succeeded'),'No successful effect evidence'); text(command.recordId,'record'); if(command.artifactSnapshot) { ensure(command.artifactSnapshot.sha256===w.artifact.sha256,'Snapshot hash mismatch'); text(command.artifactSnapshot.path,'snapshot path'); } pinnedWorkSources(state,w); const bundle={...(w.sourceDocuments?{sourceDocuments:structuredClone(w.sourceDocuments)}:{}),...(w.organizationSnapshot?{organizationSnapshot:structuredClone(w.organizationSnapshot)}:{}),...(command.artifactSnapshot?{artifactSnapshot:command.artifactSnapshot}:{}),id:command.recordId,workId:w.id,criteria:w.criteria,artifact:w.artifact,verdict:w.verdict,receipts:w.effects,assignments:w.assignments,memoryVersions:w.appliedMemoryVersions,evidenceClass:w.assignments.some(a=>a.model.evidenceClass==='fixture')?'fixture' as const:'real-provider' as const}; w.record=structuredClone({...bundle,checksum:hash(bundle)}); w.acceptance='accepted'; break;
     }
     case 'cancel': { role(actor,'owner','representative'); const w=needWork(); open(w); w.execution='cancelled'; break; }
     case 'steer': { role(actor,'owner'); const w=needWork(); open(w); text(command.instruction,'instruction'); (w.instructions??=[]).push({actorId:actor.id,text:command.instruction}); if(!w.blocker)w.execution='waiting'; break; }
@@ -231,6 +251,16 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     }
     case 'observe-growth': { role(actor,'evaluator'); const g=growth(); const w=state.works.find(w=>w.id===command.workId); ensure(g.status==='adopted'&&w?.appliedMemoryVersions.includes(g.candidate)&&w.acceptance==='accepted','Accepted later work under candidate required'); ensure(finite(command.metric),'Invalid observation'); g.observation={workId:command.workId,metric:command.metric}; break; }
     case 'revert-growth': { role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='adopted'&&g.previousEffective,'No adoption to revert'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&m.effective),'Cannot revert a superseded adoption'); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=g.previousEffective.includes(`${m.id}@${m.version}`); g.status='reverted'; break; }
+    case 'attach-work-source': {
+      role(actor,'owner');ensure(Object.keys(command).length===6&&Object.keys(command).every(k=>['type','workId','documentId','version','contentSha256','reason'].includes(k)),'Only exact Work source fields accepted');
+      const w=needWork();open(w);ensure(freshSourceWork(w),'Only fresh unstarted Work may attach a source');
+      text(command.reason,'source decision reason',2000);ensure(command.reason.isWellFormed(),'Invalid source decision Unicode');
+      ensure(Number.isSafeInteger(command.version)&&command.version>0&&typeof command.contentSha256==='string'&&/^[a-f0-9]{64}$/.test(command.contentSha256),'Exact document version and SHA-256 required');
+      validateDocumentHistory(state.documents);pinnedWorkSources(state,w);
+      const originals=state.documents!.filter(d=>d.id===command.documentId&&d.version===command.version&&d.contentSha256===command.contentSha256);
+      ensure(originals.length===1,'Exact document ID/version/hash unavailable');
+      (w.sourceDocuments??=[]).push({document:structuredClone(originals[0]!),actorId:actor.id,reason:command.reason});pinnedWorkSources(state,w);break;
+    }
     case 'capture-document': {
       role(actor,'owner');ensure(Object.keys(command).length===2,'Invalid document command fields');validateDocumentInput(command.document);if(state.documents)validateDocumentHistory(state.documents);
       const history=state.documents??[],d=command.document;ensure(d.version===(history.filter(v=>v.id===d.id).at(-1)?.version??0)+1,'Document version must advance by one');
