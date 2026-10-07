@@ -59,6 +59,7 @@ export class SelectableTextRuntime implements WorkRuntime {
   if(!owned&&this.#active.has(`${snapshot.value.id}\0${workId}`))result.diagnostics.push({code:'work_already_started',message:'This Work already has an active dispatch.'});
   const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&[...this.#active.keys()].some(key=>key!==`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
+ hasActiveAdmission(){return this.#active.size>0;}
  beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime?.beginDrain();}
  async drain(){this.beginDrain();const results=await Promise.allSettled([...this.#runs]);if(hasUnsettledRuns(results))throw new Error('Local Work admission did not settle during host drain');}
  run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>{const key=`${missionId}\0${workId}`,owned=this.#active.size===0,busy=this.#active.size>0&&!this.#active.has(key);if(owned)this.#active.set(key,undefined);const task=this.runOwned(missionId,workId,runId,expectedRevision,choice,owned,busy);this.#runs.add(task);void task.finally(()=>{if(owned)this.#active.delete(key);this.#runs.delete(task);}).catch(()=>{});return task;}

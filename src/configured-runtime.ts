@@ -30,6 +30,7 @@ export class RunAdmissionUnknownError extends Error {
  readonly runId:string;constructor(runId:string,cause:unknown){super('Runtime admission outcome is unknown. Inspect original durable state; no replay is inferred.',{cause});this.name='RunAdmissionUnknownError';this.runId=runId;}
 }
 export interface WorkRuntime {
+ hasActiveAdmission?():boolean;
  availability(mission:Mission):{ready:boolean;reason:string};
  run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>;
  configuration?():unknown;
@@ -103,6 +104,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(!available.ready)result.diagnostics.push({code:'runtime_unavailable',message:available.reason});
   const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&this.busy(`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
+ hasActiveAdmission(){return [...this.runs.values()].some(run=>run.admitted);}
  private busy(key:string){return [...this.runs.values()].some(run=>run.admitted&&run.key!==key);}
  owns(missionId:string,workId:string,runId:string){return this.controllers.get(`${missionId}\0${workId}`)?.runId===runId;}
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.controller.abort();}
