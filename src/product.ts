@@ -56,6 +56,9 @@ export class ProductService {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','version','reason','responsibilities']);
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-organization',version:input.version,reason:input.reason,responsibilities:input.responsibilities}});
  }
+ async reviseMissionConstraints(missionId:string,input:{commandId:string;expectedRevision:number;constraints:string[];reason:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','constraints','reason']);const {commandId,expectedRevision,...revision}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'revise-mission-constraints',...revision}});
+ }
  async reviseMission(missionId:string,input:{commandId:string;expectedRevision:number;purpose:string;criteria:Mission['criteria']}) {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-mission',purpose:input.purpose,criteria:{version:input.criteria.version,description:input.criteria.description,oracle:input.criteria.oracle}}});
  }

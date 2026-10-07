@@ -66,6 +66,7 @@ export type Command =
   | {type:'attach-work-source';workId:string;documentId:string;version:number;contentSha256:string;reason:string}
   | {type:'capture-document';document:Pick<DocumentVersion,'id'|'version'|'title'|'content'|'source'>}
   | { type:'revise-organization';version:number;reason:string;responsibilities:OrganizationResponsibility[] }
+  | {type:'revise-mission-constraints';constraints:string[];reason:string}
   | { type: 'revise-mission'; purpose: string; criteria: Criteria }
   | { type: 'admit-work'; workId: string; title: string; budget: number; conversationSource?:ConversationSelection; correction?:CorrectionSelection; executionGate?:ExecutionGate }
   | { type: 'revise-budget'; workId: string; limit: number; reason: string }
@@ -204,6 +205,13 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       const revision={version:command.version,reason:command.reason,responsibilities:structuredClone(command.responsibilities),actorId:actor.id};validateOrganizationRevision(revision);
       ensure(revision.version===(state.organizationRevisions?.at(-1)?.version??0)+1,'Organization version must advance by one');
       (state.organizationRevisions??=[]).push(revision);break;
+    }
+    case 'revise-mission-constraints': {
+      role(actor,'owner');ensure(Object.keys(command).length===3&&Object.keys(command).every(k=>['type','constraints','reason'].includes(k)),'Exact Mission constraint fields required');
+      ensure(Array.isArray(command.constraints)&&command.constraints.length<=100&&Object.keys(command.constraints).length===command.constraints.length&&Object.keys(command.constraints).every((key,index)=>key===String(index)),'At most 100 Mission constraints');for(const constraint of command.constraints){text(constraint,'Mission constraint',2000);ensure(constraint.isWellFormed(),'Invalid constraint Unicode');}
+      ensure(Buffer.byteLength(JSON.stringify(command.constraints),'utf8')<=16384,'Mission constraint list exceeds 16384 bytes');text(command.reason,'constraint revision reason',2000);ensure(command.reason.isWellFormed(),'Invalid constraint reason Unicode');
+      ensure(hash(command.constraints)!==hash(state.constraints),'Mission constraints are unchanged');ensure(Number.isSafeInteger(state.version)&&state.version>0&&Number.isSafeInteger(state.version+1),'Mission version cannot advance safely');
+      state.version++;state.constraints=structuredClone(command.constraints);break;
     }
     case 'revise-mission':
       role(actor,'owner'); text(command.purpose,'purpose'); criteriaValid(command.criteria); ensure(command.criteria.version > state.criteria.version, 'Criteria version must advance'); state.version++; state.purpose=command.purpose; state.criteria=structuredClone(command.criteria); break;
