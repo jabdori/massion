@@ -1,3 +1,4 @@
+import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
  * This verifies retained structure and evidence bindings, not historical
@@ -103,12 +104,13 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
+  if(work.runtimeRun?.ownership)equal(record.runtimeOwnership,work.runtimeRun.ownership,'Record exact runtime ownership');else ensure(!Object.hasOwn(record,'runtimeOwnership'),'Legacy Record has runtime ownership');
   if(Object.hasOwn(work,'prerequisites')){equal(record.prerequisites,work.prerequisites,'Record exact prerequisite pins');equal(record.prerequisiteRecords,resolvedPrerequisites(mission,work),'Record prerequisite evidence');}else ensure(!Object.hasOwn(record,'prerequisites')&&!Object.hasOwn(record,'prerequisiteRecords'),'Legacy Record has prerequisites');
   if(Object.hasOwn(work,'sourceDocuments'))equal(record.sourceDocuments,work.sourceDocuments,'Record exact source pins');else ensure(!Object.hasOwn(record,'sourceDocuments'),'legacy Record has source pins');
   if(work.organizationSnapshot)equal(record.organizationSnapshot,work.organizationSnapshot,'Record organization pin');
@@ -130,7 +132,7 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords']);
+    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
@@ -158,7 +160,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings','ownership']);
+    if(Object.hasOwn(run,'ownership'))validateRuntimeOwnership(run.ownership as import('./domain.ts').RuntimeOwnership);
     text(run.id, 'run ID'); text(run.authorizationId, 'run authorization identity'); sha(run.criteriaHash, 'run criteria hash'); sha(run.inputHash, 'run input hash');
     oneOf(run.mode, ['mock-http', 'live'], 'run mode'); integer(run.outputTokenCap, 'output cap');
     if (run.connectionBindings !== undefined) {
@@ -171,6 +174,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     // Owner steering can append instructions after admission. The original
     // inputHash is retained, not recomputed from later mutable instructions.
   }
+  validateRuntimeInterruption(value as Work);
   let recoveryPendingIds: string[] = [];
   if (Object.hasOwn(item, 'runtimeRecovery')) {
     const recovery = object(item.runtimeRecovery, 'owner recovery', ['runId', 'actorId', 'reason', 'pendingEffectIds', 'unknownEffectIds']);
@@ -300,6 +304,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'expire-runtime': {required:['workId','runId','dispatchId','observedAt']},
   'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission': { required: ['purpose', 'criteria'] },
