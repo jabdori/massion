@@ -12,6 +12,7 @@ import type {HttpProviderTransport} from './http-provider.ts';
 import {SelectableTextRuntime} from './selectable-runtime.ts';
 import type {ExecutionAuthorization,ExecutionChoice} from './selectable-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
+import {workAdmissionPreflight,hostBusyPreflight,rejectedRun} from './configured-runtime.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 export const MODEL_PROVIDER_TYPES=[
@@ -43,10 +44,10 @@ export class ConnectionWorkbench implements WorkRuntime {
  private router(){return new SelectableTextRuntime(this.#store,this.catalog(),this.#grants,this.#artifacts);}
  configuration(){return this.router().configuration();}
  availability(mission:Mission){return this.router().availability(mission);}
- preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){return this.router().preflight(snapshot,workId,expectedRevision,choice);}
+ preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime.beginDrain();}
  async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));}
- async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');const key=missionId+'\0'+workId;if(this.#active.has(key))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};const router=this.router();this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice);}finally{this.#active.delete(key);}}
+ async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#draining)throw new DomainError('Local host is draining; no new run is admitted.');const key=missionId+'\0'+workId;if(this.#active.has(key))return {status:'already-started' as const,snapshot:(await this.#store.load(missionId))!,reason:'This Work has an active dispatch.'};if(this.#active.size){const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}const router=this.router();this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice);}finally{this.#active.delete(key);}}
  owns(missionId:string,workId:string,runId:string){return this.#active.get(missionId+'\0'+workId)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(missionId+'\0'+workId)?.interrupt(missionId,workId);}
  private version(){return hash({connections:[...this.#connections.values()].map(c=>c.configHash),profiles:[...this.#profiles.values()].map(v=>hash(v.profile)),grants:this.#grants});}
