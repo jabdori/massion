@@ -64,3 +64,7 @@ Above PR44, retain a separate bounded conversation entity for an exact existing 
 ## Owned host drain follow-up (2026-10-07)
 
 RUN-01/WRK-01 require the headless host to supervise its own shutdown. Before closing normal HTTP service, synchronously fence new local admissions and interrupt only runtime controllers owned by this host. Persist the original run/dispatch/host-bound local shutdown cause and preserve unknown effects, claims and reservations; never infer remote stop, effect success, lease reclaim or replay. Bound service drain and report unresolved shutdown when durable closure or sockets do not settle. Preserve original accepted and historical Work/conversation data; test real normal CLI signals with controlled loopback providers and actual disposable storage before publication.
+
+## Explicit expired-run closure follow-up
+
+Above PR46, retain no-replay admission after crash and provide one owner decision naming the original bounded run ownership and elapsed deadline. Server clock forbids future observations; atomic command identity records owner reason/uncertainty acknowledgment. Share the existing deadline interruption fence while preserving claims, receipts, reservations, cancellation and accepted originals. This closes stranded activation-only runs without inferring worker death, remote stop, retry or restored grants. Scope and preimplementation acceptance: [expired-run](../expired-run.md).
