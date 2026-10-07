@@ -80,3 +80,5 @@ Above PR48, connect owner-declared exact existing fresh Work in bounded order to
 ## Explicit sequence GUI follow-up
 
 Above PR49, give the owner exact private plan controls connected to the existing headless sequence API. Review remains revision/feed/configuration bound; first individual admission receipt is not an outer completion receipt. Preserve unknown/no replay, actual Work cancellation and private drafts without a new durable scheduler/queue/state. [Scope and acceptance](../run-sequence-panel.md).
+
+Owner prerequisite authoring above PR50 uses the existing exact Work pin transition and version-bound acceptance gate through the normal UI. Client review is advisory and private; the server remains authoritative. No new execution authority, scheduler, pin rebinding or automatic continuation is added. See [panel protocol](../work-prerequisite-panel.md).
