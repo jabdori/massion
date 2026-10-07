@@ -51,8 +51,8 @@ export type Command =
   | { type: 'steer'; workId: string; instruction: string }
   | { type: 'save-memory'; memory: Memory }
   | { type: 'retire-memory'; memoryId: string; version: number; reason: string }
-  | { type: 'propose-growth'; proposal: Growth }
-  | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string }
+  | { type: 'propose-growth'; proposal: Growth; candidateMemory?:Memory }
+  | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string; binding?:{baseline:string;candidate:string;baselineHash:string;candidateHash:string} }
   | { type: 'adopt-growth'; growthId: string; baseline?:string; candidate?:string }
   | { type: 'observe-growth'; growthId: string; workId: string; metric: number }
   | { type: 'revert-growth'; growthId: string; baseline?:string; candidate?:string }
@@ -167,9 +167,11 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       memory.effective=false; break;
     }
     case 'propose-growth': {
+      if(command.candidateMemory){role(actor,'representative');ensure(command.candidateMemory.authority==='learned'&&!command.candidateMemory.effective&&`${command.candidateMemory.id}@${command.candidateMemory.version}`===command.proposal.candidate,'Exact inactive learned candidate required');state.memories=apply(state,{type:'save-memory',memory:command.candidateMemory},actor).value.memories;}
       role(actor,'representative'); const g=command.proposal; text(g.id,'growth'); text(g.counterevidence,'counterevidence'); ensure(g.proposer===actor.id&&g.status==='proposed'&&!g.evaluator&&!g.scores&&!g.observation,'Invalid proposal'); ensure(g.target==='memory','Only memory adoption implemented in this slice'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&!m.effective),'Unknown candidate'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Unknown effective baseline'); ensure(!state.growth.some(x=>x.id===g.id),'Growth exists'); state.growth.push(structuredClone(g)); break;
     }
     case 'evaluate-growth': {
+      if(command.binding){const g=growth(),b=command.binding,baseline=state.memories.find(m=>`${m.id}@${m.version}`===g.baseline),candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate);ensure(b.baseline===g.baseline&&b.candidate===g.candidate&&baseline?.scope===state.scope&&baseline.effective&&candidate?.scope===state.scope&&!candidate.effective&&b.baselineHash===memoryVersionHash(baseline)&&b.candidateHash===memoryVersionHash(candidate),'Exact current Growth memory binding required');}
       role(actor,'evaluator'); const g=growth(); ensure(g.status==='proposed'&&g.proposer!==actor.id,'Independent evaluation required'); ensure(finite(command.baseline)&&finite(command.candidate),'Invalid evaluation metrics'); text(command.heldOut,'held-out evidence'); g.evaluator=actor.id; g.scores={baseline:command.baseline,candidate:command.candidate,heldOut:command.heldOut}; g.status='evaluated'; break;
     }
     case 'adopt-growth': {
@@ -187,3 +189,6 @@ export function affectedBy(mission: Mission, id: string, version: number): strin
   while(queue.length) { const item=queue.shift()!; for(const r of mission.relations) if(r.to===item.id&&r.toVersion===item.version&&!seen.has(`${r.from}@${r.fromVersion}`)) { seen.add(`${r.from}@${r.fromVersion}`); queue.push({id:r.from,version:r.fromVersion}); } }
   return [...seen].sort();
 }
+
+/** Effective state changes independently; version contents/provenance remain immutable. */
+export function memoryVersionHash(memory:Memory):string {const {effective,...version}=memory;return hash(version);}

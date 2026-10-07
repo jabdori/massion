@@ -3,6 +3,14 @@
  * a model implementation nor an OS sandbox. No caller-supplied code is run.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import {calculationPlan} from './growth-evaluation.ts';
+import type {OrderCase} from './growth-evaluation.ts';
+import type {Memory} from './domain.ts';
+export async function verifyGrowthCalculation(baseline:Memory,candidate:Memory,cases:OrderCase[]):Promise<void>{
+ const plan=calculationPlan(baseline,candidate,cases);
+ const result=await runOracle(undefined,plan.input,plan.source);
+ if(result.timedOut||result.outputExceeded||result.signal||result.stderr||result.exitCode!==0||JSON.stringify(JSON.parse(result.stdout))!==JSON.stringify(plan.expected))throw new Error('Independent bounded calculation did not confirm the exact policies and input orders');
+}
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';

@@ -62,10 +62,17 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory|memory-retirement|revision|work-budget|growth)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory|memory-retirement|revision|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
+    if(workRoute[2]==='growth-proposals'||workRoute[2]==='growth-evaluation'){
+     identifier(body.growthId,'Growth identifier');
+     if(workRoute[2]==='growth-proposals'){
+      if(!body.candidate||typeof body.candidate!=='object'||Array.isArray(body.candidate))throw new RequestError(400,'Exact candidate memory required');identifier((body.candidate as Record<string,unknown>).id,'Memory identifier');
+      sendCommit(await product.proposeGrowth(missionId,body as Parameters<ProductService['proposeGrowth']>[1]));
+     }else sendCommit(await product.evaluateGrowth(missionId,body as Parameters<ProductService['evaluateGrowth']>[1]));return;
+    }
     if(workRoute[2]==='growth'){
      if(Object.keys(body).some(key=>!['commandId','expectedRevision','growthId','baseline','candidate','action'].includes(key)))throw new RequestError(400,'Only exact owner Growth action fields are accepted');
      identifier(body.growthId,'Growth identifier');
