@@ -3,7 +3,7 @@
  * authorization, provider truth, or the current bytes behind an artifact.
  */
 import { isAbsolute, normalize } from 'node:path';
-import { apply, createMission, hash } from './domain.ts';
+import { apply, createMission, hash, validateOrganizationRevision, pinnedOrganization } from './domain.ts';
 import type { Actor, Artifact, Assignment, Command, Criteria, Effect, Mission, Verdict, Work } from './domain.ts';
 import type { Operation } from './storage.ts';
 
@@ -58,7 +58,8 @@ function artifact(value: unknown): asserts value is Artifact {
   ensure(item.path.endsWith(`/${directory}/${item.sha256}.txt`), 'artifact path does not match identity and hash');
 }
 function assignment(value: unknown): asserts value is Assignment {
-  const item = object(value, 'assignment', ['id', 'actorId', 'role', 'taskId', 'model', 'extensionVersion']);
+  const item = object(value, 'assignment', ['id', 'actorId', 'role', 'taskId', 'model', 'extensionVersion'], ['organizationVersion']);
+  if(Object.hasOwn(item,'organizationVersion'))integer(item.organizationVersion,'assignment organization version');
   for (const key of ['id', 'actorId', 'taskId', 'extensionVersion']) text(item[key], `assignment ${key}`);
   oneOf(item.role, ['executor', 'verifier'], 'assignment role');
   const model = object(item.model, 'model selection', ['provider', 'model', 'configVersion', 'reason', 'evidenceClass'], ['enabled', 'capabilities']);
@@ -101,12 +102,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
+  if(work.organizationSnapshot)equal(record.organizationSnapshot,work.organizationSnapshot,'Record organization pin');
+  else ensure(!Object.hasOwn(record,'organizationSnapshot'),'legacy Record has organization');
   equal(record.criteria, work.criteria, 'Record criteria'); equal(record.artifact, work.artifact, 'Record artifact');
   equal(record.verdict, work.verdict, 'Record verdict'); equal(record.assignments, work.assignments, 'Record assignments');
   equal(record.receipts, work.effects, 'Record receipts'); equal(record.memoryVersions, work.appliedMemoryVersions, 'Record memory pins');
@@ -124,7 +127,8 @@ function checkRecord(work: Work): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record']);
+    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot']);
+  if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
   text(item.id, 'Work ID'); text(item.title, 'Work title'); integer(item.missionVersion, 'Work Mission version'); criteria(item.criteria);
   ensure(item.missionVersion <= mission.version && item.criteria.version <= mission.criteria.version, 'Work references future Mission or criteria');
   oneOf(item.execution, ['queued', 'active', 'waiting', 'blocked', 'cancelled', 'settled'], 'Work execution');
@@ -212,6 +216,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const actorRoles = new Map<string, string>();
   for (const entry of work.assignments) {
+    ensure(entry.organizationVersion===work.organizationSnapshot?.version,'assignment organization pin mismatch');
     ensure(taskIds.has(entry.taskId), 'assignment references absent task');
     ensure(!actorRoles.has(entry.actorId) || actorRoles.get(entry.actorId) === entry.role, 'executor and verifier identities overlap');
     actorRoles.set(entry.actorId, entry.role);
@@ -233,7 +238,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
 }
 
 export function validateMissionLineage(value: unknown): asserts value is Mission {
-  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations']);
+  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations'],['organizationRevisions']);
+  if(Object.hasOwn(item,'organizationRevisions')){const history=array(item.organizationRevisions,'organization revisions');ensure(history.length>0,'empty organization history');history.forEach((entry,index)=>{validateOrganizationRevision(entry as import('./domain.ts').OrganizationRevision);ensure((entry as import('./domain.ts').OrganizationRevision).version===index+1,'organization history gap');});}
   text(item.id, 'Mission ID'); text(item.purpose, 'Mission purpose'); text(item.scope, 'Mission scope'); integer(item.version, 'Mission version'); criteria(item.criteria);
   array(item.constraints, 'Mission constraints').forEach(entry => ensure(typeof entry === 'string' && entry.isWellFormed(), 'invalid constraint'));
   const memories = array(item.memories, 'memories');
@@ -288,6 +294,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate'] },
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
