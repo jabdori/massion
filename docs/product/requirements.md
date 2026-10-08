@@ -223,3 +223,5 @@ Above PR64 `11478ffc`, KNW-01/ADR0001 and issue #4 preserve knowledge exploratio
 Above PR65 `a5bc7642`, MIS-01/ADR0001 and issue #4 retain owner-versioned Mission constraints for future Work while preserving every old Work/Record and execution authority. [Preimplementation scope and acceptance](../architecture/mission-constraint-revisions.md).
 
 [Mission constraint revision bounded verification](../acceptance/mission-constraint-revisions-evidence.md).
+
+Above PR66 `5a3481da`, owner Mission discussion can precede the first Work, then explicitly seed an independently reviewed new Work through existing source/acceptance boundaries. [Preimplementation scope and acceptance](../architecture/mission-conversation-to-work.md).
