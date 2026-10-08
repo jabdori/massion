@@ -1,3 +1,4 @@
+import {validateMemoryConflicts} from './memory-conflicts.ts';
 import {clarificationInput,requireAnswered} from './work-clarification.ts';
 import {conversationSourceInput,validateConversationSources} from './conversation-work.ts';
 import {correctionInput} from './work-correction.ts';
@@ -258,7 +259,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
 }
 
 export function validateMissionLineage(value: unknown): asserts value is Mission {
-  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations'],['organizationRevisions','documents','conversations']);
+  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations'],['organizationRevisions','documents','conversations','memoryConflicts']);
   if(Object.hasOwn(item,'documents')){try{validateDocumentHistory(item.documents);}catch(error){fail(error instanceof Error?error.message:'Invalid document history');}}
   if(Object.hasOwn(item,'organizationRevisions')){const history=array(item.organizationRevisions,'organization revisions');ensure(history.length>0,'empty organization history');history.forEach((entry,index)=>{validateOrganizationRevision(entry as import('./domain.ts').OrganizationRevision);ensure((entry as import('./domain.ts').OrganizationRevision).version===index+1,'organization history gap');});}
   text(item.id, 'Mission ID'); text(item.purpose, 'Mission purpose'); text(item.scope, 'Mission scope'); integer(item.version, 'Mission version'); criteria(item.criteria);
@@ -269,7 +270,7 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
     text(memory.id, 'memory ID'); integer(memory.version, 'memory version'); ensure(memory.scope === item.scope, 'memory scope mismatch');
     oneOf(memory.authority, ['explicit', 'learned'], 'memory authority'); text(memory.content, 'memory content'); text(memory.source, 'memory source'); ensure(typeof memory.effective === 'boolean', 'invalid effective memory flag');
   }
-  const mission = value as Mission;validateConversations(mission);validateConversationSources(mission);
+  const mission = value as Mission;validateConversations(mission);validateConversationSources(mission);validateMemoryConflicts(mission);
   const memoryKeys = new Set(mission.memories.map(memory => `${memory.id}@${memory.version}`)); ensure(memoryKeys.size === memories.length, 'duplicate memory version');
   unique(mission.memories.filter(memory => memory.effective).map(memory => memory.id), 'effective memory ID');
   const works = array(item.works, 'Works'); works.forEach(work => validateWork(work, mission, memoryKeys)); unique(mission.works.map(work => work.id), 'Work ID');
@@ -345,6 +346,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   cancel: { required: ['workId'] },
   steer: { required: ['workId', 'instruction'] },
   'save-memory': { required: ['memory'] },
+  'declare-memory-conflict': { required: ['conflictId','first','second','reason'] },
   'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'], optional:['candidateMemory'] },
   'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding'] },
