@@ -53,10 +53,11 @@ export interface Relation { from: string; to: string; type: 'depends-on' | 'evid
 export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
 export interface ConversationMessage {id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
-export interface Conversation {id:string;workId:string;messages:ConversationMessage[]}
+export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
 export interface Mission { conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
   | {type:'ask-work-question'|'answer-work-question';workId:string;questionId:string;text:string}
+  | {type:'append-mission-message';messageId:string;replyTo:string|null;text:string}
   | {type:'append-work-message';workId:string;messageId:string;replyTo:string|null;text:string}
   | {type:'claim-provider-dispatch';workId:string;effectId:string;claim:ProviderDispatchClaim}
   | {type:'close-expired-runtime';workId:string;runId:string;dispatchId:string;hostSessionId:string;deadlineAt:number;observedAt:number;reason:string;acknowledgeUncertainOutcome:true}
@@ -195,9 +196,9 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
       else {const q=w.questions?.find(q=>q.id===command.questionId);ensure(q&&q.answer===null,'Exact open question required');q.answer={actorId:actor.id,text:command.text};}
       clarificationInput(w);break;
     }
-    case 'append-work-message': {
-      role(actor,'owner');needWork();ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','workId','messageId','replyTo','text'].includes(k)),'Exact owner message fields required');validateConversations(state);
-      let conversation=state.conversations?.find(c=>c.workId===command.workId);if(!conversation){conversation={id:workConversationId(state.id,command.workId),workId:command.workId,messages:[]};(state.conversations??=[]).push(conversation);}
+    case 'append-mission-message': case 'append-work-message': {
+      role(actor,'owner');const workId=command.type==='append-work-message'?command.workId:null;if(command.type==='append-work-message')needWork();const fields=['type','messageId','replyTo','text',...(workId===null?[]:['workId'])];ensure(Object.keys(command).length===fields.length&&Object.keys(command).every(k=>fields.includes(k)),'Exact owner message fields required');validateConversations(state);
+      let conversation=state.conversations?.find(c=>c.workId===workId);if(!conversation){conversation={id:workConversationId(state.id,workId),workId,messages:[]};(state.conversations??=[]).push(conversation);}
       conversation.messages.push({id:command.messageId,ordinal:conversation.messages.length+1,actorId:actor.id,role:'owner',replyTo:command.replyTo,text:command.text});validateConversations(state);break;
     }
     case 'revise-organization': {
