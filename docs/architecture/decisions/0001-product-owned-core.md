@@ -124,3 +124,5 @@ Above PR65 `a5bc7642`, MIS-01/ADR0001 and issue #4 retain owner-versioned Missio
 [Mission constraint revision bounded verification](../../acceptance/mission-constraint-revisions-evidence.md).
 
 Above PR66 `5a3481da`, owner Mission discussion can precede the first Work, then explicitly seed an independently reviewed new Work through existing source/acceptance boundaries. [Preimplementation scope and acceptance](../mission-conversation-to-work.md).
+
+Owner-declared explicit memory conflicts above PR67 bind two immutable version hashes through normal CAS/feed/receipt/journal admission. Only new Work admission checks both exact versions currently applying; retirement changes applicability without rewriting declaration history or older Work/Records. This is an owner statement, never an inferred contradiction, new model policy or existing Work execution block. [Bounded contract](../memory-conflicts.md).

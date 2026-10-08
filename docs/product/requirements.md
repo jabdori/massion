@@ -225,3 +225,5 @@ Above PR65 `a5bc7642`, MIS-01/ADR0001 and issue #4 retain owner-versioned Missio
 [Mission constraint revision bounded verification](../acceptance/mission-constraint-revisions-evidence.md).
 
 Above PR66 `5a3481da`, owner Mission discussion can precede the first Work, then explicitly seed an independently reviewed new Work through existing source/acceptance boundaries. [Preimplementation scope and acceptance](../architecture/mission-conversation-to-work.md).
+
+Above PR67 `3c14d751`, the approved MEM-01 explicit conflict increment retains owner-declared exact same-Mission effective explicit memory version pairs and reasons. Applicable declarations reject only new Work admission; existing retirement excludes one version while retaining history. Existing Work execution/pins/hash/Attempt/Record/unknown effects remain original. Learned memory, semantic detection/priority and existing Work execution blocking are excluded. [Scope and acceptance](../architecture/memory-conflicts.md).
