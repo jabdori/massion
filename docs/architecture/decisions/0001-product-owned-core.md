@@ -92,3 +92,7 @@ The expired-run owner UI follow-up to PR53 exposes the already approved exact lo
 Normal restored-text inspection above PR54 composes the existing explicit relocation reader into normal host startup for product-owned evidence queries. Original descriptors and Record checksums remain immutable; exact inventory and current bytes are validated before serving. Runtime's normal artifact writer remains separate, and no journal import, outbox replay, grants or unknown-effect outcome is created. [Acceptance](../restored-artifact-reader.md).
 
 Restore capacity prevention above PR56 measures the exact normal HTTP RPC envelope and fails closed before schema/artifact mutation when it exceeds the explicit bounded client budget. Offline checking validates retained data without contacting a destination. The budget is not server-capacity discovery or a success guarantee; unknown restores retain identity and evidence and are never automatically replayed. No database/global configuration, new transport or splitting protocol is introduced. [Scope and evidence](../../acceptance/restore-preflight-evidence.md).
+
+## Explicit owner conversation-to-Work draft
+
+Above PR57, adopt one owner-selected saved message as provenance for a separately reviewed new Work. Discussion remains unchanged and does not become a runtime grant. The edited task, current admission pins and immutable source message are distinct; existing CAS/receipt/no-replay and separate explicit Run govern all effects. [Design and preimplementation acceptance](../conversation-work-draft.md).

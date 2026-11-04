@@ -193,3 +193,7 @@ Above PR53, RUN-01/WRK-01/GOV-01 and issue #4's interruption inspection gain a p
 ### Normal inspection after clean text restore
 
 Issue #4/REC-01/OPS-01 audit above PR54 found that backup CLI/custom resolver and injected HTTP tests could restore/read exact accepted artifacts, while normal server startup could not resolve immutable old paths. The [explicit normal-host read binding](../architecture/restored-artifact-reader.md) closes this one core path: owner-selected private bundle/root, exact inventory/byte validation, existing accepted/rejected query only, original checksum/journal/held outbox unchanged, zero restored grants/effect replay. Current bounded evidence and unresolved acceptance are mapped in [first-slice audit](../acceptance/first-slice.md#current-bounded-path-audit-above-pr54). This does not complete the wider partial rows or authorize unknown recovery/live execution.
+
+## Selected next bounded increment: owner conversation-to-Work draft
+
+COL-01/SUR-01/WRK-01 and issue #4 owner-authored responsibility: explicitly select one saved owner message, inspect literal provenance, edit a private new Work title/budget and deliberately save through existing admission. This adopts the previously deferred bounded conversation-to-Work choice. It does not close model conversation, general interpretation, scheduler or quality gates. [Preimplementation design/acceptance](../architecture/conversation-work-draft.md).
