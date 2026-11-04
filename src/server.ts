@@ -6,6 +6,7 @@ import type {Store} from './storage.ts';
 import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from './storage.ts';
 import type {Mission} from './domain.ts';
 import {runGrowthScenario} from './scenario.ts';
+import type {ExecutionChoice} from './selectable-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
 import {ProviderRegistry} from './providers.ts';
 import {ProductService} from './product.ts';
@@ -35,7 +36,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    const url=new URL(req.url??'/',`http://${expected}`);
    if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
-   if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output'])});return;}
+   if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
    if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');send(200,await store.readEvents(after,limit));return;}
    if(req.method==='POST'&&url.pathname==='/missions'){
     const body=await readBody();identifier(body.id,'Mission identifier');identifier(body.commandId,'command identity');
@@ -43,13 +44,14 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
-    if(workRoute[2]==='run'){identifier(body.workId,'Work identifier');if(!product.runtime){send(503,{error:'No explicitly configured Work runtime. No provider request was made.',outcome:'rejected'});return;}const result=await product.run(missionId,body.workId,body.commandId,Number(body.expectedRevision));send(result.status==='conflict'?409:200,result);return;}
+    if(workRoute[2]==='preflight'){identifier(body.workId,'Work identifier');const result=await product.preflight(missionId,body.workId,Number(body.expectedRevision),body.selection as ExecutionChoice);if(!result)throw new RequestError(404,'Unknown Mission or Work');send(result.diagnostics.some(d=>d.code==='revision_conflict')?409:200,result);return;}
+    if(workRoute[2]==='run'){identifier(body.workId,'Work identifier');if(!product.runtime){send(503,{error:'No explicitly configured Work runtime. No provider request was made.',outcome:'rejected'});return;}const result=await product.run(missionId,body.workId,body.commandId,Number(body.expectedRevision),body.selection as ExecutionChoice);send(result.status==='conflict'?409:200,result);return;}
     if(workRoute[2]==='work'){identifier(body.workId,'Work identifier');sendCommit(await product.admit(missionId,body as Parameters<ProductService['admit']>[1]),true);return;}
-    if(!body.command||typeof body.command!=='object'||!['cancel','steer'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel and steer are exposed');
+    if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer and quarantine-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
    if(req.method==='GET'&&url.pathname.startsWith('/missions/')){const id=decodeIdentifier(url.pathname.slice(10));const state=await store.load(id);send(state?200:404,state??{error:'Unknown Mission'});return;}

@@ -1,10 +1,11 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {Application} from './application.ts';
 import {hash,DomainError} from './domain.ts';
-import type {Mission,Work,Command,Actor,ModelSelection,Artifact} from './domain.ts';
+import type {Mission,Work,Command,Actor,ModelSelection,Artifact,RuntimeConnectionBindings} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome} from './providers.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
+import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
 export const TEXT_REVIEW_ORACLE='bounded-text-review/v1';
 export interface ProviderIdentity {provider:string;model:string;configVersion:string}
 export interface RuntimeAuthorization {
@@ -13,7 +14,7 @@ export interface RuntimeAuthorization {
 }
 export interface RuntimeRole {identity:string;adapter:ProviderAdapter}
 export interface ConfiguredRuntimeOptions {
- enabled?:boolean; authorization?:RuntimeAuthorization; outputTokenCap:number;
+ enabled?:boolean; authorization?:RuntimeAuthorization; outputTokenCap:number; connectionBindings?:RuntimeConnectionBindings;
  executor:RuntimeRole; verifier:RuntimeRole; artifacts:TextArtifactStore;
 }
 export interface RuntimeResult {status:'settled'|'blocked'|'cancelled'|'already-started'|'conflict';snapshot:Snapshot<Mission>;reason?:string}
@@ -23,8 +24,30 @@ export class RunUnsettledError extends Error {
 }
 export interface WorkRuntime {
  availability(mission:Mission):{ready:boolean;reason:string};
- run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>;
+ run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>;
+ configuration?():unknown;
+ preflight?(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight;
  interrupt(missionId:string,workId:string):void;
+}
+/** Pure admission checks shared by preflight and dispatch. A check never reserves a run or budget. */
+export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,outputTokenCap?:number):SelectionPreflight {
+ const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new DomainError('Unknown Work');
+ const diagnostics:SelectionPreflight['diagnostics']=[];const add=(code:string,message:string)=>diagnostics.push({code,message});
+ if(work.runtimeRun||work.runtimeRecovery||work.effects.length||work.assignments.length||work.artifact)add('work_already_started','A run or execution evidence was already admitted. Inspect durable state; this Work cannot be replayed.');
+ if(work.execution==='cancelled')add('work_cancelled','This Work is cancelled and cannot admit a run.');
+ if(snapshot.revision!==expectedRevision||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)add('revision_conflict','Work changed since this selection was checked. Refresh the Mission and check again.');
+ if(!work.missionSnapshot)add('input_snapshot_missing','This Work lacks a pinned Mission input snapshot. Explicit rebind or new Work is required.');
+ if(work.acceptance!=='pending'||!['queued','blocked','cancelled','waiting'].includes(work.execution))add('work_not_fresh','Only fresh, unstarted Work can admit this bounded runtime.');
+ if(work.blocker&&!['provider_unavailable','runtime_unavailable'].includes(work.blocker.code))add('work_blocked',work.blocker.detail);
+ if(work.tasks.length!==1||work.tasks[0]?.id!==`${workId}:root`||work.tasks[0]?.parentId!==null||work.tasks[0]?.status!=='queued')add('work_not_fresh','This Work already has task progress. The bounded runtime cannot restart it.');
+ if(outputTokenCap!==undefined&&work.budget.limit-work.budget.reserved<outputTokenCap*2)add('budget_exceeded','Budget must reserve both executor and independent verifier output caps.');
+ return {missionId:snapshot.value.id,workId,revision:snapshot.revision,expectedRevision,ready:diagnostics.length===0,diagnostics};
+}
+export function rejectedRun(preflight:SelectionPreflight,snapshot:Snapshot<Mission>):RuntimeResult {
+ // Already admitted runs retain their no-replay classification, including stale retries or quarantine.
+ const has=(code:string)=>preflight.diagnostics.some(d=>d.code===code);
+ const status=has('work_already_started')?'already-started':has('work_cancelled')?'cancelled':has('revision_conflict')?'conflict':'blocked';
+ return {status,snapshot,reason:preflight.diagnostics.map(d=>d.message).join(' ')};
 }
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const same=(a:ProviderIdentity,b:ProviderDescriptor)=>a.provider===b.provider&&a.model===b.model&&a.configVersion===b.configVersion;
@@ -37,7 +60,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
   if(!Number.isSafeInteger(options.outputTokenCap)||options.outputTokenCap<1)throw new Error('Invalid output-token cap');
   for(const role of [options.executor,options.verifier])if(!/^[a-zA-Z0-9:_-]{1,128}$/.test(role.identity)||['local-owner','runtime-representative'].includes(role.identity))throw new Error('Invalid or reserved runtime identity');
-  this.options={...options,authorization:options.authorization?structuredClone(options.authorization):undefined,executor:{...options.executor},verifier:{...options.verifier}};
+  this.options={...options,connectionBindings:options.connectionBindings?structuredClone(options.connectionBindings):undefined,authorization:options.authorization?structuredClone(options.authorization):undefined,executor:{...options.executor},verifier:{...options.verifier}};
   const actors:Actor[]=[{id:'local-owner',roles:['owner']},{id:'runtime-representative',roles:['representative']},{id:options.executor.identity,roles:['executor']},{id:options.verifier.identity,roles:['verifier']}];
   this.app=new Application(store,actors);
  }
@@ -51,6 +74,12 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(g.mode==='mock-http'&&[executor,verifier].some(r=>r.adapter.descriptor.evidenceClass!=='fixture'))return {ready:false,reason:'Mock authorization cannot permit a live-provider route.'};
   if(!['live','mock-http'].includes(g.mode)||mission.criteria.oracle!==TEXT_REVIEW_ORACLE)return {ready:false,reason:'This runtime supports only explicitly selected bounded-text-review/v1 criteria.'};
   return {ready:true,reason:'Configured bounded text execution and independently assigned review; no arbitrary code execution.'};
+ }
+ preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number):SelectionPreflight {
+  const result=workAdmissionPreflight(snapshot,workId,expectedRevision,this.options.outputTokenCap);
+  const work=snapshot.value.works.find(w=>w.id===workId)!;const available=this.availability({...snapshot.value,criteria:work.criteria});
+  if(!available.ready)result.diagnostics.push({code:'runtime_unavailable',message:available.reason});
+  return {...result,ready:result.diagnostics.length===0};
  }
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.abort();}
  private async snapshot(missionId:string){const s=await this.app.store.load(missionId);if(!s)throw new DomainError('Unknown Mission');return s;}
@@ -76,13 +105,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   return outcome;
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{
-  const initial=await this.current(missionId,workId);const available=this.availability({...initial.snapshot.value,criteria:initial.work.criteria});
-  if(!available.ready)return {status:'blocked',snapshot:initial.snapshot,reason:available.reason};
-  if(!initial.work.missionSnapshot)return {status:'blocked',snapshot:initial.snapshot,reason:'This Work lacks a pinned Mission input snapshot. Explicit rebind or new Work is required.'};
-  if(initial.work.runtimeRun)return {status:'already-started',snapshot:initial.snapshot,reason:'A run was already admitted. It is never restarted by resubmitting this endpoint.'};
-  if(initial.snapshot.revision!==expectedRevision)return {status:'conflict',snapshot:initial.snapshot};
-  if(initial.work.budget.limit-initial.work.budget.reserved<this.options.outputTokenCap*2)return {status:'blocked',snapshot:initial.snapshot,reason:'Budget must reserve both executor and independent verifier output caps.'};
-  const g=this.options.authorization!;const activation=await this.app.dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:hash({mission:initial.work.missionSnapshot,title:initial.work.title,instructions:initial.work.instructions??[],memoryVersions:initial.work.appliedMemoryVersions}),mode:g.mode,outputTokenCap:this.options.outputTokenCap}}});
+  const initial=await this.current(missionId,workId);const preflight=this.preflight(initial.snapshot,workId,expectedRevision);
+  if(!preflight.ready)return rejectedRun(preflight,initial.snapshot);
+  const g=this.options.authorization!;const activation=await this.app.dispatch({missionId,commandId:runId,expectedRevision,actorId:'local-owner',command:{type:'activate-runtime',workId,run:{id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:hash({mission:initial.work.missionSnapshot,title:initial.work.title,instructions:initial.work.instructions??[],memoryVersions:initial.work.appliedMemoryVersions}),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});
   if(activation.status==='conflict')return {status:'conflict',snapshot:await this.snapshot(missionId)};
   if(activation.status==='replayed')return {status:'already-started',snapshot:await this.snapshot(missionId)};
   const controller=new AbortController();this.controllers.set(`${missionId}\0${workId}`,controller);
