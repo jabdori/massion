@@ -66,5 +66,6 @@ export class SelectableTextRuntime implements WorkRuntime {
   this.#active.set(key,prepared.runtime);
   try{return await prepared.runtime.run(missionId,workId,runId,expectedRevision);}finally{this.#active.delete(key);}
  }
+ owns(missionId:string,workId:string,runId:string){return this.#active.get(`${missionId}\0${workId}`)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(`${missionId}\0${workId}`)?.interrupt(missionId,workId);}
 }

@@ -1,3 +1,4 @@
+import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
@@ -77,6 +78,7 @@ export class ProductService {
  async revertGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string}) {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revert-growth',growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}});
  }
+ async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<SelectionPreflight|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
