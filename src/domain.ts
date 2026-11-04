@@ -1,3 +1,4 @@
+import {validateConversations,workConversationId} from './work-conversation.ts';
 import {validateProviderDispatch,validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership} from './runtime-lifetime.ts';
 import {prerequisitePins,bindPrerequisiteRecords} from './work-prerequisites.ts';
@@ -42,8 +43,11 @@ export interface Growth { id: string; proposer: string; target: 'memory' | 'prom
 export interface Relation { from: string; to: string; type: 'depends-on' | 'evidenced-by' | 'contains'; fromVersion: number; toVersion: number; provenance: string; inferred: boolean }
 export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
-export interface Mission { documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
+export interface ConversationMessage {id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
+export interface Conversation {id:string;workId:string;messages:ConversationMessage[]}
+export interface Mission { conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | {type:'append-work-message';workId:string;messageId:string;replyTo:string|null;text:string}
   | {type:'claim-provider-dispatch';workId:string;effectId:string;claim:ProviderDispatchClaim}
   | {type:'expire-runtime';workId:string;runId:string;dispatchId:string;observedAt:number}
   | {type:'attach-work-prerequisite';workId:string;prerequisiteId:string;criteriaHash:string;inputHash:string;reason:string}
@@ -170,6 +174,11 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
   const growth = (): Growth => { const g = state.growth.find(g => 'growthId' in command && g.id === command.growthId); ensure(g, 'Unknown growth'); return g; };
   if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
   switch (command.type) {
+    case 'append-work-message': {
+      role(actor,'owner');needWork();ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','workId','messageId','replyTo','text'].includes(k)),'Exact owner message fields required');validateConversations(state);
+      let conversation=state.conversations?.find(c=>c.workId===command.workId);if(!conversation){conversation={id:workConversationId(state.id,command.workId),workId:command.workId,messages:[]};(state.conversations??=[]).push(conversation);}
+      conversation.messages.push({id:command.messageId,ordinal:conversation.messages.length+1,actorId:actor.id,role:'owner',replyTo:command.replyTo,text:command.text});validateConversations(state);break;
+    }
     case 'revise-organization': {
       role(actor,'owner');ensure(Object.keys(command).length===4&&Object.keys(command).every(key=>['type','version','reason','responsibilities'].includes(key)),'Invalid organization command fields');
       const revision={version:command.version,reason:command.reason,responsibilities:structuredClone(command.responsibilities),actorId:actor.id};validateOrganizationRevision(revision);
