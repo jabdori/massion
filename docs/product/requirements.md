@@ -213,3 +213,7 @@ Above PR61 `5d39dbdd`, normal fresh-client continuation can discover stored Miss
 Above PR62 `b89a3868`, an explicitly read-only unresolved Work inbox connects the preserved global inbox purpose to stored owner questions, execution blockers, failed/stale Assurance and unknown/closed pending outcomes across Missions. Current evidence and owner decisions remain in the existing fresh Load/Work controls; no list becomes a grant or resolved receipt. [Preimplementation scope and acceptance](../architecture/unresolved-work-inbox.md). Full WRK-01/GOV-01/SUR-01 and issue #4 remain partial.
 
 [Unresolved Work inbox bounded verification](../acceptance/unresolved-work-inbox-evidence.md).
+
+Above PR63 `a8455f4d`, REC-01/KNW-01/WRK-01 and issue #4 connect exact accepted text to owner-reviewed retained document source and future Work input through existing contracts. No automatic copy, verified relation or new execution authority. [Preimplementation scope and acceptance](../architecture/accepted-result-source-draft.md).
+
+[Accepted result source bounded verification](../acceptance/accepted-result-source-evidence.md).
