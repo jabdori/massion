@@ -8,6 +8,7 @@ This increment replaces the default fixture-only screen with user-authored Missi
 - `POST /missions/:id/work` requires expected revision and a Work identity. It persists the provider/runtime gate with the Work.
 - `POST /missions/:id/commands` exposes only owner cancellation and steering. It cannot supply assignments, effect receipts, verification verdicts or accepted Records.
 - `GET /missions/:id` reads the authoritative snapshot.
+- `GET /missions/:id/impact?entity=<encoded ID>&version=N` reads exact-version inverse relation impact and original provenance from one SurrealDB snapshot/feed boundary when the host enables the reader. The normal CLI enables it; other hosts return explicit unavailability. This adds no Relation mutation or automatic invalidation. See [bounded query evidence](../acceptance/relation-impact-evidence.md).
 - `GET /providers` distinguishes configured descriptors from a usable selection.
 - `GET /events?after=N&limit=L` provides bounded durable operation batches with monotonic cursors. Replay, rejected revision and rolled-back transactions do not emit another committed batch.
 

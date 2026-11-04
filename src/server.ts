@@ -15,12 +15,14 @@ import {ProviderRegistry} from './providers.ts';
 import {ProductService} from './product.ts';
 import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
+import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
+import type {RelationImpactReader} from './relation-impact.ts';
 class RequestError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} }
 function identifier(value:unknown,name:string):asserts value is string {if(typeof value!=='string'||!(/^[a-zA-Z0-9:_-]{1,128}$/).test(value))throw new RequestError(400,`Invalid ${name}`);}
 
 function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench}={}) {
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader}={}) {
  let running=false;const product=new ProductService(store,options.providers,options.connections??options.runtime);
  const server=createServer(async(req,res)=>{
   let mutationFeed='';
@@ -66,6 +68,14 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer and quarantine-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
+   const impactRoute=/^\/missions\/([^/]+)\/impact$/.exec(url.pathname);
+   if(req.method==='GET'&&impactRoute){
+    const id=decodeIdentifier(impactRoute[1]!),entity=url.searchParams.get('entity')??'',version=Number(url.searchParams.get('version'));
+    try{validateImpactInput(id,entity,version);}catch{throw new RequestError(400,'A nonempty entity and positive safe version are required');}
+    if(!options.knowledge)throw new RequestError(503,'Relation impact queries are not enabled by this host');
+    let impact;try{impact=await options.knowledge.readImpact(id,entity,version);}catch(error){if(error instanceof RelationImpactLimitError)throw new RequestError(422,error.message);throw error;}
+    send(impact?200:404,impact??{error:'Unknown Mission'});return;
+   }
    if(req.method==='GET'&&url.pathname.startsWith('/missions/')){const id=decodeIdentifier(url.pathname.slice(10));const state=await store.load(id);send(state?200:404,state??{error:'Unknown Mission'});return;}
    if(req.method==='POST'&&url.pathname==='/fixture-run'){
     const body=await readBody();
@@ -88,7 +98,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const store=new SurrealStore<Mission>(transport);const workspaceRoot=resolve('.runtime/workspaces');const artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
- const server=createWorkbench(store,workspaceRoot,{connections});
+ const server=createWorkbench(store,workspaceRoot,{connections,knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{server.close(()=>process.exit(0));});
 }
