@@ -290,6 +290,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate'] },
+  'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
   'activate-runtime': { required: ['workId', 'run'] },
