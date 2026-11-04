@@ -1,3 +1,4 @@
+import {declareMemoryExpiry,requireUnexpiredNewWork,requiresMemoryTime} from './memory-expiry.ts';
 import {declareMemoryConflict,requireUnconflictedNewWork} from './memory-conflicts.ts';
 import {clarificationInput,questionText,requireAnswered} from './work-clarification.ts';
 import type {WorkQuestion} from './work-clarification.ts';
@@ -55,8 +56,9 @@ export interface DocumentVersion {id:string;version:number;title:string;content:
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
 export interface ConversationMessage {id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
-export interface Mission { memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
+export interface Mission { memoryExpiries?:import('./memory-expiry.ts').MemoryExpiry[]; memoryTimeWatermark?:number; memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | {type:'declare-memory-expiry';expiryId:string;memory:import('./memory-conflicts.ts').MemoryConflictReference;deadline:string;reason:string}
   | {type:'declare-memory-conflict';conflictId:string;first:import('./memory-conflicts.ts').MemoryConflictReference;second:import('./memory-conflicts.ts').MemoryConflictReference;reason:string}
   | {type:'ask-work-question'|'answer-work-question';workId:string;questionId:string;text:string}
   | {type:'append-mission-message';messageId:string;replyTo:string|null;text:string}
@@ -178,8 +180,8 @@ export function pinnedWorkSources(mission:Mission,work:Work):WorkSource[]|undefi
 export function freshSourceWork(w:Work):boolean {
  return w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution)&&!w.runtimeRun&&!w.runtimeRecovery&&!w.effects.length&&!w.assignments.length&&!w.artifact&&!w.verdict&&!w.record&&w.attempts.length===1&&w.attempts[0]?.status==='queued'&&w.tasks.length===1&&w.tasks[0]?.status==='queued'&&!w.tasks[0]?.result;
 }
-export function apply(current: Mission, command: Command, actor: Actor): { value: Mission; events: unknown[] } {
-  text(actor.id, 'actor');
+export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation): { value: Mission; events: unknown[] } {
+  text(actor.id, 'actor');ensure(requiresMemoryTime(current,command.type)||time===undefined,'Unexpected expiry clock context');
   const state = structuredClone(current);
   const work = 'workId' in command ? state.works.find(w => w.id === command.workId) : undefined;
   if ('workId' in command && command.type !== 'admit-work' && command.type !== 'observe-growth') ensure(work, 'Unknown work');
@@ -218,11 +220,14 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     }
     case 'revise-mission':
       role(actor,'owner'); text(command.purpose,'purpose'); criteriaValid(command.criteria); ensure(command.criteria.version > state.criteria.version, 'Criteria version must advance'); state.version++; state.purpose=command.purpose; state.criteria=structuredClone(command.criteria); break;
+    case 'declare-memory-expiry': {
+      role(actor,'owner');ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','expiryId','memory','deadline','reason'].includes(k)),'Exact memory expiry command fields required');const {type,...declaration}=command;declareMemoryExpiry(state,declaration,actor.id,time);break;
+    }
     case 'declare-memory-conflict': {
       role(actor,'owner');ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','conflictId','first','second','reason'].includes(k)),'Exact memory conflict command fields required');const {type,...declaration}=command;declareMemoryConflict(state,declaration,actor.id);break;
     }
     case 'admit-work': {
-      requireUnconflictedNewWork(state);
+      requireUnconflictedNewWork(state);if(requiresMemoryTime(state,command.type))requireUnexpiredNewWork(state,time);
       role(actor,'owner','representative'); text(command.workId,'work id'); text(command.title,'title'); ensure(!work,'Work already exists'); ensure(finite(command.budget),'Invalid budget');
       const conversationSource=Object.hasOwn(command,'conversationSource')?(role(actor,'owner'),captureConversationSource(state,command.conversationSource!,actor.id)):undefined;ensure(!(conversationSource&&command.correction),'Choose one source admission purpose');
       const correction=Object.hasOwn(command,'correction')?(role(actor,'owner'),captureCorrection(state,command.correction!,actor.id)):undefined;if(correction)ensure(Number.isSafeInteger(command.budget)&&command.budget>0,'Correction needs a positive whole output budget');
@@ -350,7 +355,7 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     case 'relate': { role(actor,'representative','verifier'); const r=command.relation; text(r.from,'relation source'); text(r.to,'relation target'); text(r.provenance,'provenance'); ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type'); ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions'); state.relations.push(structuredClone(r)); break; }
     default: throw new DomainError('Unknown command');
   }
-  return { value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command)}] };
+  return { value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),...(requiresMemoryTime(current,command.type)?{time:structuredClone(time)}:{})}] };
 }
 export function affectedBy(mission: Mission, id: string, version: number): string[] {
   const seen=new Set<string>(); const queue=[{id,version}];
