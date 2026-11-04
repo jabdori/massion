@@ -6,7 +6,7 @@ export interface CredentialRequest {secretRef:string;profileId:string;endpoint:s
 /** Caller-owned, per-request resolver. Never reads process environment or credential files. */
 export type CredentialResolver=(request:CredentialRequest)=>Promise<string>;
 export function chatProfileFactory(options:{mode:'https'|'local-http-mock';transport:HttpProviderTransport;resolveCredential?:CredentialResolver}):ModelAdapterFactory{
- const config=(p:Readonly<ModelConnectionProfile>,transport:HttpProviderTransport)=>({provider:p.providerKind,model:p.model,configVersion:p.revision,endpoint:p.endpoint,enabled:p.enabled,transportMode:options.mode,bounds:p.limits,authorization:{provider:p.providerKind,model:p.model,configVersion:p.revision,endpoint:p.endpoint,maxInputBytes:p.limits.maxInputBytes,maxOutputTokens:p.limits.maxOutputTokens},transport});
+ const config=(p:Readonly<ModelConnectionProfile>,transport:HttpProviderTransport)=>({provider:p.providerKind,model:p.model,configVersion:p.revision,endpoint:p.endpoint,enabled:p.enabled,transportMode:options.mode,bounds:p.limits,authorization:{provider:p.providerKind,model:p.model,configVersion:p.revision,endpoint:p.endpoint,maxInputBytes:p.limits.maxInputBytes,maxOutputTokens:p.limits.maxOutputTokens},transport,dialect:p.providerKind==='zai'?'zai' as const:'openai' as const});
  return {
   protocol:'openai-chat-completions/v1',authMethods:options.mode==='local-http-mock'?['none']:['bearer'],capabilities:['text-output'],evidenceClass:options.mode==='local-http-mock'?'fixture':'real-provider',
   validate(p){const errors:ConnectionDiagnostic[]=[];

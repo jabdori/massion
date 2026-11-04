@@ -16,7 +16,14 @@ the remote Mission/Work domain and adds no correction decision or consumption AP
 | OpenRouter API | Chat Completions | bearer via opaque ref/resolver | GET /api/v1/models |
 | Anthropic API | Native Messages | x-api-key and anthropic-version | GET /v1/models |
 | Gemini Developer API | Native generateContent | x-goog-api-key | GET /v1beta/models |
+| Z.ai GLM Coding Plan API | Chat Completions, `zai` request dialect | bearer via opaque ref/resolver | GET models under the fixed Coding Plan base |
 | Custom API | Chat Completions contract | bearer; no auth only in explicit local fixture mode | GET models under chosen canonical base URL |
+
+The Z.ai preset pins `https://api.z.ai/api/coding/paas/v4/`. Observed on 2026-11-04 with an owner Coding Plan key, Z.ai ignored
+`max_completion_tokens` (a cap of 16 produced 1,042 completion tokens) and counted reasoning tokens toward `max_tokens`.
+Its request dialect therefore sends `max_tokens` with `reasoning_effort: "low"` and omits `store`; the response keeps the
+same strict parser, which the observed shape satisfies (`object`, exact model, consistent usage). Usage above the cap
+remains an unknown outcome. Coding Plan terms of use are the owner's responsibility; the general `paas/v4` base is not preset.
 
 API presets supply canonical official base URLs. Custom endpoint support is one
 compatible protocol, not a claim that every named service supports it. Native

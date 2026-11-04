@@ -20,6 +20,7 @@ export const MODEL_PROVIDER_TYPES=[
  {id:'openrouter',label:'OpenRouter API',protocol:'openai-chat-completions/v1',baseUrl:'https://openrouter.ai/api/v1/',auth:'bearer',discovery:'models'},
  {id:'anthropic',label:'Anthropic API',protocol:'anthropic-messages/v1',baseUrl:'https://api.anthropic.com/v1/',auth:'anthropic-api-key',discovery:'models'},
  {id:'gemini',label:'Gemini Developer API',protocol:'gemini-generate-content/v1',baseUrl:'https://generativelanguage.googleapis.com/v1beta/',auth:'google-api-key',discovery:'models'},
+ {id:'zai',label:'Z.ai GLM Coding Plan API',protocol:'openai-chat-completions/v1',baseUrl:'https://api.z.ai/api/coding/paas/v4/',auth:'bearer',discovery:'models'},
  {id:'compatible',label:'Custom Chat Completions API',protocol:'openai-chat-completions/v1',baseUrl:'',auth:'bearer',discovery:'models'}
 ] as const;
 export type ProviderType=typeof MODEL_PROVIDER_TYPES[number]['id'];
