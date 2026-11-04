@@ -23,3 +23,15 @@ test('configured provider is not executed before runtime and assurance authoriza
  await service.create(input,'create');const result=await service.admit(input.id,{commandId:'admit',expectedRevision:1,workId:'work',title:'Task',budget:1});assert.notEqual(result.status,'conflict');if(result.status==='conflict')return;assert.equal(result.value.works[0]?.blocker?.code,'runtime_unavailable');assert.equal(called,false);
  await assert.rejects(service.intervene(input.id,{commandId:'forge',expectedRevision:2,command:{type:'accept',workId:'work',recordId:'r'}}),/Only cancel, steer and quarantine-runtime/);
 });
+
+test('owner intervention interrupts only the originally submitted Work after asynchronous admission',async()=>{
+ const store=new InMemoryStore<Mission>(),interrupts:string[]=[];
+ const runtime={availability:()=>({ready:false,reason:'No execution'}),run:async()=>{throw new Error('No invocation');},interrupt:(missionId:string,workId:string)=>{interrupts.push(missionId+'/'+workId);}};
+ const service=new ProductService(store,undefined,runtime);await service.create(input,'create');
+ for(const [i,workId] of ['a','b'].entries())await service.admit(input.id,{commandId:'admit-'+workId,expectedRevision:i+1,workId,title:workId,budget:0});
+ const original={commandId:'steer-a',expectedRevision:3,command:{type:'steer' as const,workId:'a',instruction:'Original instruction'}},submitted=structuredClone(original);
+ const lookup=store.lookupOperation.bind(store);let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),started=new Promise<void>(r=>entered=r);let first=true;
+ store.lookupOperation=async identity=>{if(first){first=false;entered();await held;}return lookup(identity);};
+ const pending=service.intervene(input.id,submitted);await started;submitted.command.workId='b';submitted.command.instruction='Changed';release();await pending;store.lookupOperation=lookup;
+ assert.deepEqual(interrupts,[input.id+'/a']);const snapshot=(await store.load(input.id))!;assert.deepEqual(snapshot.value.works[0]!.instructions,[{actorId:'local-owner',text:'Original instruction'}]);assert.equal(snapshot.value.works[1]!.instructions,undefined);
+});

@@ -30,3 +30,9 @@ test('semantic duplicate ignores JSON property insertion order',async()=>{
  const second=await a.dispatch({...admit,command:{budget:0,title:'First work',workId:'a',type:'admit-work'}});
  assert.equal(second.status,'replayed');
 });
+
+test('identical command committed between operation lookup and snapshot read replays its original outcome',async()=>{
+ const a=await app(),lookup=a.store.lookupOperation.bind(a.store);let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);let first=true;
+ a.store.lookupOperation=async identity=>{const result=await lookup(identity);if(first){first=false;entered();await held;}return result;};
+ const lagging=a.dispatch(admit);await started;assert.equal((await a.dispatch(admit)).status,'committed');const before=(a.store as InMemoryStore<Mission>).inspect();release();const result=await lagging;assert.equal(result.status,'replayed');assert.equal(result.revision,2);assert.deepEqual((a.store as InMemoryStore<Mission>).inspect(),before);
+});

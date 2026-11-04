@@ -37,6 +37,7 @@ export class ProductService {
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');return this.runtime.run(missionId,workId,runId,expectedRevision,choice);}
  async intervene(missionId:string,input:{commandId:string;expectedRevision:number;command:Command}) {
+  input=structuredClone(input);
   if(!['cancel','steer','quarantine-runtime'].includes(input.command?.type))throw new Error('Only cancel, steer and quarantine-runtime are exposed as owner interventions');
   const result=await this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:input.command});
   if(result.status!=='conflict'&&'workId' in input.command)this.runtime?.interrupt(missionId,input.command.workId);return result;
