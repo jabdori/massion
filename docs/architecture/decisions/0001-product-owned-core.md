@@ -60,3 +60,7 @@ Above PR43, add an explicit one-shot claim between durable provider effect inten
 ## Durable owner Work conversation follow-up (2026-10-07)
 
 Above PR44, retain a separate bounded conversation entity for an exact existing Work. Owner-authored messages and explicit earlier same-thread replies append through the normal application CAS/idempotency boundary and durable feed. They are conversation provenance, not automatic task inputs, grants, effect receipts, runtime recovery decisions or accepted Record data. Clients can share original messages across host lifetime while retaining private reviewed drafts. This is an owner discussion foundation; model/Representative answers, general questions, authentication and conversational autonomy require separate acceptance.
+
+## Owned host drain follow-up (2026-10-07)
+
+RUN-01/WRK-01 require the headless host to supervise its own shutdown. Before closing normal HTTP service, synchronously fence new local admissions and interrupt only runtime controllers owned by this host. Persist the original run/dispatch/host-bound local shutdown cause and preserve unknown effects, claims and reservations; never infer remote stop, effect success, lease reclaim or replay. Bound service drain and report unresolved shutdown when durable closure or sockets do not settle. Preserve original accepted and historical Work/conversation data; test real normal CLI signals with controlled loopback providers and actual disposable storage before publication.
