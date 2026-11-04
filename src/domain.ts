@@ -59,6 +59,7 @@ export type Command =
   | { type: 'adopt-growth'; growthId: string; baseline?:string; candidate?:string }
   | { type: 'observe-growth'; growthId: string; workId: string; metric: number }
   | { type: 'revert-growth'; growthId: string; baseline?:string; candidate?:string }
+  | { type:'record-relation';relation:Omit<Relation,'inferred'> }
   | { type: 'relate'; relation: Relation };
 
 export class DomainError extends Error {
@@ -213,6 +214,13 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     }
     case 'observe-growth': { role(actor,'evaluator'); const g=growth(); const w=state.works.find(w=>w.id===command.workId); ensure(g.status==='adopted'&&w?.appliedMemoryVersions.includes(g.candidate)&&w.acceptance==='accepted','Accepted later work under candidate required'); ensure(finite(command.metric),'Invalid observation'); g.observation={workId:command.workId,metric:command.metric}; break; }
     case 'revert-growth': { role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='adopted'&&g.previousEffective,'No adoption to revert'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&m.effective),'Cannot revert a superseded adoption'); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=g.previousEffective.includes(`${m.id}@${m.version}`); g.status='reverted'; break; }
+    case 'record-relation': {
+      role(actor,'owner');ensure(Object.keys(command).length===2,'Invalid owner relation command fields');const r=command.relation;
+      ensure(r&&typeof r==='object'&&!Array.isArray(r)&&Object.keys(r).length===6&&Object.keys(r).every(key=>['from','to','type','fromVersion','toVersion','provenance'].includes(key)),'Only exact owner relation fields accepted');
+      for(const key of ['from','to','provenance'] as const){text(r[key],key,2000);ensure(r[key].isWellFormed(),'Invalid relation Unicode');}
+      ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type');ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions');ensure(state.relations.length<1000,'Owner relation limit reached; native impact supports at most 1000 relations');
+      state.relations.push({...structuredClone(r),inferred:false});break;
+    }
     case 'relate': { role(actor,'representative','verifier'); const r=command.relation; text(r.from,'relation source'); text(r.to,'relation target'); text(r.provenance,'provenance'); ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type'); ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions'); state.relations.push(structuredClone(r)); break; }
     default: throw new DomainError('Unknown command');
   }
