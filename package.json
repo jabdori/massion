@@ -1,0 +1,10 @@
+{
+  "name": "massion", "version": "0.1.0-dev.0", "private": true,
+  "type": "module", "engines": { "node": ">=24.19.0 <25" },
+  "scripts": {
+    "test": "node --test tests/*.test.ts",
+    "check": "node scripts/check.mjs && node --test tests/*.test.ts",
+    "demo": "node scripts/demo.ts",
+    "start": "node src/server.ts"
+  }
+}

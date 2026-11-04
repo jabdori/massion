@@ -1,0 +1,10 @@
+import {resolve} from 'node:path';
+import {SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
+import {runGrowthScenario} from '../src/scenario.ts';
+import type {Mission} from '../src/domain.ts';
+const endpoint=process.env.MASSION_TEST_SURREAL_RPC??process.env.MASSION_SURREAL_RPC;
+if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to a permitted local SurrealDB /rpc endpoint. There is no file-store fallback.');
+const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE??process.env.MASSION_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_TEST_SURREAL_DATABASE??process.env.MASSION_SURREAL_DATABASE??'massion'});
+await initializeSurrealSchema(transport);
+const result=await runGrowthScenario(new SurrealStore<Mission>(transport),resolve('.runtime/workspaces'));
+console.log(JSON.stringify({missionId:result.missionId,workA:result.workA,workB:result.workB,revision:result.snapshot?.revision,evidenceClass:result.evidenceClass,realProvider:result.realProvider,evaluation:result.evaluation,works:result.snapshot?.value.works.map(w=>({id:w.id,execution:w.execution,acceptance:w.acceptance,attempts:w.attempts.length,memory:w.appliedMemoryVersions,record:w.record}))},null,2));

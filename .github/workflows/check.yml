@@ -1,0 +1,25 @@
+name: Candidate checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Runtime syntax and unit checks
+        run: npm run check
+      - name: Verify official SurrealDB archive
+        shell: bash
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 -o /tmp/surreal.tgz https://github.com/surrealdb/surrealdb/releases/download/v3.3.0/surreal-v3.3.0.linux-amd64.tgz
+          echo '44aeab565f7e7e39d2d0bf0583c8aae648babc91373c70b2658288d95bbbcd55  /tmp/surreal.tgz' | sha256sum --check
+          mkdir /tmp/massion-surreal
+          tar -xzf /tmp/surreal.tgz -C /tmp/massion-surreal
+      - name: Actual durable-store aggregate, crash and restore
+        env:
+          MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
+        run: python3 scripts/with-surreal.py -- env MASSION_TEST_SURREAL_RESTART=1 node --test --test-concurrency=1 tests/*.test.ts
