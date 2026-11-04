@@ -219,3 +219,7 @@ Above PR63 `a8455f4d`, REC-01/KNW-01/WRK-01 and issue #4 connect exact accepted 
 [Accepted result source bounded verification](../acceptance/accepted-result-source-evidence.md).
 
 Above PR64 `11478ffc`, KNW-01/ADR0001 and issue #4 preserve knowledge exploration through an explicit exact-version incoming/outgoing neighborhood over existing Relation declarations. No endpoint existence/quality or execution authority is inferred. [Scope, acceptance and bounded verification](../architecture/exact-knowledge-neighborhood.md).
+
+Above PR65 `a5bc7642`, MIS-01/ADR0001 and issue #4 retain owner-versioned Mission constraints for future Work while preserving every old Work/Record and execution authority. [Preimplementation scope and acceptance](../architecture/mission-constraint-revisions.md).
+
+[Mission constraint revision bounded verification](../acceptance/mission-constraint-revisions-evidence.md).

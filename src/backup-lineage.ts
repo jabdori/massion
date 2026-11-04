@@ -323,6 +323,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'stop-owned-runtime': {required:['workId','runId','dispatchId','hostSessionId','observedAt']},
   'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
+  'revise-mission-constraints': {required:['constraints','reason']},
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate','correction','conversationSource'] },
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
