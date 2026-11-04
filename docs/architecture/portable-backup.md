@@ -82,3 +82,35 @@ manifest to resolve relocated descriptors. Export validates the operation journa
 as the authoritative append-only history and reconstructs derived state/audit/event
 projections. It does not independently detect privileged corruption of source
 projection tables. Checksums are not cryptographic signatures or authenticity proof.
+
+## Exact RPC size check before normal CLI restore
+
+The 64 MiB bundle bound is separate from the encoded HTTP RPC request bound.
+JSON-string variable encoding and generated event/outbox rows can make the actual
+restore request larger than the bundle. Run the offline check first:
+
+```sh
+node scripts/backup.ts restore-check http://127.0.0.1:18080/rpc NAMESPACE DATABASE /absolute/new-artifact-root /absolute/bundle.json
+```
+
+This validates the full bundle and prints `within-client-budget` or `blocked`,
+`rpcRequestBytes`, `clientRpcBodyBudget` and `serverCapacity: "not-discovered"`.
+A blocked check exits nonzero. It sends no RPC, creates no root and does not check
+the destination's emptiness or capacity. Normal `restore` uses the same exact
+measurement and rejects above-budget input before schema or artifact mutation.
+
+The default client budget is 4 MiB, referencing the inspected SurrealDB 3.3.0
+HTTP RPC default. Deployments can override that setting, so this default is not
+capacity discovery or a success guarantee. Both `restore-check` and `restore`
+accept an explicit `--rpc-body-budget BYTES` positive integer up to 67,108,864.
+It changes only this invocation's client guard. Verify the existing destination's
+actual configuration and other limits independently before choosing that budget;
+if capacity is unknown, retain the source and blocked diagnostic instead of
+assuming a larger budget makes restore safe or successful. No database/global
+setting is changed by this flag.
+
+If a previous write already reported an unknown outcome, an offline size check
+cannot establish whether it committed. Retain its restore ID, checksum, head,
+bundle, database and staged root. Do not rerun that restore or reuse that
+potentially occupied destination. Inspect its exact identity and state read-only
+before deciding a separate explicit recovery into a proven clean destination.

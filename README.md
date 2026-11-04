@@ -64,6 +64,7 @@ The bounded text runtime now has a versioned private bundle containing the compl
 Mission operation history plus every referenced sealed text artifact. Restore into
 a fresh SurrealDB and new artifact root preserves original Records and command
 identities, verifies relocated bytes, and holds old outbox rows without replay.
+Run offline `restore-check` to validate the exact encoded RPC byte size before a new restore; its client budget does not discover server capacity or resolve a previous unknown outcome.
 See [backup CLI, limits and recovery](docs/architecture/portable-backup.md) and
 [clean-restore evidence](docs/acceptance/portable-backup-evidence.md). To inspect
 relocated accepted text through the normal CLI/workbench, explicitly select
