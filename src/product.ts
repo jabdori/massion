@@ -22,11 +22,12 @@ export class ProductService {
  readonly app:Application;readonly providers:ProviderRegistry;readonly runtime?:WorkRuntime;readonly artifacts?:ArtifactReader;
  constructor(store:Store<Mission>,providers=new ProviderRegistry(),runtime?:WorkRuntime,artifacts?:ArtifactReader) {this.artifacts=artifacts;this.runtime=runtime;this.app=new Application(store,[{id:'local-owner',roles:['owner']}]);this.providers=providers;}
  async create(input:Parameters<Application['create']>[0],commandId:string) {return this.app.create(input,'local-owner',commandId);}
- async admit(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;title:string;budget:number}) {
+ async admit(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;title:string;budget:number;correction?:import('./work-correction.ts').CorrectionSelection}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','title','budget','correction']);
   const selected=this.providers.select(['text-output']);const mission=await this.app.store.load(missionId);const available=mission&&this.runtime?.availability(mission.value);
   // Even a configured model does not imply a permitted execution/assurance runtime.
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(executionGate?{executionGate}:{})}});
+  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(Object.hasOwn(input,'correction')?{correction:input.correction}:{}),...(executionGate?{executionGate}:{})}});
  }
  async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
