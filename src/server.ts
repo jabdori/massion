@@ -1,3 +1,5 @@
+import {SurrealWorkInbox,WorkInboxChangedError} from './work-inbox.ts';
+import type {WorkInboxReader} from './work-inbox.ts';
 import {SurrealMissionCatalog,MissionCatalogChangedError} from './mission-catalog.ts';
 import type {MissionCatalogReader} from './mission-catalog.ts';
 import {readMemoryUsage,MemoryUsageError} from './memory-usage.ts';
@@ -34,7 +36,7 @@ function identifier(value:unknown,name:string):asserts value is string {if(typeo
 
 function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader}={}) {
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader}={}) {
  const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let running=false;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
  const server=createServer(async(req,res)=>{
   let mutationFeed='';
@@ -63,6 +65,13 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(req.method==='POST'&&url.pathname==='/connection-authorizations'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.authorize(await readBody()));return;}
    const connectionRoute=/^\/connections\/([^/]+)\/(models|profiles)$/.exec(url.pathname);
    if(req.method==='POST'&&connectionRoute){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const connectionId=decodeIdentifier(connectionRoute[1]!);const input=await readBody();if(connectionRoute[2]==='models'){if(Object.keys(input).length!==1||typeof input.expectedConfigHash!=='string')throw new RequestError(400,'Exact discovery fields required');send(200,await options.connections.discover(connectionId,input.expectedConfigHash));}else send(200,options.connections.selectModel(connectionId,input));return;}
+   if(req.method==='GET'&&url.pathname==='/work-inbox'){
+    if(!options.inbox)throw new RequestError(503,'Unresolved Work inbox is not enabled by this host');
+    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const keys=['afterMission','afterWork','cursor'];if([...url.searchParams.keys()].some(k=>!keys.includes(k))||keys.some(k=>url.searchParams.getAll(k).length>1))throw new RequestError(400,'Exact Work inbox query fields required');
+    const afterMission=url.searchParams.get('afterMission'),afterWork=url.searchParams.get('afterWork'),cursor=url.searchParams.get('cursor');
+    if([afterMission,afterWork,cursor].some(v=>v===null)&&[afterMission,afterWork,cursor].some(v=>v!==null))throw new RequestError(400,'Exact Work page boundary required');if(afterMission!==null){identifier(afterMission,'Mission page identity');identifier(afterWork,'Work page identity');}if(cursor!==null&&(!/^\d+$/.test(cursor)||!Number.isSafeInteger(Number(cursor))))throw new RequestError(400,'Invalid Work inbox cursor');
+    try{send(200,await options.inbox.readInbox({... (afterMission!==null?{afterMission,afterWork:afterWork!,cursor:Number(cursor)}:{}),...(feedId!==undefined?{feedId}: {})}));}catch(error){if(error instanceof WorkInboxChangedError){send(409,{error:error.message,reason:error.reason});return;}if(error instanceof TypeError)throw new RequestError(400,error.message);throw error;}return;
+   }
    if(req.method==='GET'&&url.pathname==='/mission-catalog'){
     if(!options.catalog)throw new RequestError(503,'Stored Mission discovery is not enabled by this host');
     if([...url.searchParams.keys()].some(k=>!['after','cursor'].includes(k))||['after','cursor'].some(k=>url.searchParams.getAll(k).length>1))throw new RequestError(400,'Exact Mission catalog query fields required');
@@ -201,7 +210,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  await initializeSurrealSchema(transport);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name]});
- const server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
+ const server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{void server.drain().then(result=>{console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);},()=>{console.error('Local host drain failed; inspect original durable state. No remote stop or replay inferred.');process.exit(1);});});
 }
