@@ -107,11 +107,11 @@ export class ProductService {
  async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
- /** An absent selection resolves to the saved default route; a present one is used exactly and never merged. */
- private resolveDefault(mission:Mission,choice:ExecutionChoice|undefined):DefaultResolution|undefined {return choice===undefined&&this.runtime?.resolveDefault?this.runtime.resolveDefault(mission):undefined;}
+ /** A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
+ private async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<(SelectionPreflight&{selection?:{source:'default';choice:ExecutionChoice}})|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
-  const resolved=this.resolveDefault(snapshot.value,choice);
+  const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value):undefined;
   if(resolved?.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return {...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]};}
   if(resolved)return {...this.runtime!.preflight!(snapshot,workId,expectedRevision,resolved.choice),selection:{source:'default',choice:resolved.choice}};
   if(this.runtime?.preflight)return this.runtime.preflight(snapshot,workId,expectedRevision,choice);
@@ -120,14 +120,14 @@ export class ProductService {
  }
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
   if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=this.runtime.resolveDefault(snapshot.value);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics);
   return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice}),selection:{source:'default' as const,choice:resolved.choice}};
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
   if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice);
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=this.runtime.resolveDefault(snapshot.value);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   // A local change cannot start while the run awaits the stored revision without the run seeing it; a changed revision blocks rather than re-resolving.

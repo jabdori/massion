@@ -147,6 +147,18 @@ test('another host narrowing the stored settings is read before admission: the o
  assert.deepEqual(b.list().grants,[]);assert.deepEqual(b.list().revokedAuthorizationIds,['grant']);assert.equal(b.resolveDefault(current.value).status,'unresolved');assert.deepEqual(await f.journal(),journal);assert.deepEqual(f.calls,[]);
 });
 
+test('a default saved by another host is read when this host has none: preflight, run and run-sequence use it',async t=>{
+ const f=await setup(t),a=f.host(),b=f.host();await f.grant(a);await b.restoreSettings();const product=new ProductService(f.store,undefined,b);
+ assert.equal(b.resolveDefault((await f.current()).value).status,'unresolved');await f.makeDefault(a);
+ let current=await f.current();const check=await product.preflight('mission','fresh',current.revision);assert.equal(check!.ready,true);assert.equal(check!.selection!.source,'default');
+ const result=await product.run('mission','fresh','other-host-default',current.revision) as any;assert.equal(result.status,'settled');assert.equal(result.selection.source,'default');
+ assert.equal((await f.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.authorizationId,'grant');assert.deepEqual(f.calls,['executor','verifier']);
+ const c=await setup(t),x=c.host(),y=c.host();await c.grant(x);await y.restoreSettings();await c.makeDefault(x);const seq=new ProductService(c.store,undefined,y);
+ current=await c.current();const w=current.value.works.find(w=>w.id==='fresh')!;
+ const done=await seq.runSequence('mission',{commandId:'seq-other-host',expectedRevision:current.revision,works:[{workId:'fresh',inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}]}) as any;assert.equal(done.status,'completed');
+ assert.equal(done.selection.source,'default');assert.equal((await c.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.authorizationId,'grant');
+});
+
 test('run-sequence: a default changed between steps stops at the configuration guard and never switches route',async t=>{
  const f=await setup(t),m=f.host(),other=f.host(),product=new ProductService(f.store,undefined,m);await f.grant(m);await f.grant(m,'alt');await f.makeDefault(m);await other.restoreSettings();
  await f.product.admit('mission',{commandId:'admit-second',expectedRevision:(await f.current()).revision,workId:'second',title:'Second step',budget:8});

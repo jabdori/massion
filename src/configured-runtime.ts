@@ -39,6 +39,8 @@ export interface WorkRuntime {
  configuration?():unknown;
  preflight?(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight;
  resolveDefault?(mission:Mission):DefaultResolution;
+ /** Adopts newer stored settings (saved by another host) before a selection-less run resolves its default. Never throws. */
+ refreshStoredSettings?():Promise<void>;
  owns?(missionId:string,workId:string,runId:string):boolean;
  beginDrain?():void;
  drain?():Promise<void>;
