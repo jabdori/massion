@@ -1,3 +1,4 @@
+import {renderChatCompletionsBody} from './chat-request-renderer.ts';
 /** A deliberately narrow, opt-in OpenAI-compatible Chat Completions adapter. */
 import { createHash } from 'node:crypto';
 import type { ProviderAdapter, ProviderDescriptor, ProviderOutcome, ProviderRequest } from './providers.ts';
@@ -80,7 +81,7 @@ export function providerRequestId(invocationId: string): string {
   if (!label(invocationId)) throw new Error('Invalid invocation ID.');
   return `massion-${createHash('sha256').update(invocationId, 'utf8').digest('hex')}`;
 }
-async function readBoundedJson(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
+export async function readBoundedJson(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
   const length = response.headers.get('content-length');
   if (length !== null && (!/^\d+$/.test(length) || !integer(Number(length)) || Number(length) > maxBytes)) {
     throw new ProtocolFailure('invalid_or_oversized_content_length');
@@ -183,9 +184,7 @@ export class OpenAICompatibleChatAdapter implements ProviderAdapter {
         !Array.isArray(request.inputReferences) || ![...request.inputReferences].every(reference => typeof reference === 'string') ||
         !positive(maxTokens) || maxTokens > this.#bounds.maxOutputTokens) return outcome('failed', 'invalid_request_or_output_bound');
     // References are transmitted only as literal identifiers. No URL, filesystem or account lookup occurs.
-    const content = request.inputReferences.length === 0 ? request.instruction :
-      `${request.instruction}\n\nInput references (identifiers only; their contents have not been loaded):\n${JSON.stringify(request.inputReferences)}`;
-    const body = JSON.stringify({ model: this.#model, messages: [{ role: 'user', content }], max_completion_tokens: maxTokens, n: 1, stream: false, store: false });
+    const body = renderChatCompletionsBody(this.#model,request.instruction,request.inputReferences,maxTokens);
     if (Buffer.byteLength(body, 'utf8') > this.#bounds.maxInputBytes) return outcome('failed', 'input_byte_limit');
     if (request.signal.aborted) return outcome('cancelled', 'cancelled_before_dispatch');
 
