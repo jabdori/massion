@@ -6,6 +6,7 @@ managed executor isolates loopback and PIDs between invocations.
 """
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -23,11 +24,14 @@ ROOT = Path(tempfile.gettempdir())
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=18080)
+    parser.add_argument('--timeout', type=float, help='Owned command deadline in seconds; terminates its isolated process group')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command
     if command[:1] == ['--']:
         command = command[1:]
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        parser.error('--timeout must be positive')
     if not command:
         parser.error('provide a test command after --')
     binary = shutil.which(str(BINARY)) if not BINARY.is_absolute() else str(BINARY)
@@ -81,7 +85,23 @@ def main():
             }.items():
                 os.environ[key] = value
             print('Disposable SurrealDB ready: ' + json.dumps(metadata), flush=True)
-            return subprocess.run(command).returncode
+            if args.timeout is None:
+                return subprocess.run(command).returncode
+            # The group is created by this exact Popen and contains no suite/user process.
+            child = subprocess.Popen(command, start_new_session=True)
+            try:
+                return child.wait(timeout=args.timeout)
+            except subprocess.TimeoutExpired:
+                print('Owned disposable command deadline exceeded; releasing its process group', flush=True)
+                # Keep the group leader unreaped until the final group signal, preventing ID reuse.
+                try:
+                    os.killpg(child.pid, signal.SIGTERM)
+                    time.sleep(0.1)
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.wait()
+                return 124
         finally:
             if server.poll() is None:
                 server.send_signal(signal.SIGTERM)

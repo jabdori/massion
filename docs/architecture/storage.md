@@ -148,7 +148,7 @@ It passed **26/26 tests** with no skips. Static TypeScript checking also passed 
 - Namespace and database `massion_storage_tests`
 - For the separately opt-in crash test only: `MASSION_TEST_SURREAL_RESTART=1`, `MASSION_TEST_SURREAL_BINARY`, `MASSION_TEST_SURREAL_DATA`, and `MASSION_TEST_SURREAL_PID` belonging to the disposable server that the test is allowed to stop.
 
-Do not run the crash test alongside other clients or parallel test files using that server. The crash test deliberately stops it and owns the replacement process. Ordinary live conformance does not require those restart variables.
+The opt-in crash test now creates a nested owned launcher with a distinct loopback port, PID and SurrealKV directory, and stops only that nested DB. The outer suite DB and its immutable ownership metadata remain alive for clients before, during and after the crash test. Original SIGKILL/reopen/journal/feed/export/import assertions remain; the child proves the exact owned launcher before signaling, binds PID/data/binary aliases to that proof, and the parent checks nested cleanup plus unchanged outer identity and snapshot. `tests/zz-disposable-lifetime.test.ts` deliberately runs a fresh owned client after the storage suite. No test filename convention or skipped assertion is needed to protect the outer DB. Ordinary live conformance does not require restart variables. [Recurrence evidence](../acceptance/disposable-lifetime-evidence.md).
 
 ## Remaining gates
 
