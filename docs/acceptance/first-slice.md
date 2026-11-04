@@ -81,3 +81,7 @@ The complete-slice fault matrix must cover:
 These remain required product scope but are not implied by a successful first fixture: real VM/OS isolation and resource controls; supported external dot integration; complete organization and collaboration lifecycle; automatic Growth and other target families; external extension security; full product surfaces and accessibility; platform installation/update/rollback; authenticated production hosting; long-run memory/shutdown/load behavior; backup operations and recovery drills.
 
 A completed checkpoint should say precisely what was demonstrated. Do not call the whole product complete because a helper exists, a fixture passed, a README was published or a build artifact was uploaded.
+
+## Bounded database replacement recovery
+
+[Same-host read recovery](cursor-recovery-evidence.md) extends issue #4’s second-client/interruption criterion: isolated fresh database replacement, including the same numeric cursor with different Mission state, obtains a consistent snapshot/feed boundary while retaining drafts and unknown command/fixture markers. Fresh reads and current permissions gate writes; recovery never resends commands or invokes models. This does not close the full recovery, remote-authentication or live-quality acceptance criteria. Exact published-candidate checks/review are linked from the Draft PR and issue #4 follow-up.

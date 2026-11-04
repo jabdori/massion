@@ -12,6 +12,48 @@ function work(mission:Mission,title='A bounded responsibility') {
 import {harness,reply,settle,selectionField,SharedWebLocks} from './support/workbench-client.ts';
 import type {Node,Reply,Handler} from './support/workbench-client.ts';
 
+for(const interrupted of [false,true])test(`database read recovery keeps writes locked during a held snapshot${interrupted?' and a newer disconnect':''}`,async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));let feedId='feed:a',hold=false,permissionFailure=false,release!:(result:Reply)=>void;
+ const handler:Handler=async(path,options)=>{
+  if(path==='/health')return reply({status:'ready'});
+  if(path==='/providers')return permissionFailure?reply({error:'Permission read failed'},503):reply({providers:[],selection:{status:'unavailable'}});
+  if(path==='/connections')return reply({error:'Not configured'},503);
+  if(path.startsWith('/events'))return options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feedId?reply({error:'Database changed'},409):reply({feedId,cursor:1,events:[]});
+  if(path.startsWith('/read-state'))return hold?new Promise<Reply>(resolve=>{release=resolve;}):reply({feedId,cursor:1,snapshot:{revision:1,value:mission}});
+  if(path.startsWith('/missions/'))return reply({revision:1,value:mission});
+  throw new Error('Unexpected write '+path);
+ };
+ const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();assert.equal(app.node('sync-notice').hidden,true);
+ const input=selectionField(app,'steer-work:test');input.value='Retained private direction';await input.fire('input');app.node('work-title').value='Retained Work draft';
+ feedId='feed:b';hold=true;await app.tick();assert.ok(release);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('sync-notice').hidden,false);
+ await app.submit('work-form');await app.node('run-fixture').fire('click');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+ mission.purpose='Replacement at the same revision';
+ if(interrupted)await app.windowEvent('offline');
+ release(reply({feedId,cursor:1,snapshot:{revision:1,value:mission}}));hold=false;await settle();assert.equal(app.node('work-fields').disabled,true);
+ permissionFailure=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);
+ permissionFailure=false;await app.tick();if(!app.node('sync-notice').hidden)await app.tick();
+ assert.equal(app.node('sync-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('snapshot-json').textContent,/Replacement at the same revision/);
+ assert.equal(selectionField(app,'steer-work:test').value,'Retained private direction');assert.equal(app.node('work-title').value,'Retained Work draft');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+});
+
+test('an old database command acknowledgement cannot replace recovered state or settle the current unknown marker',async()=>{
+ const mission=fixtureMission();mission.works.push(work(mission));let feedId='feed:a',release!:(result:Reply)=>void;
+ const app=harness(async(path,options)=>{
+  if(options.method==='POST')return new Promise<Reply>(resolve=>{release=resolve;});
+  if(path==='/health')return reply({status:'ready'});
+  if(path==='/providers')return reply({providers:[],selection:{status:'unavailable'}});
+  if(path==='/connections')return reply({error:'Not configured'},503);
+  if(path.startsWith('/events'))return options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feedId?reply({},409):reply({feedId,cursor:1,events:[]});
+  if(path.startsWith('/read-state'))return reply({feedId,cursor:1,snapshot:{revision:1,value:{...mission,purpose:feedId==='feed:a'?'Original':'Replacement'}}});
+  return reply({revision:1,value:{...mission,purpose:'Replacement'}});
+ },{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();
+ app.node('work-title').value='A pending old-database admission';const pending=app.submit('work-form');await settle();assert.ok(release);
+ const marker=app.storage.get('massion.workbench.pending');feedId='feed:b';await app.tick();assert.match(app.node('snapshot-json').textContent,/Replacement/);
+ release(reply({status:'committed',revision:2,value:{...mission,purpose:'Old database acknowledgement'}},201));await pending;
+ assert.match(app.node('snapshot-json').textContent,/Replacement/);assert.equal(app.storage.get('massion.workbench.pending'),marker);
+ assert.equal(app.node('work-fields').disabled,true);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+});
+
 test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
  assert.match(workbenchPage,/Create a Mission/);assert.match(workbenchPage,/Run development fixture/);
  assert.match(workbenchPage,/manual-review\/v1/);assert.match(workbenchPage,/aria-live="polite"/);

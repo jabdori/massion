@@ -1,4 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const admissionFeed = new AsyncLocalStorage<string>();
+/** Bind every application/runtime/fixture commit in this request to its admitted database. */
+export function withAdmissionFeed<R>(feedId: string, action: () => R): R {
+  identifier(feedId,'feedId'); return admissionFeed.run(feedId,action);
+}
+export class FeedAdmissionError extends Error {
+  constructor() { super('Database feed changed before this transaction could admit a mutation. Earlier request effects may still be unresolved.'); this.name='FeedAdmissionError'; }
+}
 
 export interface Snapshot<T> { revision: number; value: T }
 export interface CommitInput<T> {
@@ -22,10 +32,15 @@ export interface StoredEventBatch {
   events: readonly unknown[];
 }
 export interface EventPage { events: StoredEventBatch[]; cursor: number }
+export interface FeedPosition { feedId: string; cursor: number }
+export interface ReadState<T> extends FeedPosition { snapshot: Snapshot<T> | null }
+export interface CatchupPage extends EventPage { feedId: string }
 export type OperationIdentity = Pick<CommitInput<unknown>, 'id' | 'commandId' | 'fingerprint'>;
 export interface Store<T> {
   load(id: string): Promise<Snapshot<T> | null>;
   readEvents(after: number, limit?: number): Promise<EventPage>;
+  readState(id?: string): Promise<ReadState<T>>;
+  readCatchup(after: number, feedId?: string, limit?: number): Promise<CatchupPage>;
   commit(input: CommitInput<T>): Promise<CommitResult<T>>;
   reconcile(input: CommitInput<T>): Promise<ReconcileResult<T>>;
   lookupOperation(identity: OperationIdentity): Promise<ReconcileResult<T>>;
@@ -95,7 +110,7 @@ export class EventCursorError extends RangeError {
   readonly after: number;
   readonly head: number;
   constructor(after: number, head: number) {
-    super('Event cursor is ahead of this database; obtain a fresh snapshot and cursor.');
+    super('Event cursor or feed identity no longer matches this database; obtain a fresh snapshot and cursor.');
     this.name = 'EventCursorError'; this.after = after; this.head = head;
   }
 }
@@ -220,6 +235,7 @@ export class InMemoryStore<T> implements Store<T> {
   private readonly states = new Map<string, Snapshot<T>>();
   private readonly operations = new Map<string, Operation<T>>();
   private cursor = 0;
+  private readonly feedId = randomUUID();
   private readonly clock: () => Date;
   constructor(clock: () => Date = () => new Date()) { this.clock = clock; }
   async load(id: string): Promise<Snapshot<T> | null> {
@@ -228,6 +244,8 @@ export class InMemoryStore<T> implements Store<T> {
   }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest } = prepare(command);
+    const expectedFeed=admissionFeed.getStore();
+    if(expectedFeed!==undefined && expectedFeed!==this.feedId)throw new FeedAdmissionError();
     const existing = this.operations.get(input.commandId);
     if (existing) return replay(existing, input, digest);
     const actual = this.states.get(input.id)?.revision ?? 0;
@@ -251,6 +269,17 @@ export class InMemoryStore<T> implements Store<T> {
     eventBounds(after, limit);
     const events = [...this.operations.values()].filter((entry) => entry.cursor > after).slice(0, limit);
     return eventPage({ head: this.cursor, events }, after, limit);
+  }
+  async readState(id?: string): Promise<ReadState<T>> {
+    if (id !== undefined) identifier(id, 'id');
+    return {snapshot: copy(id ? this.states.get(id) ?? null : null), cursor: this.cursor, feedId: this.feedId};
+  }
+  async readCatchup(after: number, feedId?: string, limit = 100): Promise<CatchupPage> {
+    eventBounds(after, limit);
+    if (feedId !== undefined && feedId !== this.feedId) throw new EventCursorError(after, this.cursor);
+    // Capture the page without yielding to another command.
+    const events = [...this.operations.values()].filter(entry => entry.cursor > after).slice(0, limit);
+    return {...eventPage({head:this.cursor,events},after,limit),feedId:this.feedId};
   }
   async lookupOperation(identity: OperationIdentity): Promise<ReconcileResult<T>> {
     identifier(identity.id, 'id'); identifier(identity.commandId, 'commandId'); identifier(identity.fingerprint, 'fingerprint');
@@ -387,12 +416,13 @@ IF $feed = NONE {
 DEFINE FIELD IF NOT EXISTS cursor ON massion_feed TYPE int ASSERT $value >= 0 AND $value <= 9007199254740991;
 DEFINE FIELD IF NOT EXISTS cursor ON massion_operation TYPE int ASSERT $value > 0 AND $value <= 9007199254740991;
 DEFINE INDEX IF NOT EXISTS operation_cursor ON massion_operation FIELDS cursor UNIQUE;
+IF $feed.feedId = NONE { UPDATE massion_feed:global SET feedId = $feedId; };
 RETURN true;
 };
 COMMIT TRANSACTION;
 `;
 export async function initializeSurrealSchema(transport: QueryTransport): Promise<void> {
-  const result = await transport.query(SCHEMA_QUERY, {});
+  const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
   if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
 }
 
@@ -406,6 +436,23 @@ export const EVENTS_QUERY = `RETURN {
     WHERE cursor > $after ORDER BY cursor ASC LIMIT $limit;
   RETURN { head: $feed.cursor, events: $events };
 };`;
+
+/** One read transaction binds the selected snapshot to the database-local feed boundary. */
+export const READ_STATE_QUERY = `BEGIN TRANSACTION;
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE OR $feed.schemaVersion != 2 OR $feed.feedId = NONE { THROW 'Storage feed identity is not initialized'; };
+LET $state = IF $aggregateKey = '' { NONE } ELSE { SELECT aggregateId, revision, value FROM ONLY type::record('massion_state', $aggregateKey) };
+RETURN {feedId:$feed.feedId,cursor:$feed.cursor,state:$state};
+COMMIT TRANSACTION;`;
+
+export const CATCHUP_QUERY = `BEGIN TRANSACTION;
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE OR $feed.schemaVersion != 2 OR $feed.feedId = NONE { THROW 'Storage feed identity is not initialized'; };
+LET $events = IF $feedId != '' AND $feedId != $feed.feedId { [] } ELSE {
+  SELECT cursor, aggregateId, revision, commandId, events FROM massion_operation WHERE cursor > $after ORDER BY cursor ASC LIMIT $limit
+};
+RETURN {feedId:$feed.feedId,head:$feed.cursor,events:$events};
+COMMIT TRANSACTION;`;
 
 /** Explicit transaction supplies one consistent feed/head and whole-database journal snapshot. */
 export const EXPORT_JOURNAL_QUERY = `
@@ -488,6 +535,9 @@ COMMIT TRANSACTION;
 export const COMMIT_QUERY = `
 BEGIN TRANSACTION;
 RETURN {
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
+IF $expectedFeed != '' AND $feed.feedId != $expectedFeed { RETURN {status:'feed-mismatch',feedId:$feed.feedId}; };
 LET $state = type::record('massion_state', $aggregateKey);
 LET $operation = type::record('massion_operation', $operationKey);
 LET $existing = SELECT * FROM ONLY $operation;
@@ -503,8 +553,6 @@ IF $actual != $expectedRevision {
   RETURN { status: 'conflict', revision: $actual, reason: 'revision' };
 };
 LET $next = $actual + 1;
-LET $feed = SELECT * FROM ONLY massion_feed:global;
-IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
 IF $feed.cursor >= 9007199254740991 { THROW 'Event cursor exhausted'; };
 LET $cursor = $feed.cursor + 1;
 UPDATE massion_feed:global SET cursor = $cursor;
@@ -578,6 +626,21 @@ export class SurrealStore<T> implements Store<T> {
   async readEvents(after: number, limit = 100): Promise<EventPage> {
     eventBounds(after, limit);
     return eventPage(oneResult(await this.transport.query(EVENTS_QUERY, { after, limit })), after, limit);
+  }
+  async readState(id?: string): Promise<ReadState<T>> {
+    if (id !== undefined) identifier(id, 'id');
+    const result = oneResult(await this.transport.query(READ_STATE_QUERY,{aggregateKey:id === undefined ? '' : hash(id)}));
+    if (!object(result) || typeof result.feedId !== 'string' || !result.feedId || !revision(result.cursor)) throw new StorageProtocolError('Invalid read boundary');
+    const state = result.state;
+    if (state !== null && (!object(state) || state.aggregateId !== id || !revision(state.revision) || state.revision === 0 || !Object.hasOwn(state,'value'))) throw new StorageProtocolError('Invalid read snapshot');
+    return {feedId:result.feedId,cursor:result.cursor,snapshot:state === null ? null : {revision:(state as Record<string,unknown>).revision as number,value:copy((state as Record<string,unknown>).value) as T}};
+  }
+  async readCatchup(after: number, feedId?: string, limit = 100): Promise<CatchupPage> {
+    eventBounds(after,limit);if (feedId !== undefined) identifier(feedId,'feedId');
+    const result = oneResult(await this.transport.query(CATCHUP_QUERY,{after,limit,feedId:feedId ?? ''}));
+    if (!object(result) || typeof result.feedId !== 'string' || !result.feedId || !revision(result.head)) throw new StorageProtocolError('Invalid catch-up identity');
+    if (feedId !== undefined && result.feedId !== feedId) throw new EventCursorError(after,result.head);
+    return {...eventPage(result,after,limit),feedId:result.feedId};
   }
   async exportJournal(): Promise<PortableJournal<T>> {
     const result = oneResult(await this.transport.query(EXPORT_JOURNAL_QUERY, {}));
@@ -653,22 +716,27 @@ export class SurrealStore<T> implements Store<T> {
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     // Capture/validate before waiting: callers cannot mutate queued submissions.
     const { input } = prepare(command);
-    const result = this.commitQueue.then(() => this.commitOnce(input));
+    const expectedFeed=admissionFeed.getStore() ?? '';
+    const result = this.commitQueue.then(() => this.commitOnce(input,expectedFeed));
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }
-  private async commitOnce(command: CommitInput<T>): Promise<CommitResult<T>> {
+  private async commitOnce(command: CommitInput<T>,expectedFeed:string): Promise<CommitResult<T>> {
     const { input, digest, aggregateKey, operationKey } = prepare(command);
     const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
     const variables = {
+      expectedFeed,
       aggregateId: input.id, aggregateKey, operationKey, commandId: input.commandId,
       fingerprint: input.fingerprint, contentDigest: digest, expectedRevision: input.expectedRevision,
       value: input.value, events: input.events, outbox: input.outbox,
       eventRows: rows(input.events), outboxRows: rows(input.outbox), recordedAt: this.clock().toISOString(),
     };
     try {
-      return commitResult<T>(oneResult(await this.transport.query(COMMIT_QUERY, variables)));
+      const result=oneResult(await this.transport.query(COMMIT_QUERY, variables));
+      if(object(result)&&result.status==='feed-mismatch')throw new FeedAdmissionError();
+      return commitResult<T>(result);
     } catch (cause) {
+      if(cause instanceof FeedAdmissionError)throw cause;
       // A timeout, disconnect, malformed response, or proxy error may follow a commit.
       // Read operation identity once; never retransmit COMMIT_QUERY automatically.
       try {
