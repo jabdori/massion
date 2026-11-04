@@ -87,7 +87,12 @@ An existing reference/resolver is displayed as configured-unverified; it does no
 claim that a value or account has been validated. Missing values fail without a
 provider send. Public catalogs expose neither references nor environment names.
 
-The separate live option allows live scoped grants; it does not create one. Exact
+The separate live option allows live scoped grants; it does not create one. A live
+grant the owner created earlier under the same manifest is restored from host settings,
+but it is active only when this start also has the live option; otherwise it is listed
+as `live-disabled`. A restored live grant or live default route is counted in the
+startup log and listed with its scope and mode in `GET /connections`
+([default route and persistent connections](default-route-and-persistent-connections.md)). Exact
 Mission scope, executor/verifier profile hashes, output cap, budget, current revision
 and explicit Run remain the existing product-owned path. Output bounds are not
 money or total-token limits. Usage can remain unknown; cancellation cannot undo a
@@ -104,10 +109,13 @@ an explicit developer fixture capability, not live account validation.
 
 ## Restart and evidence boundaries
 
-Declared connections/models are enrolled again at startup. Discovered metadata and
-scoped permissions are not restored. Durable Mission/Work/Records and pinned effects
-remain in SurrealDB and the existing artifact root. Restart does not dispatch, grant
-permission or resume old effects—even when host bindings change.
+Declared connections/models are enrolled again at startup. Owner model labels,
+scoped permissions, revocations, default routes and discovered metadata made under the
+same manifest are restored from the `massion_host_settings` table, without secret
+values ([default route and persistent connections](default-route-and-persistent-connections.md)).
+A changed manifest is a new, empty settings scope. Durable Mission/Work/Records and
+pinned effects remain in SurrealDB and the existing artifact root. Restart does not
+dispatch, create a permission or resume old effects—even when host bindings change.
 
 Tests use synthetic value accessors/intercepted HTTPS-shaped transports for exact
 credential headers and lazy binding, plus actual normal CLI subprocesses with a

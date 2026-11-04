@@ -407,6 +407,7 @@ DEFINE TABLE IF NOT EXISTS massion_audit SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_event SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_outbox SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_feed SCHEMALESS;
+DEFINE TABLE IF NOT EXISTS massion_host_settings SCHEMALESS;
 LET $feed = SELECT * FROM ONLY massion_feed:global;
 IF $feed = NONE {
   IF array::len(SELECT id FROM massion_operation LIMIT 1) > 0 OR
@@ -499,7 +500,8 @@ RETURN {
     array::len(SELECT id FROM massion_state LIMIT 1) > 0 OR
     array::len(SELECT id FROM massion_audit LIMIT 1) > 0 OR
     array::len(SELECT id FROM massion_event LIMIT 1) > 0 OR
-    array::len(SELECT id FROM massion_outbox LIMIT 1) > 0 {
+    array::len(SELECT id FROM massion_outbox LIMIT 1) > 0 OR
+    array::len(SELECT id FROM massion_host_settings LIMIT 1) > 0 {
     THROW 'Journal restore requires a fresh empty initialized database';
   };
   FOR $entry IN $operations {
@@ -774,4 +776,54 @@ export class SurrealStore<T> implements Store<T> {
       throw new CommitOutcomeUnknownError(input, cause);
     }
   }
+}
+
+/** Host connection settings outside the Mission journal, feed and backup. Never holds secret values. */
+export interface HostSettingsRow {revision:number;writeId:string;updatedAt:string;value:unknown}
+export interface HostDiscoveryRow {connectionId:string;configHash:string;models:unknown;hasMore:boolean}
+export interface HostSettingsStore {
+  load(scope:string):Promise<HostSettingsRow|null>;
+  /** Compare-and-set on revision. Never retried; an exception means the outcome is unknown. */
+  save(scope:string,expectedRevision:number,writeId:string,value:unknown):Promise<{status:'committed';revision:number;updatedAt:string}|{status:'conflict';revision:number}>;
+  loadDiscovery(scope:string):Promise<HostDiscoveryRow[]>;
+  saveDiscovery(scope:string,row:HostDiscoveryRow):Promise<void>;
+}
+const settingsKey=(scope:string)=>hash('settings\0'+scope);
+const discoveryKey=(scope:string,connectionId:string)=>hash('discovery\0'+scope+'\0'+connectionId);
+export class InMemoryHostSettings implements HostSettingsStore {
+  readonly rows=new Map<string,HostSettingsRow&{scope:string}>();readonly discovery=new Map<string,HostDiscoveryRow&{scope:string}>();
+  async load(scope:string){const row=this.rows.get(settingsKey(scope));return row?copy({revision:row.revision,writeId:row.writeId,updatedAt:row.updatedAt,value:row.value}):null;}
+  async save(scope:string,expectedRevision:number,writeId:string,value:unknown){const key=settingsKey(scope),actual=this.rows.get(key)?.revision??0;if(actual!==expectedRevision)return {status:'conflict' as const,revision:actual};const updatedAt=new Date().toISOString();this.rows.set(key,copy({scope,revision:actual+1,writeId,updatedAt,value}));return {status:'committed' as const,revision:actual+1,updatedAt};}
+  async loadDiscovery(scope:string){return copy([...this.discovery.values()].filter(r=>r.scope===scope).map(({scope:_,...row})=>row));}
+  async saveDiscovery(scope:string,row:HostDiscoveryRow){this.discovery.set(discoveryKey(scope,row.connectionId),copy({...row,scope}));}
+}
+export const HOST_SETTINGS_LOAD_QUERY=`RETURN SELECT revision, writeId, updatedAt, settings FROM ONLY type::record('massion_host_settings', $key);`;
+export const HOST_SETTINGS_SAVE_QUERY=`
+BEGIN TRANSACTION;
+RETURN {
+LET $row = SELECT revision FROM ONLY type::record('massion_host_settings', $key);
+LET $actual = IF $row = NONE { 0 } ELSE { $row.revision };
+IF $actual != $expectedRevision { RETURN { status: 'conflict', revision: $actual }; };
+UPSERT type::record('massion_host_settings', $key) CONTENT { kind: 'settings', scope: $scope, revision: $actual + 1, writeId: $writeId, updatedAt: $updatedAt, settings: $settings };
+RETURN { status: 'committed', revision: $actual + 1, updatedAt: $updatedAt };
+};
+COMMIT TRANSACTION;`;
+export const HOST_DISCOVERY_LOAD_QUERY=`RETURN SELECT connectionId, configHash, models, hasMore FROM massion_host_settings WHERE kind = 'discovery' AND scope = $scope;`;
+export const HOST_DISCOVERY_SAVE_QUERY=`UPSERT type::record('massion_host_settings', $key) CONTENT { kind: 'discovery', scope: $scope, connectionId: $connectionId, configHash: $configHash, models: $models, hasMore: $hasMore };`;
+export class SurrealHostSettings implements HostSettingsStore {
+  private readonly transport:QueryTransport;private readonly clock:()=>Date;
+  constructor(transport:QueryTransport,clock:()=>Date=()=>new Date()){this.transport=transport;this.clock=clock;}
+  async load(scope:string){
+    const row=oneResult(await this.transport.query(HOST_SETTINGS_LOAD_QUERY,{key:settingsKey(scope)}));if(row===null)return null;
+    if(!object(row)||!revision(row.revision)||row.revision===0||typeof row.writeId!=='string'||typeof row.updatedAt!=='string'||!Object.hasOwn(row,'settings'))throw new StorageProtocolError('Invalid stored host settings');
+    return {revision:row.revision,writeId:row.writeId,updatedAt:row.updatedAt,value:copy(row.settings)};
+  }
+  async save(scope:string,expectedRevision:number,writeId:string,value:unknown){
+    const result=oneResult(await this.transport.query(HOST_SETTINGS_SAVE_QUERY,{key:settingsKey(scope),scope,expectedRevision,writeId,updatedAt:this.clock().toISOString(),settings:value}));
+    if(object(result)&&result.status==='conflict'&&revision(result.revision))return {status:'conflict' as const,revision:result.revision};
+    if(object(result)&&result.status==='committed'&&revision(result.revision)&&result.revision===expectedRevision+1&&typeof result.updatedAt==='string')return {status:'committed' as const,revision:result.revision,updatedAt:result.updatedAt};
+    throw new StorageProtocolError('Invalid host settings write result');
+  }
+  async loadDiscovery(scope:string){const rows=oneResult(await this.transport.query(HOST_DISCOVERY_LOAD_QUERY,{scope}));if(!Array.isArray(rows))throw new StorageProtocolError('Invalid stored discovery cache');return copy(rows) as HostDiscoveryRow[];}
+  async saveDiscovery(scope:string,row:HostDiscoveryRow){await this.transport.query(HOST_DISCOVERY_SAVE_QUERY,{key:discoveryKey(scope,row.connectionId),scope,...row});}
 }

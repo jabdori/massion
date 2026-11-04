@@ -13,7 +13,10 @@ connections, discover account models, or provide credential setup UI.
 The owner chooses bounded-text model review explicitly when creating a Mission.
 Each unstarted Work then has labeled executor/verifier selectors, an authorized-use
 selector, an output-token cap, and a side-effect-free Check selection action.
-No option is automatically chosen. Protocol/authentication, endpoint, usage
+No option is chosen by the host. The owner may save one default route per exact
+Mission scope; a request without a selection then uses that saved route, or fails as
+`default_route_missing`/`default_route_stale`
+([default route](default-route-and-persistent-connections.md)). Protocol/authentication, endpoint, usage
 reporting and limits are shown; unavailable profiles show diagnostics. Run uses
 that exact selection. An admitted run displays its pinned profile IDs and hashes.
 Changes after admission never reroute, retry, or resume a run.

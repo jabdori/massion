@@ -11,6 +11,8 @@ export interface ProfilePermission {profileId:string;configHash:string}
 export interface ExecutionAuthorization {
  id:string;scope:string;mode:'mock-http'|'live';executor:readonly ProfilePermission[];verifier:readonly ProfilePermission[];maxOutputTokensPerCall:number;
 }
+/** A default route becomes one concrete choice before admission, or a named failure. Never a fallback. */
+export type DefaultResolution={status:'resolved';choice:ExecutionChoice}|{status:'unresolved';diagnostics:ConnectionDiagnostic[]};
 export interface SelectionPreflight {missionId:string;workId:string;revision:number;expectedRevision:number;ready:boolean;diagnostics:ConnectionDiagnostic[]}
 export class SelectableTextRuntime implements WorkRuntime {
  readonly #store:Store<Mission>;readonly #catalog:ConnectionCatalog;readonly #grants:readonly ExecutionAuthorization[];readonly #artifacts:TextArtifactStore;
