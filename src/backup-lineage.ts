@@ -3,7 +3,7 @@
  * authorization, provider truth, or the current bytes behind an artifact.
  */
 import { isAbsolute, normalize } from 'node:path';
-import { apply, createMission, hash, validateOrganizationRevision, pinnedOrganization } from './domain.ts';
+import { apply, createMission, hash, validateOrganizationRevision, pinnedOrganization, validateDocumentHistory } from './domain.ts';
 import type { Actor, Artifact, Assignment, Command, Criteria, Effect, Mission, Verdict, Work } from './domain.ts';
 import type { Operation } from './storage.ts';
 
@@ -238,7 +238,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
 }
 
 export function validateMissionLineage(value: unknown): asserts value is Mission {
-  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations'],['organizationRevisions']);
+  const item = object(value, 'Mission', ['id', 'version', 'purpose', 'scope', 'constraints', 'criteria', 'works', 'memories', 'growth', 'relations'],['organizationRevisions','documents']);
+  if(Object.hasOwn(item,'documents')){try{validateDocumentHistory(item.documents);}catch(error){fail(error instanceof Error?error.message:'Invalid document history');}}
   if(Object.hasOwn(item,'organizationRevisions')){const history=array(item.organizationRevisions,'organization revisions');ensure(history.length>0,'empty organization history');history.forEach((entry,index)=>{validateOrganizationRevision(entry as import('./domain.ts').OrganizationRevision);ensure((entry as import('./domain.ts').OrganizationRevision).version===index+1,'organization history gap');});}
   text(item.id, 'Mission ID'); text(item.purpose, 'Mission purpose'); text(item.scope, 'Mission scope'); integer(item.version, 'Mission version'); criteria(item.criteria);
   array(item.constraints, 'Mission constraints').forEach(entry => ensure(typeof entry === 'string' && entry.isWellFormed(), 'invalid constraint'));
@@ -320,6 +321,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
   'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
+  'capture-document':{required:['document']},
   'record-relation':{required:['relation']},
   relate: { required: ['relation'] },
 };
