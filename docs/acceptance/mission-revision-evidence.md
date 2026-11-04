@@ -1,5 +1,6 @@
 # Local increment: owner Mission purpose and acceptance revision
 
+Current published source, review corrections and follow-up keyboard evidence are reconciled in [the final bounded candidate](memory-mission-final-candidate.md). Earlier counts, API-only exclusions and publication-wait statements below are historical checkpoints, not current approval or completion status.
 Recorded before implementation, base5835cfac4ac6e1948917cd043696278d34f8229b. Publication remains blocked awaiting public-repository authorization; explicit-memory worktree/evidence are preserved.
 
 MIS-01 in docs/product/requirements.md preserves versioned purpose and acceptance; accepted ADR0001 requires product-owned commands with revision/idempotency and historical bindings. Domain revise-mission exists, but ProductService and normal HTTP expose no owner revision path.
