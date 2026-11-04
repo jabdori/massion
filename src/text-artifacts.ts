@@ -155,12 +155,21 @@ export class TextArtifactStore {
   readonly root: string;
   readonly maxBytes: number;
   private rootMarker?: Marker;
+  private readonly relocated = new Map<string, Artifact>();
   private readonly workMarkers = new Map<string, Marker>();
 
-  constructor(root: string, maxBytes = 32_768) {
+  constructor(root: string, maxBytes = 32_768, originalArtifacts: readonly Artifact[] = []) {
     this.root = absolute(root);
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes >= Number.MAX_SAFE_INTEGER) fail('maxBytes must be a positive safe byte bound');
     this.maxBytes = maxBytes;
+    for (const artifact of originalArtifacts) {
+      const pinned = { ...artifact };
+      if (pinned.kind !== 'text' || !/^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):text$/.test(pinned.id) ||
+          !SHA256.test(pinned.sha256) || absolute(pinned.path) !== pinned.path) fail('invalid relocation descriptor');
+      validVersion(pinned.version);
+      const key = JSON.stringify([pinned.id, pinned.version, pinned.sha256, pinned.path, pinned.kind]);
+      this.relocated.set(key, pinned);
+    }
   }
 
   private async marker(path: string, kind: Marker['kind'], create: boolean, workId?: string): Promise<Marker> {
@@ -226,7 +235,8 @@ export class TextArtifactStore {
     validVersion(artifact.version);
     const workId = match[1]!;
     const path = join(this.root, workId, `${artifact.sha256}.txt`);
-    if (absolute(artifact.path) !== artifact.path || artifact.path !== path) fail('artifact path does not match its work and hash');
+    const key = JSON.stringify([artifact.id, artifact.version, artifact.sha256, artifact.path, artifact.kind]);
+    if (absolute(artifact.path) !== artifact.path || (artifact.path !== path && !this.relocated.has(key))) fail('artifact path does not match its work and hash');
     within(this.root, path);
     return { workId, path };
   }
@@ -239,6 +249,11 @@ export class TextArtifactStore {
     if (digest(bytes) !== artifact.sha256) fail('artifact hash/content mismatch');
     await this.workspace(workId, false);
     return bytes;
+  }
+
+  /** Explicitly initialize an empty owned root without creating a Work artifact. */
+  async initialize(): Promise<void> {
+    await serialized(this.root, async () => { await this.marker(this.root, 'root', true); });
   }
 
   async write(workId: string, version: number, content: string): Promise<Artifact> {
