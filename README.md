@@ -10,7 +10,7 @@ This clean rebuild has a runnable, tested **development foundation**, not a fini
 
 The authoritative store is a separate **SurrealDB 3.3.0** service. Actual integration tests cover atomic state/event/audit/outbox writes, concurrent revisions, idempotency, ambiguous commit readback, process crash/reopen, and backup/restore. The in-memory adapter is test-only; there is no file/SQLite production fallback.
 
-**Evidence boundaries:** the executor and memory routing are deterministic fixtures. They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
+**Evidence boundaries:** demonstrated model execution and memory routing use deterministic fixtures or local HTTP mocks. A separately configured bounded-text provider path exists but is disabled without explicit matching configuration; no live model has been tested. They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
 
 ## Run tests
 
@@ -47,6 +47,8 @@ For an existing authorized local development service, set `MASSION_SURREAL_RPC`,
 
 A request that loses its receipt does not silently rerun. Pending/unknown effects block further execution; recovery requires establishing the prior owner has stopped, inspecting actual outcome evidence, and an explicit resolution. General recovery UI, durable outbox workers, event retention/snapshot fallback and production leases remain open.
 
+For the opt-in provider path and its remaining live-service gates, see [configured execution](docs/architecture/configured-runtime.md). No account or credential is loaded by default.
+
 ## Repository map
 
 - `src/domain.ts`: product invariants, pinned attempts, authority, Records, Memory/Growth and typed relation impact
@@ -55,6 +57,8 @@ A request that loses its receipt does not silently rerun. Pending/unknown effect
 - `src/execution.ts`: version-gated built-in fixtures, independent oracles and sealed snapshots
 - `src/scenario.ts`: product-owned delegation and actual execution/verification orchestration
 - `src/product.ts` / `src/providers.ts`: user Work admission and explicit provider/runtime gates
+- `src/http-provider.ts` / `src/configured-runtime.ts`: opt-in bounded provider execution and independently bound review
+- `src/text-artifacts.ts`: bounded text data, content-addressed snapshots and fresh hash checks
 - `src/server.ts` / `src/workbench.ts`: loopback Mission/Work interface, interventions and event catch-up
 - `docs/product`: preserved product scope and requirement ledger
 - `docs/architecture`: decisions and tested storage guarantees
