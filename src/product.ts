@@ -22,6 +22,11 @@ export class ProductService {
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(executionGate?{executionGate}:{})}});
  }
+ async attachWorkSource(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;documentId:string;version:number;contentSha256:string;reason:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','documentId','version','contentSha256','reason']);
+  const {commandId,expectedRevision,...selection}=input;
+  return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'attach-work-source',...selection}});
+ }
  async captureDocument(missionId:string,input:{commandId:string;expectedRevision:number;document:Pick<import('./domain.ts').DocumentVersion,'id'|'version'|'title'|'content'|'source'>}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','document']);keys(input.document,['id','version','title','content','source']);
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'capture-document',document:input.document}});

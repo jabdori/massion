@@ -3,7 +3,7 @@
  * authorization, provider truth, or the current bytes behind an artifact.
  */
 import { isAbsolute, normalize } from 'node:path';
-import { apply, createMission, hash, validateOrganizationRevision, pinnedOrganization, validateDocumentHistory } from './domain.ts';
+import { apply, createMission, hash, validateOrganizationRevision, pinnedOrganization, pinnedWorkSources, validateDocumentHistory } from './domain.ts';
 import type { Actor, Artifact, Assignment, Command, Criteria, Effect, Mission, Verdict, Work } from './domain.ts';
 import type { Operation } from './storage.ts';
 
@@ -102,12 +102,13 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['artifactSnapshot','organizationSnapshot','sourceDocuments']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
+  if(Object.hasOwn(work,'sourceDocuments'))equal(record.sourceDocuments,work.sourceDocuments,'Record exact source pins');else ensure(!Object.hasOwn(record,'sourceDocuments'),'legacy Record has source pins');
   if(work.organizationSnapshot)equal(record.organizationSnapshot,work.organizationSnapshot,'Record organization pin');
   else ensure(!Object.hasOwn(record,'organizationSnapshot'),'legacy Record has organization');
   equal(record.criteria, work.criteria, 'Record criteria'); equal(record.artifact, work.artifact, 'Record artifact');
@@ -127,7 +128,8 @@ function checkRecord(work: Work): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot']);
+    ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments']);
+  pinnedWorkSources(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
   text(item.id, 'Work ID'); text(item.title, 'Work title'); integer(item.missionVersion, 'Work Mission version'); criteria(item.criteria);
   ensure(item.missionVersion <= mission.version && item.criteria.version <= mission.criteria.version, 'Work references future Mission or criteria');
@@ -321,6 +323,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
   'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
+  'attach-work-source':{required:['workId','documentId','version','contentSha256','reason']},
   'capture-document':{required:['document']},
   'record-relation':{required:['relation']},
   relate: { required: ['relation'] },
