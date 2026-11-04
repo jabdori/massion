@@ -75,6 +75,8 @@ after-settled-receipt cases deliberately remain admitted without a new recovery
 policy. The controlled child uses the unmodified application/server/runtime with
 a pausing store wrapper; it is not a normal CLI shutdown or Chrome/assistive
 technology proof. Existing CLI/Chrome evidence retains its original scope.
+The separate [normal CLI process-kill regression](normal-cli-process-kill-evidence.md)
+covers a held-call SIGKILL through the actual CLI entrypoint without store hooks.
 
 Only disposable fixture data and credential-free loopback providers are used.
 No real account, live/paid model, production DB, merge or deployment is included.
