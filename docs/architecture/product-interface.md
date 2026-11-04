@@ -27,6 +27,27 @@ The store serializes commits within one host/store instance because its atomic g
 
 No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
 
+## Reconnection synchronization barrier
+
+Startup, an offline notification or a failed/invalid event read pauses new writes.
+Mission reads and input drafts remain available. Before enabling actions again,
+the client validates a durable event page, refreshes current provider/runtime
+metadata and connection setup, and reads the selected authoritative Mission.
+A failed permission or Mission read keeps the barrier closed. Successful refresh
+rebuilds execution controls so an old selection check cannot authorize a Run.
+
+This barrier covers Mission/Work admission, owner intervention, fixture execution,
+model connection/permission changes and Run; it is a client synchronization rule,
+not a new authentication system. Existing server owner resolution, scope grants,
+revision/idempotency checks and effect admission remain authoritative. Losing a
+connection does not cancel an already admitted effect or authorize retry.
+
+A later offline notification fences an older refresh response. Durable pending
+command/fixture markers remain separate locks even after successful synchronization;
+only their existing exact-receipt/definite-rejection path can clear them. Reconnection
+never resends commands. The development runtime still has no remote multi-PC
+identity, persistent approval or publicly exposed listener.
+
 ## Same-host Mission links
 
 A validated loaded snapshot exposes `#mission=<encoded ID>` on the current host.
