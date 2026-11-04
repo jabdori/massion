@@ -1,3 +1,4 @@
+import {expiredPanel,expiredClient} from './expired-run-panel.ts';
 import {correctionPanel,correctionClient} from './work-correction-panel.ts';
 import {rejectedTextClient} from './rejected-text-panel.ts';
 import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts';
@@ -16,6 +17,7 @@ export const workbenchPage = String.raw`<!doctype html>
 .execution-form select,.execution-form input,#criteria-oracle{margin-bottom:14px}.execution-form button{margin:7px 8px 0 0}
 #conversation-panel{overflow-wrap:anywhere;min-width:0}#conversation-messages{max-width:100%;overflow:auto}
 .impact-panel{border-top:1px solid var(--line);margin-top:20px;padding-top:14px;overflow-wrap:anywhere}.impact-results{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}.impact-results:focus-visible{outline:3px solid #377dba;outline-offset:4px}.impact-results ul{padding-left:20px}.impact-results li{margin-bottom:12px}
+.expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
 </style>
 </head>
 <body>
@@ -46,6 +48,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><p><a id="mission-link" href="#" hidden>Open this Mission in another browser</a></p><p class="hint">Copy this link to continue on the same host. Opening it reads current state; it does not start Work or grant access.</p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
 ${prerequisitePanel}
 ${correctionPanel}
+${expiredPanel}
 ${runSequencePanel}
 <details id="revision-panel" class="impact-panel"><summary>Revise Mission purpose and acceptance</summary><p class="hint">Only future Work uses these changes. Existing Work keeps its original Mission input and criteria. Scope and constraints stay fixed; editing does not run a model or re-evaluate Work.</p><div id="revision-comparison" tabindex="0" role="region" aria-label="Current Mission and revision draft comparison" class="impact-results"><p id="revision-current" class="hint"></p><p id="revision-base" class="hint"></p></div><form id="revision-form"><fieldset id="revision-fields"><label for="revision-purpose">Revised purpose</label><textarea id="revision-purpose" rows="2" maxlength="16000" required></textarea><label for="revision-version">New criteria version</label><input id="revision-version" type="number" min="1" max="9007199254740991" step="1" required><label for="revision-criteria">Revised success criteria</label><textarea id="revision-criteria" rows="3" maxlength="16000" required></textarea><label for="revision-oracle">Acceptance method</label><select id="revision-oracle"><option value="manual-review/v1">Manual review (no model execution)</option><option value="bounded-text-review/v1">Bounded text with independent model review</option></select><button id="save-revision" type="submit" data-write>Save Mission revision</button><button id="rebase-revision" type="button" class="secondary">Keep draft against current revision</button><button id="discard-revision" type="button" class="secondary">Discard revision draft</button></fieldset></form><p id="revision-status" class="status" role="status" aria-live="polite">Review current purpose and criteria before saving.</p></details>
 <details id="organization-panel"><summary>Inspect and revise organization responsibilities</summary><p id="organization-hint" class="hint">Choose an exact saved revision or new definitions. Owner-declared executor and independent verifier responsibilities affect only newly admitted Work. Existing Work and Records retain their original version. Required capabilities are declarations, not measured competence, staffing choices or permission grants. Saving does not execute a model.</p><p id="organization-current" class="hint"></p><form id="organization-form"><fieldset id="organization-fields"><label for="organization-target">Exact source organization revision</label><select id="organization-target" aria-describedby="organization-hint organization-base"><option value="">Choose exact revision or new definitions</option></select><div id="organization-evidence" tabindex="0" role="region" aria-label="Selected stored organization responsibility evidence" class="impact-results"></div><p id="organization-base" class="hint"></p><label for="organization-version">New organization version</label><input id="organization-version" type="number" readonly aria-describedby="organization-base"><label for="organization-executor">Executor responsibility · required text-output</label><textarea id="organization-executor" rows="3" maxlength="2000" required></textarea><label for="organization-verifier">Independent verifier responsibility · required independent-text-review</label><textarea id="organization-verifier" rows="3" maxlength="2000" required></textarea><label for="organization-reason">Reason for this new revision</label><textarea id="organization-reason" rows="2" maxlength="2000" required></textarea><div class="row"><button id="save-organization" type="submit" data-write>Save new responsibility revision</button><button id="review-organization" type="button" class="secondary">Review draft against current revision</button><button id="cancel-organization" type="button" class="secondary">Cancel private responsibility draft</button></div></fieldset></form><p id="organization-status" class="status" role="status" aria-live="polite">Choose a source revision and review its recorded requirements.</p><button id="organization-recheck" type="button" class="secondary">Check pending command receipt</button><p class="hint">If the outcome is unknown, this checks durable receipts. It does not repeat the save or unlock writes from snapshot inference.</p></details>
@@ -124,6 +127,7 @@ function confirmOperation(operation) {
   sequenceAdmissionObserved(operation);
   const operationId = operationKey(operation); confirmedOperations.add(operationId);
   if(prerequisiteSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderPrerequisites();
+  if(expiredSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderExpired();
   if(correctionSubmissions.has(operationId)&&snapshot?.value.id===operation.missionId&&selectedId===operation.missionId)renderCorrections();
   if(sourceSubmissions.has(operationId) && snapshot?.value.id===operation.missionId && selectedId===operation.missionId)renderSources();
   if(documentSubmissions.has(operationId) && snapshot?.value.id===operation.missionId && selectedId===operation.missionId)renderDocuments();
@@ -181,7 +185,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); prerequisiteSubmissions.delete(operationKey(operation)); correctionSubmissions.delete(operationKey(operation)); sourceSubmissions.delete(operationKey(operation)); documentSubmissions.delete(operationKey(operation)); relationSubmissions.delete(operationKey(operation)); organizationSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); growthSubmissions.delete(operationKey(operation)); conversationSubmissions.delete(operationKey(operation)); }
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); prerequisiteSubmissions.delete(operationKey(operation)); correctionSubmissions.delete(operationKey(operation)); expiredSubmissions.delete(operationKey(operation)); sourceSubmissions.delete(operationKey(operation)); documentSubmissions.delete(operationKey(operation)); relationSubmissions.delete(operationKey(operation)); organizationSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); retirementSubmissions.delete(operationKey(operation)); budgetSubmissions.delete(operationKey(operation)); growthSubmissions.delete(operationKey(operation)); conversationSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -278,7 +282,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  conversationControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls();
+  conversationControls(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls(); expiredControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -586,7 +590,7 @@ function renderMission() {
   let card = focused; while (card && !card.id?.startsWith('work-card-')) card = card.parentElement;
   const workFocus = focused?.id && $('work-list').contains(focused) ? {id:focused.id,heading:card ? 'work-heading-' + card.id.slice(10) : null,start:focused.selectionStart,end:focused.selectionEnd,scroll:focused.scrollTop} : null;
   const mission = snapshot.value;
-  renderSources(); renderPrerequisites(); renderCorrections();
+  renderSources(); renderPrerequisites(); renderCorrections(); renderExpired();
   renderDocuments();
   renderRelations();
   renderOrganization();
@@ -702,7 +706,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null, organizationSubmission = null, relationSubmission = null, documentSubmission = null, sourceSubmission = null, conversationSubmission = null, prerequisiteSubmission = null, correctionSubmission = null) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null, organizationSubmission = null, relationSubmission = null, documentSubmission = null, sourceSubmission = null, conversationSubmission = null, prerequisiteSubmission = null, correctionSubmission = null, expiredSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -716,6 +720,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
   if(conversationSubmission)conversationSubmissions.set(operationKey(operation),conversationSubmission);
   if(prerequisiteSubmission)prerequisiteSubmissions.set(operationKey(operation),prerequisiteSubmission);
   if(correctionSubmission)correctionSubmissions.set(operationKey(operation),correctionSubmission);
+  if(expiredSubmission)expiredSubmissions.set(operationKey(operation),expiredSubmission);
   if(sourceSubmission)sourceSubmissions.set(operationKey(operation),sourceSubmission);
   if(documentSubmission)documentSubmissions.set(operationKey(operation),documentSubmission);
   if(relationSubmission)relationSubmissions.set(operationKey(operation),relationSubmission);
@@ -734,8 +739,8 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     if (result.outcome === 'rejected' && result.reason === 'feed') { await clearPending(operation); requireReconnect(); report('Database changed before command admission. No command was executed or retried; refresh before a new action.','warning'); return false; }
     if (writeFeed && writeFeed !== feedId) { requireReconnect(); throw new Error('The command response belongs to the previous database. Its outcome requires current-feed receipt readback; no replay occurred.'); }
     const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId) : null;
-    if((longRun || prerequisiteSubmission || correctionSubmission) && selectedId!==missionId){
-      if((prerequisiteSubmission||correctionSubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
+    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission) && selectedId!==missionId){
+      if((prerequisiteSubmission||correctionSubmission||expiredSubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
       if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
       if(response.status>=400 && response.status<500 || response.status===503 && result.outcome==='rejected'){await clearPending(operation);return false;}
       throw new Error('Background run outcome requires durable readback.');
@@ -761,11 +766,11 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
       report(result.reason || successMessage,result.status === 'settled' ? 'success' : 'warning'); return result.status === 'settled';
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
-    confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
+    confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission||expiredSubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
-    if((longRun || prerequisiteSubmission || correctionSubmission) && selectedId!==missionId){if(!confirmedOperations.has(operationKey(operation)) && (!unknownOperation || operationKey(unknownOperation)===operationKey(operation)))unknownOperation=operation;await pollEvents();return false;}
+    if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission) && selectedId!==missionId){if(!confirmedOperations.has(operationKey(operation)) && (!unknownOperation || operationKey(unknownOperation)===operationKey(operation)))unknownOperation=operation;await pollEvents();return false;}
     if (confirmedOperations.has(operationKey(operation))) {
       const loaded = await loadMission(missionId, false);
       if (loaded) report('The host confirmed this command. Its current state was refreshed without replaying it.','success');
@@ -1565,6 +1570,7 @@ async function connect() {
 ${runSequenceClient}
 ${prerequisiteClient}
 ${correctionClient}
+${expiredClient}
 ${rejectedTextClient}
 controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);

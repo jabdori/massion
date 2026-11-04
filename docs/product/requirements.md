@@ -185,3 +185,7 @@ Above PR51 `dac58e8`, WRK-01/ASR-01/SUR-01 and issue [#4](https://github.com/jab
 ## Explicit fresh correction Work after known rejection
 
 Above PR52 `732c84b`, WRK-01/ASR-01/GOV-01/SUR-01 and issue [#4](https://github.com/jabdori/massion/issues/4): exact known settled failure may inform an explicitly reviewed new Work admission, preserving failed original/verdict/receipts/claims/Records. Current new inputs are reviewed independently; no unknown recovery/replay or automatic inheritance/execution. Existing separate Run/Assurance accepts only the new result. See [scope and acceptance](../architecture/owner-correction-work.md) and [evidence](../acceptance/owner-correction-work-evidence.md). Real model correction quality, remote authentication and overall recovery/product acceptance remain open.
+
+### Expired original closure through the normal owner UI
+
+Above PR53, RUN-01/WRK-01/GOV-01 and issue #4's interruption inspection gain a private exact Work/reason/uncertainty decision with ownership Review, Cancel and explicit Close. Activation-only host crashes and retained pending/unknown effects can be closed only against original ownership and elapsed server observation at the reviewed current revision/feed. Existing claims, receipts, reservations, Work and Records remain evidence; local closure proves neither external cessation nor success. Unknown responses and restart do not replay commands/effects or restore grants. This closes the API-to-UI gap only; it does not authorize unknown recovery, authentication changes or live-provider evaluation.
