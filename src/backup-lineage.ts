@@ -1,3 +1,4 @@
+import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
@@ -73,7 +74,7 @@ function assignment(value: unknown): asserts value is Assignment {
   oneOf(model.evidenceClass, ['fixture', 'real-provider'], 'evidence class');
 }
 function effect(value: unknown, recoveryPendingIds: readonly string[] = []): asserts value is Effect {
-  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt']);
+  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt','providerDispatch']);
   for (const key of ['id', 'taskId', 'target', 'authority']) text(item[key], `effect ${key}`);
   oneOf(item.status, ['pending', 'succeeded', 'failed', 'unknown'], 'effect status');
   if (item.status === 'pending') ensure(!Object.hasOwn(item, 'receipt'), 'pending effect has a receipt');
@@ -133,6 +134,7 @@ function checkRecord(work: Work,mission:Mission): void {
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
     ['runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+  validateProviderDispatchClaims(value as Work);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
@@ -175,6 +177,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     // inputHash is retained, not recomputed from later mutable instructions.
   }
   validateRuntimeInterruption(value as Work);
+  const deadlinePendingIds=(value as Work).runtimeInterruption?.pendingEffectIds??[];
   let recoveryPendingIds: string[] = [];
   if (Object.hasOwn(item, 'runtimeRecovery')) {
     const recovery = object(item.runtimeRecovery, 'owner recovery', ['runId', 'actorId', 'reason', 'pendingEffectIds', 'unknownEffectIds']);
@@ -190,7 +193,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     ensure(effects.filter(effect => effect.status === 'unknown').every(effect => ids.includes(effect.id)), 'unbound recovery unknown effect');
     ensure(!effects.some(effect => effect.status === 'pending'), 'quarantined Work still has pending effects');
     ensure(recoveryPendingIds.every(id => !Object.hasOwn(effects.find(effect => effect.id === id)!, 'receipt')), 'owner recovery fabricated a provider receipt');
-    ensure(unknownIds.every(id => Object.hasOwn(effects.find(effect => effect.id === id)!, 'receipt')), 'existing unknown receipt was lost');
+    ensure(unknownIds.every(id => deadlinePendingIds.includes(id)||Object.hasOwn(effects.find(effect => effect.id === id)!, 'receipt')), 'existing unknown receipt was lost');
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
@@ -199,7 +202,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
     if (task.status === 'settled') text(task.result, 'settled task result');
   }
-  array(item.assignments, 'assignments').forEach(assignment); array(item.effects, 'effects').forEach(entry => effect(entry, recoveryPendingIds));
+  array(item.assignments, 'assignments').forEach(assignment); array(item.effects, 'effects').forEach(entry => effect(entry, [...recoveryPendingIds,...deadlinePendingIds]));
   const attempts = array(item.attempts, 'attempts'); ensure(attempts.length > 0, 'Work has no attempt');
   for (const [index, value] of attempts.entries()) {
     const attempt = object(value, 'attempt', ['id', 'number', 'criteria', 'status', 'modelVersions'], ['results']);
@@ -304,6 +307,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'claim-provider-dispatch': {required:['workId','effectId','claim']},
   'expire-runtime': {required:['workId','runId','dispatchId','observedAt']},
   'attach-work-prerequisite': {required:['workId','prerequisiteId','criteriaHash','inputHash','reason']},
   'revise-organization': {required:['version','reason','responsibilities']},
@@ -318,7 +322,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   delegate: { required: ['workId', 'taskId', 'parentId'] },
   'settle-task': { required: ['workId', 'taskId', 'result'] },
   'admit-effect': { required: ['workId', 'effect', 'reserve'] },
-  receipt: { required: ['workId', 'effectId', 'outcome', 'receipt', 'usage'] },
+  receipt: { required: ['workId', 'effectId', 'outcome', 'receipt', 'usage'],optional:['providerDispatchId'] },
   'reconcile-effect': { required: ['workId', 'effectId', 'outcome', 'receipt'] },
   'publish-artifact': { required: ['workId', 'artifact'] },
   verify: { required: ['workId', 'verdict'] },

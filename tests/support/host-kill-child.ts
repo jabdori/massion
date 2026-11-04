@@ -26,12 +26,14 @@ class PausedStore extends SurrealStore<Mission>{
   const executor=event?.effect?.id==='run:executor'||event?.effectId==='run:executor';
   if(!config.restarted){
    if(config.stage==='before-admission'&&event?.type==='admit-effect'&&executor)await pause('before-effect-admission',input);
+   if(config.stage==='before-provider-claim'&&event?.type==='claim-provider-dispatch'&&executor)await pause('provider-effect-pending-before-claim',input);
    if(config.stage==='before-receipt'&&event?.type==='receipt'&&executor)await pause('provider-returned-before-receipt',input);
    if(config.stage==='artifact-before-receipt'&&event?.type==='receipt'&&event.effectId==='run:artifact')await pause('artifact-written-before-receipt',input);
   }
   const result=await super.commit(input);
   if(!config.restarted){
    if(config.stage==='after-admission'&&event?.type==='admit-effect'&&executor)await pause('effect-admitted-before-invocation',input);
+   if(config.stage==='after-provider-claim'&&event?.type==='claim-provider-dispatch'&&executor)await pause('provider-claim-committed-before-invocation',input);
    if(config.stage==='after-receipt'&&event?.type==='receipt'&&executor)await pause('receipt-committed-before-next-stage',input);
   }
   return result;

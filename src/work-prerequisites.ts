@@ -1,3 +1,4 @@
+import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership} from './runtime-lifetime.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
 import {DomainError,hash,workInputHash,pinnedWorkSources,pinnedOrganization} from './domain.ts';
@@ -18,6 +19,7 @@ export function prerequisitePins(mission:Mission,work:Work):WorkPrerequisite[]|u
 function acceptedRecord(mission:Mission,w:Work):PrerequisiteRecord {
  const r=w.record;ensure(w.acceptance==='accepted'&&w.execution==='settled'&&r,'Prerequisite Work has no accepted Record');
  ensure(w.tasks.length>0&&w.tasks.every(t=>t.status==='settled')&&w.attempts.at(-1)?.status==='settled','Prerequisite task/attempt settlement unavailable');
+ validateProviderDispatchClaims(w);
  if(Object.hasOwn(w.runtimeRun??{},'ownership'))validateRuntimeOwnership(w.runtimeRun!.ownership!);
  const {checksum,...bundle}=r;ensure(digest(checksum)&&hash(bundle)===checksum&&r.workId===w.id,'Prerequisite Record checksum/binding unavailable');
  for(const [a,b] of [[r.runtimeOwnership??null,w.runtimeRun?.ownership??null],[r.criteria,w.criteria],[r.artifact,w.artifact],[r.verdict,w.verdict],[r.receipts,w.effects],[r.assignments,w.assignments],[r.memoryVersions,w.appliedMemoryVersions],[r.sourceDocuments??null,w.sourceDocuments??null],[r.organizationSnapshot??null,w.organizationSnapshot??null],[r.prerequisites??null,w.prerequisites??null],[r.prerequisiteRecords??null,w.prerequisiteRecords??null]])ensure(hash(a)===hash(b),'Prerequisite Record original Work binding mismatch');
