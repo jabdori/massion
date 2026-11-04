@@ -49,6 +49,7 @@ export type Command =
   | { type: 'cancel'; workId: string }
   | { type: 'steer'; workId: string; instruction: string }
   | { type: 'save-memory'; memory: Memory }
+  | { type: 'retire-memory'; memoryId: string; version: number; reason: string }
   | { type: 'propose-growth'; proposal: Growth }
   | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string }
   | { type: 'adopt-growth'; growthId: string }
@@ -147,6 +148,14 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     case 'steer': { role(actor,'owner'); const w=needWork(); open(w); text(command.instruction,'instruction'); (w.instructions??=[]).push({actorId:actor.id,text:command.instruction}); if(!w.blocker)w.execution='waiting'; break; }
     case 'save-memory': {
       role(actor,'owner','representative'); const m=command.memory; text(m.id,'memory'); text(m.source,'memory provenance'); text(m.content,'memory'); ensure(m.scope===state.scope,'Memory scope mismatch'); ensure(Number.isSafeInteger(m.version)&&m.version>0,'Invalid memory version'); ensure(m.authority==='explicit'||m.authority==='learned','Invalid memory authority'); if(m.authority==='explicit') role(actor,'owner'); ensure(m.authority!=='learned'||!m.effective,'Learned memory requires evaluated adoption'); ensure(!state.memories.some(x=>x.id===m.id&&x.version===m.version),'Memory version immutable'); ensure(m.version>Math.max(0,...state.memories.filter(x=>x.id===m.id).map(x=>x.version)),'Memory version must advance'); if(m.effective) for(const old of state.memories) if(old.id===m.id) old.effective=false; state.memories.push(structuredClone(m)); break;
+    }
+    case 'retire-memory': {
+      role(actor,'owner'); text(command.memoryId,'memory identity'); text(command.reason,'memory retirement reason');
+      ensure(Number.isSafeInteger(command.version)&&command.version>0,'Invalid memory version');
+      const memory=state.memories.find(m=>m.id===command.memoryId&&m.version===command.version);
+      ensure(memory,'Unknown memory version'); ensure(memory.scope===state.scope,'Memory scope mismatch');
+      ensure(memory.authority==='explicit','Only explicit memory may be retired'); ensure(memory.effective===true,'Memory version is not effective');
+      memory.effective=false; break;
     }
     case 'propose-growth': {
       role(actor,'representative'); const g=command.proposal; text(g.id,'growth'); text(g.counterevidence,'counterevidence'); ensure(g.proposer===actor.id&&g.status==='proposed'&&!g.evaluator&&!g.scores&&!g.observation,'Invalid proposal'); ensure(g.target==='memory','Only memory adoption implemented in this slice'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&!m.effective),'Unknown candidate'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Unknown effective baseline'); ensure(!state.growth.some(x=>x.id===g.id),'Growth exists'); state.growth.push(structuredClone(g)); break;

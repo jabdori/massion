@@ -174,3 +174,13 @@ test('measured Growth adoption, later accepted Work, observation and revert pres
   const invalid = structuredClone(restored); invalid.growth[0]!.observation!.workId = 'work';
   assert.throws(() => validateMissionLineage(invalid), /Growth observation/);
 });
+
+test('explicit memory retirement preserves accepted Record, old pins and portable journal lineage',async()=>{
+ const {store,send,mission}=await fixture(),old=structuredClone(mission.works[0]);
+ await send({type:'retire-memory',memoryId:'guidance',version:1,reason:'Owner stops future application'});
+ await send({type:'admit-work',workId:'future',title:'No retired guidance',budget:0});
+ const current=(await store.load('mission'))!.value;assert.deepEqual(current.works[0],old);assert.equal(current.memories[0]?.effective,false);assert.deepEqual(current.works[1]?.appliedMemoryVersions,[]);assert.deepEqual(old?.record?.memoryVersions,['guidance@1']);
+ validateMissionJournalLineage(store.inspect());validateMissionLineage(current);
+ const corrupt=structuredClone(store.inspect()),retirement=corrupt.find(o=>(o.events[0] as any).type==='retire-memory')!;(retirement.events[0] as any).command.scope='forged';
+ assert.throws(()=>validateMissionJournalLineage(corrupt),/unexpected|unknown|field/i);
+});
