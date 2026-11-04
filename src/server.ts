@@ -91,7 +91,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|mission-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
@@ -115,6 +115,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
      sendCommit(await product.reviseBudget(missionId,body as Parameters<ProductService['reviseBudget']>[1]));return;
     }
     if((workRoute[2]==='work-question'||workRoute[2]==='work-answer')){identifier(body.workId,'Work identifier');identifier(body.questionId,'Question identifier');sendCommit(await product.clarifyWork(missionId,body as Parameters<ProductService['clarifyWork']>[1],workRoute[2]==='work-answer'));return;}
+    if(workRoute[2]==='mission-message'){sendCommit(await product.appendMissionMessage(missionId,body as Parameters<ProductService['appendMissionMessage']>[1]));return;}
     if(workRoute[2]==='work-message'){identifier(body.workId,'Work identifier');identifier(body.messageId,'Message identifier');if(body.replyTo!==null)identifier(body.replyTo,'Reply message identifier');sendCommit(await product.appendWorkMessage(missionId,body as Parameters<ProductService['appendWorkMessage']>[1]));return;}
     if(workRoute[2]==='work-prerequisite'){identifier(body.workId,'Work identifier');identifier(body.prerequisiteId,'Prerequisite Work identifier');sendCommit(await product.attachWorkPrerequisite(missionId,body as Parameters<ProductService['attachWorkPrerequisite']>[1]));return;}
     if(workRoute[2]==='work-source'){identifier(body.workId,'Work identifier');sendCommit(await product.attachWorkSource(missionId,body as Parameters<ProductService['attachWorkSource']>[1]));return;}
@@ -149,6 +150,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    }
    const memoryUsageRoute=/^\/missions\/([^/]+)\/memory-usage$/.exec(url.pathname);
    if(req.method==='GET'&&memoryUsageRoute){const missionId=decodeIdentifier(memoryUsageRoute[1]!),allowed=['id','version','hash'];if([...url.searchParams.keys()].some(k=>!allowed.includes(k)||url.searchParams.getAll(k).length!==1)||allowed.some(k=>!url.searchParams.has(k)))throw new RequestError(400,'Unique exact memory query fields required');const feed=req.headers['x-massion-feed'];if(feed!==undefined)identifier(feed,'Feed identity');const result=await readMemoryUsage(store,missionId,{id:url.searchParams.get('id')!,version:Number(url.searchParams.get('version')),versionHash:url.searchParams.get('hash')!,...(feed===undefined?{}:{feedId:feed})});send(result?200:404,result??{error:'Unknown Mission or exact memory version'});return;}
+   const missionConversationRoute=/^\/missions\/([^/]+)\/mission-conversation$/.exec(url.pathname);
+   if(req.method==='GET'&&missionConversationRoute){if([...url.searchParams.keys()].length)throw new RequestError(400,'Mission conversation has no query fields');const missionId=decodeIdentifier(missionConversationRoute[1]!),feed=req.headers['x-massion-feed'];if(feed!==undefined)identifier(feed,'Feed identity');const result=await product.readMissionConversation(missionId,feed);send(result?200:404,result??{error:'Unknown Mission'});return;}
    const conversationRoute=/^\/missions\/([^/]+)\/work-conversation$/.exec(url.pathname);
    if(req.method==='GET'&&conversationRoute){const missionId=decodeIdentifier(conversationRoute[1]!),workId=url.searchParams.get('work'),feed=req.headers['x-massion-feed'];if([...url.searchParams.keys()].length!==1||url.searchParams.getAll('work').length!==1)throw new RequestError(400,'Unique exact conversation Work query required');identifier(workId,'Work identifier');if(feed!==undefined)identifier(feed,'Feed identity');const result=await product.readWorkConversation(missionId,workId,feed);send(result?200:404,result??{error:'Unknown Mission or Work'});return;}
    const ownershipRoute=/^\/missions\/([^/]+)\/run-ownership$/.exec(url.pathname);

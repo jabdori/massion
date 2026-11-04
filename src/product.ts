@@ -2,7 +2,7 @@ import {readRejectedText} from './rejected-text.ts';
 import type {RejectedTextInput} from './rejected-text.ts';
 import {runSequence} from './run-sequence.ts';
 import type {RunSequenceInput} from './run-sequence.ts';
-import {readWorkConversation} from './work-conversation.ts';
+import {readWorkConversation,readMissionConversation} from './work-conversation.ts';
 import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
@@ -32,6 +32,10 @@ export class ProductService {
  async clarifyWork(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;questionId:string;text:string},answer:boolean) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','questionId','text']);const {commandId,expectedRevision,...question}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:answer?'answer-work-question':'ask-work-question',...question}});
  }
+ async appendMissionMessage(missionId:string,input:{commandId:string;expectedRevision:number;messageId:string;replyTo:string|null;text:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-mission-message',...message}});
+ }
+ async readMissionConversation(missionId:string,feedId?:string){return readMissionConversation(this.app.store,missionId,feedId);}
  async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
  }

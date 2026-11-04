@@ -1,0 +1,1 @@
+export async function beforeWork(f:any){await f.product.create({id:'before',purpose:'Discuss before assuming a responsibility',scope:'local',constraints:[],criteria:{version:1,description:'Original bounded lifetime fixture',oracle:'bounded-text-review/v1'}},'before-create');}

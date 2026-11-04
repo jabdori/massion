@@ -317,6 +317,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
   'ask-work-question':{required:['workId','questionId','text']},
   'answer-work-question':{required:['workId','questionId','text']},
+  'append-mission-message':{required:['messageId','replyTo','text']},
   'append-work-message':{required:['workId','messageId','replyTo','text']},
   'claim-provider-dispatch': {required:['workId','effectId','claim']},
   'expire-runtime': {required:['workId','runId','dispatchId','observedAt']},
