@@ -57,6 +57,8 @@ export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,
  if(outputTokenCap!==undefined&&work.budget.limit-work.budget.reserved<outputTokenCap*2)add('budget_exceeded','Budget must reserve both executor and independent verifier output caps.');
  return {missionId:snapshot.value.id,workId,revision:snapshot.revision,expectedRevision,ready:diagnostics.length===0,diagnostics};
 }
+export function hasUnsettledRuns(results:PromiseSettledResult<RuntimeResult>[]):boolean {return results.some(result=>result.status==='rejected'&&!(result.reason instanceof HostDrainError)&&!(result.reason instanceof DomainError)&&!(result.reason instanceof Error&&result.reason.name==='StorageContentionError'));}
+export function hostBusyPreflight(result:SelectionPreflight):SelectionPreflight {return {...result,ready:false,diagnostics:[...result.diagnostics,{code:'host_busy',message:'At request admission this local host already owned another Work. No run or effect was admitted for this request. Refresh and deliberately check again; no automatic queue, replay or remote stop is inferred.'}]};}
 export function rejectedRun(preflight:SelectionPreflight,snapshot:Snapshot<Mission>):RuntimeResult {
  // Already admitted runs retain their no-replay classification, including stale retries or quarantine.
  const has=(code:string)=>preflight.diagnostics.some(d=>d.code===code);
@@ -70,7 +72,7 @@ const validTokens=(n:unknown)=>n===null||typeof n==='number'&&Number.isSafeInteg
 export class ConfiguredTextRuntime implements WorkRuntime {
  readonly app:Application; private readonly options:ConfiguredRuntimeOptions;
  private draining=false;
- private readonly runs=new Set<Promise<RuntimeResult>>();
+ private readonly runs=new Map<Promise<RuntimeResult>,{key:string;admitted:boolean}>();
  private readonly controllers=new Map<string,{runId:string;controller:AbortController}>();
  constructor(store:Store<Mission>,options:ConfiguredRuntimeOptions){
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
@@ -82,7 +84,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   this.app=new Application(store,actors);
  }
  beginDrain(){this.draining=true;for(const owned of this.controllers.values())owned.controller.abort(new HostDrainError());}
- async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs]);if(results.some(result=>result.status==='rejected'&&!(result.reason instanceof HostDrainError)&&!(result.reason instanceof DomainError)&&!(result.reason instanceof Error&&result.reason.name==='StorageContentionError')))throw new Error('Owned runtime did not settle durably during local host drain');}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs.keys()]);if(hasUnsettledRuns(results))throw new Error('Owned runtime did not settle durably during local host drain');}
  availability(mission:Mission){
   if(this.draining)return {ready:false,reason:"Local host is draining; no new run is admitted."};
   const {authorization:g,executor,verifier,outputTokenCap,enabled}=this.options;
@@ -99,8 +101,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const result=workAdmissionPreflight(snapshot,workId,expectedRevision,this.options.outputTokenCap);
   const work=snapshot.value.works.find(w=>w.id===workId)!;const available=this.availability({...snapshot.value,criteria:work.criteria});
   if(!available.ready)result.diagnostics.push({code:'runtime_unavailable',message:available.reason});
-  return {...result,ready:result.diagnostics.length===0};
+  const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&this.busy(`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
+ private busy(key:string){return [...this.runs.values()].some(run=>run.admitted&&run.key!==key);}
  owns(missionId:string,workId:string,runId:string){return this.controllers.get(`${missionId}\0${workId}`)?.runId===runId;}
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.controller.abort();}
  private async snapshot(missionId:string){const s=await this.app.store.load(missionId);if(!s)throw new DomainError('Unknown Mission');return s;}
@@ -151,9 +154,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   await this.send(missionId,{type:'receipt',workId,effectId,...(claim?{providerDispatchId:claim.id}:{}),outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
   return outcome;
  }
- run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{const task=this.runOwned(missionId,workId,runId,expectedRevision);this.runs.add(task);void task.finally(()=>this.runs.delete(task)).catch(()=>{});return task;}
- private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{
-  const initial=await this.current(missionId,workId);const preflight=this.preflight(initial.snapshot,workId,expectedRevision);
+ run(missionId:string,workId:string,runId:string,expectedRevision:number):Promise<RuntimeResult>{const key=`${missionId}\0${workId}`,admitted=!this.busy(key),task=this.runOwned(missionId,workId,runId,expectedRevision,admitted);this.runs.set(task,{key,admitted});void task.finally(()=>this.runs.delete(task)).catch(()=>{});return task;}
+ private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,admitted:boolean):Promise<RuntimeResult>{
+  const initial=await this.current(missionId,workId);let preflight=this.preflight(initial.snapshot,workId,expectedRevision);if(!admitted&&preflight.ready)preflight=hostBusyPreflight(preflight);
   if(!preflight.ready)return rejectedRun(preflight,initial.snapshot);
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};

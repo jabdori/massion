@@ -68,3 +68,7 @@ RUN-01/WRK-01 require the headless host to supervise its own shutdown. Before cl
 ## Explicit expired-run closure follow-up
 
 Above PR46, retain no-replay admission after crash and provide one owner decision naming the original bounded run ownership and elapsed deadline. Server clock forbids future observations; atomic command identity records owner reason/uncertainty acknowledgment. Share the existing deadline interruption fence while preserving claims, receipts, reservations, cancellation and accepted originals. This closes stranded activation-only runs without inferring worker death, remote stop, retry or restored grants. Scope and preimplementation acceptance: [expired-run](../expired-run.md).
+
+## Bounded local admission capacity follow-up
+
+Above PR47, supervise one distinct Work admission at a time in the normal top-level Work runtime using existing local promise/active tracking. Reuse pure fresh Work/CAS/no-replay conditions; an occupied admission rejects another fresh Work without a durable state/queue or automatic future dispatch. Reservation precedes asynchronous admission reads; exact settlement releases only local capacity and never settles or replays unknown external effects. Validate controlled actual DB/normal CLI and existing browser preflight diagnostics. [Scope and acceptance](../host-admission.md) distinguish this local bound from global/remote concurrency, leases, budgets and complete scheduling/recovery.
