@@ -91,7 +91,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|mission-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-conflict|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|mission-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
@@ -116,6 +116,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     }
     if((workRoute[2]==='work-question'||workRoute[2]==='work-answer')){identifier(body.workId,'Work identifier');identifier(body.questionId,'Question identifier');sendCommit(await product.clarifyWork(missionId,body as Parameters<ProductService['clarifyWork']>[1],workRoute[2]==='work-answer'));return;}
     if(workRoute[2]==='mission-message'){sendCommit(await product.appendMissionMessage(missionId,body as Parameters<ProductService['appendMissionMessage']>[1]));return;}
+    if(workRoute[2]==='memory-conflict'){sendCommit(await product.declareMemoryConflict(missionId,body as Parameters<ProductService['declareMemoryConflict']>[1]));return;}
     if(workRoute[2]==='work-message'){identifier(body.workId,'Work identifier');identifier(body.messageId,'Message identifier');if(body.replyTo!==null)identifier(body.replyTo,'Reply message identifier');sendCommit(await product.appendWorkMessage(missionId,body as Parameters<ProductService['appendWorkMessage']>[1]));return;}
     if(workRoute[2]==='work-prerequisite'){identifier(body.workId,'Work identifier');identifier(body.prerequisiteId,'Prerequisite Work identifier');sendCommit(await product.attachWorkPrerequisite(missionId,body as Parameters<ProductService['attachWorkPrerequisite']>[1]));return;}
     if(workRoute[2]==='work-source'){identifier(body.workId,'Work identifier');sendCommit(await product.attachWorkSource(missionId,body as Parameters<ProductService['attachWorkSource']>[1]));return;}

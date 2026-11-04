@@ -1,3 +1,4 @@
+import {declareMemoryConflict,requireUnconflictedNewWork} from './memory-conflicts.ts';
 import {clarificationInput,questionText,requireAnswered} from './work-clarification.ts';
 import type {WorkQuestion} from './work-clarification.ts';
 import {captureConversationSource,conversationSourceInput} from './conversation-work.ts';
@@ -54,8 +55,9 @@ export interface DocumentVersion {id:string;version:number;title:string;content:
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
 export interface ConversationMessage {id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
-export interface Mission { conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
+export interface Mission { memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | {type:'declare-memory-conflict';conflictId:string;first:import('./memory-conflicts.ts').MemoryConflictReference;second:import('./memory-conflicts.ts').MemoryConflictReference;reason:string}
   | {type:'ask-work-question'|'answer-work-question';workId:string;questionId:string;text:string}
   | {type:'append-mission-message';messageId:string;replyTo:string|null;text:string}
   | {type:'append-work-message';workId:string;messageId:string;replyTo:string|null;text:string}
@@ -216,7 +218,11 @@ export function apply(current: Mission, command: Command, actor: Actor): { value
     }
     case 'revise-mission':
       role(actor,'owner'); text(command.purpose,'purpose'); criteriaValid(command.criteria); ensure(command.criteria.version > state.criteria.version, 'Criteria version must advance'); state.version++; state.purpose=command.purpose; state.criteria=structuredClone(command.criteria); break;
+    case 'declare-memory-conflict': {
+      role(actor,'owner');ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','conflictId','first','second','reason'].includes(k)),'Exact memory conflict command fields required');const {type,...declaration}=command;declareMemoryConflict(state,declaration,actor.id);break;
+    }
     case 'admit-work': {
+      requireUnconflictedNewWork(state);
       role(actor,'owner','representative'); text(command.workId,'work id'); text(command.title,'title'); ensure(!work,'Work already exists'); ensure(finite(command.budget),'Invalid budget');
       const conversationSource=Object.hasOwn(command,'conversationSource')?(role(actor,'owner'),captureConversationSource(state,command.conversationSource!,actor.id)):undefined;ensure(!(conversationSource&&command.correction),'Choose one source admission purpose');
       const correction=Object.hasOwn(command,'correction')?(role(actor,'owner'),captureCorrection(state,command.correction!,actor.id)):undefined;if(correction)ensure(Number.isSafeInteger(command.budget)&&command.budget>0,'Correction needs a positive whole output budget');

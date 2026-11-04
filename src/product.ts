@@ -72,6 +72,9 @@ export class ProductService {
   const current=await this.app.store.load(missionId);if(!current)throw new DomainError('Unknown Mission');
   return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'save-memory',memory:{...memory,scope:current.value.scope,authority:'explicit',effective:true}}});
  }
+ async declareMemoryConflict(missionId:string,input:{commandId:string;expectedRevision:number;conflictId:string;first:import('./memory-conflicts.ts').MemoryConflictReference;second:import('./memory-conflicts.ts').MemoryConflictReference;reason:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','conflictId','first','second','reason']);const {commandId,expectedRevision,...declaration}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'declare-memory-conflict',...declaration}});
+ }
  async retireMemory(missionId:string,input:{commandId:string;expectedRevision:number;memoryId:string;version:number;reason:string}) {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'retire-memory',memoryId:input.memoryId,version:input.version,reason:input.reason}});
  }
