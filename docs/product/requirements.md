@@ -95,3 +95,7 @@ Existing evaluator independence, measured improvement, effective baseline and su
 ## Exact accepted text inspection
 
 REC-01 normal ProductService/HTTP/CLI/Workbench now exposes deliberate exact accepted UTF-8 text inspection with Record/feed/hash binding and literal rendering. [Protocol](../architecture/accepted-text-access.md) and [scoped evidence](../acceptance/accepted-text-evidence.md) retain fixture/live-quality boundaries. Other artifact types, production authentication and durable external artifact access remain open.
+
+## Normal memory Growth proposal and evaluation
+
+GRO-01 now has normal owner-authored scoped proposal/candidate provenance and host-owned independent bounded rounding evaluation through ProductService/HTTP/Workbench, followed by existing adoption/revert and future Work pins. [Protocol](../architecture/growth-proposals.md) and [evidence](../acceptance/growth-proposals-evidence.md) distinguish caller input cases and trusted local calculation from general model learning or secret heldout evaluation. Broader targets, evaluator strategies, automatic mode, persistent organization revisions and authenticated identity remain open.
