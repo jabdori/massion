@@ -59,7 +59,8 @@ root or occupied Massion store; it never merges. Keep the bundle private (create
 `openRestoredArtifacts(bundleText, newRoot).read(record.artifact)`. This verifies
 current physical bytes while preserving the original descriptor/checksum. A plain
 store constructed without that explicit manifest cannot resolve an old path.
-Current workbench UI shows evidence descriptors but does not serve artifact bytes.
+The normal UI reads exact accepted/rejected text through product-owned evidence queries.
+Relocated original descriptors require an explicit normal-host [restored read binding](restored-artifact-reader.md); the default host never guesses another root.
 
 The envelope is bounded to 64 MiB, 10,000 journal operations, 4,096 artifact
 references and 32,768 bytes per text artifact. These development limits are not

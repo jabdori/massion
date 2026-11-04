@@ -65,7 +65,11 @@ Mission operation history plus every referenced sealed text artifact. Restore in
 a fresh SurrealDB and new artifact root preserves original Records and command
 identities, verifies relocated bytes, and holds old outbox rows without replay.
 See [backup CLI, limits and recovery](docs/architecture/portable-backup.md) and
-[clean-restore evidence](docs/acceptance/portable-backup-evidence.md).
+[clean-restore evidence](docs/acceptance/portable-backup-evidence.md). To inspect
+relocated accepted text through the normal CLI/workbench, explicitly select
+`--restored-bundle /absolute/private-backup.json --restored-artifact-root /absolute/restored-text-root`.
+See [normal restored reads](docs/architecture/restored-artifact-reader.md). This reads
+existing restored evidence and restores no execution grants or effects.
 
 ## Repository map
 
