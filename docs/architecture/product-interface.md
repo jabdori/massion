@@ -142,3 +142,7 @@ model/scope inputs restores the submitted input after replacement. Scrollable ev
 and authoritative snapshot text are keyboard reachable with visible focus. See the
 [bounded Chrome keyboard evidence](../acceptance/browser-qa.md); screen-reader and
 broader platform coverage remain open.
+
+### Inspect stored relation impact
+
+The selected Mission exposes an optional exact-version impact panel. An explicit GET shows the read revision, target/version, affected versions, original relation types, provenance and inferred flags. Empty reads do not establish that the target exists. Inputs, Mission changes, authoritative revision/feed changes and disconnects clear the previous result; late responses and errors cannot replace a newer selection. Query failure leaves no older result visible. Reads preserve Work drafts and the independent pending-command write barrier, and never admit Work, mutate relations, invalidate results or call a provider. The bounded result region is keyboard focusable. See [UI evidence](../acceptance/relation-impact-ui-evidence.md).

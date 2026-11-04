@@ -1,0 +1,35 @@
+# Read-only relation impact UI evidence
+
+This increment adds a small workbench panel above the bounded native query from PR17 (`b836e2df6608ad8b0199cac2aec974e790a598f8`). It does not complete KNW-01 graph storage, ingestion/search or automatic invalidation.
+
+## Risk and regression coverage
+
+`tests/impact-panel.test.ts` covers exact Mission/target/version/revision/feed identity, original provenance/inferred evidence, text-only rendering, empty and malformed results, HTTP errors, target/version/Mission/revision/feed/disconnect changes, late success and error responses, retained private drafts and pending-command barriers. Supporting in-memory and actual SurrealDB inline-client/HTTP tests both prove unchanged snapshot/journal and zero POST/provider effects. The focused actual run passed 14/14, zero skips.
+
+A keyboard browser check found Mission and Work admission disabled their focused fieldsets and left focus on BODY. Their handlers now restore the original submitted control in the same current Mission if focus has not moved elsewhere. Existing creation tests assert button focus for both acceptance methods; existing intervention focus regression remains covered.
+
+## Actual browser route
+
+CachyOS, pinned Node 24.19.0, SurrealDB 3.3.0 and an isolated agent-browser Chrome session exercised the normal `src/server.ts` entry with a fresh owned database. Seeded calculation/Record and relation data are explicitly deterministic fixtures. No live model or external account was used.
+
+Keyboard-only Tab/Enter/type checks covered Mission creation/native required validation, bounded Work admission, owner instruction recording, cancellation, evidence expansion and accepted fixture Record bundle PRE focus. New-panel checks covered exact source v1 multi-hop dependencies, provenance/inferred flags, result-region focus outline, v2 empty output, native invalid version without a GET, a held v1 response after v2 completed, Mission selection clearing old results and an actual 1001-relation HTTP422 with no partial output and restored Read focus. Read-only query batches preserved the actual full operation journal. Screens were inspected at a 390px viewport; screen-reader operation and exhaustive accessibility certification were not performed.
+
+Raw commands, DOM snapshots, screens, supervisor/host logs and journals are retained outside the repository under `task-11/relation-impact-ui-b836e2d/browser/`. `final-source.json` identifies the exact executed workbench SHA256 and screen hashes. Browser and owned normal CLI/supervisor/database were closed before reporting GUI release. Initial source head `1a237ad3ca26b5270a20400681d7890eeecd3c10` exposed the admission focus issue; final source SHA256 is `6424a6c66b33e19a4db1db0ed413497f245bb5db72e5ce522a2726197e0620a6`.
+
+The earlier test-driver failure incorrectly called an in-memory adapter's nonexistent exportJournal; it remains in `focused-first.log`. The correction uses inspect for that fixture and exportJournal for SurrealDB, retaining identical unchanged-journal assertions. The initial browser launch redirection missed the log directory and started no process; creating its private evidence directory enabled normal launch.
+
+Aggregate validation and exact-head CI/review are recorded in the Draft PR and local `evidence-final.json`; fixture or integration evidence is not live-provider evidence. No merge, deployment, account change or recurring report activation is part of this increment.
+
+## Independent review correction
+
+Codex reviewed `b338efc197e8feda4387a1a59e12c185f461ef8c` and identified P2 [queued refresh focus loss](https://github.com/jabdori/massion/pull/18#discussion_r4186693756): an admitted event can precede the HTTP response, causing write completion to launch another authoritative read while the submit control remains disabled. The write now waits for that queued refresh before the admission handler restores focus. Four order-controlled regressions cover both admission types with original focus and moved focus: old source failed both original-focus cases, fixed source passes all four without stealing moved focus or replaying POSTs. `queued-refresh-before-allowed.log` and `queued-refresh-after-allowed.log` preserve the comparison.
+
+A second fresh normal CLI/SurrealDB and isolated Chrome check delayed actual committed POST responses until event polling observed their admission, for Mission creation and Work admission. Both regained their submitted button focus after the queued read; impact populated/empty/native-invalid/read-only-journal checks also passed. Raw proof in `review-browser/browser/` is retained separately from the earlier browser run; all owned processes and GUI were released again. Admission-correction actual aggregate was 375/375, zero skips; ordinary aggregate is 332 pass / 43 conditional skips.
+
+## Concurrent impact/read focus correction
+
+Independent re-review of `7be8021f27b9f16c260e5b3c50d7f5d538e48a7a` identified a separate P2 [impact response before an unchanged Mission reload](https://github.com/jabdori/massion/pull/18#discussion_r4186810921). Impact completion now retains a focus target bound to the original selection; controls consume it only when the Read button becomes enabled. Target/version or Mission/revision/feed invalidation clears it, and the existing focus guard preserves a user focus move.
+
+Five new order tests cover success/error before same-Mission read completion, original/moved focus and target editing while restoration is deferred. The old source failed both original-focus cases; final source passes all five. Initial driver logs also exposed that load-form returns before its async read; corrected driver waits for read completion without relaxing assertions. All logs remain preserved. Actual normal CLI/SurrealDB Chrome checks explicitly simulate a visibility-return event and hold real GET responses to control order; keyboard Read submissions restore focus after the read, moved keyboard focus remains on Mission ID, and editing target preserves that input and clears the result. Journal comparison remains identical with zero POSTs. The earlier event-before-admission-response keyboard regression also passes again. Separate raw evidence is retained in `impact-focus-browser/browser/`; owned browser/host/DB and GUI are released.
+
+Final local aggregate: actual SurrealDB 380/380, fail/skip0; ordinary 337 pass / 43 conditional skips. Static types and runtime syntax pass. Exact final head and independent review/CI are recorded in the Draft PR and local evidence manifest.
