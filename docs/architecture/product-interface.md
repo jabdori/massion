@@ -27,6 +27,29 @@ The store serializes commits within one host/store instance because its atomic g
 
 No retention/pruning is enabled. A cursor beyond the database head requires reset and snapshot reload; production snapshot fallback/retention, identity-scoped feeds, event-stream transport, leases and multiple-host load behavior remain open.
 
+## Same-host Mission links
+
+A validated loaded snapshot exposes `#mission=<encoded ID>` on the current host.
+Installing a validated snapshot replaces the current address fragment with that
+Mission, so explicit form navigation and reload cannot reopen a stale reference.
+Opening that link in a browser with separate storage loads the authoritative
+Mission and durable events using reads only. The link carries no command,
+credentials, grants, selected model or execution authorization. Invalid or
+oversized fragments are rejected rather than becoming transport paths. A missing
+or failed snapshot exposes no continuation link.
+
+On initial load, a valid pending-command recovery marker takes precedence over a
+link. Later link navigation may inspect another Mission, but cannot clear that
+marker, resolve an unknown outcome or unlock writes. Normal revision conflicts
+and explicit Run boundaries remain authoritative. Sharing a reference does not
+grant access; clients must already reach the same authorized host.
+
+This advances #4/SUR-01 second-client continuation without altering loopback
+binding or Host/origin defenses. Authenticated multi-PC networking, shared
+conversations and flexible agent collaboration remain open. Actual HTTP and
+SurrealDB tests with isolated client storage are not browser rendering or
+multi-device authentication evidence.
+
 ## Upgrade boundary
 
 The cursor schema is version 2. A nonempty foundation database without cursor metadata is deliberately refused. It needs an explicit, reviewed migration/cutover plan; historical total ordering is not invented, and data is not deleted. Disposable test databases are new for every acceptance run.

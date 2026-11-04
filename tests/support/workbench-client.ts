@@ -33,7 +33,7 @@ export class SharedWebLocks {
  }
 }
 export async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
-export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean}) {
+export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean;fragment?:string}) {
  const nodes=new Map<string,Node>();
  for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');nodes.set(node.id,node);}
  nodes.get('work-budget')!.value='0';
@@ -41,14 +41,15 @@ export function harness(handler:Handler,initial:Record<string,string>={},storage
  const all=():Node[]=>{const output:Node[]=[];const visit=(node:Node)=>{output.push(node);node.children.forEach(visit);};nodes.forEach(visit);return output;};
  const listeners=new Map<string,()=>unknown>();
  const document={getElementById:(id:string)=>nodes.get(id),createElement:(tag:string)=>new Node(tag),querySelectorAll:()=>all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
- const context=createContext({navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{addEventListener(){}},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
+ const windowListeners=new Map<string,()=>unknown>(),location={hash:coordination?.fragment||'',pathname:'/',search:''};
+ const context=createContext({navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{location,history:{replaceState:(_state:unknown,_title:string,fragment:string)=>{location.hash=fragment.startsWith('#')?fragment:'';}},addEventListener:(name:string,fn:()=>unknown)=>windowListeners.set(name,fn)},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
   calls.push({path,options});
   const result=coordination?.network?await handler(path,options):path==='/health'?reply({status:'ready'}):path==='/providers'?reply({providers:[],selection:{status:'unavailable',code:'provider_unavailable',reason:'No authorized provider is configured.'}}):await handler(path,options);
   return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>result.body};
  }});
  const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
  runInContext(source,context);
- return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
+ return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
 }
 
 export function selectionField(app:ReturnType<typeof harness>,id:string) {return app.all().find(node=>node.id===id)!;}
