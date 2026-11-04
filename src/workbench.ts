@@ -8,6 +8,7 @@ import {missionCatalogPanel,missionCatalogClient} from './mission-catalog-panel.
 import {fileDocumentPanel,fileDocumentClient} from './owner-file-document-draft.ts';
 import {memoryUsagePanel,memoryUsageClient} from './memory-usage-panel.ts';
 import {memoryFindPanel,memoryFindClient} from './memory-find-panel.ts';
+import {memorySearchPanel,memorySearchClient} from './memory-content-search-panel.ts';
 import {clarificationPanel,clarificationClient} from './work-clarification-panel.ts';
 import {conversationWorkPanel,conversationWorkClient} from './conversation-work-panel.ts';
 import {expiredPanel,expiredClient} from './expired-run-panel.ts';
@@ -74,6 +75,7 @@ ${fileDocumentPanel}${recordSourcePanel}${neighborhoodPanel}
 <details id="memory-panel" class="impact-panel"><summary>Manage Mission memory</summary><h3>Owner-authored instructions for future Work</h3><p id="memory-hint" class="hint">Save an explicit instruction for this Mission. New Work pins its effective version; earlier Work keeps its original memory. This does not run a model or adopt learned memory. Sources are owner-supplied context, not independent verification. Instruction and source each allow up to 16,000 characters; the complete JSON command must fit 32 KiB of UTF-8, including escaping and metadata.</p><p id="memory-scope" class="hint"></p><form id="memory-form"><fieldset id="memory-fields"><label for="memory-id">Memory ID</label><input id="memory-id" required maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" aria-describedby="memory-hint" placeholder="memory:instruction"><label for="memory-version">New immutable version</label><input id="memory-version" type="number" min="1" max="9007199254740991" step="1" value="1" required><label for="memory-content">Explicit instruction</label><textarea id="memory-content" rows="3" maxlength="16000" required></textarea><label for="memory-source">Owner-supplied source or reason</label><textarea id="memory-source" rows="2" maxlength="16000" required></textarea><button id="save-memory" type="submit" data-write>Save explicit memory</button></fieldset></form><p id="memory-status" class="status" role="status" aria-live="polite">Save a new ID at version 1, or advance an existing ID to a higher version.</p><h3>Stop an instruction for future Work</h3><p id="retirement-hint" class="hint">Choose one exact active explicit memory version. This stops its application to newly admitted Work. Its original content, history and earlier Work pins stay available; nothing is deleted.</p><form id="retirement-form"><fieldset id="retirement-fields"><label for="retirement-target">Exact active explicit memory</label><select id="retirement-target" required aria-describedby="retirement-hint retirement-base"></select><label for="retirement-reason">Reason for stopping future application</label><textarea id="retirement-reason" rows="2" maxlength="16000" required aria-describedby="retirement-hint"></textarea><p id="retirement-base" class="hint"></p><button id="stop-memory" type="submit" data-write>Stop this version for future Work</button><button id="review-retirement" type="button" class="secondary">Keep exact target against current revision</button><button id="cancel-retirement" type="button" class="secondary">Cancel stop draft</button></fieldset></form><p id="retirement-status" class="status" role="status" aria-live="polite">Choose an exact version and review what will remain.</p><div id="memory-history" class="impact-results" tabindex="0" role="region" aria-label="Mission memory history"></div></details>${memoryConflictPanel}${memoryExpiryPanel}
 ${conversationWorkPanel}
 ${clarificationPanel}
+${memorySearchPanel}
 ${memoryFindPanel}
 ${memoryUsagePanel}
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria, effective memory and the current organization revision. It does not start model execution.</p></fieldset></form>
@@ -303,7 +305,7 @@ function controls() {
   const notice = $('operation-notice');
   notice.hidden = !unknownOperation && !recoveryProblem && !fixtureUnknown;
   notice.textContent = recoveryProblem || (unknownOperation ? (confirmedOperations.has(operationKey(unknownOperation)) ? 'Confirmed command awaiting browser recovery cleanup: ' : busy ? 'Command in flight: ' : 'Outcome unknown for command ') + unknownOperation.commandId + '. Its recovery reference is saved on this browser. Checking durable receipts; no write will be replayed, including after reload.' : fixtureUnknown ? 'A development fixture has no confirmed outcome in this browser. Fixture reruns are locked, including after reload. Inspect durable activity and the local host logs to identify its Mission and outcome; ordinary Mission reads remain available.' : '');
-  memoryExpiryControls();memoryConflictControls();constraintControls();renderNeighborhood();inboxControls();catalogControls();clarificationControls();conversationControls();conversationWorkControls();memoryUsageControls();memoryFindControls();fileDocumentControls();renderRecordSource(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls(); expiredControls();
+  memoryExpiryControls();memoryConflictControls();constraintControls();renderNeighborhood();inboxControls();catalogControls();clarificationControls();conversationControls();conversationWorkControls();memoryUsageControls();memoryFindControls();memorySearchControls();fileDocumentControls();renderRecordSource(); organizationControls(); impactControls(); storedBudgetControls(); storedInterventionControls(); growthControls(); growthCreationControls(); recordTextControls(); rejectedControls(); sequenceControls(); prerequisiteControls(); correctionControls(); expiredControls();
 }
 function impactControls() {
   const current = snapshot && snapshot.value.id === selectedId;
@@ -618,7 +620,7 @@ function renderMission() {
   renderRelations();
   renderOrganization();
   renderRevision();renderConstraints();renderMemoryExpiries();renderMemoryConflicts();
-  renderMemoryHistory();renderMemoryUsage();renderMemoryFind();renderFileDocument();
+  renderMemoryHistory();renderMemoryUsage();renderMemoryFind();renderMemorySearch();renderFileDocument();
   renderRetirement();
   renderBudget();
   renderClarification();renderConversation();renderConversationWork();
@@ -1605,6 +1607,7 @@ ${conversationWorkClient}
 ${clarificationClient}
 ${memoryUsageClient}
 ${memoryFindClient}
+${memorySearchClient}
 ${fileDocumentClient}
 ${recordSourceClient}
 ${memoryConflictClient}${memoryExpiryClient}

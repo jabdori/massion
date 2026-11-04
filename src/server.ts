@@ -6,6 +6,7 @@ import {SurrealMissionCatalog,MissionCatalogChangedError} from './mission-catalo
 import type {MissionCatalogReader} from './mission-catalog.ts';
 import {readMemoryUsage,MemoryUsageError} from './memory-usage.ts';
 import {findMemoryVersions} from './memory-find.ts';
+import {searchMemoryContent} from './memory-content-search.ts';
 import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {ConversationReadError} from './work-conversation.ts';
@@ -151,6 +152,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!body.command||typeof body.command!=='object'||!['cancel','steer','quarantine-runtime','close-expired-runtime'].includes((body.command as {type:string}).type))throw new RequestError(400,'Only cancel, steer, quarantine-runtime and close-expired-runtime are exposed');
     identifier((body.command as {workId:unknown}).workId,'Work identifier');sendCommit(await product.intervene(missionId,body as Parameters<ProductService['intervene']>[1]));return;
    }
+   const memorySearchRoute=/^\/missions\/([^/]+)\/memory-search$/.exec(url.pathname);
+   if(req.method==='GET'&&memorySearchRoute){const missionId=decodeIdentifier(memorySearchRoute[1]!),required=['text','revision'],allowed=[...required,'after'];if([...url.searchParams.keys()].some(k=>!allowed.includes(k)||url.searchParams.getAll(k).length!==1)||required.some(k=>!url.searchParams.has(k)))throw new RequestError(400,'Unique literal content search query fields required');const feed=req.headers['x-massion-feed'];identifier(feed,'Original feed identity');const pageNumber=(key:string)=>{const raw=url.searchParams.get(key)!;if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw new RequestError(400,'Invalid content search '+key);return Number(raw);};const result=await searchMemoryContent(store,missionId,{text:url.searchParams.get('text')!,feedId:feed as string,revision:pageNumber('revision'),...(url.searchParams.has('after')?{after:pageNumber('after')}:{})});send(result?200:404,result??{error:'Unknown Mission'});return;}
    const memoryFindRoute=/^\/missions\/([^/]+)\/memory-versions$/.exec(url.pathname);
    if(req.method==='GET'&&memoryFindRoute){const missionId=decodeIdentifier(memoryFindRoute[1]!),required=['id','revision'],allowed=[...required,'after'];if([...url.searchParams.keys()].some(k=>!allowed.includes(k)||url.searchParams.getAll(k).length!==1)||required.some(k=>!url.searchParams.has(k)))throw new RequestError(400,'Unique literal memory discovery query fields required');const feed=req.headers['x-massion-feed'];identifier(feed,'Original feed identity');const pageNumber=(key:string)=>{const raw=url.searchParams.get(key)!;if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw new RequestError(400,'Invalid memory discovery '+key);return Number(raw);};const result=await findMemoryVersions(store,missionId,{id:url.searchParams.get('id')!,feedId:feed as string,revision:pageNumber('revision'),...(url.searchParams.has('after')?{after:pageNumber('after')}:{})});send(result?200:404,result??{error:'Unknown Mission'});return;}
    const memoryUsageRoute=/^\/missions\/([^/]+)\/memory-usage$/.exec(url.pathname);
