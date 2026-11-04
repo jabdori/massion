@@ -25,6 +25,7 @@ async function setup(t:TestContext,durable=false,sparse=false){
   if(blocked&&path.startsWith('/events'))throw new Error('Supporting event outage');
   const response=await fetch(base+path,options);let body=await response.json();
   if(path.includes('/work-intervention-history?')){
+   if(mode==='expired')body={...body,changes:[{cursor:body.cursor,revision:6,commandId:'owner-expired',actor:'local-owner',action:'close-expired-runtime',runId:'original-run',reason:'Original reason <img src=x>'}]};
    if(mode==='fail')return reply({error:'Controlled page failure'},503);
    if(mode==='malformed')body={...body,workId:'wrong-work'};
    if(mode==='wrong-feed')body={...body,feedId:'different-feed'};
@@ -65,4 +66,8 @@ test('Mission navigation and connection loss discard held history but preserve p
 test('bounded history view refuses an overflow page without advancing or claiming completion',async t=>{
  const f=await setup(t),app=f.app;for(let i=0;i<199;i++)await f.change(f.id,'a',100+i,'Additional recorded change '+i);await f.choose();await app.node('stored-intervention-read').fire('click');let pages=1;while(!app.node('stored-intervention-more').disabled){await app.node('stored-intervention-more').fire('click');assert.ok(++pages<30);}
  assert.match(app.node('stored-intervention-status').textContent,/limited to 200/);assert.ok(app.node('stored-intervention-results').children.filter(n=>n.tagName==='PRE').length<=200);assert.ok(!app.node('stored-intervention-status').textContent.includes('boundary reached'));assert.equal(app.node('stored-intervention-read').disabled,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('stored history accepts expired-run closure as literal owner reason and original run without writing',async t=>{
+ const f=await setup(t),app=f.app;await f.choose();f.mode('expired');const before=await f.journal();await app.node('stored-intervention-read').fire('click');const shown=app.node('stored-intervention-results').textContent;assert.match(shown,/action close-expired-runtime/);assert.match(shown,/Exact original run: original-run/);assert.match(shown,/Recorded expired-run closure reason: Original reason <img src=x>/);assert.match(app.node('stored-intervention-status').textContent,/boundary reached/);assert.equal(app.all().some(n=>n.tagName==='IMG'),false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);assert.deepEqual(await f.journal(),before);
 });

@@ -320,6 +320,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
   'activate-runtime': { required: ['workId', 'run'] },
+  'close-expired-runtime': { required: ['workId','runId','dispatchId','hostSessionId','deadlineAt','observedAt','reason','acknowledgeUncertainOutcome'] },
   'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
   'block-work': { required: ['workId', 'blocker'] },
   delegate: { required: ['workId', 'taskId', 'parentId'] },
