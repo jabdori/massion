@@ -1,3 +1,4 @@
+import {validateMissionLineage} from './backup-lineage.ts';
 import {DomainError,validateDocumentHistory} from './domain.ts';
 import type {Mission,DocumentVersion} from './domain.ts';
 import type {Store} from './storage.ts';
@@ -18,7 +19,21 @@ export async function searchDocuments(store:Store<Mission>,missionId:string,inpu
 }
 /** Exact historical version/hash, never replaced by latest; a single authoritative snapshot read. */
 export async function readDocument(store:Store<Mission>,missionId:string,input:{id:string;version:number;contentSha256:string;feedId?:string}):Promise<DocumentRead|null>{
- input=structuredClone(input);if(typeof input.id!=='string'||!/^document:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(input.id)||!Number.isSafeInteger(input.version)||input.version<1||typeof input.contentSha256!=='string'||!/^[a-f0-9]{64}$/.test(input.contentSha256))throw new DomainError('Exact document ID/version/SHA-256 required');
+ input=structuredClone(input);exactDocumentInput(input);
  const state=await documentState(store,missionId,input.feedId);if(!state.snapshot)return null;const d=state.snapshot.value.documents?.find(d=>d.id===input.id&&d.version===input.version);if(!d)return null;if(d.contentSha256!==input.contentSha256)throw new DocumentReadError(409,'Exact document content hash does not match. No newer version is substituted.');
  return {missionId,revision:state.snapshot.revision,feedId:state.feedId,cursor:state.cursor,document:structuredClone(d),byteLength:Buffer.byteLength(d.content,'utf8')};
+}
+
+export interface DocumentUse {workId:string;title:string;execution:Mission['works'][number]['execution'];acceptance:Mission['works'][number]['acceptance'];criteriaVersion:number;decision:{actorId:string;reason:string};record?:{id:string;checksum:string;evidenceClass:'fixture'|'real-provider';criteriaVersion:number;artifact:{id:string;version:number;sha256:string;kind:string}}}
+export interface DocumentUsage {missionId:string;revision:number;feedId:string;cursor:number;document:DocumentVersion;byteLength:number;totalUses:number;limit:20;uses:DocumentUse[]}
+function exactDocumentInput(input:{id:string;version:number;contentSha256:string}):void {
+ if(typeof input.id!=='string'||!/^document:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(input.id)||!Number.isSafeInteger(input.version)||input.version<1||typeof input.contentSha256!=='string'||!/^[a-f0-9]{64}$/.test(input.contentSha256))throw new DomainError('Exact document ID/version/SHA-256 required');
+}
+/** Actual retained Work pins only, never inferred relations or automatic source replacement. */
+export async function readDocumentUsage(store:Store<Mission>,missionId:string,input:{id:string;version:number;contentSha256:string;feedId?:string}):Promise<DocumentUsage|null>{
+ input=structuredClone(input);exactDocumentInput(input);const state=await documentState(store,missionId,input.feedId);if(!state.snapshot)return null;
+ const mission=state.snapshot.value,d=mission.documents?.find(d=>d.id===input.id&&d.version===input.version);if(!d)return null;if(d.contentSha256!==input.contentSha256)throw new DocumentReadError(409,'Exact document content hash does not match. No newer version is substituted.');
+ try{validateMissionLineage(mission);}catch{throw new DocumentReadError(503,'Stored Work/source/Record bindings failed integrity checks. No use result or fallback is supplied.');}
+ const matches=mission.works.flatMap(work=>{const pin=work.sourceDocuments?.find(p=>p.document.id===d.id&&p.document.version===d.version&&p.document.contentSha256===d.contentSha256);return pin?[{work,pin}]:[];});
+ return {missionId,revision:state.snapshot.revision,feedId:state.feedId,cursor:state.cursor,document:structuredClone(d),byteLength:Buffer.byteLength(d.content,'utf8'),totalUses:matches.length,limit:20,uses:matches.slice(0,20).map(({work,pin})=>({workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,criteriaVersion:work.criteria.version,decision:{actorId:pin.actorId,reason:pin.reason},...(work.record?{record:{id:work.record.id,checksum:work.record.checksum,evidenceClass:work.record.evidenceClass,criteriaVersion:work.record.criteria.version,artifact:{id:work.record.artifact.id,version:work.record.artifact.version,sha256:work.record.artifact.sha256,kind:work.record.artifact.kind}}}:{})}))};
 }
