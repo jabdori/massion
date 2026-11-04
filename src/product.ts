@@ -14,7 +14,7 @@ import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
-import {workAdmissionPreflight,rejectedRun} from './configured-runtime.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight} from './configured-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
 import type {Store} from './storage.ts';
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
@@ -120,14 +120,18 @@ export class ProductService {
  }
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
   if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
+  // Capacity is captured before any await so a request made while the host is busy is refused, not deferred.
+  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
   const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
-  if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics);
-  return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice}),selection:{source:'default' as const,choice:resolved.choice}};
+  if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry);
+  return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice},undefined,busyAtEntry),selection:{source:'default' as const,choice:resolved.choice}};
  }
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
   if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice);
+  const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
   const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
+  if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   // A local change cannot start while the run awaits the stored revision without the run seeing it; a changed revision blocks rather than re-resolving.

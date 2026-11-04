@@ -170,6 +170,22 @@ test('a run requested while the host is busy is refused at entry even when the s
  assert.equal(done.status,'settled');assert.equal(busy.status,'blocked');assert.equal((await f.current()).value.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
 });
 
+test('a selection-less run or sequence made while busy is refused even when the Mission read is slow',async t=>{
+ for(const kind of ['run','sequence'] as const){
+  const f=await setup(t),m=f.host();await f.grant(m);await f.makeDefault(m);let delay=false,releaseLoad!:()=>void;const gate=new Promise<void>(r=>releaseLoad=r);
+  const store=Object.create(f.store);store.load=async(...a:any[])=>{if(delay)await gate;return f.store.load(...(a as [any]));};const product=new ProductService(store,undefined,m);
+  const created=await f.product.create({id:'other',purpose:'Another Mission',scope:'local',constraints:[],criteria:{version:1,description:'Original bounded lifetime fixture',oracle:'bounded-text-review/v1'}},'create-other');
+  await f.product.admit('other',{commandId:'admit-other',expectedRevision:(created as any).revision,workId:'second',title:'Second step',budget:8});
+  let releaseCall!:()=>void,entered!:()=>void;const calling=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>releaseCall=r);f.hooks.onCall=async()=>{f.hooks.onCall=undefined;entered();await held;};
+  const first=product.run('mission','fresh','first-run',(await f.current()).revision);await calling;const other=(await f.store.load('other'))!;delay=true;
+  const w=other.value.works.find(w=>w.id==='second')!;
+  const second=kind==='run'?product.run('other','second','busy-run',other.revision):product.runSequence('other',{commandId:'busy-seq',expectedRevision:other.revision,works:[{workId:'second',inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}]});
+  releaseCall();assert.equal((await first).status,'settled');releaseLoad();const busy=await second as any;
+  assert.match(JSON.stringify(busy).slice(0,4000)+JSON.stringify(busy.results??''),/already owned another Work/);
+  assert.equal((await f.store.load('other'))!.value.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
+ }
+});
+
 test('run-sequence: a default changed between steps stops at the configuration guard and never switches route',async t=>{
  const f=await setup(t),m=f.host(),other=f.host(),product=new ProductService(f.store,undefined,m);await f.grant(m);await f.grant(m,'alt');await f.makeDefault(m);await other.restoreSettings();
  await f.product.admit('mission',{commandId:'admit-second',expectedRevision:(await f.current()).revision,workId:'second',title:'Second step',budget:8});
