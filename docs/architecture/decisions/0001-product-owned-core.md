@@ -100,3 +100,7 @@ Above PR57, adopt one owner-selected saved message as provenance for a separatel
 ## Exact memory usage inspection
 
 Expose only original exact-version memory/Work/Record relationships from one authoritative read boundary, with explicit bounds and current effective versus historical pin semantics. No read result becomes permission, inferred applicability or task rebinding. [Scope and acceptance](../memory-usage.md).
+
+## Explicit browser-local file document draft
+
+Read only the owner's selected bounded UTF-8 File in the client, retain truthful raw-file versus normalized draft provenance, then reuse existing separate exact document admission. No host path access or source execution/verification authority follows from ingestion. [Preimplementation acceptance](../owner-file-document-draft.md).

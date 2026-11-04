@@ -201,3 +201,7 @@ COL-01/SUR-01/WRK-01 and issue #4 owner-authored responsibility: explicitly sele
 ## Selected bounded memory retrieval increment
 
 MEM-01 and issue #4 original pinned evidence: [exact-version usage inspection](../architecture/memory-usage.md) connects historical literal memory to actual Work/Record pins through read-only API/UI. Existing memoryVersionHash excludes current effective state; original version is never replaced. General retrieval/ranking/conflict/expiry/deletion and learning quality remain open.
+
+## Selected bounded local file ingestion increment
+
+KNW-01 document/code ingestion and issue #4 original source-backed evidence: [owner-selected UTF-8 file draft](../architecture/owner-file-document-draft.md) composes browser-local explicit selection with the existing exact source capture command. Raw file versus normalized/editable document text hashes are distinguished. No server file access, parsing/execution, automatic attachment or new authority is added; general ingestion/graph/search quality remains open.
