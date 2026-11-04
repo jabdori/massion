@@ -29,6 +29,9 @@ export class ProductService {
   const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(Object.hasOwn(input,'conversationSource')?{conversationSource:input.conversationSource}:{}),...(Object.hasOwn(input,'correction')?{correction:input.correction}:{}),...(executionGate?{executionGate}:{})}});
  }
+ async clarifyWork(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;questionId:string;text:string},answer:boolean) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','questionId','text']);const {commandId,expectedRevision,...question}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:answer?'answer-work-question':'ask-work-question',...question}});
+ }
  async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
  }
