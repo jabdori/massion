@@ -15,3 +15,32 @@ All data and model outputs are controlled local fixtures. No live model/provider
 After final reply/focus corrections, actual disposable DB panel9/9 pass, fail/skip/cancel0. Strict TypeScript, runtime syntax and whitespace checks passed; native visual correction is a scoped CSS change. Independent read-only review found no additional P2 on the corrected handler/focus/backend/docs; exact committed-head review will be recorded with publication.
 
 Final owned headless Chrome154/normal credential-free CLI/separate disposable SurrealDB journey passed: two clients append original literal owner text and exact earlier-message reply; first client's stale private draft retains text/revision until explicit review, stays in the open client through normal CLI restart; peer reload reads the identical stored originals. Keyboard checks original independently accepted UTF-8 Record. 390/1280 widths have no horizontal overflow. axe4.12.1 reports47 pass, violations/incomplete0. Journal contains exactly2 new owner message batches, original prefix and every Work/Record unchanged, including late ignored-abort fixture output. Seed setup used3 controlled adapter calls, live0; browser conversations cause no calls. Both owned namespaces, CLI, temporary workspace and disposable DB released; release receipt retained. This does not certify screen-reader speech, headed/other platforms, authenticated remote PCs or real-model usefulness.
+
+## Initial exact Work selection in the normal browser
+
+The current-head first-slice keyboard audit found that the conversation fieldset
+was disabled until a Work was selected, including the selector needed to make
+that selection. DOM harness tests directly dispatched selection changes and did
+not model native disabled-fieldset behavior.
+
+The fieldset now follows the existing revision/feed/pending/unknown readiness
+check. With no exact Work selected, only the selector is usable; text, reply,
+review, clear and send remain disabled. Selecting a Work enables its private
+message controls, while send still requires the exact reviewed revision/feed and
+existing UTF-8 bound. No selection, write or execution happens automatically.
+
+`tests/conversation-cli-browser.test.ts` exercises the normal CLI with actual
+SurrealDB and headless Chrome: initial native keyboard selection, literal owner
+message save, focus return, reload/reselection and clearing the target. Existing
+Work objects remain exact and no model profile, grant or provider call is used.
+The small test fails at the initial selector on PR55 head
+`0342033fdc88e0e034d8560f9bb44de938d89f41`; the fixed conversation gate passes
+11/11 with no skip. Existing conflict, replaced-feed, lost receipt, pending and
+unknown-message guards remain covered by the same gate.
+
+This is a bounded browser/keyboard regression result, not full assistive
+technology certification. Actual screen-reader interaction and other operating
+systems remain unverified. Historical checkpoints are not added into a current
+whole-first-slice pass claim. This addresses issue #4's inspect-and-discuss
+existing Work path and the product-owned-core ADR without extending runtime or
+owner authority.
