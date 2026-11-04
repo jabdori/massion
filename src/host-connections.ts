@@ -5,7 +5,7 @@ import {open} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {DomainError,hash} from './domain.ts';
 import {boundedPlainJson} from './bounded-json.ts';
-import {ConnectionWorkbench,MODEL_PROVIDER_TYPES} from './connection-workbench.ts';
+import {ConnectionWorkbench,MODEL_PROVIDER_TYPES,isCliProvider} from './connection-workbench.ts';
 import type {ConnectionInput,HostConnectionBindings} from './connection-workbench.ts';
 import type {CredentialResolver} from './chat-profile-factory.ts';
 import {validateModelEndpoint} from './native-model-providers.ts';
@@ -39,13 +39,15 @@ export function parseHostManifest(value:unknown):HostManifest {
   fields(entry,['id','label','providerType','baseUrl','models'],['credential']);identity(entry.id);label(entry.label);
   const provider=MODEL_PROVIDER_TYPES.find(p=>p.id===entry.providerType);requireHost(provider,'unsupported provider');
   requireHost(typeof entry.baseUrl==='string'&&entry.baseUrl.endsWith('/'),'canonical base URL ending in / required');
-  try{validateModelEndpoint(entry.baseUrl+'models',value.mode,'/models');}catch{throw new DomainError('Host configuration: invalid destination URL');}
+  const cli=isCliProvider(provider.id);
+  if(cli)requireHost(value.mode==='https'&&entry.baseUrl===provider.baseUrl&&entry.credential===undefined,'subscription CLI connections use their fixed identity and own login, without credential bindings');
+  else try{validateModelEndpoint(entry.baseUrl+'models',value.mode,'/models');}catch{throw new DomainError('Host configuration: invalid destination URL');}
   requireHost(value.mode!=='https'||provider.id==='compatible'||entry.baseUrl===provider.baseUrl,'custom destinations require the compatible provider');
   requireHost(Array.isArray(entry.models)&&entry.models.length>0,'exact models required');
   const models=new Set<string>();for(const model of entry.models){requireHost(typeof model==='string'&&/^[a-zA-Z0-9._:/-]{1,256}$/.test(model)&&(provider.id!=='gemini'||/^[a-zA-Z0-9._-]{1,128}$/.test(model)),'invalid exact model');requireHost(!models.has(model),'duplicate model');models.add(model);}
-  for(const model of models){const suffix=provider.id==='anthropic'?'/messages':provider.id==='gemini'?'/models/'+model+':generateContent':'/chat/completions';const endpoint=entry.baseUrl+suffix.slice(1);requireHost(endpoint.length<=512,'inference endpoint exceeds profile limit');try{validateModelEndpoint(endpoint,value.mode,suffix);}catch{throw new DomainError('Host configuration: invalid inference endpoint');}}
+  if(!cli)for(const model of models){const suffix=provider.id==='anthropic'?'/messages':provider.id==='gemini'?'/models/'+model+':generateContent':'/chat/completions';const endpoint=entry.baseUrl+suffix.slice(1);requireHost(endpoint.length<=512,'inference endpoint exceeds profile limit');try{validateModelEndpoint(endpoint,value.mode,suffix);}catch{throw new DomainError('Host configuration: invalid inference endpoint');}}
   modelCount+=models.size;requireHost(modelCount<=64,'at most 64 models allowed');requireHost(!ids.has(entry.id),'duplicate connection');ids.add(entry.id);
-  if(value.mode==='https'){
+  if(value.mode==='https'&&!cli){
    fields(entry.credential,['ref','environment']);identity(entry.credential.ref);
    requireHost(typeof entry.credential.environment==='string'&&/^[A-Z_][A-Z0-9_]{0,127}$/.test(entry.credential.environment),'explicit environment name required');
    requireHost(!references.has(entry.credential.ref),'duplicate credential reference');references.add(entry.credential.ref);

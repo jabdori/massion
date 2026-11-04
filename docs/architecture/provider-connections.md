@@ -25,6 +25,25 @@ Its request dialect therefore sends `max_tokens` with `reasoning_effort: "low"` 
 same strict parser, which the observed shape satisfies (`object`, exact model, consistent usage). Usage above the cap
 remains an unknown outcome. Coding Plan terms of use are the owner's responsibility; the general `paas/v4` base is not preset.
 
+## Subscription CLI backends
+
+`claude-code-cli` and `codex-cli` run bounded text Work through the owner's existing Claude Code and Codex
+subscription logins. Each invocation launches the official CLI once, argv-only and without a shell, in a new empty
+directory that is removed afterwards, in its own process group (timeouts kill the group), with no session
+persistence, ignored user settings and a short replacement system prompt. Tools are disabled at invocation: Claude
+Code with `--tools ""`; Codex, which has no tool-free mode, with its shell, exec, code-mode, browser, app and web-search
+features turned off so attempts fail closed in its router. The child environment is an allowlist (path, home, locale
+and the CLIs' own config homes), so API keys, base-URL or provider overrides and unrelated host secrets never reach it
+and a run cannot switch to metered billing. Manifests declare
+them at their fixed identities (`cli://claude-code/`, `cli://codex/`) without credential bindings.
+
+A CLI that never started is a `failed` dispatch; any started process that times out, is aborted, overflows its output
+bound, emits invalid UTF-8 or exits non-zero is `unknown`; Codex error events other than the expected code-mode warning are
+`unknown` too. Claude results must report exactly the pinned model in `modelUsage`; Codex
+events do not report the serving model, so its identity is the requested model only. Neither CLI can be shown to
+send exactly one upstream request: Claude Code continues internally after hitting its output cap, and Codex ignores
+output caps. Over-cap usage is therefore `unknown`. See [live evidence](../acceptance/subscription-cli-live-evidence.md).
+
 API presets supply canonical official base URLs. Custom endpoint support is one
 compatible protocol, not a claim that every named service supports it. Native
 Anthropic and Gemini have separate renderers, authentication and response parsers.
