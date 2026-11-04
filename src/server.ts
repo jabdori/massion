@@ -60,10 +60,17 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory|memory-retirement|revision|work-budget)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory|memory-retirement|revision|work-budget|growth)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
+    if(workRoute[2]==='growth'){
+     if(Object.keys(body).some(key=>!['commandId','expectedRevision','growthId','baseline','candidate','action'].includes(key)))throw new RequestError(400,'Only exact owner Growth action fields are accepted');
+     identifier(body.growthId,'Growth identifier');
+     for(const key of ['baseline','candidate'])if(typeof body[key]!=='string'||!/^.+@[1-9]\d*$/.test(body[key] as string)||(body[key] as string).length>16000)throw new RequestError(400,'Exact Growth memory version required');
+     if(body.action!=='adopt'&&body.action!=='revert')throw new RequestError(400,'Only deliberate adopt or revert is accepted');
+     const input=body as Parameters<ProductService['adoptGrowth']>[1];sendCommit(await (body.action==='adopt'?product.adoptGrowth(missionId,input):product.revertGrowth(missionId,input)));return;
+    }
     if(workRoute[2]==='work-budget'){
      if(Object.keys(body).some(key=>!['commandId','expectedRevision','workId','limit','reason'].includes(key)))throw new RequestError(400,'Only owner Work budget fields are accepted');
      identifier(body.workId,'Work identifier');
