@@ -109,6 +109,7 @@ test('pinned but arbitrary source is rejected before execution', async t => {
   const result = await verify(workspace, forged);
   assert.equal(result.verdict, 'failed');
   assert.equal(result.process, undefined);
+  assert.ok(result.evidence[0]);
   assert.match(result.evidence[0], /allowlist/);
   await assert.rejects(readFile(join(workspace.path, 'must-not-exist')), { code: 'ENOENT' });
 });

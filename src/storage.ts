@@ -14,14 +14,24 @@ export type CommitResult<T> =
   | { status: 'committed' | 'replayed'; revision: number; value: T }
   | { status: 'conflict'; revision: number; reason: 'revision' | 'idempotency' };
 export type ReconcileResult<T> = CommitResult<T> | { status: 'unknown' };
+export interface StoredEventBatch {
+  cursor: number;
+  aggregateId: string;
+  revision: number;
+  commandId: string;
+  events: readonly unknown[];
+}
+export interface EventPage { events: StoredEventBatch[]; cursor: number }
 export type OperationIdentity = Pick<CommitInput<unknown>, 'id' | 'commandId' | 'fingerprint'>;
 export interface Store<T> {
   load(id: string): Promise<Snapshot<T> | null>;
+  readEvents(after: number, limit?: number): Promise<EventPage>;
   commit(input: CommitInput<T>): Promise<CommitResult<T>>;
   reconcile(input: CommitInput<T>): Promise<ReconcileResult<T>>;
   lookupOperation(identity: OperationIdentity): Promise<ReconcileResult<T>>;
 }
 export interface AuditRecord {
+  cursor: number;
   aggregateId: string;
   commandId: string;
   fingerprint: string;
@@ -53,6 +63,20 @@ export class CommitOutcomeUnknownError extends Error {
 export class StorageQueryError extends Error {
   constructor(message: string) { super(message); this.name = 'StorageQueryError'; }
 }
+/** A definite rejected transaction; caller may retry deliberately after reading state. */
+export class StorageContentionError extends StorageQueryError {
+  readonly retryable = true;
+  constructor(message: string) { super(message); this.name = 'StorageContentionError'; }
+}
+/** A cursor from another/reset database must not silently skip future changes. */
+export class EventCursorError extends RangeError {
+  readonly after: number;
+  readonly head: number;
+  constructor(after: number, head: number) {
+    super('Event cursor is ahead of this database; obtain a fresh snapshot and cursor.');
+    this.name = 'EventCursorError'; this.after = after; this.head = head;
+  }
+}
 export class StorageProtocolError extends Error {
   constructor(message: string) { super(message); this.name = 'StorageProtocolError'; }
 }
@@ -65,6 +89,29 @@ function revision(value: unknown): value is number {
 }
 function identifier(value: unknown, name: string): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) throw new TypeError(`${name} must be nonempty`);
+}
+
+function eventBounds(after: number, limit: number): void {
+  if (!revision(after)) throw new TypeError('after must be a nonnegative safe integer');
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new TypeError('limit must be an integer from 1 through 1000');
+}
+function eventPage(result: unknown, after: number, limit: number): EventPage {
+  if (!object(result) || !revision(result.head) || !Array.isArray(result.events) || result.events.length > limit) {
+    throw new StorageProtocolError('Invalid event page');
+  }
+  if (after > result.head) throw new EventCursorError(after, result.head);
+  let cursor = after;
+  const events: StoredEventBatch[] = [];
+  for (const entry of result.events) {
+    if (!object(entry) || !revision(entry.cursor) || entry.cursor <= cursor || entry.cursor > result.head ||
+      !revision(entry.revision) || entry.revision === 0 || typeof entry.aggregateId !== 'string' || !entry.aggregateId ||
+      typeof entry.commandId !== 'string' || !entry.commandId || !Array.isArray(entry.events)) {
+      throw new StorageProtocolError('Invalid or unordered stored event batch');
+    }
+    cursor = entry.cursor;
+    events.push({ cursor, aggregateId: entry.aggregateId, commandId: entry.commandId, revision: entry.revision, events: copy(entry.events) });
+  }
+  return { events, cursor };
 }
 
 /** JSON-only canonicalization prevents lossy values and caller mutation after submission. */
@@ -109,6 +156,7 @@ function replay<T>(stored: Operation<T>, input: CommitInput<T>, digest: string):
 export class InMemoryStore<T> implements Store<T> {
   private readonly states = new Map<string, Snapshot<T>>();
   private readonly operations = new Map<string, Operation<T>>();
+  private cursor = 0;
   private readonly clock: () => Date;
   constructor(clock: () => Date = () => new Date()) { this.clock = clock; }
   async load(id: string): Promise<Snapshot<T> | null> {
@@ -122,7 +170,10 @@ export class InMemoryStore<T> implements Store<T> {
     const actual = this.states.get(input.id)?.revision ?? 0;
     if (actual !== input.expectedRevision) return { status: 'conflict', reason: 'revision', revision: actual };
     const next = actual + 1;
+    if (this.cursor === Number.MAX_SAFE_INTEGER) throw new RangeError('Event cursor exhausted');
+    const cursor = this.cursor + 1;
     const operation: Operation<T> = {
+      cursor,
       aggregateId: input.id, commandId: input.commandId, fingerprint: input.fingerprint,
       contentDigest: digest, expectedRevision: actual, revision: next,
       recordedAt: this.clock().toISOString(), value: input.value, events: input.events, outbox: input.outbox,
@@ -130,7 +181,13 @@ export class InMemoryStore<T> implements Store<T> {
     // No await or user callback between the two writes: one JS critical section.
     this.operations.set(input.commandId, operation);
     this.states.set(input.id, { revision: next, value: input.value });
+    this.cursor = cursor;
     return { status: 'committed', revision: next, value: copy(input.value) };
+  }
+  async readEvents(after: number, limit = 100): Promise<EventPage> {
+    eventBounds(after, limit);
+    const events = [...this.operations.values()].filter((entry) => entry.cursor > after).slice(0, limit);
+    return eventPage({ head: this.cursor, events }, after, limit);
   }
   async lookupOperation(identity: OperationIdentity): Promise<ReconcileResult<T>> {
     identifier(identity.id, 'id'); identifier(identity.commandId, 'commandId'); identifier(identity.fingerprint, 'fingerprint');
@@ -195,8 +252,15 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
           throw new StorageProtocolError('Invalid SurrealDB statement result');
         }
       }
-      const failure = statements.find((statement) => statement.status === 'ERR');
-      if (failure) throw new StorageQueryError(String(failure.result));
+      const failures = statements.filter((statement) => statement.status === 'ERR');
+      if (failures.length) {
+        // Structured conflict kind is verified against HTTP RPC 3.3.0. Never
+        // classify a timeout or generic error string as retryable contention.
+        const conflict = failures.find((statement) => statement.kind === 'Query' &&
+          object(statement.details) && statement.details.kind === 'TransactionConflict');
+        if (conflict) throw new StorageContentionError(String(conflict.result));
+        throw new StorageQueryError(String(failures[0].result));
+      }
       return statements.map((statement) => statement.result);
     },
   };
@@ -211,6 +275,23 @@ DEFINE TABLE IF NOT EXISTS massion_operation SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_audit SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_event SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_outbox SCHEMALESS;
+DEFINE TABLE IF NOT EXISTS massion_feed SCHEMALESS;
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE {
+  IF array::len(SELECT id FROM massion_operation LIMIT 1) > 0 OR
+    array::len(SELECT id FROM massion_state LIMIT 1) > 0 OR
+    array::len(SELECT id FROM massion_audit LIMIT 1) > 0 OR
+    array::len(SELECT id FROM massion_event LIMIT 1) > 0 OR
+    array::len(SELECT id FROM massion_outbox LIMIT 1) > 0 {
+    THROW 'Existing operation journal requires an explicit event-cursor migration';
+  };
+  CREATE massion_feed:global CONTENT { cursor: 0, schemaVersion: 2 };
+} ELSE IF $feed.schemaVersion != 2 {
+  THROW 'Unsupported storage schema version';
+};
+DEFINE FIELD IF NOT EXISTS cursor ON massion_feed TYPE int ASSERT $value >= 0 AND $value <= 9007199254740991;
+DEFINE FIELD IF NOT EXISTS cursor ON massion_operation TYPE int ASSERT $value > 0 AND $value <= 9007199254740991;
+DEFINE INDEX IF NOT EXISTS operation_cursor ON massion_operation FIELDS cursor UNIQUE;
 RETURN true;
 };
 COMMIT TRANSACTION;
@@ -221,7 +302,15 @@ export async function initializeSurrealSchema(transport: QueryTransport): Promis
 }
 
 export const LOAD_QUERY = `RETURN SELECT aggregateId, revision, value FROM ONLY type::record('massion_state', $aggregateKey);`;
-export const OPERATION_QUERY = `RETURN SELECT aggregateId, commandId, fingerprint, contentDigest, expectedRevision, revision, recordedAt, value, events, outbox FROM ONLY type::record('massion_operation', $operationKey);`;
+export const OPERATION_QUERY = `RETURN SELECT cursor, aggregateId, commandId, fingerprint, contentDigest, expectedRevision, revision, recordedAt, value, events, outbox FROM ONLY type::record('massion_operation', $operationKey);`;
+
+export const EVENTS_QUERY = `RETURN {
+  LET $feed = SELECT * FROM ONLY massion_feed:global;
+  IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
+  LET $events = SELECT cursor, aggregateId, revision, commandId, events FROM massion_operation
+    WHERE cursor > $after ORDER BY cursor ASC LIMIT $limit;
+  RETURN { head: $feed.cursor, events: $events };
+};`;
 
 // Target: SurrealDB 3.x. A single query body is essential for an HTTP transaction.
 export const COMMIT_QUERY = `
@@ -242,31 +331,38 @@ IF $actual != $expectedRevision {
   RETURN { status: 'conflict', revision: $actual, reason: 'revision' };
 };
 LET $next = $actual + 1;
+LET $feed = SELECT * FROM ONLY massion_feed:global;
+IF $feed = NONE OR $feed.schemaVersion != 2 { THROW 'Storage event feed is not initialized'; };
+IF $feed.cursor >= 9007199254740991 { THROW 'Event cursor exhausted'; };
+LET $cursor = $feed.cursor + 1;
+UPDATE massion_feed:global SET cursor = $cursor;
 IF $current = NONE {
   CREATE $state CONTENT { aggregateId: $aggregateId, revision: $next, value: $value };
 } ELSE {
   UPDATE $state CONTENT { aggregateId: $aggregateId, revision: $next, value: $value };
 };
 CREATE $operation CONTENT {
+  cursor: $cursor,
   aggregateId: $aggregateId, aggregate: $state, commandId: $commandId,
   fingerprint: $fingerprint, contentDigest: $contentDigest,
   expectedRevision: $expectedRevision, revision: $next, recordedAt: $recordedAt,
   value: $value, events: $events, outbox: $outbox
 };
 CREATE type::record('massion_audit', $operationKey) CONTENT {
+  cursor: $cursor,
   aggregate: $state, operation: $operation, aggregateId: $aggregateId,
   commandId: $commandId, fingerprint: $fingerprint, contentDigest: $contentDigest,
   expectedRevision: $expectedRevision, revision: $next, recordedAt: $recordedAt
 };
 FOR $entry IN $eventRows {
   CREATE type::record('massion_event', $entry.key) CONTENT {
-    aggregate: $state, operation: $operation, revision: $next,
+    cursor: $cursor, aggregate: $state, operation: $operation, revision: $next,
     ordinal: $entry.ordinal, payload: $entry.payload
   };
 };
 FOR $entry IN $outboxRows {
   CREATE type::record('massion_outbox', $entry.key) CONTENT {
-    aggregate: $state, operation: $operation, revision: $next,
+    cursor: $cursor, aggregate: $state, operation: $operation, revision: $next,
     ordinal: $entry.ordinal, payload: $entry.payload, status: 'pending'
   };
 };
@@ -294,6 +390,7 @@ function commitResult<T>(value: unknown): CommitResult<T> {
 }
 
 export class SurrealStore<T> implements Store<T> {
+  private commitQueue: Promise<void> = Promise.resolve();
   private readonly transport: QueryTransport;
   private readonly clock: () => Date;
   constructor(transport: QueryTransport, clock: () => Date = () => new Date()) { this.transport = transport; this.clock = clock; }
@@ -306,11 +403,15 @@ export class SurrealStore<T> implements Store<T> {
     }
     return { revision: result.revision, value: copy(result.value) as T };
   }
+  async readEvents(after: number, limit = 100): Promise<EventPage> {
+    eventBounds(after, limit);
+    return eventPage(oneResult(await this.transport.query(EVENTS_QUERY, { after, limit })), after, limit);
+  }
   private async readOperation(commandId: string): Promise<Operation<T> | null> {
     identifier(commandId, 'commandId');
     const found = oneResult(await this.transport.query(OPERATION_QUERY, { operationKey: hash(commandId) }));
     if (found === null) return null;
-    if (!object(found) || !revision(found.revision) || found.revision === 0 ||
+    if (!object(found) || !revision(found.cursor) || found.cursor === 0 || !revision(found.revision) || found.revision === 0 ||
       !['aggregateId', 'commandId', 'fingerprint', 'contentDigest', 'recordedAt'].every((key) => typeof found[key] === 'string') ||
       !revision(found.expectedRevision) || !Object.hasOwn(found, 'value') || !Array.isArray(found.events) || !Array.isArray(found.outbox)) {
       throw new StorageProtocolError('Invalid stored operation');
@@ -332,6 +433,13 @@ export class SurrealStore<T> implements Store<T> {
     return existing ? replay(existing, input, digest) : { status: 'unknown' };
   }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
+    // Capture/validate before waiting: callers cannot mutate queued submissions.
+    const { input } = prepare(command);
+    const result = this.commitQueue.then(() => this.commitOnce(input));
+    this.commitQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+  private async commitOnce(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest, aggregateKey, operationKey } = prepare(command);
     const rows = (values: readonly unknown[]) => values.map((payload, ordinal) => ({ key: `${operationKey}_${ordinal}`, ordinal, payload }));
     const variables = {

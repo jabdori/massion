@@ -104,3 +104,7 @@ test('explicit memory update leaves only one effective version',()=>{
  let m=fresh();for(const version of [1,2])m=command(m,{type:'save-memory',memory:{id:'m',version,scope:'sample',authority:'explicit',content:'User revision',source:'user',effective:true}});
  assert.deepEqual(m.memories.filter(x=>x.effective).map(x=>x.version),[2]);
 });
+test('reconciliation rejects invalid runtime outcome without reopening the effect',()=>{
+ let m=assigned();m=command(m,{type:'admit-effect',workId:'a',effect:{id:'write',taskId:'a:root',status:'pending',target:'output',authority:'builtin@1'},reserve:0},exec);m=command(m,{type:'receipt',workId:'a',effectId:'write',outcome:'unknown',receipt:'Interrupted',usage:null},exec);
+ assert.throws(()=>command(m,{type:'reconcile-effect',workId:'a',effectId:'write',outcome:'pending',receipt:'Invalid'} as unknown as Command),/Invalid reconciliation outcome/);assert.equal(m.works[0]?.effects[0]?.status,'unknown');
+});

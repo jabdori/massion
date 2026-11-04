@@ -14,23 +14,23 @@ The current fixture demonstrates useful portions of that path through actual loc
 - `runDocumentScenario`: source-backed document facts through the same acceptance contracts, without a coding-only domain.
 - `runGrowthScenario`: Work A → learned-memory candidate and counterevidence → separate held-out evaluation → review-mode adoption → Work B using the new pin → actual oracle measurement → revert → a newly admitted Work using the previous pin.
 
-`src/server.ts` serves the loopback workbench and `POST /fixture-run`, `GET /missions/:id`, and `GET /health`. A read from another client sees the same stored Mission snapshot. This is not yet a general-purpose client command API or an event-replay protocol.
+`src/server.ts` now also exposes user-authored Mission/Work admission, owner cancellation/steering and durable event catch-up. The default interface shows provider/runtime blockers rather than running a fixture for user Work. See [local product interface](../architecture/product-interface.md). The explicitly requested development fixture remains separate. Real-provider execution and the complete client contract are still open.
 
 ## Acceptance status
 
 | Gate | Current evidence | Still required for the complete slice |
 | --- | --- | --- |
-| Mission and truthful lifecycle | Pinned criteria, separate execution/acceptance, retained attempts in domain tests | General admission and clear user-facing state/controls |
+| Mission and truthful lifecycle | Pinned criteria, separate execution/acceptance, retained attempts, user forms and explicit blocked state | Actual task execution and full lifecycle/controls |
 | Organization and collaboration | Product-owned parent/child task and executor/verifier assignments | Real model-driven staffing and causal agent collaboration; fixed fixture actors do not establish it |
 | Independent acceptance | Wrong/correct fixture, separate oracle, stale/tamper rejection, sealed artifacts and Records checksum | Real-provider result quality and independent product review |
 | Memory/Growth | Actual held-out oracle scores, second-Work version use, observed effect and revert | General authority lifecycle; controlled marker routing is not autonomous learning |
 | Atomic persistence | Live Surreal tests for journals, revision races, replay and response-loss readback | Migration/load limits and broader aggregate contention evidence |
 | Interrupted effects | Real file write followed by injected receipt failure; reconnect refuses a second effect | Actual host process death at admission/write/receipt boundaries, durable owner detection and reconciled resumption |
-| Shared clients | Snapshot reads plus application revision conflict tests | Durable event cursor, catch-up, retention/snapshot fallback, approvals and conversation reconstruction across clients |
+| Shared clients | Snapshot reads, CAS conflicts, durable cursor catch-up and actual HTTP-host restart tests | Retention/snapshot fallback, approvals, conversation reconstruction and production identity across clients |
 | Backup/restore | Actual database crash/restart and fresh database import tests for storage fixtures | Restore accepted product state **and** sealed artifacts into a clean environment and validate checksums/links |
 | Knowledge relationships | Domain multi-hop version/provenance test | Actual database graph queries, change-impact invalidation and readable product evidence |
 | Model/extensions | Pinned controlled-provider/built-in capability checks | Actual configured provider, observed usage/errors/cancel, external package lifecycle and isolation |
-| User control | Domain role/budget/cancel/steer checks; narrow web route rejects forged verdict input | Persisted approvals, policy versions, real execution controls and authenticated identities |
+| User control | Domain role/budget checks and owner cancel/steer UI/API; web route rejects forged verdict input | Persisted approvals, policy versions, general execution/recovery controls and authenticated identities |
 | Candidate integrity | Runtime syntax checks and tests with explicit live-store opt-ins | Static TypeScript checking, final-revision aggregate evidence and independent review |
 
 ## Required final-candidate evidence
