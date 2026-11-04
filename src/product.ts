@@ -13,8 +13,8 @@ import {verifyGrowthCalculation} from './execution.ts';
 import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
-import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
-import {workAdmissionPreflight} from './configured-runtime.ts';
+import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
+import {workAdmissionPreflight,rejectedRun} from './configured-runtime.ts';
 import type {WorkRuntime} from './configured-runtime.ts';
 import type {Store} from './storage.ts';
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
@@ -107,14 +107,32 @@ export class ProductService {
  async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
- async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<SelectionPreflight|null> {
+ /** An absent selection resolves to the saved default route; a present one is used exactly and never merged. */
+ private resolveDefault(mission:Mission,choice:ExecutionChoice|undefined):DefaultResolution|undefined {return choice===undefined&&this.runtime?.resolveDefault?this.runtime.resolveDefault(mission):undefined;}
+ async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<(SelectionPreflight&{selection?:{source:'default';choice:ExecutionChoice}})|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
+  const resolved=this.resolveDefault(snapshot.value,choice);
+  if(resolved?.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return {...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]};}
+  if(resolved)return {...this.runtime!.preflight!(snapshot,workId,expectedRevision,resolved.choice),selection:{source:'default',choice:resolved.choice}};
   if(this.runtime?.preflight)return this.runtime.preflight(snapshot,workId,expectedRevision,choice);
   const result=workAdmissionPreflight(snapshot,workId,expectedRevision);
   return {...result,ready:false,diagnostics:[...result.diagnostics,{code:'selection_unavailable',message:'No runtime with execution preflight is configured.'}]};
  }
- async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');return runSequence(this.app.store,this.runtime,missionId,input);}
- async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');return this.runtime.run(missionId,workId,runId,expectedRevision,choice);}
+ async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
+  if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=this.runtime.resolveDefault(snapshot.value);
+  // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
+  if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics);
+  return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice}),selection:{source:'default' as const,choice:resolved.choice}};
+ }
+ async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
+  if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=this.runtime.resolveDefault(snapshot.value);
+  // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
+  if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
+  // A local change cannot start while the run awaits the stored revision without the run seeing it; a changed revision blocks rather than re-resolving.
+  return {...await this.runtime.run(missionId,workId,runId,expectedRevision,resolved.choice),selection:{source:'default' as const,choice:resolved.choice}};
+ }
  async intervene(missionId:string,input:{commandId:string;expectedRevision:number;command:Command}) {
   input=structuredClone(input);
   if(!['cancel','steer','quarantine-runtime','close-expired-runtime'].includes(input.command?.type))throw new Error('Only cancel, steer, quarantine-runtime and close-expired-runtime are exposed as owner interventions');

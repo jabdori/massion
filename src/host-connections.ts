@@ -1,6 +1,6 @@
 import {validateRestoredSelection} from './restored-artifact-reader.ts';
 import type {RestoredArtifactSelection} from './restored-artifact-reader.ts';
-/** Explicit owner-selected host bindings. No credential search, persistence or startup sends. */
+/** Explicit owner-selected host bindings. No credential search or startup sends; only non-secret manifest-scoped settings persist. */
 import {open} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {DomainError,hash} from './domain.ts';
@@ -10,7 +10,7 @@ import type {ConnectionInput,HostConnectionBindings} from './connection-workbenc
 import type {CredentialResolver} from './chat-profile-factory.ts';
 import {validateModelEndpoint} from './native-model-providers.ts';
 import type {HttpProviderTransport} from './http-provider.ts';
-import type {Store} from './storage.ts';
+import type {Store,HostSettingsStore} from './storage.ts';
 import type {Mission} from './domain.ts';
 import type {TextArtifactStore} from './text-artifacts.ts';
 
@@ -101,9 +101,9 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
-export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined}) {
+export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore}) {
  if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
  const host=compileHostBindings(manifest,options.readEnvironment);
- return new ConnectionWorkbench(store,artifacts,{transport:options.transport,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution});
+ return new ConnectionWorkbench(store,artifacts,{transport:options.transport,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});
 }

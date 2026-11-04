@@ -101,8 +101,8 @@ export type Command =
   | { type: 'relate'; relation: Relation };
 
 export class DomainError extends Error {
-  code: 'invalid' | 'denied';
-  constructor(message: string, code: 'invalid' | 'denied' = 'invalid') { super(message); this.code = code; }
+  code: 'invalid' | 'denied' | 'conflict';
+  constructor(message: string, code: 'invalid' | 'denied' | 'conflict' = 'invalid') { super(message); this.code = code; }
 }
 export function canonical(value: unknown): string {
   if(value===null||typeof value==='string'||typeof value==='boolean')return JSON.stringify(value);

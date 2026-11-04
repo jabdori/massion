@@ -87,8 +87,10 @@ No actual credential connection, OAuth session or paid provider call is establis
 by this code change. Even a configured resolver is shown as configured-unverified;
 model metadata and accepted fixture Records never set liveVerified=true.
 
-Connections, discovered metadata, model profiles and scoped permissions are scoped
-to the host session and are lost on restart; this is disclosed in the UI. Existing
+Without a host manifest, connections, discovered metadata, model profiles and scoped
+permissions are scoped to the host session and are lost on restart; this is disclosed
+in the UI. With a manifest, labels, permissions, default routes and metadata are kept
+in host settings ([default route and persistent connections](default-route-and-persistent-connections.md)). Existing
 Mission/Work evidence remains durable and inspectable. Restart does not recreate
 permissions or resume remote effects. Persistent secure account enrollment is a
 separate future integration, not a hidden file containing an API key.

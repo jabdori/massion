@@ -12,7 +12,7 @@ import type {Store,Snapshot,CommitResult} from './storage.ts';
 import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest} from './providers.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
-import type {ExecutionChoice,SelectionPreflight} from './selectable-runtime.ts';
+import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
 export const TEXT_REVIEW_ORACLE='bounded-text-review/v1';
 export interface ProviderIdentity {provider:string;model:string;configVersion:string}
 export interface RuntimeAuthorization {
@@ -38,6 +38,7 @@ export interface WorkRuntime {
  run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<RuntimeResult>;
  configuration?():unknown;
  preflight?(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight;
+ resolveDefault?(mission:Mission):DefaultResolution;
  owns?(missionId:string,workId:string,runId:string):boolean;
  beginDrain?():void;
  drain?():Promise<void>;

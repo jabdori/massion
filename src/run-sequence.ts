@@ -5,6 +5,7 @@ import type {Store,Snapshot} from './storage.ts';
 import {workAdmissionPreflight,rejectedRun,hostBusyPreflight} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeResult} from './configured-runtime.ts';
 import type {ExecutionChoice} from './selectable-runtime.ts';
+import type {ConnectionDiagnostic} from './provider-profiles.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 import {keys} from './growth-evaluation.ts';
 export interface SequenceWork {workId:string;inputHash:string;criteriaHash:string}
@@ -29,10 +30,11 @@ function plannedPrerequisites(snapshot:Snapshot<Mission>,w:Work,earlier:Set<stri
  const external=pins.filter(pin=>!earlier.has(pin.workId)),view={...w};if(external.length)view.prerequisites=external;else delete view.prerequisites;
  resolvedPrerequisites(snapshot.value,view);
 }
-export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput):Promise<RunSequenceResult>{
+export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[]):Promise<RunSequenceResult>{
  const input=structuredClone(submitted);bound(input);const busyAtEntry=runtime.hasActiveAdmission?.()??false,configuration=hash(runtime.configuration?.()??null);
  let snapshot=await store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
  const results:RunSequenceResult['results']=[],completedWorkIds:string[]=[],stop=(entry:SequenceWork,index:number,result:RuntimeResult):RunSequenceResult=>({status:'stopped',snapshot:result.snapshot,completedWorkIds,results:[...results,{workId:entry.workId,runId:sequenceRunId(input.commandId,index),status:result.status,reason:result.reason}],reason:result.reason});
+ if(unresolved)return stop(input.works[0]!,0,{status:'blocked',snapshot,reason:unresolved.map(d=>d.message).join(' ')});
  const earlier=new Set<string>(),selected=new Set(input.works.map(entry=>entry.workId));
  for(const [index,entry] of input.works.entries()){
   const w=original(snapshot,entry),checked=workAdmissionPreflight(snapshot,entry.workId,input.expectedRevision,input.selection?.outputTokenCap);
