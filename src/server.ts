@@ -59,10 +59,16 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
-   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory)$/.exec(url.pathname);
+   const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|preflight|memory|revision)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
     const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
+    if(workRoute[2]==='revision'){
+     if(Object.keys(body).some(key=>!['commandId','expectedRevision','purpose','criteria'].includes(key)))throw new RequestError(400,'Only Mission purpose and acceptance revision fields are accepted');
+     const criteria=body.criteria;
+     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||Object.keys(criteria).some(key=>!['version','description','oracle'].includes(key)))throw new RequestError(400,'Acceptance criteria require version, description and oracle only');
+     sendCommit(await product.reviseMission(missionId,body as Parameters<ProductService['reviseMission']>[1]));return;
+    }
     if(workRoute[2]==='memory'){
      if(Object.keys(body).some(key=>!['commandId','expectedRevision','memory'].includes(key)))throw new RequestError(400,'Only explicit memory fields are accepted');
      const memory=body.memory;

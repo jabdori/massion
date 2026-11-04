@@ -38,6 +38,7 @@ export const workbenchPage = String.raw`<!doctype html>
 <div class="stack">
 <section id="empty-state" class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>No Mission selected</h2><p id="empty-message">Start with a purpose and clear success criteria. Your Mission and Work will appear here after the host confirms them.</p></section>
 <section id="mission-panel" class="panel" aria-labelledby="mission-heading" hidden><div class="section-top"><h2 id="mission-heading">Mission</h2><span id="revision" class="tag"></span></div><p id="loaded-id" class="id"></p><p><a id="mission-link" href="#" hidden>Open this Mission in another browser</a></p><p class="hint">Copy this link to continue on the same host. Opening it reads current state; it does not start Work or grant access.</p><h3 id="mission-purpose" class="mission-purpose"></h3><dl id="mission-facts" class="facts"></dl><div class="divider"></div><div class="section-top"><h2>Work</h2><span id="work-count" class="tag"></span></div><div id="work-list" class="work-list"></div>
+<details id="revision-panel" class="impact-panel"><summary>Revise Mission purpose and acceptance</summary><p class="hint">Only future Work uses these changes. Existing Work keeps its original Mission input and criteria. Scope and constraints stay fixed; editing does not run a model or re-evaluate Work.</p><div id="revision-comparison" tabindex="0" role="region" aria-label="Current Mission and revision draft comparison" class="impact-results"><p id="revision-current" class="hint"></p><p id="revision-base" class="hint"></p></div><form id="revision-form"><fieldset id="revision-fields"><label for="revision-purpose">Revised purpose</label><textarea id="revision-purpose" rows="2" maxlength="16000" required></textarea><label for="revision-version">New criteria version</label><input id="revision-version" type="number" min="1" max="9007199254740991" step="1" required><label for="revision-criteria">Revised success criteria</label><textarea id="revision-criteria" rows="3" maxlength="16000" required></textarea><label for="revision-oracle">Acceptance method</label><select id="revision-oracle"><option value="manual-review/v1">Manual review (no model execution)</option><option value="bounded-text-review/v1">Bounded text with independent model review</option></select><button id="save-revision" type="submit" data-write>Save Mission revision</button><button id="rebase-revision" type="button" class="secondary">Keep draft against current revision</button><button id="discard-revision" type="button" class="secondary">Discard revision draft</button></fieldset></form><p id="revision-status" class="status" role="status" aria-live="polite">Review current purpose and criteria before saving.</p></details>
 <details id="impact-panel" class="impact-panel"><summary>Inspect relation impact</summary><h3 id="impact-heading">Exact-version impact</h3><p id="impact-scope" class="hint"></p><p id="impact-hint" class="hint">Read stored dependencies for an exact entity ID and version in this Mission. Provenance and inferred flags describe recorded relations, not an independent truth verdict. This read does not invalidate results, start Work or call a model.</p><form id="impact-form"><div class="field"><label for="impact-entity">Target entity ID</label><input id="impact-entity" required maxlength="16000" aria-describedby="impact-hint" placeholder="Exact Work, artifact or evidence ID"></div><div class="field"><label for="impact-version">Exact version</label><input id="impact-version" type="number" min="1" max="9007199254740991" step="1" value="1" required aria-describedby="impact-hint"></div><button id="impact-read" type="submit">Read impact</button></form><p id="impact-status" class="status" role="status" aria-live="polite">Choose a target and exact version, then read its impact.</p><div id="impact-results" class="impact-results" tabindex="0" role="region" aria-label="Relation impact results" hidden></div></details>
 <details id="memory-panel" class="impact-panel"><summary>Manage Mission memory</summary><h3>Owner-authored instructions for future Work</h3><p id="memory-hint" class="hint">Save an explicit instruction for this Mission. New Work pins its effective version; earlier Work keeps its original memory. This does not run a model or adopt learned memory. Sources are owner-supplied context, not independent verification. Instruction and source each allow up to 16,000 characters; the complete JSON command must fit 32 KiB of UTF-8, including escaping and metadata.</p><p id="memory-scope" class="hint"></p><form id="memory-form"><fieldset id="memory-fields"><label for="memory-id">Memory ID</label><input id="memory-id" required maxlength="128" pattern="[a-zA-Z0-9:_-]{1,128}" aria-describedby="memory-hint" placeholder="memory:instruction"><label for="memory-version">New immutable version</label><input id="memory-version" type="number" min="1" max="9007199254740991" step="1" value="1" required><label for="memory-content">Explicit instruction</label><textarea id="memory-content" rows="3" maxlength="16000" required></textarea><label for="memory-source">Owner-supplied source or reason</label><textarea id="memory-source" rows="2" maxlength="16000" required></textarea><button id="save-memory" type="submit" data-write>Save explicit memory</button></fieldset></form><p id="memory-status" class="status" role="status" aria-live="polite">Save a new ID at version 1, or advance an existing ID to a higher version.</p><div id="memory-history" class="impact-results" tabindex="0" role="region" aria-label="Mission memory history"></div></details>
 <form id="work-form" class="work-compose"><fieldset id="work-fields"><h2>Admit bounded Work</h2><div class="row"><div class="field grow"><label for="work-title">Work title</label><input id="work-title" maxlength="16000" placeholder="A concrete responsibility or deliverable" required></div><div class="field budget"><label id="work-budget-label" for="work-budget">Budget limit (host units)</label><input id="work-budget" type="number" min="0" step="any" value="0" required></div></div><button id="admit-work" type="submit">Add Work</button><p id="work-budget-hint" class="hint">Admission records responsibility and pins criteria and effective memory. It does not start model execution.</p></fieldset></form>
@@ -77,12 +78,15 @@ let snapshot = null, busy = false, loading = false, readSequence = 0, polling = 
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 let impactSequence = 0, impactReading = false, impactFocus = null;
+let revisionMission = "", revisionFocus = null;
+const revisionSubmissions = new Map(), revisionDrafts = new Map(), revisionIds = ["revision-purpose","revision-version","revision-criteria","revision-oracle"];
 let memoryMission = "", memoryFocus = null;
 const memoryDrafts = new Map(), memoryIds = ["memory-id","memory-version","memory-content","memory-source"];
 const drafts = new Map(), instructionConflicts = new Map(), instructionSubmissions = new Map(), confirmedOperations = new Set();
 const instructionKey = (missionId, workId) => JSON.stringify([missionId, workId]);
 function confirmOperation(operation) {
   const operationId = operationKey(operation); confirmedOperations.add(operationId);
+  if (revisionSubmissions.has(operationId) && snapshot?.value.id === operation.missionId && selectedId === operation.missionId) renderRevision();
   const submission = instructionSubmissions.get(operationId);
   if (!submission) return;
   instructionSubmissions.delete(operationId);
@@ -129,7 +133,7 @@ async function persistPending(operation) {
   controls(); return result.acquired && result.value;
 }
 async function clearPending(operation) {
-  if (!confirmedOperations.has(operationKey(operation))) instructionSubmissions.delete(operationKey(operation));
+  if (!confirmedOperations.has(operationKey(operation))) { instructionSubmissions.delete(operationKey(operation)); revisionSubmissions.delete(operationKey(operation)); }
   const result = await withRecoveryLock(() => {
     const saved = storage.get(pendingKey);
     if (!storage.readable) { recoveryProblem = 'The command outcome was confirmed, but recovery storage cannot be read. Writes remain locked.'; return false; }
@@ -181,6 +185,11 @@ function controls() {
   $('mission-fields').disabled = locked;
   connectionControls();
   $('work-fields').disabled = locked || !snapshot;
+  const revisionActive = document.activeElement;
+  if (snapshot && snapshot.value.id === selectedId && !$('revision-fields').disabled && $('revision-fields').contains(revisionActive)) revisionFocus = {missionId:selectedId,previous:revisionActive,targetId:revisionActive.id};
+  $('revision-fields').disabled = locked || !snapshot || snapshot.value.id !== selectedId;
+  if (revisionFocus && !$('revision-fields').disabled) { const focus = revisionFocus; revisionFocus = null; if (snapshot.value.id === focus.missionId && selectedId === focus.missionId) restoreControlFocus(focus.previous,focus.targetId); }
+
   const memoryActive = document.activeElement;
   if (snapshot && snapshot.value.id === selectedId && !$('memory-fields').disabled && $('memory-fields').contains(memoryActive)) memoryFocus = {missionId:selectedId,previous:memoryActive,targetId:memoryActive.id};
   $('memory-fields').disabled = locked || !snapshot || snapshot.value.id !== selectedId;
@@ -264,6 +273,7 @@ async function request(path, options = {}, timeout = 15000) {
 function validSnapshot(value, id) { return value && Number.isSafeInteger(value.revision) && value.revision > 0 && value.value && value.value.id === id && Array.isArray(value.value.works); }
 function rememberMission(id) { selectedId = id; $('mission-id').value = id; storage.set(missionKey, id); }
 function clearSnapshot(message) {
+  switchRevisionDraft(''); revisionFocus = null;
   switchMemoryDraft(''); memoryFocus = null; $('memory-history').replaceChildren();
   snapshot = null; restoreMissionAddress();
   invalidateImpact('No current Mission snapshot is available. Load current state before reading impact.');
@@ -422,6 +432,7 @@ function renderWork(work) {
   if ((work.instructions || []).length) card.append(element('p', 'Latest owner instruction: ' + work.instructions.at(-1).text, 'work-note'));
   const evidence = element('details'); evidence.append(workElement(work,'summary','Criteria, memory pins & evidence','evidence-summary'));
   const body = element('div', undefined, 'detail-content');
+  body.append(element('h4','Original Mission input'),workElement(work,'pre',work.missionSnapshot ? JSON.stringify(work.missionSnapshot,null,2) : 'Original Mission input is unavailable; current input is not substituted.','mission-input'));
   body.append(element('h4', 'Pinned criteria'), element('p', 'v' + work.criteria.version + ' · ' + work.criteria.description), element('p', 'Oracle: ' + work.criteria.oracle, 'id'));
   body.append(element('h4', 'Pinned memory versions'), element('p', work.appliedMemoryVersions.length ? work.appliedMemoryVersions.join(', ') : 'None pinned for this Work.'));
   for (const pin of work.appliedMemoryVersions) {
@@ -488,6 +499,7 @@ function renderMission() {
   let card = focused; while (card && !card.id?.startsWith('work-card-')) card = card.parentElement;
   const workFocus = focused?.id && $('work-list').contains(focused) ? {id:focused.id,heading:card ? 'work-heading-' + card.id.slice(10) : null,start:focused.selectionStart,end:focused.selectionEnd,scroll:focused.scrollTop} : null;
   const mission = snapshot.value;
+  renderRevision();
   renderMemoryHistory();
   executionForms.clear();
   $('revision').textContent = 'Revision ' + snapshot.revision;
@@ -592,7 +604,7 @@ async function pollEvents() {
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; }
 }
-async function write(path, body, missionId, successMessage) {
+async function write(path, body, missionId, successMessage, revisionSubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
   if (reconnectRequired || busy || loading || unknownOperation || recoveryProblem) return false;
   const operation = {commandId:body.commandId, missionId, reconcileCursor:cursor};
@@ -603,6 +615,7 @@ async function write(path, body, missionId, successMessage) {
   if (reconnectRequired || writeFeed !== feedId) { await clearPending(operation); busy = false; controls(); report('Host state changed before transmission. No command was sent; refresh before a deliberate new action.','warning'); return false; }
   rememberMission(missionId);
   if (instructionSubmission) instructionSubmissions.set(operationKey(operation),instructionSubmission);
+  if (revisionSubmission) revisionSubmissions.set(operationKey(operation),revisionSubmission);
   controls(); report('Sending command ' + body.commandId + '…');
   try {
     const responsePromise = request(path,{method:'POST',headers:{'Content-Type':'application/json',...(writeFeed ? {'X-Massion-Feed':writeFeed} : {})},body:JSON.stringify(body)},longRun ? 120000 : 15000);
@@ -667,6 +680,54 @@ async function sendCommand(command, restoreFocus = false) {
 }
 function commandBodyFits(body) { return new TextEncoder().encode(JSON.stringify(body)).byteLength <= ${MAX_REQUEST_BODY_BYTES}; }
 function memoryValues() { return memoryIds.map(id => $(id).value); }
+function revisionValues() { return revisionIds.map(id => $(id).value); }
+function revisionCriteriaText(criteria) { const method = criteria.oracle === 'manual-review/v1' ? 'Manual review' : criteria.oracle === 'bounded-text-review/v1' ? 'Bounded text with independent model review' : criteria.oracle; return 'v' + criteria.version + ': ' + criteria.description + ' · Acceptance method: ' + method; }
+function newRevisionDraft() {
+  const mission = snapshot.value;
+  return {values:[mission.purpose,String(mission.criteria.version + 1),mission.criteria.description,mission.criteria.oracle],baseRevision:snapshot.revision,basePurpose:mission.purpose,baseCriteria:revisionCriteriaText(mission.criteria),dirty:false};
+}
+function switchRevisionDraft(id) {
+  if (revisionMission === id) return;
+  const old = revisionDrafts.get(revisionMission); if (old) old.values = revisionValues();
+  revisionMission = id;
+  const values = revisionDrafts.get(id)?.values || ['', '', '', 'manual-review/v1'];
+  for (let i=0;i<revisionIds.length;i++) $(revisionIds[i]).value = values[i];
+  $('revision-status').textContent = 'Review current purpose and criteria before saving.';
+}
+function renderRevision() {
+  switchRevisionDraft(snapshot.value.id);
+  for (const [key, submission] of revisionSubmissions) {
+    if (submission.missionId !== revisionMission || !confirmedOperations.has(key) || snapshot.revision <= submission.expectedRevision) continue;
+    const unchanged = JSON.stringify(revisionValues()) === JSON.stringify(submission.values);
+    if (unchanged) revisionDrafts.set(revisionMission,newRevisionDraft());
+    revisionSubmissions.delete(key);
+    $('revision-status').textContent = 'Mission revision confirmed. ' + (unchanged ? 'Only future Work uses the new purpose and criteria.' : 'Your later edits are retained for review.');
+  }
+  let draft = revisionDrafts.get(revisionMission);
+  if (!draft || !draft.dirty) { draft = newRevisionDraft(); revisionDrafts.set(revisionMission,draft); for(let i=0;i<revisionIds.length;i++) $(revisionIds[i]).value = draft.values[i]; }
+  $('revision-current').textContent = 'Current revision ' + snapshot.revision + ' · Mission v' + snapshot.value.version + ': ' + snapshot.value.purpose + ' · Criteria: ' + revisionCriteriaText(snapshot.value.criteria);
+  $('revision-base').textContent = 'Draft based on revision ' + draft.baseRevision + ': ' + draft.basePurpose + ' · Criteria: ' + draft.baseCriteria + (draft.baseRevision !== snapshot.revision ? ' · State changed. Compare current and draft before explicitly keeping this draft against the current revision.' : '');
+}
+function revisionEditable() { return snapshot && snapshot.value.id === selectedId && !reconnectRequired && !busy && !loading && !unknownOperation && !recoveryProblem; }
+for (const id of revisionIds) for (const event of ['input','change']) $(id).addEventListener(event,() => { const draft = revisionDrafts.get(revisionMission); if (draft) { draft.values = revisionValues(); draft.dirty = true; } });
+$('discard-revision').addEventListener('click',() => { if (!revisionEditable()) return; revisionDrafts.set(selectedId,newRevisionDraft()); renderRevision(); $('revision-status').textContent = 'Revision draft discarded. No command was sent.'; });
+$('rebase-revision').addEventListener('click',() => { if (!revisionEditable()) return; const values = revisionValues(); revisionDrafts.set(selectedId,{...newRevisionDraft(),values,dirty:true}); renderRevision(); $('revision-status').textContent = 'Draft retained against current revision. Review purpose, criteria and advancing version before saving.'; });
+$('revision-form').addEventListener('submit',async event => {
+  event.preventDefault(); if (!revisionEditable()) return;
+  const values = revisionValues(), version = Number(values[1]), draft = revisionDrafts.get(selectedId);
+  if (!draft || !values[0].trim() || values[0].length > 16000 || !values[2].trim() || values[2].length > 16000 || !Number.isSafeInteger(version) || version <= snapshot.value.criteria.version || !['manual-review/v1','bounded-text-review/v1'].includes(values[3])) { $('revision-status').textContent = 'Enter purpose, success criteria and a positive whole-number version above the current criteria version. No command was sent.'; return; }
+  draft.values = values; draft.dirty = true;
+  const missionId = selectedId, submittedFocus = document.activeElement;
+  const body = {commandId:crypto.randomUUID(),expectedRevision:draft.baseRevision,purpose:values[0],criteria:{version,description:values[2],oracle:values[3]}};
+  $('revision-status').textContent = 'Saving Mission revision. No Work is restarted or model invoked…';
+  const saved = await write('/missions/' + encodeURIComponent(missionId) + '/revision',body,missionId,'Mission revision saved. Earlier Work retains its original purpose and criteria.',{missionId,values:[...values],expectedRevision:body.expectedRevision});
+  const confirmed = saved || confirmedOperations.has(operationKey({missionId,commandId:body.commandId}));
+  if (snapshot?.value.id === missionId && selectedId === missionId) {
+    if (confirmed && JSON.stringify(revisionValues()) === JSON.stringify(values)) { revisionDrafts.set(missionId,newRevisionDraft()); renderRevision(); }
+    $('revision-status').textContent = confirmed ? 'Mission revision confirmed. Only future Work uses the new purpose and criteria.' : 'Revision was not confirmed here. Compare current state and your retained draft; no command is retried.';
+    if ($('revision-form').contains(submittedFocus)) { revisionFocus = {missionId,previous:submittedFocus,targetId:submittedFocus.id}; controls(); }
+  }
+});
 function switchMemoryDraft(id) {
   if (memoryMission === id) return;
   if (memoryMission) memoryDrafts.set(memoryMission,memoryValues());
