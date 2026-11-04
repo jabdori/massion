@@ -235,7 +235,7 @@ The verifier judges the artifact against the criteria and this format: one JSON 
 
 ### Step 3: record the outcome
 
-`ProductService.completeGrowthProposal(missionId, {expectedRevision, proposalWorkId})` records the outcome. Under `growthPolicy.adoption === 'automatic'` the host calls it right after P is accepted, in the same process that ran P. Under `review`, or when that call did not finish (host restart, lost response), the Workbench offers it on an accepted P that has no outcome. Either way the request is idempotent, as described below.
+`ProductService.completeGrowthProposal(missionId, {expectedRevision, proposalWorkId})` records the outcome. The host calls it right after P is accepted, in the same process that ran P. When that call did not finish (host restart, lost response), the host start scan or the Workbench repeats it for an accepted P that has no outcome. Either way the request is idempotent, as described below.
 
 - The service first checks `growthProposalOutcomes` for P. If an outcome exists, it returns it and dispatches nothing. This is how a retry after a lost response or a host restart works, because the command fingerprint includes `expectedRevision` and a retry at a newer revision would otherwise conflict.
 - Otherwise it reads P's accepted artifact through `readRecordArtifact`. If the read fails (reader unavailable, or the reader's own hash check fails), nothing is dispatched and the request returns `unresolved`; it can be retried.
@@ -262,28 +262,20 @@ The model's `cue`, `why` and `evidence` are not copied into Growth. The Workbenc
 
 ### Step 4: evaluate and adopt
 
-Under `review`, the owner selects the Growth and runs `evaluateGrowth`. Under `automatic`, the host runs the same steps (next section). Only `host-rounding-oracle/v1` exists. Whether a candidate is evaluable is derived, not stored: the Workbench disables evaluation and shows "no evaluator for this candidate" when the candidate or baseline content is not one of the oracle's two exact policies. Such a Growth stays `proposed` and cannot be adopted, because adoption still requires an independently measured improvement.
+The host runs evaluation and adoption (next section). A Growth the host does not adopt stays `proposed` or `evaluated`, and the owner can evaluate and adopt it as today. Only `host-rounding-oracle/v1` exists. Whether a candidate is evaluable is derived, not stored: the Workbench disables evaluation and shows "no evaluator for this candidate" when the candidate or baseline content is not one of the oracle's two exact policies. Such a Growth stays `proposed` and cannot be adopted, because adoption still requires an independently measured improvement.
 
 Baselines may be explicit or learned. A candidate is always learned. Adopting a learned candidate over an explicit baseline replaces owner-authored memory, and afterwards only `revert-growth` restores it, because `retire-memory` accepts explicit memory only. The Workbench states both before the owner adopts.
 
 ### Adoption without waiting for the owner
 
-**Policy.** A new owner command `set-growth-policy` stores `Mission.growthPolicy`:
+**No adoption setting.** Per [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md), automatic adoption after an independent check is the rule, and there is no owner-chosen review mode. A target returns to owner review only through [calibration](#calibration). A candidate whose baseline is owner-authored explicit memory is never adopted automatically, because it replaces an owner instruction: it stays `evaluated` and is raised to the owner as a decision card.
 
-```ts
-{ adoption: 'automatic' | 'review';
-  explicitBaselines: 'review' | 'automatic';      // default 'review'
-  resumedAfterSeq: Record<string, number> }       // per Growth target, see Calibration
-```
-
-Setting the policy is an owner decision about rules, made once, not per change. A Mission without the field behaves as `review`, so existing Missions do not change. With `explicitBaselines: 'review'`, a candidate whose baseline is owner-authored explicit memory stays `proposed` for the owner even under `automatic`, because replacing an owner instruction is close to changing the rules.
-
-**Standing evaluation set.** The rounding oracle needs input orders. The owner stores one set per oracle (`Mission.growthEvaluationSets[oracle] = { version, cases, hash }`, same bounds as today's `cases`, owner-only command `save-growth-evaluation-set`). Changing the set is a change to the checking rules. The set and any evaluation evidence that contains it never enter a trail, a proposal Work source or any model input.
+**Standing evaluation set.** The rounding oracle needs input orders. Automatic evaluation runs only when the owner has stored one set per oracle (`Mission.growthEvaluationSets[oracle] = { version, cases, hash }`, same bounds as today's `cases`, owner-only command `save-growth-evaluation-set`). Changing the set is a change to the checking rules. The set and any evaluation evidence that contains it never enter a trail, a proposal Work source or any model input.
 
 **Chain.** `ProductService.continueGrowthAdoption(missionId, growthId)` advances one Growth as far as the policy allows. It reads current state before every step and dispatches only what is missing, so calling it twice is harmless:
 
-1. Growth `proposed`, policy `automatic`, an applicable host deterministic evaluator and a standing set exist → `evaluateGrowth` with the standing set, as `host-rounding-oracle/v1`. The evaluation binding records `evaluationSetHash`.
-2. Growth `evaluated` → `adopt-growth` as `host-growth-adopter/v1`.
+1. Growth `proposed`, an applicable host deterministic evaluator and a standing set exist → `evaluateGrowth` with the standing set, as `host-rounding-oracle/v1`. The evaluation binding records `evaluationSetHash`.
+2. Growth `evaluated`, baseline not explicit, target not paused → `adopt-growth` as `host-growth-adopter/v1`. If the baseline is explicit, raise a decision card instead.
 3. Anything else → stop. A Growth left `proposed` or `evaluated` is shown to the owner as waiting for review.
 
 Command IDs derive from the Growth ID and step. Because the command fingerprint includes `expectedRevision`, an idempotency conflict at a newer revision is treated as "already done": re-read state and continue from there. A revision conflict (another command committed in between) re-reads and re-checks, at most three times, then stops and reports.
@@ -292,14 +284,14 @@ The chain is called:
 
 - after `completeGrowthProposal` records `proposed`, and again when it replays an existing outcome;
 - from `ProductService.run` and `runSequence` after they return a settled P, asynchronously, after the run response is sent, so the run request is not held open by evaluation;
-- once at host start for Missions with `automatic`, for every Growth that is `proposed` or `evaluated`.
+- once at host start, for every Growth that is `proposed` or `evaluated`.
 
 **Adoption rule.** `adopt-growth` branches on actor ID first, then role:
 
-- `host-growth-adopter/v1`: requires, checked inside the transition, `growthPolicy.adoption === 'automatic'`; the target not paused by calibration; `g.evaluator` in the host deterministic evaluator allowlist (today only `host-rounding-oracle/v1`); `g.scores` bound to the current standing set hash; `scores.candidate > scores.baseline`; and, if the baseline is explicit, `explicitBaselines === 'automatic'`. All existing guards stay (effective baseline, exact versions, superseded adoption).
+- `host-growth-adopter/v1`: requires, checked inside the transition, the target not paused by calibration; `g.evaluator` in the host deterministic evaluator allowlist (today only `host-rounding-oracle/v1`); `g.scores` bound to the current standing set hash; `scores.candidate > scores.baseline`; and a baseline that is not explicit memory. All existing guards stay (effective baseline, exact versions, superseded adoption).
 - any other actor: role `owner`, as today.
 
-Branching on ID first matters because portable replay runs every event as an actor holding all roles. The transition sets `adoptedBy = actor.id` and `adoptionSeq` (one more than the highest `adoptionSeq` in the Mission), so replay reproduces them and a forged automatic adoption under a `review` policy fails replay. `host-growth-proposer/v1` and `host-growth-adopter/v1` exist only inside the host; ProductService and HTTP callers cannot choose them as actor.
+Branching on ID first matters because portable replay runs every event as an actor holding all roles. The transition sets `adoptedBy = actor.id` and `adoptionSeq` (one more than the highest `adoptionSeq` in the Mission), so replay reproduces them, and a forged automatic adoption of a paused target, an explicit baseline or an unbound set fails replay. `host-growth-proposer/v1` and `host-growth-adopter/v1` exist only inside the host; ProductService and HTTP callers cannot choose them as actor.
 
 `revert-growth` stays owner-only in stage 2 and now records `revertedBy`. Stage 4 adds automatic revert by a host actor.
 
@@ -307,18 +299,18 @@ Branching on ID first matters because portable replay runs every event as an act
 
 ### Calibration
 
-For each Growth target, the host counts automatic adoptions with `adoptionSeq` greater than `growthPolicy.resumedAfterSeq[target]`, newest first, at most 10. An adoption counts as **failed** if it was reverted (`revertedBy` set) or if the owner later adopted a different candidate for the same memory ID while it was effective. Automatic adoption for the target pauses when:
+For each Growth target, the host counts automatic adoptions with `adoptionSeq` greater than `Mission.growthResumedAfterSeq[target]`, newest first, at most 10. An adoption counts as **failed** if it was reverted (`revertedBy` set) or if the owner later adopted a different candidate for the same memory ID while it was effective. Automatic adoption for the target pauses when:
 
 - 2 or more of those adoptions failed, or
 - 1 failed while fewer than 5 have been counted.
 
-Paused means new candidates for that target stay `proposed` for owner review, and the owner sees one notice. The count is derived from Growth fields; only the resume point is stored. When the owner resumes with `set-growth-policy`, `resumedAfterSeq[target]` is set to the current highest `adoptionSeq`, so earlier failures no longer count.
+Paused means new candidates for that target stay `proposed` for owner review, and the owner sees one notice. The count is derived from Growth fields; only the resume point is stored. When the owner resumes the target with the owner command `resume-growth-adoption { target }`, `growthResumedAfterSeq[target]` is set to the current highest `adoptionSeq`, so earlier failures no longer count.
 
 Limits until stage 4: failures come only from owner audit, so an unaudited Mission shows no failures. That is why automatic adoption in stage 2 is limited to host deterministic evaluators, whose measurements are exact, and why explicit baselines default to review.
 
 ### Storage, hashing and backup changes
 
-- New optional fields: `Work.growthProposal`; `Mission.growthProposalOutcomes`, `Mission.growthPolicy`, `Mission.growthEvaluationSets`; `Growth.adoptedBy`, `Growth.adoptionSeq`, `Growth.revertedBy`; `evaluationSetHash` in the evaluate-growth binding.
+- New optional fields: `Work.growthProposal`; `Mission.growthProposalOutcomes`, `Mission.growthResumedAfterSeq`, `Mission.growthEvaluationSets`; `Growth.adoptedBy`, `Growth.adoptionSeq`, `Growth.revertedBy`; `evaluationSetHash` in the evaluate-growth binding.
 - `workInputHash` includes `growthProposal` only when the field is present, so existing Work hashes do not change.
 - P's Record checksum covers `growthProposal` through the accept bundle. `AcceptedRecord` gains the optional field, and the record equality check in `record-artifact.ts` compares it.
 - [Portable backup](portable-backup.md): add all new fields to the allowed keys, add the five new commands to the command field table in `backup-lineage.ts`, and validate on restore that every outcome names an existing accepted P with the same record checksum, that a `proposed` outcome's Growth exists with proposer `host-growth-proposer/v1`, and that every adoption by `host-growth-adopter/v1` replays under an `automatic` policy with a matching standing set hash.
@@ -327,7 +319,7 @@ Limits until stage 4: failures come only from owner audit, so an unaudited Missi
 
 - In each finished Work's detail: "Draft a proposal from this Work", disabled with the reason when stage 2 refuses the trail.
 - P appears as an ordinary Work with its own status, budget and Record.
-- On an accepted P under `review`: "Record the result", then one of `proposed`, `kept base`, `rejected: …`, `baseline moved`. Under `automatic` the host records it. `kept base` reads as a normal result.
+- The host records P's outcome: one of `proposed`, `kept base`, `rejected: …`, `baseline moved`. If that did not finish, the Workbench offers "Record the result" on the accepted P. `kept base` reads as a normal result.
 - A created Growth shows its source Record, the cited trail refs and the counterevidence next to the existing evaluate and adopt controls.
 
 The A7 Growth and A6 inbox screens in [experience plan](../product/experience-plan.ko.md) are where these results will appear in the rebuilt UI. That plan currently lists model-made proposals as absent; it should be updated when stage 2 lands.
@@ -340,10 +332,10 @@ The A7 Growth and A6 inbox screens in [experience plan](../product/experience-pl
 - Each new command is one transition. `admit-growth-proposal-work` writes documents, Work and source pins together. `record-growth-proposal-outcome` writes outcome, candidate and Growth together. Replays return the original receipt through command identity, and `completeGrowthProposal` reads an existing outcome before dispatching.
 - W and its Record are never modified. P's Record is never modified after acceptance; the outcome lives in `growthProposalOutcomes`.
 - P runs with no applied memory. The trail and the format document are untrusted sources for both models.
-- Checking rules and permissions are never changed automatically: `set-growth-policy`, `save-growth-evaluation-set` and the family map are owner-only, and evaluators cannot be candidates.
+- Checking rules and permissions are never changed automatically: `resume-growth-adoption`, `save-growth-evaluation-set` and the family map are owner-only, and evaluators cannot be candidates.
 - Host actors are decided by actor ID inside transitions and cannot be chosen by API callers. Policy, calibration and set hash are re-checked in the adopting transition, not only when evaluating.
 - The standing evaluation set never enters a model input.
-- **New in this design**: the actors `host-growth-proposer/v1` and `host-growth-adopter/v1`, the commands `admit-growth-proposal-work`, `record-growth-proposal-outcome`, `release-growth-proposal`, `set-growth-policy` and `save-growth-evaluation-set`, the fixed format document, a widened `adopt-growth` rule, and the optional fields listed under storage. No new role, credential or provider permission is added.
+- **New in this design**: the actors `host-growth-proposer/v1` and `host-growth-adopter/v1`, the commands `admit-growth-proposal-work`, `record-growth-proposal-outcome`, `release-growth-proposal`, `resume-growth-adoption` and `save-growth-evaluation-set`, the fixed format document, a widened `adopt-growth` rule, and the optional fields listed under storage. No new role, credential or provider permission is added.
 
 ### Acceptance for stage 2
 
@@ -365,15 +357,15 @@ Fixture runtime unless stated:
 - W with two applied memories: the proposal input names the selected baseline and its text, and the executor and verifier both receive it.
 - W's title of 99 ASCII characters followed by an emoji: both generated titles are well-formed and admission succeeds.
 - A Growth from P with content `Round aggregate once` against baseline `Round each line` evaluates with the existing oracle and the owner can adopt it. A Growth with other content shows "no evaluator" and cannot be adopted.
-- With `growthPolicy.adoption = 'automatic'` and a standing evaluation set, the same Growth is evaluated and adopted by `host-growth-adopter/v1` with no owner request, `adoptedBy` records it, and a later Work pins the candidate. With `review`, or without a set, it stays `proposed`.
-- The host adopter cannot adopt when the policy is `review`, when the evaluator equals the proposer, or when the improvement is not measured. It cannot run `set-growth-policy` or `save-growth-evaluation-set`.
+- With a standing evaluation set and a learned baseline, the same Growth is evaluated and adopted by `host-growth-adopter/v1` with no owner request, `adoptedBy` records it, and a later Work pins the candidate. Without a set it stays `proposed`.
+- The host adopter cannot adopt when the target is paused, when the evaluator equals the proposer, or when the improvement is not measured. It cannot run `resume-growth-adoption` or `save-growth-evaluation-set`.
 - Two owner reverts among the last 10 automatic adoptions of `memory`, or one among the first four, pause automatic adoption for `memory`; the next candidate stays `proposed`, and the owner sees one notice. After the owner resumes, the next candidate is adopted automatically, and two new failures pause it again.
 - An owner adoption of a different candidate over an automatic adoption counts as a failure.
-- Switching the policy to `review` between evaluation and adoption makes the host adoption fail. Changing the standing set between evaluation and adoption makes it fail.
-- A candidate over an explicit baseline stays `proposed` under `automatic` unless `explicitBaselines` is `automatic`.
+- A calibration pause between evaluation and adoption makes the host adoption fail. Changing the standing set between evaluation and adoption makes it fail.
+- A candidate over an explicit baseline is evaluated but not adopted by the host; the owner gets a decision card and adopts or declines.
 - An API request naming `host-growth-adopter/v1` or `host-growth-proposer/v1` as actor is refused.
 - A host crash after the outcome and before adoption: at restart the chain adopts once; replaying it again changes nothing.
-- A portable backup containing a host adoption under a `review` policy fails replay.
+- A portable backup containing a host adoption over an explicit baseline, of a paused target, or with an unbound set fails replay.
 - W's Record and pins are byte-identical before and after the whole flow. Portable backup of a Mission with P and an outcome restores and replays.
 - One live run with real providers recorded under `docs/acceptance/` before the stage is called done. It needs the owner's prior approval for provider usage, as with earlier live evidence.
 
