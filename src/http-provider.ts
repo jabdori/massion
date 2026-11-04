@@ -1,4 +1,5 @@
-import {renderChatCompletionsBody} from './chat-request-renderer.ts';
+import {renderChatCompletionsBody,CHAT_DIALECTS} from './chat-request-renderer.ts';
+import type {ChatDialect} from './chat-request-renderer.ts';
 /** A deliberately narrow, opt-in OpenAI-compatible Chat Completions adapter. */
 import { createHash } from 'node:crypto';
 import type { ProviderAdapter, ProviderDescriptor, ProviderOutcome, ProviderRequest } from './providers.ts';
@@ -33,6 +34,8 @@ export interface OpenAICompatibleChatConfig {
   bounds: HttpProviderBounds;
   authorization?: HttpProviderAuthorization;
   transport: HttpProviderTransport;
+  /** Request-body variant for a named preset; responses keep the same strict parser. Defaults to 'openai'. */
+  dialect?: ChatDialect;
 }
 export interface HttpProviderEvidence {
   protocol: 'openai-chat-completions';
@@ -148,6 +151,7 @@ export class OpenAICompatibleChatAdapter implements ProviderAdapter {
   readonly evidence: Readonly<HttpProviderEvidence>;
   readonly #endpoint: string;
   readonly #model: string;
+  readonly #dialect: ChatDialect;
   readonly #bounds: Readonly<HttpProviderBounds>;
   readonly #transport: HttpProviderTransport;
   readonly #enabled: boolean;
@@ -157,7 +161,9 @@ export class OpenAICompatibleChatAdapter implements ProviderAdapter {
         (config.enabled !== undefined && typeof config.enabled !== 'boolean') || !config.bounds ||
         !positive(config.bounds.maxInputBytes) || !positive(config.bounds.maxOutputTokens) || !positive(config.bounds.maxResponseBytes) ||
         !positive(config.bounds.timeoutMs) || config.bounds.timeoutMs > 2_147_483_647) throw new Error('Invalid provider configuration or bounds.');
+    if (config.dialect !== undefined && !CHAT_DIALECTS.includes(config.dialect)) throw new Error('Invalid provider configuration or bounds.');
     validateEndpoint(config.endpoint, config.transportMode);
+    this.#dialect = config.dialect ?? 'openai';
     this.#endpoint = config.endpoint;
     this.#model = config.model;
     this.#bounds = Object.freeze({ ...config.bounds });
@@ -184,7 +190,7 @@ export class OpenAICompatibleChatAdapter implements ProviderAdapter {
         !Array.isArray(request.inputReferences) || ![...request.inputReferences].every(reference => typeof reference === 'string') ||
         !positive(maxTokens) || maxTokens > this.#bounds.maxOutputTokens) return outcome('failed', 'invalid_request_or_output_bound');
     // References are transmitted only as literal identifiers. No URL, filesystem or account lookup occurs.
-    const body = renderChatCompletionsBody(this.#model,request.instruction,request.inputReferences,maxTokens);
+    const body = renderChatCompletionsBody(this.#model,request.instruction,request.inputReferences,maxTokens,this.#dialect);
     if (Buffer.byteLength(body, 'utf8') > this.#bounds.maxInputBytes) return outcome('failed', 'input_byte_limit');
     if (request.signal.aborted) return outcome('cancelled', 'cancelled_before_dispatch');
 
