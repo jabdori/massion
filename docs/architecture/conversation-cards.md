@@ -47,7 +47,7 @@ Closing a result-unknown Work stays in the work pane, because the existing quara
 The conversation read may carry two optional arrays. Their producers are member admission ([Members](members.md)) for `decisions` and the morning briefing schedule ([Results and schedules](results-and-schedules.md)) for `briefings`, which also adds a third array, `exceptions`, for schedule runs that failed or whose result is unknown. The shapes below exist only here and in the client check; a producer must emit exactly them or change both. The client renders them when present and ignores malformed entries.
 
 ```
-decisions: [{id, at, title, question, rows: [[label, value]], action, state: 'open'|'later'|'done', line?}]
+decisions: [{id, at, title, question, detail?, rows: [[label, value]], action, state: 'open'|'later'|'done', line?, remove?}]   // detail and remove: apps.md
 briefings: [{id, at, title, turnIds: [turnId]}]
 ```
 

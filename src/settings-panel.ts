@@ -29,7 +29,7 @@ function settingsText(title,sub){const box=element('span',undefined,'set-text');
 function settingsRow(title,sub,...controls){const row=element('div',undefined,'set-row');row.append(settingsText(title,sub),...controls.filter(Boolean));return row;}
 function settingsCard(label,rows,action){const head=element('h3',label);if(action)head.append(action);const card=element('div',undefined,'set-card');card.append(...(rows.length?rows:[element('div','None','set-empty')]));return [head,card];}
 /** Opens one section and reads what it shows; nothing is written by opening. */
-function settingsOpen(name){settingsShown=name;settingsAdding=false;settingsMember='';for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
+function settingsOpen(name,app=''){settingsShown=name;settingsAdding=false;settingsMember='';settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
 async function settingsRead(path){try{const {response,body}=await request(path);return response.ok?body:null;}catch{return null;}}
 async function settingsLoad(name){
  if(name==='general')await schedulesLoad();
@@ -37,6 +37,7 @@ async function settingsLoad(name){
  if(name==='memory'){const id=settingsCatalog&&settingsCatalog.representative&&settingsCatalog.representative.intakeMissionId;settingsMission=id?await settingsRead('/missions/'+encodeURIComponent(id)):null;}
  if(name==='devices')settingsHealth=(await settingsRead('/health'))?.status==='ready'?'Ready':'Offline';
  if(name==='permissions')settingsRules=await settingsRead('/assistant/permissions');
+ if(name==='apps')settingsApps=await settingsRead('/assistant/apps');
  if(name==='members'||name==='improvements')settingsSkills=await settingsRead('/assistant/skills');
  if(settingsShown===name)renderSettings();
 }
@@ -54,7 +55,7 @@ function renderSettings(){
   const rows=chatMembers().map(m=>{const row=element('button',undefined,'set-row'),a=element('span',[...m.name][0],'avatar');row.type='button';row.id='settings-member-'+m.id;a.setAttribute('aria-hidden','true');a.style.background=shellColor(m);row.append(a,settingsText(m.name),element('span',settingsGroupName(m.modelGroup||'default')+' ›','set-side'));row.addEventListener('click',()=>{settingsMember=m.id;renderSettings();});return row;});
   view.replaceChildren(...settingsCard('',[rep,...rows]).slice(1));}
  if(settingsShown==='devices')view.replaceChildren(...settingsCard('',[settingsRow('This Mac',settingsHealth)]).slice(1));
- if(settingsShown==='apps')view.replaceChildren(...settingsCard('Installed',[element('div','No apps installed','set-empty')]));
+ if(settingsShown==='apps')view.replaceChildren(...settingsAppsView());
  if(settingsShown==='connections')view.replaceChildren(...settingsConnectionsView());
  if(settingsShown==='permissions')view.replaceChildren(...settingsPermissionsView());
 }

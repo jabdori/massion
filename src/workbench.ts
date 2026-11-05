@@ -22,6 +22,7 @@ import {memberDialog,memberClient,memberStyle} from './members-panel.ts';
 import {resultsPage,resultsPane,resultsClient,resultsStyle} from './results-panel.ts';
 import {schedulesPage,schedulesClient,schedulesStyle} from './schedules-panel.ts';
 import {settingsSection,settingsClient,settingsStyle} from './settings-panel.ts';
+import {appsStyle,appsPage,appsPane,appsClient} from './apps-panel.ts';
 import {shellStyle,shellRail,shellSidebar,shellBand,shellPaneBar,shellClient} from './surface-shell.ts';
 /** Self-contained loopback client. All user and host text is rendered through textContent. */
 export const workbenchPage = String.raw`<!doctype html>
@@ -42,6 +43,7 @@ ${memberStyle}
 ${resultsStyle}
 ${schedulesStyle}
 ${settingsStyle}
+${appsStyle}
 ${shellStyle}</style>
 </head>
 <body>
@@ -58,6 +60,7 @@ ${chatPanel}
 ${memberDialog}
 ${resultsPage}
 ${schedulesPage}
+${appsPage}
 <div id="page-settings" class="page-body" hidden><div class="settings-stack">
 ${settingsSection('general')}${settingsSection('memory')}${settingsSection('members')}${settingsSection('devices')}
 ${settingsSection('connections',`<div id="settings-groups"></div><details id="settings-setup" class="set-setup"><summary>Connection setup</summary>
@@ -112,6 +115,7 @@ ${memoryUsagePanel}
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
 </div>
 ${resultsPane}
+${appsPane}
 </section><!-- /work-pane -->
 </div>
 <script>
@@ -1635,6 +1639,7 @@ ${memberClient}
 ${resultsClient}
 ${schedulesClient}
 ${settingsClient}
+${appsClient}
 ${shellClient}
 ${missionCatalogClient}
 ${workInboxClient}

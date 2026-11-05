@@ -14,6 +14,7 @@ import { isMembersState } from './members.ts';
 import { isSchedulesState } from './schedules.ts';
 import { isPermissionsState } from './permissions.ts';
 import { isSkillsState } from './skills.ts';
+import { isAppsState } from './apps.ts';
 
 export const BACKUP_FORMAT = 'massion-portable-text/v1';
 export const BACKUP_LIMITS = Object.freeze({ bundleBytes: 64 * 1024 * 1024, artifactBytes: 32_768, artifacts: 4096, operations: 10000 });
@@ -39,7 +40,7 @@ function inventory(journal: PortableJournal<Mission>): Artifact[] {
   validateMissionJournalLineage(journal.operations);
   const inventory = new Map<string, Artifact>();
   for (const operation of journal.operations) {
-    if (isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permission rules and skills hold no artifacts.
+    if (isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAppsState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permission rules, skills and apps hold no artifacts.
     validateMissionLineage(operation.value);
     if (operation.value.id !== operation.aggregateId) fail('Mission aggregate lineage mismatch');
     for (const artifact of collectMissionArtifacts(operation.value)) {

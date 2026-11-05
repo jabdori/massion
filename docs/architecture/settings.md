@@ -21,7 +21,7 @@ Settings was one long page of the earlier forms. Nothing showed what the Represe
 - **Members** (B13): the Representative (★) and each admitted member with its model group name. The Representative's row opens its conversation; a member's row opens the member page (B19-juno, [self-made skills](self-made-skills.md)) with `Message`. Archive is later.
 - **Devices** (B13-devices): `This Mac` and the host state (`Ready` or `Offline`).
 - **Connections** (B14): `Model groups` from `GET /connections`: each group's name, who uses it (the Representative uses Default; members their own), its description (the Default group's host string is not drawn), its models as `model Family` chips (the model family from the host map, `Unknown` when unmapped, so a model reached through OpenRouter counts with its family) and `N providers` counting distinct families. Then `Subscription logins` (CLI connections) and `API keys` (the others) as rows with their state. The earlier connection forms follow under `Connection setup`.
-- **Apps** (B23): `No apps installed`. The app runtime is a later step.
+- **Apps** (B23, B23-github): installed apps and the catalog, each app's permissions, contributions and versions. See [Apps runtime v1](apps.md).
 - **Improvements** (B14): one card with skill and procedure candidates waiting for the owner, the ones that could not be checked, then past adoptions with their revert ([self-made skills](self-made-skills.md)).
 - **Permissions** (B14): two columns.
   - `Always ask`: the five fixed kinds, `Spend money`, `Send as me`, `Delete`, `Hand to a new member`, `Change check rules`.
@@ -65,6 +65,6 @@ interface PermissionsState {kind:'permissions'; id; rules: {id; what; kind:'spen
 - Members: archive and unarchive, the member page (B19), merging.
 - Devices: pairing codes and remote devices.
 - Connections: editing groups (B20), changing the checking model through a decision card, `Recheck` and `Add key` on rows; the earlier forms still carry explanation text.
-- Apps: everything (Q11).
+- Apps: see [Apps runtime v1](apps.md#not-in-this-increment).
 - Permissions: owner rules in `Always ask`, and the policy gate that reads `Allow without asking`.
 - The Settings search field.

@@ -74,7 +74,7 @@ test('Members lists the Representative and each member with its model group; a r
  await byId(app,'settings-member-member-a')!.fire('click');await settle();await button(app.node('settings-members-body'),'Message')!.fire('click');await settle();
  assert.equal(app.node('page-chat').hidden,false);assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
  await open(app,'devices');assert.match(app.node('settings-devices-body').textContent,/This Mac.*Ready/);
- await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,/No apps installed/);
+ await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,/Installed 0.*None/);
 });
 
 test('Connections lists model groups with who uses them, models and providers, then logins and API keys',async()=>{
