@@ -186,3 +186,8 @@ test('the narrow-screen sidebar opens below the band so its toggle stays reachab
  assert.match(narrow,/position:fixed/);assert.match(narrow,/top:44px/);
  assert.match(workbenchPage,/\.band\{height:44px/,'the sidebar top matches the band height');
 });
+
+test('the owner menu stacks above the narrow-screen work pane so Settings stays reachable',()=>{
+ const menu=Number(/\.menu\{position:absolute;z-index:(\d+)/.exec(workbenchPage)?.[1]),pane=Number(/@media \(max-width:900px\)\{[^@]*\.pane\{position:fixed;z-index:(\d+)/.exec(workbenchPage)?.[1]);
+ assert.ok(menu>pane,`menu z-index ${menu} must exceed the narrow pane's ${pane}`);
+});
