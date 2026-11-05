@@ -173,8 +173,10 @@ export class SkillsService {
   ensure(exact(input,['memberId','missionId','workId','trigger'])&&id(input.memberId)&&id(input.missionId)&&id(input.workId),'Exact skill proposal fields required');ensure((TRIGGERS as readonly string[]).includes(input.trigger as string),'Unknown trigger: candidates come from a correction, a dead end or repeated work');
   ensure(this.#producer,'No skill producer on this host');const members=(await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined;ensure(members?.members.some(m=>m.id===input.memberId),'Unknown member');
   const mission=(await this.#store.load(input.missionId as string))?.value as Mission|undefined,w=mission?.works?.find(x=>x.id===input.workId);ensure(w&&w.acceptance==='accepted'&&w.record,'Only an accepted Work with a Record is a source');
-  const source={missionId:input.missionId as string,workId:w.id,recordId:w.record.id,title:w.title},draft=await this.#producer({memberId:input.memberId as string,trigger:input.trigger as string,work:structuredClone(source)});
-  ensure(draft&&typeof draft==='object'&&line(draft.name,64)&&draft.model&&line(draft.model.provider,128)&&line(draft.model.model,256),'Invalid draft');
+  // A Work title may be multiline and up to 16,000 characters; the source keeps a bounded one-line display title.
+  const title=[...w.title.toWellFormed().replace(/[\s\u0000-\u001f\u007f]+/g,' ').trim()].slice(0,512).join('').trim()||w.id;
+  const source={missionId:input.missionId as string,workId:w.id,recordId:w.record.id,title},draft=await this.#producer({memberId:input.memberId as string,trigger:input.trigger as string,work:structuredClone(source)});
+  ensure(exact(draft,['kind','name','body','model'])&&line(draft.name,64)&&exact(draft.model,['provider','model'])&&line(draft.model.provider,128)&&line(draft.model.model,256),'Invalid draft');
   const commandId=HOST_PREFIX+'-proposal:'+hash({memberId:input.memberId,kind:draft.kind,name:draft.name.toLowerCase(),body:draft.body}).slice(0,64);
   return this.#dispatch(commandId,ASSISTANT_ACTOR_ID,{type:'propose-skill',candidate:{id:candidateId(commandId),memberId:input.memberId as string,kind:draft.kind as SkillKind,name:draft.name,body:draft.body,trigger:input.trigger as Candidate['trigger'],source,producer:{provider:draft.model.provider,model:draft.model.model,family:modelFamily(draft.model.provider,draft.model.model)}}});
  }
@@ -182,11 +184,13 @@ export class SkillsService {
  async check(id:string):Promise<CommitResult<SkillsState>>{
   const v=(await this.#state())?.value,c=v?.candidates.find(x=>x.id===id);ensure(c,'Unknown candidate');ensure(c.state==='pending','Only a pending candidate is checked','conflict');ensure(this.#evaluator,'No skill evaluator on this host');
   const s=v!.skills.find(x=>x.id===c.skillId),base=c.base!==null&&s?s.versions[c.base-1]!.body:null;
-  const {checker,...scores}=await this.#evaluator({id:c.id,memberId:c.memberId,kind:c.kind,name:c.name,body:structuredClone(c.body),base:structuredClone(base),producer:structuredClone(c.producer)});
+  const out=await this.#evaluator({id:c.id,memberId:c.memberId,kind:c.kind,name:c.name,body:structuredClone(c.body),base:structuredClone(base),producer:structuredClone(c.producer)});
+  // Exact fields, so an evaluator cannot slip in a `check` (or any other field) over the host-built one.
+  ensure(exact(out,['checker','cases','baseline','candidate','heldOut','evidence']),'Exact evaluator output fields required');const {checker,cases,baseline,candidate,heldOut,evidence}=out;
   // The host builds the check from the models it ran; an evaluator claims neither a family nor a deterministic check.
   ensure(checker!==null||this.#hostEvaluator,'Only a host evaluator checks without a model');ensure(checker===null||exact(checker,['provider','model'])&&line(checker.provider,128)&&line(checker.model,256),'Checker model required');
   const check=checker?familyCheck([c.producer],checker):{relation:'deterministic' as const,producers:[structuredClone(c.producer)],checker:null};
-  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:{check,...scores} as SkillEvaluation});
+  return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:{check,cases,baseline,candidate,heldOut:structuredClone(heldOut),evidence} as SkillEvaluation});
  }
  async use(skillId:string){return this.#dispatch(HOST_PREFIX+'-use:'+skillId+':'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'use-skill',skillId});}
  async archiveUnused(){return this.#dispatch(HOST_PREFIX+'-archive:'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'archive-unused'});}

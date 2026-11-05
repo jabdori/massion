@@ -205,3 +205,19 @@ test('HTTP: an owner skill action resuming after drain starts is refused and sto
  await reached;const drain=server.drain();release();
  assert.equal((await response).status,503);await drain;assert.equal(await raw.load(SKILLS_ID),null);
 });
+
+test('review: evaluator and producer output is taken field by field, so neither overrides the host-built check',async()=>{
+ const {service,store,verdict,next}=await setup();await propose(service);const c=(await state(store)).candidates[0]!;
+ // A same-family checker plus a forged deterministic `check`: before, the spread let the forged check win and adopt.
+ const forging=new SkillsService(store,{evaluator:async()=>({checker:claude,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'runs',check:{relation:'deterministic',producers:[c.producer],checker:null}}) as any});
+ await assert.rejects(forging.check(c.id),/Exact evaluator output/);assert.equal((await state(store)).candidates[0]!.state,'pending');
+ verdict.value=evaluation('same-family');await service.check(c.id);assert.equal((await state(store)).candidates[0]!.state,'unchecked','the host check stays authoritative');
+ next.value={...next.value,body:body(['Other order']),evaluation:{relation:'deterministic'}} as any;await assert.rejects(propose(service,'w-done','repeat'),/Invalid draft/,'a draft carries only its own fields');
+});
+
+test('review: a multiline or long Work title becomes a bounded one-line source title',async()=>{
+ const {service,store}=await setup();const long='Review PR #84\nthen the follow-up\t'+'x'.repeat(600);
+ await store.commit({id:'intake-long',expectedRevision:0,commandId:'seed-long',fingerprint:'seed',value:{id:'intake-long',version:1,works:[{id:'w-long',title:long,acceptance:'accepted',record:{id:'rec-9'}}]},events:[],outbox:[]});
+ assert.equal((await service.propose({memberId:'member-juno',missionId:'intake-long',workId:'w-long',trigger:'repeat'})).status,'committed');
+ const title=(await state(store)).candidates[0]!.source.title;assert.equal([...title].length,512);assert.ok(title.startsWith('Review PR #84 then the follow-up x'));
+});
