@@ -194,3 +194,14 @@ test('review: an allowed body warning does not hide a secret name; card versions
  await adopt(['six']);const card=(await service.decisions('member-juno')).find(c=>c.state==='open')!;assert.equal(card.action,'Use v6');
  await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});assert.equal((await state(store)).skills[0]!.current,6);assert.equal((await service.decisions('member-juno')).find(c=>c.id===card.id)!.line,'Changed: v6');
 });
+
+test('HTTP: an owner skill action resuming after drain starts is refused and stores nothing',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {store:raw}=await setup();let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(raw,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===SKILLS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:3000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;hold=true;
+ const response=fetch(`http://127.0.0.1:${port}/assistant/skills`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-drain',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['List changed files'])})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);await drain;assert.equal(await raw.load(SKILLS_ID),null);
+});
