@@ -6,7 +6,7 @@ import {apply,createMission,hash,workInputHash,canonical} from '../src/domain.ts
 import type {Actor,Command,Mission} from '../src/domain.ts';
 import {InMemoryStore,SurrealStore} from '../src/storage.ts';
 import type {Operation,PortableJournal,Store} from '../src/storage.ts';
-import {AssistantConversation,applyAssistant,segmentId,ownerMessageId,assistantTurnId,assistantWorkId,assistantRunId,hasRoom,headSegment,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,SEGMENT_MESSAGES,SEGMENT_BYTES,MESSAGE_BYTES} from '../src/assistant-conversation.ts';
+import {AssistantConversation,applyAssistant,segmentId,ownerMessageId,assistantTurnId,assistantWorkId,assistantRunId,hasRoom,headSegment,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,SEGMENT_MESSAGES,SEGMENT_BYTES,MESSAGE_BYTES,TITLE_BYTES,DIAGNOSTIC_BYTES} from '../src/assistant-conversation.ts';
 import type {AssistantCommand,AssistantSegment,AssistantSource} from '../src/assistant-conversation.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {exportPortableBackup,parsePortableBackup} from '../src/portable-backup.ts';
@@ -257,4 +257,25 @@ test('review: lineage refuses a Mission created by the assistant actor',async()=
  const store=new InMemoryStore<any>();await intake(store);validateMissionJournalLineage(journal(store).operations);const ops=journal(store).operations as Operation<any>[],created=ops.find(o=>o.aggregateId==='intake')!,{id,purpose,scope,constraints,criteria}=created.value;
  (created.events[0] as any).actor=ASSISTANT_ACTOR_ID;created.fingerprint=hash({actorId:ASSISTANT_ACTOR_ID,input:{id,purpose,scope,constraints,criteria},kind:'create'});
  assert.throws(()=>validateMissionJournalLineage(ops),/assistant/);
+});
+test('review: room reserves every unrecorded outcome, so outcomes recorded after close stay within the bound',async()=>{
+ const h=harness(),turns:string[]=[],d={code:'a'.repeat(64),message:'"'.repeat(DIAGNOSTIC_BYTES)};let i=0;
+ while(!(await h.head(1))||hasRoom((await h.head(1)).value)){i++;const text=i<7?'s':'"'.repeat(MESSAGE_BYTES);assert.equal((await h.say(1,'c'+i,text)).status,'committed');const turnId=assistantTurnId(ownerMessageId('c'+i));assert.equal((await h.settle(1,turnId,'answered',{title:'"'.repeat(TITLE_BYTES)},text)).status,'committed');turns.push(turnId);h.clock.now+=1;assert.ok(i<=8);}
+ assert.equal((await h.close(1)).status,'committed');
+ for(const turnId of turns)assert.equal((await h.conversation.dispatch({segment:1,commandId:'assistant-outcome:'+turnId,expectedRevision:(await h.head(1)).revision,actorId:ASSISTANT_ACTOR_ID,command:{type:'record-assistant-outcome',turnId,work:{status:'not_created',diagnostics:[d,d]},run:{status:'not_started',diagnostics:[d,d]}}})).status,'committed');
+ assert.ok(Buffer.byteLength(JSON.stringify((await h.head(1)).value),'utf8')<=SEGMENT_BYTES);
+});
+test('review: lineage refuses an assistantSource whose Representative differs from the answered turn route',async()=>{
+ for(const representative of [{provider:'other-provider',model:route.model},{provider:route.provider,model:'other-model'}]){
+  const h=harness();await h.exchange(1,'r1','Route check',{title:'Routed'});const {send}=await intake(h.store);const source={...await sourceFor(h,1,'r1'),representative};
+  assert.equal((await send({type:'admit-work',workId:assistantWorkId(source.turnId),title:'Routed',budget:512,assistantSource:source},ASSISTANT_ACTOR_ID,'assistant-work:'+source.turnId)).status,'committed');
+  assert.throws(()=>validateMissionJournalLineage(journal(h.store as InMemoryStore<any>).operations),/Representative/,representative.provider);
+ }
+});
+test('review: the Mission prefix guard leaves connection ID routes alone',async t=>{
+ const seen:string[]=[],h=harness(),connections={async discover(connectionId:string){seen.push(connectionId);return {models:[]};}};
+ const server=createWorkbench(h.store,'.',{connections:connections as any});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});
+ const base='http://127.0.0.1:'+(server.address() as any).port,id=encodeURIComponent(segmentId(1));
+ assert.equal((await fetch(base+'/connections/'+id+'/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedConfigHash:'h'})})).status,200);assert.deepEqual(seen,[segmentId(1)]);
+ assert.equal((await fetch(base+'/missions/'+id)).status,400);
 });

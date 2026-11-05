@@ -427,6 +427,7 @@ function checkAssistantSteps(operation: Operation<Mission>, actorId: string, com
   const message = segment.messages.find(entry => entry.id === source.messageId);
   ensure(message && hash(message) === source.messageHash, 'assistantSource must pin the stored owner message');
   ensure(turn.proposal.title === command.title, 'assistant Work title must equal the proposal title');
+  ensure(turn.route?.provider === source.representative.provider && turn.route.model === source.representative.model, 'assistantSource Representative must equal the answered turn route');
 }
 /** Segments replay from their open with the recorded host time; roles follow the deterministic actor. */
 function replaySegment(operation: Operation<AssistantSegment>, previous: Map<string, Operation<AssistantSegment>>): void {
