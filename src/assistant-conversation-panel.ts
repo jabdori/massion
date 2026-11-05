@@ -125,7 +125,8 @@ async function chatReadLoop(){
   clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],wait=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
-function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
+// A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
+function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder','Message');if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
 async function openChatWork(turnId){const turn=chatRep&&chatRep.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;

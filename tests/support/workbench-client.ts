@@ -22,6 +22,7 @@ export class Node {
  private drop(item:Node){const at=this.children.indexOf(item);if(at>=0){this.children.splice(at,1);item.detaches++;}}
  detaches=0;
  setAttribute(key:string,value:string){this.attributes.set(key,value);}
+ removeAttribute(key:string){this.attributes.delete(key);}
  hasAttribute(key:string){return this.attributes.has(key);}
  addEventListener(name:string,fn:(event:any)=>unknown){this.listeners.set(name,[...(this.listeners.get(name)||[]),fn]);}
  async fire(name:string){await Promise.all((this.listeners.get(name)||[]).map(fn=>fn({preventDefault(){}})));}

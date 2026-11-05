@@ -96,6 +96,17 @@ test('producer: rows come from Representative Works run this month; the card is 
  const after=await f.members.read();assert.deepEqual(after.members.map(m=>[m.name,m.look.shape]),[['셈','drop']]);assert.deepEqual([after.decisions[0]!.state,after.decisions[0]!.line],['done','Added: 셈']);
 });
 
+test('an identical answer racing a committed one replays instead of refusing the answered decision',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
+ const card=(await f.members.read()).decisions[0]!,act={commandId:'d-race',decisionId:card.id,answer:'act',member:{name:'셈',shape:'drop'}};
+ // The racing request's first lookup sees nothing; the other request commits right after it.
+ let raced=false;const store=new Proxy(f.store,{get(target,key){
+  if(key==='lookupOperation'&&!raced)return async(identity:any)=>{raced=true;const r=await target.lookupOperation(identity);assert.equal((await f.members.decide(act)).status,'committed');return r;};
+  const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ assert.equal((await new MembersService(store,()=>'intake').decide(act)).status,'replayed');
+ assert.deepEqual((await f.members.read()).members.map(m=>m.name),['셈'],'admitted once');
+});
+
 test('1:1 conversation: one thread per member through its model group, the member named as data, no Work admitted; lineage replays it',async t=>{
  const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
  await f.members.decide({commandId:'d-1',decisionId:(await f.members.read()).decisions[0]!.id,answer:'act',member:{name:'셈',shape:'drop'}});
