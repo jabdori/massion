@@ -23,7 +23,7 @@ RETURN {
  IF $feedId != '' AND $feed.feedId != $feedId { RETURN {changed:'feed'}; };
  IF $cursor >= 0 AND $feed.cursor != $cursor { RETURN {changed:'cursor'}; };
  LET $rows = SELECT aggregateId, revision, value.id AS missionId, value.version AS version, value.purpose AS purpose, value.scope AS scope, array::len(value.works) AS workCount
-  FROM massion_state WHERE aggregateId > $after ORDER BY aggregateId ASC LIMIT $fetchLimit;
+  FROM massion_state WHERE aggregateId > $after AND value.kind = NONE ORDER BY aggregateId ASC LIMIT $fetchLimit;
  RETURN {feedId:$feed.feedId,cursor:$feed.cursor,rows:$rows};
 };
 COMMIT TRANSACTION;`;

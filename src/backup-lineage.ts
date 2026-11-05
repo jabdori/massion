@@ -7,6 +7,8 @@ import {validateConversations} from './work-conversation.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
+import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,validateAssistantSource} from './assistant-conversation.ts';
+import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
  * This verifies retained structure and evidence bindings, not historical
  * authorization, provider truth, or the current bytes behind an artifact.
@@ -111,13 +113,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
   if(work.runtimeRun?.ownership)equal(record.runtimeOwnership,work.runtimeRun.ownership,'Record exact runtime ownership');else ensure(!Object.hasOwn(record,'runtimeOwnership'),'Legacy Record has runtime ownership');
+  if(work.assistantSource)equal(record.assistantSource,work.assistantSource,'Record assistant source');else ensure(!Object.hasOwn(record,'assistantSource'),'Record has assistant source without its Work pin');
   if(work.questions){requireAnswered(work);equal(record.questions,clarificationInput(work),'Record original owner clarification');}else ensure(!Object.hasOwn(record,'questions'),'Legacy Record has owner clarification');
   if(work.conversationSource)equal(record.conversationSource,conversationSourceInput(work),'Record original conversation provenance');else ensure(!Object.hasOwn(record,'conversationSource'),'Legacy Record has conversation provenance');
   if(work.correction)equal(record.correction,correctionInput(work),'Record original correction decision');else ensure(!Object.hasOwn(record,'correction'),'Legacy Record has correction provenance');
@@ -142,7 +145,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+    ['assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+  if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
   clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
   validateProviderDispatchClaims(value as Work);
   pinnedWorkSources(mission,value as Work);
@@ -328,7 +332,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission-constraints': {required:['constraints','reason']},
   'revise-mission': { required: ['purpose', 'criteria'] },
-  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate','correction','conversationSource'] },
+  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate','correction','conversationSource','assistantSource'] },
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
@@ -371,6 +375,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>();
   for (const operation of operations) {
+    if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); previous.set(operation.aggregateId, operation); continue; }
     validateMissionLineage(operation.value);
     ensure(operation.aggregateId === operation.value.id, 'operation aggregate/Mission mismatch');
     text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId);
@@ -379,9 +384,10 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
     ensure(Array.isArray(operation.events) && operation.events.length === 1, 'portable Mission operation requires one typed application event');
     const event = object(operation.events[0], 'application event', prior ? ['type', 'actor', 'command'] : ['type', 'actor'],prior?['time']:[]);
     text(event.actor, 'event actor ID');
-    const actor: Actor = { id: event.actor, roles: ['owner', 'representative', 'executor', 'verifier', 'evaluator'] };
+    const actor: Actor = { id: event.actor, roles: ['owner', 'representative', 'executor', 'verifier', 'evaluator', 'assistant'] };
     if (!prior) {
       ensure(event.type === 'mission-created', 'journal must start with mission-created');
+      ensure(event.actor !== ASSISTANT_ACTOR_ID, 'assistant actor may not create a Mission');
       const { id, purpose, scope, constraints, criteria } = operation.value;
       const input = { id, purpose, scope, constraints, criteria };
       equal(createMission(input, actor), operation.value, 'Mission creation baseline');
@@ -395,10 +401,51 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
       ensure(operation.fingerprint === hash({ actorId: actor.id, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
+      checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');
       equal(operation.outbox, command.type === 'admit-effect' ? [{ type: 'effect-admitted', workId: command.workId, effectId: command.effect.id }] : [], 'command/outbox transition');
     }
     previous.set(operation.aggregateId, operation);
   }
+}
+
+/** Synthetic lineage roles cannot tell the assistant actor apart, so its narrow permission and host IDs are checked here. */
+function checkAssistantSteps(operation: Operation<Mission>, actorId: string, command: Command, mission: Mission, previous: Map<string, Operation<AssistantSegment>>): void {
+  if (actorId === ASSISTANT_ACTOR_ID) ensure(command.type === 'admit-work' && Object.hasOwn(command, 'assistantSource') || command.type === 'activate-runtime', 'assistant actor may only admit its pinned Work and start its run');
+  // Pin the assistant actor's runs and the deterministic assistant run ID; an owner run merely named assistant-* (possible before HTTP refused it) still replays.
+  const runSource = command.type === 'activate-runtime' ? mission.works.find(work => work.id === command.workId)?.assistantSource : undefined;
+  if (command.type === 'activate-runtime' && (actorId === ASSISTANT_ACTOR_ID || runSource && command.run?.id === assistantRunId(runSource.turnId))) {
+    ensure(actorId === ASSISTANT_ACTOR_ID && runSource && command.run.id === assistantRunId(runSource.turnId), 'assistant run must be started by assistant-representative as assistant-run:<turnId>');
+  }
+  if (command.type !== 'admit-work' || !Object.hasOwn(command, 'assistantSource')) return;
+  const source = command.assistantSource as AssistantSource;
+  ensure(actorId === ASSISTANT_ACTOR_ID, 'assistantSource admission must be by assistant-representative');
+  ensure(operation.commandId === 'assistant-work:' + source.turnId, 'assistantSource admission must use command ID assistant-work:<turnId>');
+  const segment = previous.get(source.segmentId)?.value, turn = segment?.turns.find(entry => entry.id === source.turnId);
+  ensure(segment && turn?.status === 'answered' && turn.proposal && turn.messageId === source.messageId, 'assistantSource must pin an answered turn with a proposal at an earlier cursor');
+  const message = segment.messages.find(entry => entry.id === source.messageId);
+  ensure(message && hash(message) === source.messageHash, 'assistantSource must pin the stored owner message');
+  ensure(turn.proposal.title === command.title, 'assistant Work title must equal the proposal title');
+  ensure(turn.route?.provider === source.representative.provider && turn.route.model === source.representative.model, 'assistantSource Representative must equal the answered turn route');
+}
+/** Segments replay from their open with the recorded host time; roles follow the deterministic actor. */
+function replaySegment(operation: Operation<AssistantSegment>, previous: Map<string, Operation<AssistantSegment>>): void {
+  const prior = previous.get(operation.aggregateId);
+  ensure(operation.aggregateId === operation.value.id, 'operation aggregate/segment mismatch');
+  ensure(operation.expectedRevision === (prior?.revision ?? 0) && operation.revision === operation.expectedRevision + 1, 'operation revision lineage mismatch');
+  ensure(Array.isArray(operation.events) && operation.events.length === 1, 'segment operation requires one typed application event');
+  const event = object(operation.events[0], 'segment event', ['type', 'actor', 'command', 'time']); text(event.actor, 'event actor ID');
+  ensure(event.command && typeof event.command === 'object' && !Array.isArray(event.command), 'invalid journal command');
+  const command = event.command as AssistantCommand; ensure(event.type === command.type, 'event and command type mismatch');
+  ensure(operation.fingerprint === hash({ actorId: event.actor, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
+  requireAssistantCommandIdentity(operation.commandId, command);
+  const step = command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome';
+  ensure((event.actor === ASSISTANT_ACTOR_ID) === step, 'segment step actor mismatch');
+  if (!prior && command.type === 'open-assistant-segment' && command.segment > 1) {
+    const before = previous.get(segmentId(command.segment - 1))?.value;
+    ensure(before?.closed && command.previous?.lastMessageId === before.messages.at(-1)?.id, 'segment opened before its predecessor closed');
+  }
+  const derived = applyAssistant(prior ? prior.value : null, command, { id: event.actor, roles: [step ? 'assistant' : 'owner'] }, event.time as import('./memory-expiry.ts').TimeObservation);
+  equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition'); equal(operation.outbox, [], 'segment outbox');
 }
