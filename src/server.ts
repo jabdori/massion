@@ -9,6 +9,7 @@ import {findMemoryVersions} from './memory-find.ts';
 import {searchMemoryContent} from './memory-content-search.ts';
 import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
+import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
@@ -40,7 +41,12 @@ function identifier(value:unknown,name:string):asserts value is string {if(typeo
 
 /** Absent selection means the saved default route; anything present must be an object. */
 function selection(body:Record<string,unknown>):ExecutionChoice|undefined {if(!Object.hasOwn(body,'selection'))return undefined;const value=body.selection;if(!value||typeof value!=='object'||Array.isArray(value))throw new RequestError(400,'Selection must be an object when present');return value as ExecutionChoice;}
-function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}identifier(decoded,'Mission identifier');return decoded;}
+/** Conversation segments never reach a Mission reader. */
+function missionIdentifier(value:unknown):asserts value is string {identifier(value,'Mission identifier');if(value.startsWith(ASSISTANT_CONVERSATION_PREFIX))throw new RequestError(400,'Conversation segments are not Missions');}
+/** Single entry point for every Mission ID route. */
+function decodeIdentifier(value:string):string {let decoded:string;try{decoded=decodeURIComponent(value);}catch{throw new RequestError(400,'Invalid identifier encoding');}missionIdentifier(decoded);return decoded;}
+/** Host steps own every `assistant-` command and run ID, so no caller can occupy one. */
+function callerCommand(value:unknown):asserts value is string {identifier(value,'command identity');if(value.startsWith('assistant-'))throw new RequestError(400,'assistant- command identities are reserved for host steps');}
 
 export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader}={}) {
  const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let running=false;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
@@ -87,17 +93,17 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    }
    const neighborhoodRoute=/^\/missions\/([^/]+)\/neighborhood$/.exec(url.pathname);
    if(req.method==='GET'&&neighborhoodRoute){if(!options.neighborhood)throw new RequestError(503,'Knowledge neighborhood is not enabled by this host');const keys=['entity','version','revision','after','cursor'];if([...url.searchParams.keys()].some(k=>!keys.includes(k))||keys.some(k=>url.searchParams.getAll(k).length>1))throw new RequestError(400,'Exact neighborhood query fields required');const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const number=(key:string)=>{const v=url.searchParams.get(key);if(v===null)return undefined;if(!/^\d+$/.test(v)||!Number.isSafeInteger(Number(v)))throw new RequestError(400,'Invalid neighborhood '+key);return Number(v);};const input={missionId:decodeIdentifier(neighborhoodRoute[1]!),referenceId:url.searchParams.get('entity')!,version:number('version')!,...(feedId!==undefined?{feedId}:{}),... (url.searchParams.has('revision')?{revision:number('revision')}:{}),...(url.searchParams.has('after')?{after:number('after')}:{}),...(url.searchParams.has('cursor')?{cursor:number('cursor')}:{})};try{neighborhoodInput(input);const result=await options.neighborhood.readNeighborhood(input);send(result?200:404,result??{error:'Unknown Mission'});}catch(error){if(error instanceof NeighborhoodChangedError){send(409,{error:error.message,reason:error.reason});return;}if(error instanceof NeighborhoodLimitError){send(503,{error:error.message});return;}if(error instanceof TypeError)throw new RequestError(400,error.message);throw error;}return;}
-   if(req.method==='GET'&&url.pathname==='/read-state'){const id=url.searchParams.get('mission')??undefined;if(id!==undefined)identifier(id,'Mission identifier');send(200,await store.readState(id));return;}
+   if(req.method==='GET'&&url.pathname==='/read-state'){const id=url.searchParams.get('mission')??undefined;if(id!==undefined)missionIdentifier(id);send(200,await store.readState(id));return;}
    if(req.method==='GET'&&url.pathname==='/events'){const after=Number(url.searchParams.get('after')??0);const limit=Number(url.searchParams.get('limit')??100);if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new RequestError(400,'Invalid event cursor or limit');const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');send(200,await store.readCatchup(after,feedId,limit));return;}
    if(req.method==='POST'&&url.pathname==='/missions'){
-    const body=await readBody();identifier(body.id,'Mission identifier');identifier(body.commandId,'command identity');
+    const body=await readBody();identifier(body.id,'Mission identifier');callerCommand(body.commandId);
     const {id,purpose,scope,constraints,criteria}=body;
     if(!criteria||typeof criteria!=='object'||Array.isArray(criteria))throw new RequestError(400,'Acceptance criteria required');
     sendCommit(await product.create({id,purpose,scope,constraints,criteria} as Parameters<ProductService['create']>[0],body.commandId),true);return;
    }
    const workRoute=/^\/missions\/([^/]+)\/(work|commands|run|run-sequence|preflight|memory|memory-conflict|memory-expiry|memory-retirement|relations|documents|work-source|work-prerequisite|work-question|work-answer|work-message|mission-message|organization|revision|mission-constraints|work-budget|growth|growth-proposals|growth-evaluation)$/.exec(url.pathname);
    if(req.method==='POST'&&workRoute){
-    const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();identifier(body.commandId,'command identity');
+    const missionId=decodeIdentifier(workRoute[1]!);const body=await readBody();callerCommand(body.commandId);
     if(!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<1)throw new RequestError(400,'Expected revision required');
     if(workRoute[2]==='growth-proposals'||workRoute[2]==='growth-evaluation'){
      identifier(body.growthId,'Growth identifier');

@@ -25,7 +25,7 @@ RETURN {
   array::map(value.works,|$w| { RETURN {workId:$w.id,title:$w.title,execution:$w.execution,acceptance:$w.acceptance,
    openQuestions:array::len(($w.questions ?? [])[WHERE answer = NULL]),unknownEffects:array::len($w.effects[WHERE status = 'unknown']),pendingEffects:array::len($w.effects[WHERE status = 'pending']),
    interrupted:$w.runtimeInterruption != NONE OR $w.runtimeRecovery != NONE,blocker:IF $w.blocker = NONE { NULL } ELSE { $w.blocker }}; }) AS works
-  FROM massion_state WHERE aggregateId >= $afterMission;
+  FROM massion_state WHERE aggregateId >= $afterMission AND value.kind = NONE;
  LET $split = SELECT aggregateId,revision,missionId,missionPurpose,works FROM $missions SPLIT works;
  LET $rows = SELECT aggregateId,revision,missionId,missionPurpose,works.workId AS workId,works.title AS title,works.execution AS execution,works.acceptance AS acceptance,
   works.openQuestions AS openQuestions,works.unknownEffects AS unknownEffects,works.pendingEffects AS pendingEffects,works.interrupted AS interrupted,works.blocker AS blocker
