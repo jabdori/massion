@@ -58,13 +58,16 @@ export class PermissionsService {
   const commandId=input.commandId as string;ensure(!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');
   return this.#dispatch(commandId,allow?{type:'allow-rule',ruleId:ruleId(commandId),what:input.what as string,kind:input.kind as AllowKind}:{type:'remove-rule',ruleId:input.ruleId as string});
  }
- /** Lookup before and after the load, CAS on the revision read; a lost command replays by its ID. */
+ /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
  async #dispatch(commandId:string,command:PermissionsCommand):Promise<CommitResult<PermissionsState>>{
   const identity={id:PERMISSIONS_ID,commandId,fingerprint:fingerprint(OWNER,command)};
   for(let attempt=0;attempt<3;attempt++){
-   const prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const snapshot=await this.#state(),{value,events}=applyPermissions(snapshot?.value??null,command,owner,{observedAt:this.#clock()});
+   // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
+   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const {value,events}=applyPermissions(snapshot?.value??null,command,owner,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:PERMISSIONS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
+   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};

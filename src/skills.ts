@@ -114,7 +114,8 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
   case 'write-skill': {
    role('owner');ensure(exact(command,['type','memberId','kind','name','body'])&&id(command.memberId)&&line(command.name,64)&&(command.kind==='skill'||command.kind==='procedure'),'Exact skill fields required');
    // The owner may write freely except the format and secrets: a secret would be stored in the journal and backups.
-   const reason=scanSkill(command.body)??scanName(command.name);ensure(reason===null||!reason.startsWith('Format')&&reason!=='Hard-coded secret',reason??'');version(target(command.memberId,command.kind,command.name),command.body,'owner');break;
+   // Body and name are checked separately, so an allowed warning in one cannot hide a secret in the other.
+   const refused=[scanSkill(command.body),scanName(command.name)].find(r=>r!==null&&(r.startsWith('Format')||r==='Hard-coded secret'));ensure(!refused,refused??'');version(target(command.memberId,command.kind,command.name),command.body,'owner');break;
   }
   case 'use-skill': {
    // Checked again when a Work loads it: the body hash and the scan, so a changed or newly flagged skill is not loaded.
@@ -153,10 +154,10 @@ export class SkillsService {
  async read(){
   const s=await this.#state(),v=s?.value??{skills:[],candidates:[],changes:[]} as unknown as SkillsState,cand=(cid?:string)=>v.candidates.find(c=>c.id===cid);
   const skills=v.skills.map(k=>{const cur=k.current===null?k.versions.at(-1)!:k.versions[k.current-1]!;return {id:k.id,memberId:k.memberId,kind:k.kind,name:k.name,path:k.path,version:cur.version,author:cur.author,at:cur.at,state:k.archivedAt!==undefined?'archived':k.current===null?'off':'active',steps:[...cur.body.steps]};});
-  const lastAdopted=new Map<string,string>(),reverted=new Map<string,{to:number|null;at:number}>();
-  for(const [i,c] of v.changes.entries()){if(c.type==='adopted')lastAdopted.set(c.skillId,c.id);if(c.type==='reverted'){const a=v.changes.slice(0,i).findLast(x=>x.skillId===c.skillId&&x.type==='adopted'&&x.to===c.from);if(a)reverted.set(a.id,{to:c.to,at:c.at});}}
+  const reverted=new Map<string,{to:number|null;at:number}>();
+  for(const [i,c] of v.changes.entries()){if(c.type==='reverted'){const a=v.changes.slice(0,i).findLast(x=>x.skillId===c.skillId&&x.type==='adopted'&&x.to===c.from);if(a)reverted.set(a.id,{to:c.to,at:c.at});}}
   const improvements=v.changes.map(c=>{const k=v.skills.find(x=>x.id===c.skillId)!,e=cand(c.candidateId);
-   return {id:c.id,at:c.at,type:c.type,skillId:k.id,memberId:k.memberId,name:k.name,kind:k.kind,from:c.from,to:c.to,source:e?.source.title??null,result:result(e?.evaluation),checkedBy:checkedBy(e?.evaluation),revertible:c.type==='adopted'&&lastAdopted.get(k.id)===c.id&&k.current===c.to&&k.archivedAt===undefined,reverted:reverted.get(c.id)??null};}).reverse();
+   return {id:c.id,at:c.at,type:c.type,skillId:k.id,memberId:k.memberId,name:k.name,kind:k.kind,from:c.from,to:c.to,source:e?.source.title??null,result:result(e?.evaluation),checkedBy:checkedBy(e?.evaluation),revertible:c.type==='adopted'&&k.current===c.to&&k.archivedAt===undefined,reverted:reverted.get(c.id)??null};}).reverse();
   const candidates=v.candidates.filter(c=>c.state!=='adopted').map(c=>({id:c.id,at:c.at,memberId:c.memberId,name:c.name,kind:c.kind,state:c.state,reason:c.reason??null,result:result(c.evaluation)})).reverse();
   return {revision:s?.revision??0,skills,improvements,candidates};
  }
@@ -164,7 +165,7 @@ export class SkillsService {
  async decisions(memberId:string){
   const v=(await this.#state())?.value;if(!v)return [];
   return v.candidates.filter(c=>c.memberId===memberId&&['deciding','later'].includes(c.state)||c.memberId===memberId&&c.state==='adopted'&&c.answeredAt!==undefined).map(c=>{
-   const s=v.skills.find(x=>x.id===c.skillId)!,now=c.base!==null?s.versions[c.base-1]!:undefined,next=(c.base??0)+1,cut=(now?.body.steps.length??0)-c.body.steps.length,changed=c.body.steps.find((step,i)=>step!==now?.body.steps[i])??(cut>0?'Removed '+cut+(cut===1?' step':' steps'):c.body.steps.at(-1)!);
+   const s=v.skills.find(x=>x.id===c.skillId)!,now=c.base!==null?s.versions[c.base-1]!:undefined,next=c.state==='adopted'?s.versions.find(x=>x.candidateId===c.id)!.version:s.versions.length+1,cut=(now?.body.steps.length??0)-c.body.steps.length,changed=c.body.steps.find((step,i)=>step!==now?.body.steps[i])??(cut>0?'Removed '+cut+(cut===1?' step':' steps'):c.body.steps.at(-1)!);
    return {id:DECISION_PREFIX+c.id,at:c.at,title:c.name,question:'Replace your '+c.name+'?',rows:[['Now','v'+(c.base??0)+' · You'],['Change',changed],['Check',result(c.evaluation)+' · '+checkedBy(c.evaluation)]] as [string,string][],action:'Use v'+next,state:c.state==='adopted'?'done':c.state==='later'?'later':'open',...(c.state==='adopted'?{line:'Changed: v'+next}:{})};});
  }
  /** Host step: the producer drafts from a finished Work; the host runs the deterministic check in the same step. Asking again with the same draft replays. */

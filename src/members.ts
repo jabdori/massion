@@ -88,9 +88,11 @@ export class MembersService {
   ensure(exact(input,['topic','workIds'])&&Array.isArray(input.workIds)&&input.workIds.length<=64&&input.workIds.every(id)&&new Set(input.workIds).size===input.workIds.length,'Exact member proposal fields required');
   ensure(input.workIds.length>=2,'At least two Works are required');const intake=this.#intake(),mission=intake?(await this.#store.load(intake))?.value as Mission|undefined:undefined;
   const now=new Date(this.#clock()),month=(t:number)=>{const d=new Date(t);return d.getUTCFullYear()===now.getUTCFullYear()&&d.getUTCMonth()===now.getUTCMonth();};
-  const works=(input.workIds as string[]).map(workId=>{const w=mission?.works?.find(x=>x.id===workId);ensure(w&&w.assistantSource,'Unknown Representative Work: '+workId);ensure(w.runtimeRun?.ownership&&month(w.runtimeRun.ownership.startedAt),'Work did not run this month: '+workId);return w;});
+  // One canonical order for identity, fingerprint and the rows, so a reordered ask replays.
+  const ordered=[...input.workIds as string[]].sort();
+  const works=ordered.map(workId=>{const w=mission?.works?.find(x=>x.id===workId);ensure(w&&w.assistantSource,'Unknown Representative Work: '+workId);ensure(w.runtimeRun?.ownership&&month(w.runtimeRun.ownership.startedAt),'Work did not run this month: '+workId);return w;});
   // The same topic over the same Works is one proposal: asking again replays it instead of opening a second card.
-  const commandId=PROPOSAL_PREFIX+hash({topic:input.topic,works:[...input.workIds as string[]].sort()}).slice(0,64);
+  const commandId=PROPOSAL_PREFIX+hash({topic:input.topic,works:ordered}).slice(0,64);
   return this.#dispatch(commandId,ASSISTANT_ACTOR_ID,{type:'propose-member',decisionId:proposalDecisionId(commandId),topic:input.topic as string,works:works.slice(0,2).map(w=>({title:w.title})),count:works.length});
  }
  /** The owner's answer to a card. `act` admits and needs a name and a shape; the member ID derives from the command ID, so a replay admits once. */
@@ -100,14 +102,16 @@ export class MembersService {
   const member=input.member;ensure(exact(member,['name','shape'])&&typeof member.name==='string'&&typeof member.shape==='string','A name and a shape are required');
   return this.#dispatch(input.commandId,OWNER,{type:'admit-member',decisionId,memberId:admittedMemberId(input.commandId),name:member.name,shape:member.shape});
  }
- /** Lookup before and after the load, CAS on the revision read; a lost answer replays by command ID. */
+ /** Lookup after the load, CAS on the revision read; a lost or overlapping answer replays by command ID. */
  async #dispatch(commandId:string,actorId:string,command:MembersCommand):Promise<CommitResult<MembersState>>{
   const identity={id:MEMBERS_ID,commandId,fingerprint:fingerprint(actorId,command)},actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
   for(let attempt=0;attempt<3;attempt++){
-   const prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const snapshot=await this.#state(),{value,events}=applyMembers(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
+   // Load first, then look up: an answer committed before the load is found here, one after it fails the commit and is found on retry.
+   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const {value,events}=applyMembers(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:MEMBERS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
-   if(result.status!=='conflict'||result.reason!=='revision')return result;
+   // A stale revision or the same command ID committed meanwhile: the next lookup replays it or reports a different command.
+   if(result.status!=='conflict')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
  }

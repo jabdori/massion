@@ -2,6 +2,7 @@
 
 - Status: accepted working design; not implemented; reversible on measured evidence
 - Date: 2026-11-05
+- Superseded in part by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002): sections 1, 2, 3, 4 and 10, and invariant 4
 - Scope: the user-facing surface, who checks a result, which decisions stay with the owner, and the order in which hidden organization scope returns. Builds on [ADR 0001](0001-product-owned-core.md) and [Growth reflection and model proposals](../growth-reflection-and-model-proposals.md).
 
 ## Context
@@ -19,13 +20,13 @@ A second question is who checks results. If the owner approves every change, the
 - Opening Massion continues the same conversation with one assistant. There is no "new conversation".
 - The owner names the assistant. Memory personalizes it.
 - The assistant reports first. A morning briefing is one message in the conversation, not a separate feed. Its frequency is off, low or high, and the owner changes it by telling the assistant or on the schedules page.
-- There are no top-level tabs. A left rail opens the conversation, the results shelf, schedules and Settings. By default the sidebar lists pinned and recent Work; a toggle switches it to an activity view (needs a decision, running, recent). Work detail, previews and the browser open in a work pane beside the conversation.
+- There are no top-level tabs. A left rail opens the conversation, the results shelf, schedules and Settings. By default the sidebar lists pinned and recent Work; a toggle switches it to an activity view (needs a decision, running, recent). (Rail and sidebar changed by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002).) Work detail, previews and the browser open in a work pane beside the conversation.
 - The assistant is Massion's Representative. It receives requests, answers, and turns a request that is work into a Work.
 
 ### 2. Internal concepts stay internal
 
 - The words Work, Mission, organization, executor and verifier do not appear on the surface.
-- Work appears as a card in the conversation. Opening a card opens the Work detail.
+- Work appears as a card in the conversation. Opening a card opens the Work detail. (Changed by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002): a single-step Work shows only a collapsed line.)
 - The detail belongs to the assistant's delegated work. It is not a new conversation.
 - The four-area Work layout becomes the "Show details" view, which is the widened Work detail pane.
 - The underlying entities, transitions and evidence do not change.
@@ -42,7 +43,7 @@ A second question is who checks results. If the owner approves every change, the
 ### 4. Independent checks
 
 - **No self-judgment.** The producer of a result never decides that it is accepted.
-- **Who checks.** A result is checked either by a host-owned deterministic evaluator, or by a model from a different family than the models that produced it, judging from execution evidence.
+- **Who checks.** A result is checked either by a host-owned deterministic evaluator, or by a model from a different family than the models that produced it, judging from execution evidence. (Changed by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002) §7.)
 - **Family and execution evidence** have the exact meaning given in [Who checks a change](../growth-reflection-and-model-proposals.md#who-checks-a-change). Family is the model developer from a host-owned map; unknown counts as the same family. Execution evidence is host-produced, isolated, checksum-pinned Records. A model judgment without such evidence is not an evaluation.
 - **No owner pre-approval by default.** A result that passes an independent check is applied without waiting for the owner.
 
@@ -137,7 +138,7 @@ An external agent's work is admitted as a Work inside Massion. Each outgoing req
 1. ADR 0001 is unchanged. One product-owned headless core owns Work, Records, memory and Growth. The surface is a client of application commands and queries.
 2. A model response, an arrival receipt or a tool's success report is never acceptance. Acceptance still requires settled effects and independent evidence bound to exact criteria and artifact versions.
 3. An unknown outcome stays unknown. Hiding concepts never hides the three exceptions in section 8.
-4. A check whose producer and checker share a family, or which lacks execution evidence, records no evaluation and supports no automatic application.
+4. A check whose producer and checker share a family, or which lacks execution evidence, records no evaluation and supports no automatic application. (Replaced by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002).)
 5. Learned permissions and automatic adoptions never widen checking rules or permissions. Those stay owner decisions at the moment of change.
 6. Conversation is provenance, not a grant. A message, including one from an external member, does not become a task input, permission or effect receipt by itself.
 7. Host actors that apply changes automatically are chosen by actor ID inside transitions. API callers cannot choose them.
@@ -164,7 +165,7 @@ Implementation order, which matches the current dogfooding blockers:
 
 Consequences:
 
-- The domain needs a host-owned family map and a check that producer and checker differ by family. Today it checks only distinct identities.
+- The domain needs a host-owned family map and a check that producer and checker differ by family. Today it checks only distinct identities. (Changed by [ADR 0003](0003-members-internal-teams-model-groups-and-apps.md#changes-to-adr-0002) §7.)
 - A Representative that answers needs its own executor, budget and independent check. It is a new model path, not a relabeled role.
 - Hiding the organization raises expectations of an organization that "just handles it". The restoration order in section 10 must keep pace with the surface.
 - Automatic correction after a failed check needs an explicit bound (attempts and budget) in invariant documents before the assistant retries on its own. A new attempt is not a resend, so it does not conflict with the unknown-outcome rule.

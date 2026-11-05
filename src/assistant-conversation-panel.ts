@@ -69,9 +69,10 @@ function chatDecisions(view=chatView){return (Array.isArray(view&&view.decisions
 /** Members from the latest read, for the sidebar and the name of an open member conversation. */
 function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&view.members)?view.members:[]).filter(m=>m&&chatText(m.id)&&chatText(m.name));}
 function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
-/** Opens the Representative ('') or a member conversation in the page; a switch drops the shown nodes and reads that thread. */
+/** Opens the Representative ('') or a member conversation in the page at its head; a switch drops the shown nodes and reads that thread, and reopening the thread shown at an earlier segment returns to the head, where briefings and exception cards are. */
 function chatOpenThread(id,name=''){
  if(id!==chatThread){if(chatSending)return;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ else if(chatSegment!==null){chatSegment=null;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
 /** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */
@@ -87,7 +88,8 @@ function chatDecision(d){
  node.setAttribute('aria-label',d.question);return node;
 }
 /** Bullets name the Work and its current state from the turn, so a briefing never carries its own counts. */
-function chatBriefing(b,turns){const named=b.turnIds.map(id=>turns.get(id)).filter(turn=>turn&&turn.work);
+// A briefing from an earlier segment carries its own turns, read from that segment.
+function chatBriefing(b,turns){const own=Array.isArray(b.turns)?b.turns:[],named=b.turnIds.map(id=>turns.get(id)??own.find(turn=>turn&&turn.id===id)).filter(turn=>turn&&turn.work);
  return chatKeyed('briefing-'+b.id,'div','chat-briefing',JSON.stringify([b.title,b.at,named.map(turn=>[turn.id,turn.work.title,chatCardLabel(turn)])]),()=>{const head=element('p'),list=element('ul');head.append(element('strong',b.title),element('span',' | '+chatDay(b.at)+' '+chatTime(b.at)));
   for(const turn of named){const item=element('li');item.append(chatButton(turn.work.title,()=>shellOpenWork(turn.id),''),element('span',' '+chatCardLabel(turn)));list.append(item);}return [head,list];});}
 function chatSlot(turn){const kind=chatKind(turn);if(kind==='card')return [chatCard(turn)];const shown=turn.work?[chatFold(turn)]:[];
@@ -127,11 +129,15 @@ async function chatReadLoop(){
   // ponytail: fixed interval because the view carries no deadlineAt; schedule at the deadline once the read exposes it.
   // A host's own start in flight emits nothing if it is refused before activation, so a card that shows it is read again too.
   // A running card's elapsed minutes come from the read, so it is read again each minute while one shows.
-  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],wait=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
+  // A schedule run still in time emits nothing when its host dies, so the conversation is read again just after its deadline to show the unknown-result card.
+  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],due=chatView&&Number.isSafeInteger(chatView.runDeadlineAt)?Math.max(1000,chatView.runDeadlineAt-Date.now()+1000):0,every=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0,wait=every&&due?Math.min(every,due):every||due;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
-function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
-async function openChatWork(turnId){const turn=chatRep&&chatRep.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
+// A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
+function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder','Message');if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
+/** A Representative turn by ID, also one a briefing carries from an earlier segment, so its Work links open. */
+function chatWorkTurn(turnId){if(!chatRep)return;return chatRep.turns.find(t=>t.id===turnId)??(Array.isArray(chatRep.briefings)?chatRep.briefings:[]).flatMap(b=>b&&Array.isArray(b.turns)?b.turns:[]).find(t=>t&&t.id===turnId);}
+async function openChatWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;
  // One request per card at a time; the card label from the reread, not a status line, says how it ended.

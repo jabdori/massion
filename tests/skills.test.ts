@@ -158,7 +158,7 @@ test('review: a revert goes back to the version in use before that adoption, and
  await adopt(['one']);await adopt(['two']);const sid=(await state(store)).skills[0]!.id;
  await service.act({commandId:'c-r1',action:'revert',skillId:sid});await adopt(['three']);assert.equal((await state(store)).skills[0]!.current,3);
  await service.act({commandId:'c-r2',action:'revert',skillId:sid});assert.equal((await state(store)).skills[0]!.current,1,'v2 was reverted by the owner and stays out');
- const view=await service.read();assert.deepEqual(view.improvements.filter(c=>c.type==='adopted').map(c=>[c.to,c.reverted?.to??'kept',c.revertible]),[[3,1,false],[2,1,false],[1,'kept',false]]);
+ const view=await service.read();assert.deepEqual(view.improvements.filter(c=>c.type==='adopted').map(c=>[c.to,c.reverted?.to??'kept',c.revertible]),[[3,1,false],[2,1,false],[1,'kept',true]],'the adoption in use stays revertible');
 });
 
 test('review: a candidate past the version bound is rejected at the check, not left pending',async()=>{
@@ -178,4 +178,19 @@ test('review: names are scanned, owner writes refuse secrets and unknown members
  await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});
  next.value={...next.value,body:body(['List changed files','Link the issue'])};await propose(service,'w-done','dead-end');await service.check((await state(store)).candidates.at(-1)!.id);
  assert.equal((await state(store)).candidates.at(-1)!.state,'deciding','still the owner\'s skill after one approved change');
+});
+
+test('review: an allowed body warning does not hide a secret name; card versions follow the history; the restored adoption stays revertible',async()=>{
+ const {service,store,next}=await setup();
+ await assert.rejects(service.act({commandId:'c-sec',action:'write',memberId:'member-juno',kind:'skill',name:'Deploy sk-abcdefghijklmnopqrstuv',body:body(['Read https://example.com/notes'])}),/secret/);
+ const adopt=async(steps:string[])=>{next.value={...next.value,body:body(steps)};await propose(service,'w-done','repeat');await service.check((await state(store)).candidates.at(-1)!.id);};
+ await adopt(['one']);await adopt(['two']);await adopt(['three']);const sid=(await state(store)).skills[0]!.id;
+ await service.act({commandId:'c-r',action:'revert',skillId:sid});assert.equal((await state(store)).skills[0]!.current,2);
+ let view=await service.read();assert.deepEqual(view.improvements.filter(c=>c.type==='adopted').map(c=>[c.to,c.revertible]),[[3,false],[2,true],[1,false]]);
+ await service.act({commandId:'c-w',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['owner'])});
+ await adopt(['five']);await service.decide({commandId:'c-act5',decisionId:(await service.decisions('member-juno'))[0]!.id,answer:'act'});
+ await service.act({commandId:'c-r5',action:'revert',skillId:sid});assert.equal((await state(store)).skills[0]!.current,4);
+ // Back on the owner's v4 after v5 was reverted: the next adoption appends v6, not v5.
+ await adopt(['six']);const card=(await service.decisions('member-juno')).find(c=>c.state==='open')!;assert.equal(card.action,'Use v6');
+ await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});assert.equal((await state(store)).skills[0]!.current,6);assert.equal((await service.decisions('member-juno')).find(c=>c.id===card.id)!.line,'Changed: v6');
 });

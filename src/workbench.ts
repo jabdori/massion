@@ -14,6 +14,7 @@ import {conversationWorkPanel,conversationWorkClient} from './conversation-work-
 import {expiredPanel,expiredClient} from './expired-run-panel.ts';
 import {correctionPanel,correctionClient} from './work-correction-panel.ts';
 import {rejectedTextClient} from './rejected-text-panel.ts';
+import {reflectionTrailClient} from './reflection-trail-panel.ts';
 import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts';
 import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
@@ -54,6 +55,7 @@ ${shellSidebar}
 ${shellBand}
 <div id="sync-notice" class="notice" role="status" hidden></div>
 <div id="operation-notice" class="notice" role="alert" hidden></div>
+<div id="page-status" class="notice" role="alert" hidden></div>
 <div id="page-chat" class="page-body">
 ${chatPanel}
 </div>
@@ -283,7 +285,11 @@ function restoreControlFocus(previous, targetId) {
   const active = document.activeElement;
   if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
-function report(message, tone = '') { $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : ''); }
+function report(message, tone = '') {
+  $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : '');
+  // The status lives in the work pane; while the pane is closed, problems also show on the page that sent the command.
+  $('page-status').textContent = message; $('page-status').hidden = !$('work-pane').hidden || tone !== 'error' && tone !== 'warning';
+}
 function controls() {
   const locked = reconnectRequired || busy || loading || !!unknownOperation || !!recoveryProblem;
   $('sync-notice').hidden = !reconnectRequired;
@@ -602,6 +608,7 @@ function renderWork(work) {
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
   if(work.record && work.acceptance==='accepted')body.append(recordTextPanel(work));
   if(work.execution==='settled'&&work.acceptance==='failed'&&work.verdict?.status==='failed'&&work.artifact)body.append(rejectedTextPanel(work));
+  if(reflectionTrailEligible(work))body.append(reflectionTrailPanel(work));
   const attempts = element('details'); attempts.append(workElement(work,'summary','Attempts, tasks & assignments','attempts-summary'), workElement(work,'pre',JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments},null,2),'attempts')); body.append(attempts); evidence.append(body); card.append(evidence);
   if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),workElement(work,'pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2),'connections'));
   if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
@@ -741,7 +748,7 @@ async function pollEvents() {
       if (!activity.some(old => old.cursor === event.cursor)) activity.push(event);
       if (event.aggregateId === selectedId && (!snapshot || event.revision > snapshot.revision)) eventRefreshNeeded = true;
     }
-    chatEvents(body.events);
+    chatEvents(body.events); schedulesEvents(body.events); resultsEvents(body.events);
     if (unknownOperation) unknownOperation.reconcileCursor = body.cursor;
     activity.sort((a,b) => a.cursor - b.cursor);
     if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmOperation(unknownOperation); await clearPending(unknownOperation); controls(); report('Durable receipt found for ' + commandId + '. Refreshing current state; the command was not replayed.','success'); eventRefreshNeeded = true; }
@@ -1658,6 +1665,7 @@ ${missionConstraintsClient}
 ${neighborhoodClient}
 ${expiredClient}
 ${rejectedTextClient}
+${reflectionTrailClient}
 controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });

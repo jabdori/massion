@@ -42,6 +42,14 @@ test('the service derives the rule ID from the command ID, so a resent Add commi
  const forged=structuredClone(ops[0]);forged.events[0].actor=host.id;assert.throws(()=>replayPermissions(forged,undefined),/actor|fingerprint/);
 });
 
+test('an overlapping resend replays the first result instead of a digest conflict or a duplicate-rule error',async()=>{
+ let tick=time.observedAt;const store=new InMemoryStore<any>(),service=new PermissionsService(store,()=>tick++),add={commandId:'c-1',action:'allow',what:'Pay the toner invoice',kind:'spend'};
+ const both=await Promise.all([service.act(add),service.act(add)]);assert.deepEqual(both.map(r=>r.status).sort(),['committed','replayed']);assert.equal(both[0]!.revision,both[1]!.revision);
+ const remove={commandId:'c-2',action:'remove',ruleId:(await service.read()).allow[0]!.id};
+ const removed=await Promise.all([service.act(remove),service.act(remove)]);assert.deepEqual(removed.map(r=>r.status).sort(),['committed','replayed']);
+ assert.equal(store.inspect().filter(o=>o.aggregateId===PERMISSIONS_ID).length,2);
+});
+
 test('HTTP: GET lists both columns; POST takes exact fields through feed admission and refuses host command IDs',async t=>{
  const root=await mkdtemp(join(tmpdir(),'massion-permissions-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const server=createWorkbench(new InMemoryStore<any>() as Store<Mission>,root,{drainTimeoutMs:50,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());

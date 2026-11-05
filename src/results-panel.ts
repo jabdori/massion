@@ -18,6 +18,8 @@ const resultKey=r=>r.missionId+'/'+r.workId,resultWhen=at=>Number.isSafeInteger(
 const resultValid=r=>r&&chatText(r.missionId)&&chatText(r.workId)&&chatText(r.recordId)&&Number.isSafeInteger(r.version)&&/^[a-f0-9]{64}$/.test(r.sha256)&&chatText(r.title)&&Number.isSafeInteger(r.segment)&&r.segment>=1;
 // A CSS-drawn page: the client builds no markup from strings.
 function resultIcon(){const box=element('span',undefined,'result-kind');box.setAttribute('aria-hidden','true');return box;}
+/** Accepted Records live in the intake Mission, which is never a conversation aggregate, so its events reread the page while it shows. */
+function resultsEvents(events){if(!$('page-results').hidden&&events.some(event=>typeof event.aggregateId==='string'&&!event.aggregateId.startsWith('assistant-conversation:')))void resultsLoad();}
 async function resultsLoad(){try{const {response,body}=await request('/assistant/results');if(response.ok&&Array.isArray(body.results))resultRows=body.results.filter(resultValid);}catch{}renderResults();}
 /** Rail > Results: its own sidebar (All, Documents, recent names), then a table or tiles. Every readable result is text, so Documents equals All. */
 function renderResults(){
@@ -33,7 +35,7 @@ function renderResults(){
 /** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview). */
 async function resultOpen(r){
  chatOpenThread('');chatSegment=chatRep&&chatRep.head===r.segment?null:r.segment;void readChat();
- const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneMission='';renderPane();await resultLoad(r);
+ const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneAway(false);renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */
 async function resultLoad(r){
