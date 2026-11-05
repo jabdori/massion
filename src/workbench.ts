@@ -17,6 +17,7 @@ import {rejectedTextClient} from './rejected-text-panel.ts';
 import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts';
 import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
+import {chatPanel,chatClient,chatStyle} from './assistant-conversation-panel.ts';
 /** Self-contained loopback client. All user and host text is rendered through textContent. */
 export const workbenchPage = String.raw`<!doctype html>
 <html lang="en">
@@ -31,11 +32,12 @@ export const workbenchPage = String.raw`<!doctype html>
 #conversation-panel{overflow-wrap:anywhere;min-width:0}#conversation-messages{max-width:100%;overflow:auto}
 .impact-panel{border-top:1px solid var(--line);margin-top:20px;padding-top:14px;overflow-wrap:anywhere}.impact-results{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}.impact-results:focus-visible{outline:3px solid #377dba;outline-offset:4px}.impact-results ul{padding-left:20px}.impact-results li{margin-bottom:12px}
 .expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
-</style>
+${chatStyle}</style>
 </head>
 <body>
 <div class="shell">
 <header><div class="brand"><span class="mark" aria-hidden="true">m</span>Massion</div><div class="header-meta"><span>Local development</span><span id="health" role="status"><span class="dot"></span>Connecting</span></div></header>
+${chatPanel}
 <section class="intro" aria-labelledby="page-title"><div><div class="eyebrow">Purpose → Work → Evidence</div><h1 id="page-title">Work with a reason.<br>Progress you can inspect.</h1><p>Set the Mission, admit bounded Work, and follow its durable state.</p></div><p class="intro-side">Execution and acceptance are separate. A result becomes a Record only after independent evidence.</p></section>
 <div id="provider-notice" class="notice" role="status">Checking provider availability. No execution has been requested.</div>
 <div id="sync-notice" class="notice" role="status" hidden></div>
@@ -650,7 +652,8 @@ function renderMission() {
 }
 function renderActivity() {
   const list = $('event-list'); list.replaceChildren();
-  const shown = activity.filter(event => !selectedId || event.aggregateId === selectedId).slice(-8).reverse();
+  // Conversation events belong to the conversation section, which reads them itself.
+  const shown = activity.filter(event => !String(event.aggregateId || '').startsWith('assistant-conversation:') && (!selectedId || event.aggregateId === selectedId)).slice(-8).reverse();
   if (!shown.length) list.append(element('li',selectedId ? 'No newly observed events for this Mission.' : 'Select a Mission to follow its events.'));
   renderBudgetHistory();
   for (const event of shown) { const row = element('li'); const label = (event.events || []).map(item => item.type).filter(Boolean).join(', ') || 'Committed change'; row.append(element('span',String(label).replaceAll('-',' ')),element('small','revision ' + event.revision + ' · cursor ' + event.cursor)); list.append(row); }
@@ -707,6 +710,7 @@ async function pollEvents() {
       if (!activity.some(old => old.cursor === event.cursor)) activity.push(event);
       if (event.aggregateId === selectedId && (!snapshot || event.revision > snapshot.revision)) eventRefreshNeeded = true;
     }
+    chatEvents(body.events);
     if (unknownOperation) unknownOperation.reconcileCursor = body.cursor;
     activity.sort((a,b) => a.cursor - b.cursor);
     if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmOperation(unknownOperation); await clearPending(unknownOperation); controls(); report('Durable receipt found for ' + commandId + '. Refreshing current state; the command was not replayed.','success'); eventRefreshNeeded = true; }
@@ -1599,6 +1603,7 @@ async function connect() {
   await pollEvents();
   if (!selectedId && initialReference.present) report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error');
 }
+${chatClient}
 ${missionCatalogClient}
 ${workInboxClient}
 ${runSequenceClient}
