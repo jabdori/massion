@@ -65,9 +65,9 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 ## Surface
 
 - **Settings > Apps** (B23): `Installed N` catalog rows (name, `version`, `On`/`Off ›`), `Self-made apps N` rows (`version · Made by 주노 · <source Work title>`), then `Recommended` catalog rows with `Install`. `Install` opens the card in the Representative's conversation. App page (B23-github): `‹ Apps`, name, `version · Installed <date>`, `Open`, `Turn off`/`Turn on`; `Permissions` (Tools, Network, Files, Token, Events), `Adds` (Member templates, Skills, Procedures, Tools, Screens), `Versions` with `Current version` and `Roll back to this version`.
-- **Install card** (B24): `Install GitHub app?`, detail `GitHub · 1.4.0`, rows Read, Write, Network, Token, Events, Adds; `Install` and `Later`. `Later: Install GitHub app? · Ask again`. Done: `GitHub app installed · Remove`.
+- **Install card** (B24): `Install GitHub app?`, detail `GitHub · 1.4.0`, rows Read, Write, Network, Token, Events, Adds; `Install` and `Later`. `Later: Install GitHub app? · Ask again`. Done: `GitHub app installed · Remove`. While the app is installed, its newest done card (install or update) carries `Remove`.
 - **Self-made card** (B25) in the member's conversation: `Install PR list fetcher?`, detail `Self-made app · Made by 주노 · 0.1.0`, rows Does, Read, Write, Network, Files, Token, Events, Check (`Declared permissions only`), Source.
-- **Rail and app page** (B22): an enabled app with `contributes.page` adds a rail icon after Schedules. Its page shows the app's list in the sidebar (`App settings` at the foot) and the selected item's view.
+- **Rail and app page** (B22): an enabled app with `contributes.page` adds a rail icon after Schedules. Its page shows the app's list in the sidebar (`App settings` at the foot) and the selected item's view; an app without an `item` handler, or a page without rows, shows the page view itself. A page response that arrives after the owner opened another app is dropped.
 - **Work room tab** (B22-room): an enabled app with `roomTab.prefix` adds a tab `PR #84` when an open Work's title contains the prefix followed by a number; the tab draws the `item` view for that number.
 - Labels stay in the surface's English. No explanation sentences; yellow only on the decision card.
 

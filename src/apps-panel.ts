@@ -10,11 +10,11 @@ export const appsPage=String.raw`<div id="page-app" class="page-body" hidden><di
 export const appsSide=String.raw`<nav id="side-app" aria-label="App" hidden></nav>`;
 export const appsPane=String.raw`<div id="pane-app" class="pane-app app-view" role="tabpanel" aria-label="App" hidden></div>`;
 export const appsClient=String.raw`
-let appsList=[],appShown='',appItem='',appPage=null,settingsApps=null,settingsApp='';
+let appsList=[],appShown='',appItem='',appPage=null,appSeq=0,settingsApps=null,settingsApp='';
 const appsMark=name=>{const mark=element('span',[...name][0],'avatar app-mark');mark.setAttribute('aria-hidden','true');return mark;};
 /** Enabled apps from the conversation read (rail and room tabs); malformed entries are skipped. */
 function appsRail(view){
- appsList=(Array.isArray(view&&view.apps)?view.apps:[]).filter(a=>a&&chatText(a.id)&&chatText(a.name)&&typeof a.page==='boolean'&&(a.roomTab===null||chatText(a.roomTab)));
+ appsList=(Array.isArray(view&&view.apps)?view.apps:[]).filter(a=>a&&chatText(a.id)&&chatText(a.name)&&typeof a.page==='boolean'&&typeof a.item==='boolean'&&(a.roomTab===null||chatText(a.roomTab)));
  const box=$('rail-apps'),shown=appsList.filter(a=>a.page),key=JSON.stringify(shown.map(a=>[a.id,a.name]));
  if(box.appsKey!==key){box.appsKey=key;box.replaceChildren(...shown.map(a=>{const b=element('button',undefined,'icon');b.type='button';b.id='rail-app-'+a.id;b.setAttribute('aria-label',a.name);b.append(appsMark(a.name));b.addEventListener('click',()=>void appOpen(a.id));return b;}));}
  box.hidden=!shown.length;appsCurrent();
@@ -29,22 +29,23 @@ function appsViewNodes(v){
  for(const g of v.groups){if(!g||!Array.isArray(g.rows))continue;out.push(element('h3',g.title));const list=element('ul',undefined,'app-list');for(const r of g.rows){const li=element('li');li.append(element('span',r.title),element('span',[r.meta,r.state].filter(Boolean).join(' · ')));list.append(li);}out.push(list);}
  return out;
 }
-/** B22: the app's list in the sidebar with App settings at its foot, the selected item in the page. */
+/** B22: the app's list in the sidebar with App settings at its foot, the selected item in the page. An app without an item handler, or a page without rows, shows the page view itself. */
 async function appOpen(id){
- const a=appsList.find(x=>x.id===id);if(!a)return;appShown=id;appItem='';appPage=null;shellShow('app');$('page-heading').textContent=a.name;$('app-view').replaceChildren();renderAppSide();appsCurrent();
- appPage=await appsRead(id,'page');if(appShown!==id)return;renderAppSide();
+ const a=appsList.find(x=>x.id===id);if(!a)return;const seq=++appSeq;appShown=id;appItem='';appPage=null;shellShow('app');$('page-heading').textContent=a.name;$('app-view').replaceChildren();renderAppSide();appsCurrent();
+ // A late response for an earlier open (another app, or this one reopened) is dropped before it touches the shared page.
+ const page=await appsRead(id,'page');if(seq!==appSeq)return;appPage=page;renderAppSide();
  // Like B22, the first row opens with the page.
- const first=appPage&&Array.isArray(appPage.groups)?appPage.groups.flatMap(g=>g&&Array.isArray(g.rows)?g.rows:[])[0]:null;if(first&&!appItem)await appSelect(first.id);
+ const first=a.item&&page&&Array.isArray(page.groups)?page.groups.flatMap(g=>g&&Array.isArray(g.rows)?g.rows:[])[0]:null;if(first){if(!appItem)await appSelect(first.id);}else $('app-view').replaceChildren(...appsViewNodes(page));
 }
 function renderAppSide(){
  const a=appsList.find(x=>x.id===appShown),side=$('side-app'),head=element('div',undefined,'app-side-head');if(!a){side.replaceChildren();return;}
  head.append(element('strong',appPage&&chatText(appPage.title)?appPage.title:a.name));if(appPage&&chatText(appPage.meta))head.append(element('span',appPage.meta));const parts=[head];
  if(appPage&&Array.isArray(appPage.groups))for(const g of appPage.groups){if(!g||!Array.isArray(g.rows))continue;parts.push(element('p',g.title,'app-group'));
-  for(const r of g.rows){const b=element('button',undefined,'app-row');b.type='button';b.id='app-row-'+r.id;b.setAttribute('aria-current',String(appItem===r.id));b.append(element('strong',r.title),element('span',[r.meta,r.state].filter(Boolean).join(' · ')));b.addEventListener('click',()=>void appSelect(r.id));parts.push(b);}}
+  for(const r of g.rows){const b=element('button',undefined,'app-row');b.type='button';b.id='app-row-'+r.id;b.setAttribute('aria-current',String(appItem===r.id));b.append(element('strong',r.title),element('span',[r.meta,r.state].filter(Boolean).join(' · ')));if(a.item)b.addEventListener('click',()=>void appSelect(r.id));else b.disabled=true;parts.push(b);}}
  else if(!appPage)parts.push(element('p','Not available','app-group'));
  const foot=element('div',undefined,'app-foot');foot.append(chatButton('App settings',()=>{shellShow('settings');settingsOpen('apps',appShown);},''));parts.push(foot);side.replaceChildren(...parts);
 }
-async function appSelect(ref){const id=appShown;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref);if(appShown===id&&appItem===ref)$('app-view').replaceChildren(...appsViewNodes(v));}
+async function appSelect(ref){const id=appShown,seq=appSeq;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref);if(seq===appSeq&&appItem===ref)$('app-view').replaceChildren(...appsViewNodes(v));}
 /** B22-room: a Work whose title names the prefix and a number gets that app's tab, drawn by its item view. */
 function appsRoomTabs(title){
  for(const a of appsList){if(!a.roomTab)continue;const at=String(title).indexOf(a.roomTab);if(at<0)continue;const ref=/^\d{1,9}/.exec(String(title).slice(at+a.roomTab.length));if(!ref)continue;

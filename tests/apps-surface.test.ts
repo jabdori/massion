@@ -9,14 +9,14 @@ const perms={read:['Repositories','Pull requests','Check results'],write:[],netw
 const github={id:'app-github',name:'GitHub',origin:'catalog',memberId:null,version:'1.4.0',enabled:true,installedAt:T0,check:null,permissions:perms,contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},versions:[{index:1,version:'1.3.2',at:T0-2*86400000,current:false},{index:2,version:'1.4.0',at:T0,current:true}]};
 const page={title:'GitHub',meta:'jabdori/massion',groups:[{title:'Open',rows:[{id:'84',title:'feat(assistant): answer the owner and start Representative Work',meta:'#84 · 2026-11-05 10:28',state:'Open'}]},{title:'Merged',rows:[{id:'83',title:'feat(assistant): store the continuing assistant conversation',meta:'#83',state:'Merged'}]}]};
 const item={title:'feat(assistant): answer the owner and start Representative Work #84',meta:'Open · jabdori · feat/assistant-conversation-turns → main',groups:[{title:'Files 2',rows:[{id:'src/assistant-service.ts',title:'src/assistant-service.ts',meta:'+206 −0'}]}],fields:[['Changes','+769 −39']]};
-function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=[]){
+function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=[],rail:any[]=[{id:'app-github',name:'GitHub',page:true,item:true,roomTab:'PR #'}],view?:(body:any)=>unknown){
  const posted:{path:string;body:any}[]=[];
  const app=harness(async(path,options)=>{
-  if(options?.method==='POST'&&path==='/assistant/apps/view'){const b=JSON.parse(options.body);return reply(b.app==='app-github'&&b.handler==='page'&&b.ref===undefined?page:b.handler==='item'&&b.ref==='84'?item:{error:'x'});}
+  if(options?.method==='POST'&&path==='/assistant/apps/view'){const b=JSON.parse(options.body);if(view)return reply(await view(b));return reply(b.app==='app-github'&&b.handler==='page'&&b.ref===undefined?page:b.handler==='item'&&b.ref==='84'?item:{error:'x'});}
   if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});return reply({status:'committed',revision:2});}
   if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[github,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'Pull requests',installed}]});
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
-  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?[{id:'app-github',name:'GitHub',page:true,roomTab:'PR #'}]:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?rail:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
   return reply({error:'Not configured'},503);
  });
@@ -77,4 +77,25 @@ test('self-made apps are listed apart with their maker and source Work',async()=
  const made={...github,id:'app-made',name:'PR list fetcher',origin:'self-made',memberId:'member-juno',version:'0.1.0',source:{missionId:'intake',workId:'w-done',title:'PR #84 review'},contributes:{templates:[],skills:[],procedures:[],tools:['pr-list']}};
  const {app}=fixture(true,[],[made],[{id:'member-juno',name:'주노',shape:'round'}]);await settle();await open(app);
  assert.match(app.node('settings-apps-body').textContent,/Installed 1.*GitHub.*Self-made apps 1.*PR list fetcher.*0\.1\.0 · Made by 주노 · PR #84 review.*On/);
+});
+
+test('a page-only app shows its page view and asks for no item; a page without rows shows its fields',async()=>{
+ const asked:any[]=[],notes={title:'Notes',meta:'Today',fields:[['Owner','jabdori']],groups:[{title:'Recent',rows:[{id:'n1',title:'First note'}]}]};
+ const {app}=fixture(true,[],[],[],[{id:'app-notes',name:'Notes',page:true,item:false,roomTab:null}],b=>{asked.push(b);return notes;});await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ assert.deepEqual(asked.map(b=>b.handler),['page'],'no item request for an app without an item handler');
+ assert.match(app.node('app-view').textContent,/Notes.*Today.*Owner.*jabdori.*Recent.*First note/);
+ const empty=fixture(true,[],[],[],undefined,b=>({title:'GitHub',fields:[['Repository','jabdori/massion']],groups:[]}));await settle();
+ await empty.app.node('rail-apps').children[0]!.fire('click');await settle();assert.match(empty.app.node('app-view').textContent,/GitHub.*Repository.*jabdori\/massion/);
+});
+
+test('a late page response for an earlier open never replaces the app shown now',async()=>{
+ const pending:(()=>void)[]=[],views:Record<string,any>={'app-a':{title:'A page',groups:[{title:'A',rows:[{id:'1',title:'A row'}]}]},'app-b':{title:'B page',groups:[{title:'B',rows:[{id:'2',title:'B row'}]}]}};const asked:any[]=[];
+ const {app}=fixture(true,[],[],[],[{id:'app-a',name:'A',page:true,item:true,roomTab:null},{id:'app-b',name:'B',page:true,item:true,roomTab:null}],b=>{asked.push(b);return b.handler==='item'?{title:b.app+' item '+b.ref,groups:[]}:new Promise(done=>pending.push(()=>done(views[b.app])));});await settle();
+ const [a,b]=app.node('rail-apps').children;await a!.fire('click');await b!.fire('click');await settle();
+ pending[1]!();await settle();pending[0]!();await settle();
+ // Selecting a row draws the sidebar again from the shared page.
+ await app.all().find(n=>n.id==='app-row-2')!.fire('click');await settle();
+ assert.match(app.node('side-app').textContent,/B page.*B row/);assert.doesNotMatch(app.node('side-app').textContent,/A row/);
+ assert.deepEqual(asked.filter(x=>x.handler==='item').map(x=>[x.app,x.ref]),[['app-b','2'],['app-b','2']]);assert.match(app.node('app-view').textContent,/app-b item 2/);
 });

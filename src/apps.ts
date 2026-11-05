@@ -150,10 +150,12 @@ export class AppsService {
   return {revision:s?.revision??0,apps,catalog};
  }
  /** Enabled apps for the rail and Work room tabs. */
- async rail(){const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,roomTab:m.contributes.roomTab?.prefix??null};});}
+ async rail(){const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null};});}
  /** Decision cards: catalog apps in the Representative's conversation (null), self-made apps in their member's (conversation-cards.md shape plus `detail` and `remove`). */
  async decisions(memberId:string|null){
   const v=(await this.#state())?.value;if(!v)return [];const members=((await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined)?.members??[];
+  // The newest done card of an installed app carries Remove, so an update or rollback never leaves the owner without it.
+  const latest=new Map<string,AppDecision>();for(const d of v.decisions)if(d.state==='done'&&(latest.get(d.appId)?.answeredAt??-1)<=d.answeredAt!)latest.set(d.appId,d);
   return v.decisions.filter(d=>d.state!=='stale').flatMap(d=>{const a=v.apps.find(x=>x.id===d.appId)!;if((a.memberId??null)!==memberId)return [];
    const offer=a.versions[d.version-1]!,m=offer.package.manifest,p=m.permissions,label=a.origin==='catalog'?a.name+' app':a.name,base=d.base===null?null:a.versions[d.base-1]!.package.manifest.version;
    const detail=a.origin==='self-made'?'Self-made app · Made by '+(members.find(x=>x.id===a.memberId)?.name??a.memberId)+' · '+m.version:a.name+' · '+(d.kind==='widen'&&base?base+' → ':'')+m.version;
@@ -161,7 +163,7 @@ export class AppsService {
     :[['Read',joined(p.read)],['Write',joined(p.write)],['Network',joined(p.network)],['Token',joined(p.secrets.map(s=>s.label))],['Events',joined(p.events)],['Adds',adds(m)]];
    const install=d.kind==='install',done=d.state==='done';
    return [{id:d.id,at:d.at,title:a.name,question:(install?'Install ':'Update ')+label+'?',detail,rows,action:install?'Install':'Update',state:d.state as 'open'|'later'|'done',
-    ...(done?{line:install?label+' installed':label+' updated: '+m.version,...(install&&a.current===d.version&&a.removedAt===undefined?{remove:a.id}:{})}:{})}];});
+    ...(done?{line:install?label+' installed':label+' updated: '+m.version,...(a.current!==null&&d===latest.get(a.id)?{remove:a.id}:{})}:{})}];});
  }
  /** Runs an installed, enabled app's page or item handler in the worker, after the pinned hash is checked again. */
  async view(input:{app:unknown;handler:unknown;ref?:unknown}){

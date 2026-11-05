@@ -92,12 +92,14 @@ test('a narrower version applies at once, a wider one waits for the owner, rollb
  await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');const appId=(await service.read()).apps[0]!.id;
  const narrower=structuredClone(GITHUB_APP);narrower.manifest.version='1.4.1';narrower.manifest.permissions.events=[];
  await service.offer({commandId:'assistant-app-update-1',pkg:narrower,origin:'catalog'});
+ assert.deepEqual((await service.decisions(null)).map(d=>d.remove),[appId],'an update applied at once keeps Remove on the install card');
  assert.equal((await service.read()).apps[0]!.version,'1.4.1');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,0);
  const wider=structuredClone(GITHUB_APP);wider.manifest.version='1.5.0';wider.manifest.permissions.write=['PR comments'];
  await service.offer({commandId:'assistant-app-update-2',pkg:wider,origin:'catalog'});
  assert.equal((await service.read()).apps[0]!.version,'1.4.1','a widening version waits');
  const widen=(await service.decisions(null)).find(d=>d.state==='open')!;assert.deepEqual([widen.question,widen.detail,widen.action],['Update GitHub app?','GitHub · 1.4.1 → 1.5.0','Update']);assert.ok(widen.rows.some(([l,v])=>l==='Write'&&v==='PR comments'));
  await answer(service,widen.id,'act','c-widen');assert.equal((await service.read()).apps[0]!.version,'1.5.0');
+ assert.deepEqual((await service.decisions(null)).map(d=>[d.action,d.remove]),[['Install',undefined],['Update',appId]],'after an update the newest done card carries Remove');
  // Back to 1.4.0 narrows: applied. Then forward to 1.5.0 widens: a decision.
  await service.act({commandId:'c-rb1',action:'rollback',appId,version:1});assert.equal((await service.read()).apps[0]!.version,'1.4.0');
  await service.act({commandId:'c-rb2',action:'rollback',appId,version:3});assert.equal((await service.read()).apps[0]!.version,'1.4.0');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,1);
@@ -157,7 +159,7 @@ test('routes: list, install, answer and view; the conversation read carries the 
   assert.equal((await post('/assistant/apps',{commandId:'c1',action:'install',catalogId:'github'})).status,201);
   let chat=(await get('/assistant/conversation')).body;const card=chat.decisions.find((d:any)=>d.id.startsWith('app-decision:'));assert.equal(card.question,'Install GitHub app?');assert.deepEqual(chat.apps,[]);
   assert.equal((await post('/assistant/decisions',{commandId:'c2',decisionId:card.id,answer:'act'})).status,200);
-  chat=(await get('/assistant/conversation')).body;assert.deepEqual(chat.apps.map((a:any)=>[a.name,a.page,a.roomTab]),[['GitHub',true,'PR #']]);
+  chat=(await get('/assistant/conversation')).body;assert.deepEqual(chat.apps.map((a:any)=>[a.name,a.page,a.item,a.roomTab]),[['GitHub',true,true,'PR #']]);
   const view=await post('/assistant/apps/view',{app:chat.apps[0].id,handler:'page'});assert.equal(view.status,200);assert.equal(view.body.title,'GitHub');
   assert.equal((await post('/assistant/apps/view',{app:chat.apps[0].id,handler:'item',ref:'../'})).status,400);
   // A view runs app code with a secret: no GET and no form post from another site.
