@@ -198,6 +198,13 @@ export class AssistantService {
   });
   return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
  }
+ /** Results (results-and-schedules.md): accepted Records of conversation Work in the intake Mission, newest first, with the exact identity the preview reads. No writes and no calls. */
+ // ponytail: `at` is the run start because Records keep no acceptance time; at most 200 rows, page when owners keep more.
+ async results(){
+  const intake=this.#connections?.list().representative?.intakeMissionId,state=intake?await this.#store.readState(intake):await this.#store.readState(),mission=(intake?state.snapshot?.value:undefined) as Mission|undefined;
+  const rows=(mission?.works??[]).filter(w=>w.acceptance==='accepted'&&w.record&&w.assistantSource).map(w=>({missionId:mission!.id,workId:w.id,recordId:w.record!.id,version:w.record!.artifact.version,sha256:w.record!.artifact.sha256,kind:w.record!.artifact.kind,title:w.title,at:w.runtimeRun?.ownership?.startedAt??null,segment:Number(w.assistantSource!.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),turnId:w.assistantSource!.turnId}));
+  return {feedId:state.feedId,results:rows.sort((a,b)=>(b.at??0)-(a.at??0)).slice(0,200)};
+ }
  /** The intake Mission must use the bounded text oracle when it is set; admission checks it again. */
  async setSettings(body:unknown){
   const connections=this.#requireConnections(),intakeMissionId=(body as {intakeMissionId?:unknown})?.intakeMissionId;

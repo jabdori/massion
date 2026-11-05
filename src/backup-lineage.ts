@@ -9,6 +9,8 @@ import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-li
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,segmentThread,validateAssistantSource} from './assistant-conversation.ts';
 import {isMembersState,replayMembers} from './members.ts';
+import {isSchedulesState,replaySchedules} from './schedules.ts';
+import type {SchedulesState} from './schedules.ts';
 import type {MembersState} from './members.ts';
 import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
@@ -383,6 +385,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>();
   for (const operation of operations) {
+    if (isSchedulesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySchedules(operation as unknown as Operation<SchedulesState>, previous.get(operation.aggregateId) as unknown as Operation<SchedulesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); previous.set(operation.aggregateId, operation); continue; }
     validateMissionLineage(operation.value);
