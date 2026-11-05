@@ -1,6 +1,6 @@
 # Assistant conversation: the Representative answers and creates Work
 
-- Status: **PR 2a implemented** (segment storage, reducer, Mission-reader guard, lineage and backup; see [PR 2a implementation notes](#pr-2a-implementation-notes)). **PR 2b pending** (Representative settings, turn path, Work admission and auto-start, HTTP, minimal surface). Revision 2 after three independent reviews (domain, safety, scope); see [Review disposition](#review-disposition). Revision 2.1 aligns the surface and HTTP sections with the v3 surface skeleton; domain, commands, invariants and tests 1–30 are unchanged.
+- Status: **PR 2a implemented** (segment storage, reducer, Mission-reader guard, lineage and backup; see [PR 2a implementation notes](#pr-2a-implementation-notes)). **PR 2b pending** (Representative settings, turn path, Work admission and start, HTTP, minimal surface). Revision 2 after three independent reviews (domain, safety, scope); see [Review disposition](#review-disposition). Revision 2.1 aligns the surface and HTTP sections with the v3 surface skeleton; domain, commands, invariants and tests 1–30 are unchanged.
 - Date: 2026-11-05, above `2117f99` (PR #81, default route and persistent connections, since merged as `b7bb5f3`)
 - Requirements: SUR-02, ORG-02 (Representative first), COL-01, GOV-01, GOV-02, WRK-01 in [requirements](../product/requirements.md); item 2 of [Next implementation order](../product/scope.md#next-implementation-order); [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) §1, §2, §4, §5, §8, invariants 2, 3, 5, 6, 7 and "Consequences" item 2; [experience plan v2](../product/experience-plan.ko.md) §5.1, J1, B3; v3 surface skeleton (conversation first, workspace pane on demand; prototype artboards B1, B2, B3, B7, not yet in the repository)
 - Builds on: [Default execution route and persistent connections](default-route-and-persistent-connections.md), [Durable owner Work conversation](work-conversation.md), [Mission discussion before first Work](mission-conversation-to-work.md), [Owner conversation → reviewed new Work](conversation-work-draft.md), [Bounded provider dispatch](provider-dispatch.md), [Runtime lifetime](runtime-lifetime.md), [Portable backup](portable-backup.md), [ADR 0001](decisions/0001-product-owned-core.md)
@@ -11,7 +11,7 @@ The owner can save messages in a Mission thread or a Work thread (`append-missio
 
 ADR 0002 makes the assistant the entry point, and the assistant is the Representative. Today `representative` is only a permission role. The host uses it through two actors: `runtime-representative` in `ConfiguredTextRuntime` (`src/configured-runtime.ts`), which sends `delegate`, `block-work` and `accept`, and the owner Growth path in `ProductService.proposeGrowth` (`src/product.ts`). No path calls a model as the Representative, and none returns a reply.
 
-This increment adds one path: the owner writes in one continuing conversation, the Representative answers, and when the request is work, the host admits one Work from the Representative's proposal and, only if the owner turned on auto-start, starts it on the saved default route.
+This increment adds one path: the owner writes in one continuing conversation, the Representative answers, and when the request is work, the host admits one Work from the Representative's proposal and starts it on the saved default route.
 
 ## Scope
 
@@ -21,14 +21,14 @@ This increment adds one path: the owner writes in one continuing conversation, t
 2. A Representative turn per owner message: one model call through an owner-chosen Representative route, with its own output cap.
 3. A strict output contract. The reply is text. A request that is work yields at most one Work proposal (a title only).
 4. Work admission through the existing `admit-work` command, with a new provenance pin to the owner message and the settled turn.
-5. Optional start of that Work through the existing selection-less `ProductService.run` (default route from PR #81), only when the owner set `autoStart: true`, recorded under a distinct actor.
+5. Start of that Work through the existing selection-less `ProductService.run` (default route from PR #81), recorded under a distinct actor. There is no auto-start setting (ADR 0002 §6: no autonomy setting); a missing or stale default route leaves the Work admitted and not started, shown as an exception.
 6. Unknown, failed and not-started turns stored and shown as exceptions, never resent.
 7. HTTP routes and a minimal conversation surface inside the existing Workbench: the conversation, one input, and a Work card that updates in place and opens the existing Work detail. See [Minimal surface](#minimal-surface).
 
 Delivery is split in two PRs so the storage change is reviewed without any model path:
 
 - **2a** (implemented): segment aggregate, reducer, Mission-reader guard, lineage and backup (tests 26–28, plus the reducer parts of tests 1–6). No adapter call exists yet.
-- **2b** (pending): Representative settings, turn path, Work admission, auto-start, HTTP and the minimal surface (tests 7–25, 29–31).
+- **2b** (pending): Representative settings, turn path, Work admission and start, HTTP and the minimal surface (tests 7–25, 29–31).
 
 ### Not in scope, and why
 
@@ -69,7 +69,7 @@ Delivery is split in two PRs so the storage change is reviewed without any model
 - **Every segment command records the host time** in its event and keeps a non-decreasing watermark, so replay is deterministic.
 - **A segment is closed by CAS on itself** before its successor opens. A command that observes an expired pending turn settles it `unknown` in the same transition.
 - **A new actor `assistant-representative` with a new role `assistant`.** The role permits only the assistant segment commands, `admit-work` with `assistantSource`, and `activate-runtime` for its own run. It is not `representative` and not `runtime-representative`.
-- **A separate Representative route and an explicit auto-start choice** in host settings, set by owner commands.
+- **A separate Representative route** in host settings, set by owner commands. Starting the admitted Work is not a setting: it always follows when the default route resolves.
 - **Settle first, then admit.** The deadline binds only the model reply. Work admission and run preflight follow the settled turn, and their outcome is recorded once.
 - **The model output is a proposal.** A Work exists only after `admit-work` commits. Its ID, Mission, budget and source are host-chosen. The prompt carries no Work status.
 - **Unknown stays unknown.** A turn is never sent twice.
@@ -221,7 +221,7 @@ interface AssistantSource {
 
 ## Representative answer path
 
-### Route, auto-start and permission
+### Route, start and permission
 
 `HostSettingsV1` becomes `HostSettingsV2`; load accepts version 1 (no field) and 2; every save writes 2.
 
@@ -229,14 +229,13 @@ interface AssistantSource {
 interface RepresentativeSettings {
   route: {profileId: string; configHash: string; outputTokenCap: number};
   intakeMissionId: string;
-  autoStart: boolean;           // required, no default: the owner decides
 }
 ```
 
-- `ConnectionWorkbench.setRepresentative({profileId, outputTokenCap, intakeMissionId, autoStart, expectedConfigHash})` and `removeRepresentative({expectedConfigHash})`, through the existing `save(() => apply())` protocol. `version()` includes the representative settings.
+- `ConnectionWorkbench.setRepresentative({profileId, outputTokenCap, intakeMissionId, expectedConfigHash})` and `removeRepresentative({expectedConfigHash})`, through the existing `save(() => apply())` protocol. `version()` includes the representative settings.
 - The profile must resolve with `text-output`, report output usage, and have `limits.maxOutputTokens ≥ outputTokenCap`. A live profile needs `--allow-live-model-calls`.
 - The route handler checks that `intakeMissionId` is an existing Mission whose `criteria.oracle` is `bounded-text-review/v1`; otherwise `assistant_intake_unsupported`. Admission checks it again, since `revise-mission` can change criteria.
-- `setRepresentative` with `autoStart: true` is the third explicit owner act in "Live meaning change" of the default route design: with it, a model classification can cause a selection-less run on the saved default route. The startup log states whether the Representative route and auto-start are active.
+- Setting a Representative route is the third explicit owner act in "Live meaning change" of the default route design: with it, a model classification can cause a selection-less run on the saved default route. The startup log states whether the Representative route is active.
 - Status is computed on read (`active`, `stale`, `live-disabled`). `ConnectionWorkbench.representative()` returns `resolved` with adapter and pins, or `unresolved` with `assistant_route_missing`, `assistant_route_stale`, `settings_pending`, `settings_changed`.
 - A turn is registered synchronously in a separate `ConnectionWorkbench` set from route resolution until its outcome is recorded (or it settles without a proposal). Settings saves refuse while the set is nonempty. It is separate from `#active`, so a turn never makes a Work run `host_busy`.
 - Downgrade: an implementation-1 binary reading a V2 document reports `#unknown` and blocks runs (fail closed). Unmanaged hosts keep these settings for the session only, as today.
@@ -261,7 +260,7 @@ All in `POST /assistant/messages`:
 5. Validate as `ConfiguredTextRuntime.invoke` does, then parse `assistant-turn/v1`. Invalid is `failed`.
 6. Settle (`answered` with reply and proposal, `failed`, or `unknown`). Not fresh committed: stop.
 7. If answered with a proposal: resolve the default route for the intake Mission and check the intake oracle; unresolved or unsupported gives `work: not_created`. Otherwise load the intake Mission and dispatch `admit-work` once at its current revision as `assistant-representative` with `assistantSource`, the deterministic `workId`, `budget = 2 × cap` and the shared `executionGate` helper. `conflict` or `invalid` gives `not_created` with the reason; there is no second attempt. Commit outcome unknown: one lookup on `assistant-work:<turnId>`; still unknown gives `work: unknown`.
-8. If admitted fresh: `autoStart: false` gives `run: off`. Otherwise await `ProductService.preflight` (selection-less) and check that the default route's verifier provider/model differs from `assistantSource.representative` (`assistant_verifier_same_model`). Ready gives `run: requested`; else `not_started` with diagnostics.
+8. If admitted fresh, await `ProductService.preflight` (selection-less) and check that the default route's verifier provider/model differs from `assistantSource.representative` (`assistant_verifier_same_model`). Ready gives `run: requested`; else `not_started` with diagnostics.
 9. Dispatch `record-assistant-outcome`, release the settings registration.
 10. If `requested`: `ProductService.run(intakeMissionId, workId, 'assistant-run:' + turnId, revision, undefined, 'assistant-representative')`, not awaited; `AssistantService` keeps the promise for drain. A later refusal (race after preflight, such as `host_busy`) is not stored; the read path shows it (below).
 
@@ -325,7 +324,7 @@ Loopback host, the drain refusal and the `x-massion-feed` check apply to `/assis
 | --- | --- | --- |
 | `GET /assistant/conversation` | optional `segment` | `{feedId, cursor, head, segment, turns: [{id, status, displayStatus, outcome?, work?: {missionId, workId, title, execution, acceptance}}]}`. `work` is present iff the deterministic Work exists. `displayStatus` derives `unknown` for an expired pending turn and the read-time run state above. One store snapshot; no writes, no calls. |
 | `POST /assistant/messages` | `{commandId, segment, expectedRevision, text}` | `200 {message: CommitResult, turn: {status, reply?, outcome?, diagnostics?}}`. 409 for conflict, `segment_full`, `answer_in_progress`. 400 for an `assistant-` command ID. |
-| `POST /assistant-settings` | `{profileId, outputTokenCap, intakeMissionId, autoStart, expectedConfigHash}` | `list()`, now with `representative: {route, intakeMissionId, autoStart, status, diagnostics} | null` |
+| `POST /assistant-settings` | `{profileId, outputTokenCap, intakeMissionId, expectedConfigHash}` | `list()`, now with `representative: {route, intakeMissionId, status, diagnostics} | null` |
 | `POST /assistant-settings/remove` | `{expectedConfigHash}` | `list()` |
 
 `/run` and other routes refuse a caller `runId` starting with `assistant-`.
@@ -349,7 +348,7 @@ The v3 skeleton puts one continuing conversation at the center, keeps Work as ca
 
 **Copy.** Labels and content only: no subtitle, no explanatory sentence, no footnote in the conversation section. The word "assistant" does not appear in visible text; the Representative speaks for itself in its replies, and host-written lines are short state labels. The input placeholder is `Message`. No badge on an answered turn.
 
-**First run.** No connection choice and no setup step precede the conversation. With no Representative route a message is stored with turn `not_started` and shows `Not sent · <reason>`. The Representative settings (profile, cap, intake Mission, auto-start) live with the existing connection settings, not in the conversation section.
+**First run.** No connection choice and no setup step precede the conversation. With no Representative route a message is stored with turn `not_started` and shows `Not sent · <reason>`. The Representative settings (profile, cap, intake Mission) live with the existing connection settings, not in the conversation section.
 
 Deferred to the next step: rail, sidebar (pinned, recent, activity view), Shelf, Schedule and Settings pages, the workspace pane with tabs, widen and split, B7 steps with elapsed time and Stop, B3 folded activity line, date dividers, morning briefing card, decision cards, composer permission chip, name and greeting, and the B1 sign-in fallback.
 
@@ -358,12 +357,12 @@ Deferred to the next step: rail, sidebar (pinned, recent, activity view), Shelf,
 1. The conversation is provenance, not a grant. An owner message enters a Work only as the pinned `assistantSource` of a Work that `admit-work` committed.
 2. Every Representative call follows exactly one fresh committed owner message whose turn is `pending`. At most one call per owner message; none without one. No owner message exists without a turn.
 3. A turn is never resent. `unknown` stays unknown; an expired pending turn reads as unknown and is settled `unknown` by the next command.
-4. A model output is never acceptance. It can cause one `admit-work` with host-chosen ID, Mission, budget and source and, only with owner auto-start, one selection-less run request.
+4. A model output is never acceptance. It can cause one `admit-work` with host-chosen ID, Mission, budget and source and one selection-less run request on the default route.
 5. The reply never enters a Work input, Record or memory, and the prompt carries no Work state.
 6. The Representative uses its own owner-set route, never a Work grant; a Work run never uses it; its verifier differs from it in provider/model.
 7. The model never chooses a Mission, scope, route, budget or second Work.
 8. `assistant-representative` has only the `assistant` role: segment settle and outcome, `admit-work` with `assistantSource`, and `activate-runtime` for `assistant-run:<turnId>`. Everything else is `denied`. No HTTP field names an actor, role, message ID, ordinal, turn or host ID.
-9. A run follows only a fresh committed Work admission after a fresh settle, and only with `autoStart: true`. A replay, restart or reconciliation never starts one. The journal records the run as `assistant-representative`, never as the owner.
+9. A run follows only a fresh committed Work admission after a fresh settle. A replay, restart or reconciliation never starts one. The journal records the run as `assistant-representative`, never as the owner.
 10. While host settings are pending, unknown or changed, no turn is admitted; settings saves refuse while a turn is registered.
 11. Segments are bounded and contiguous. A segment is closed by its own CAS before its successor exists; no reply lands in a closed segment.
 12. Every segment command records its host time; replay uses only that time; the watermark never decreases.
@@ -387,8 +386,8 @@ Domain and reducer:
 Turns:
 
 7. A question: reply appended, no Work, two operations, one adapter call; stored `requestHash` equals the hash of the request received, which has `invocationId = workId = turnId` and `maxOutputTokens = cap`.
-8. A work request with `autoStart: true`: Work in the intake Mission by `assistant-representative`, `assistantSource` with message hash, budget `2 × default cap`; run ID `assistant-run:<turnId>`, `activate-runtime` actor `assistant-representative`, `selection.source = 'default'`; extension `@9`; the verifier input contains the owner message; accepted Record carries `assistantSource`.
-9. `autoStart: false`: Work admitted, outcome `run: off`, zero executor calls.
+8. A work request: Work in the intake Mission by `assistant-representative`, `assistantSource` with message hash, budget `2 × default cap`; run ID `assistant-run:<turnId>`, `activate-runtime` actor `assistant-representative`, `selection.source = 'default'`; extension `@9`; the verifier input contains the owner message; accepted Record carries `assistantSource`.
+9. A work request with no usable default route: Work admitted, outcome `not_started` with `default_route_missing` or `default_route_stale`, zero executor calls.
 10. No default route: no Work, outcome `not_created` with `default_route_missing`, the host exception line, zero executor calls.
 11. Host busy at preflight: outcome `run: not_started` with `host_busy`; the card shows it, not the admission blocker text.
 12. Intake Mission oracle changed by `revise-mission`: `not_created` with `assistant_intake_unsupported`; setting a Mission with another oracle is refused.
@@ -443,12 +442,12 @@ Not in 2a: the intake Mission validation at setting time and the conversation su
 
 ## Open questions (owner decisions)
 
-1. **Auto-start on live routes.** `autoStart` is a required owner choice. Should the Workbench allow `autoStart: true` with a live default route in this increment, or only with mock routes until wrong-classification cost is measured?
-2. **Single intake criteria.** Every Representative Work is judged by the intake Mission's one criteria plus the pinned owner message. Is that acceptable for dogfooding, or must per-request criteria drafts come first?
-3. **Wrong classification.** Should the first increment record classification outcomes (Work cancelled within N minutes) before auto-start widens?
-4. **Checking answers.** Do factual replies need a different-family check, or is "conversation is not a result" enough until the family map exists?
+1. **Decided (owner, 2026-11-05): no auto-start setting.** A Representative Work starts on the default route like any other selection-less run, live or mock (ADR 0002 §6).
+2. **Single intake criteria (working default for PR 2b).** Every Representative Work is judged by the intake Mission's one criteria plus the pinned owner message. Per-request criteria drafts come later.
+3. **Wrong classification.** Record classification outcomes (Work cancelled within N minutes) for calibration (ADR 0002 §7).
+4. **Checking answers (working default for PR 2b).** A reply is conversation, not a result, so it is not checked. A different-family check is added with the family map.
 5. **Cumulative Representative budget.** Required before the briefing. Per day, per segment, or an owner-set total?
-6. **Intake Mission.** With several Missions, should the Representative ask, and how is the answer bound without letting the model pick a scope?
+6. **Intake Mission (working default for PR 2b).** One owner-set intake Mission. The model never picks a scope; asking among several Missions comes later.
 
 ## Review disposition
 
@@ -457,14 +456,14 @@ Not in 2a: the intake Mission validation at setting time and the conversation su
 | Domain 1: host time not journaled | Accepted | `Application.dispatch` passes time only for `requiresMemoryTime`; lineage replays event `time`. Every segment command records `{observedAt}`, `timeWatermark`, start ≤ observed < deadline check; test 28 covers late restore. |
 | Domain 2: gap between message commit and turn admission | Accepted | Route resolution and request hash move before the commit; message and turn commit together; `admit-assistant-turn` removed. Clock skew handled by closing a segment via its own CAS and settling expired turns in the observing transition (also Safety 7, 11). |
 | Domain 3: same-commandId retry conflicts | Accepted | `storage.ts:288`/`:724` confirmed. Target aggregate comes only from the client body; `segment_full` 409 commits nothing. Test 20. |
-| Domain 4: run recorded as `local-owner` | Accepted | `configured-runtime.ts:172`, `domain.ts:244` confirmed. Narrow `assistant` activation rule plus owner `autoStart` (with Safety 2, Scope M5). |
+| Domain 4: run recorded as `local-owner` | Accepted | `configured-runtime.ts:172`, `domain.ts:244` confirmed. Narrow `assistant` activation rule (with Safety 2, Scope M5). The owner `autoStart` field was later removed by owner decision. |
 | Domain 5: lineage checks message only | Accepted | Settle-first order lets lineage check turn `answered`, proposal title, deterministic IDs, one Work per turn; settle no longer carries a host `work` claim. |
 | Domain 6: backup limits | Accepted | Segment 16 messages / 64 KiB, 2–3 ops per exchange, budget arithmetic and `ponytail:` ceiling added. The operation limit binds first, mostly through Work runs. |
 | Domain 7: more Mission readers | Accepted | Guard in `decodeIdentifier` (single entry point for all ID routes) plus `createMission`; `portable-backup.ts` `inventory()` added. Store wrapper not added: one guard suffices. |
 | Domain 8: extension version order | Accepted | `@9` first in the ternary; test 8 checks it (questions combination covered by the @9 prompt). |
 | Domain 9: caller occupies host IDs | Accepted | 400 for `assistant-` command and run IDs; lineage checks deterministic IDs. |
 | Safety 1: model title governs, no interpretation check | Accepted | `configured-runtime.ts:188/200` confirmed. @9 prompt and verifier check against the owner message; same provider/model refused. Family rule stays open. |
-| Safety 2: auto-start widens permission, owner recorded | Accepted, partly | Required `autoStart` owner field and distinct activation actor adopted. Three-state `off/mock-only/on` rejected: live is already gated by route mode and `--allow-live-model-calls`; the live question is open question 1. |
+| Safety 2: auto-start widens permission, owner recorded | Accepted, partly | Distinct activation actor adopted. The `autoStart` field adopted here was removed by owner decision on 2026-11-05 (no autonomy setting). Three-state `off/mock-only/on` rejected: live is already gated by route mode and `--allow-live-model-calls`; the live question is open question 1. |
 | Safety 3: reply claims unperformed work | Accepted | Prompt drops Work state; fixed instruction forbids status claims; host exception lines from the stored outcome; test 17. |
 | Safety 4: `representative` role too broad | Accepted | Confirmed in `domain.ts`. New role `assistant` limited to the listed commands; test 1. |
 | Safety 5: deadline/crash between Work admission and settle | Accepted via reorder | Settle first, then admit (Scope M1); the deadline binds only the reply. A pre-admission time check is unnecessary. |
@@ -481,7 +480,7 @@ Not in 2a: the intake Mission validation at setting time and the conversation su
 | Scope M2: drain and hang tests vs bounds | Accepted | `drainTimeoutMs ≤ 30 s` vs 120 s deadline confirmed. Turn abort timer; drain aborts the turn; test 30 uses a short drain. |
 | Scope M3: reply states Work status | Accepted | Same as Safety 3. |
 | Scope M4: nobody checks the title | Accepted | Same as Safety 1. |
-| Scope M5: auto-start meaning change | Accepted | `setRepresentative` with `autoStart: true` is the third owner act; startup log; tests 8, 9. The default-route document is updated in PR 2b, not now (repository read-only). |
+| Scope M5: auto-start meaning change | Accepted | Setting the Representative route is the third owner act; startup log; tests 8, 9. The default-route document is updated in PR 2b, not now (repository read-only). |
 | Scope M6: segment aggregate dominates the diff | Option (b) accepted, (a) rejected | Storing in the intake Mission thread shares the 1 MiB Mission bound with Work state and copies the conversation in every Work operation (~25 per run), which blocks the Mission and reaches backup limits sooner. The rejection reason is rewritten; "crosses Missions" is dropped since one intake Mission exists. PR split 2a/2b adopted. |
 | Scope M7: same command ID cannot retry admission | Handling accepted, premise corrected | An uncommitted conflict reserves no operation, so the ID is not burned. There is still no second attempt (no automatic retry); `conflict`/`invalid` give `not_created` with the reason; test 14. |
 | Scope L1: Work line does not refresh | Accepted | The surface also listens to the intake Mission aggregate (`workbench.ts:708` filters by aggregate); the card updates in place (revision 2.1). |
