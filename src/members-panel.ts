@@ -1,0 +1,34 @@
+/** Name-and-shape dialog behind an admission card's Add member (docs/architecture/members.md, prototype B21-name). The owner sets a name and a shape only; the host picks the colour. */
+export const memberShapeIcons:[string,string,string][]=[
+ ['round','Circle','<circle cx="20" cy="20" r="17"/>'],['square','Square','<rect x="4" y="4" width="32" height="32" rx="10"/>'],['drop','Drop','<path d="M20 3c7 9 15 15 15 22a15 15 0 0 1-30 0C5 18 13 12 20 3z"/>'],
+ ['hex','Hexagon','<path d="M20 5l13 7.5v15L20 35 7 27.5v-15z" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>'],['diamond','Diamond','<path d="M20 5l15 15-15 15L5 20z" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>'],
+ ['cloud','Cloud','<path d="M12 32a8 8 0 0 1-1.5-15.8A9.5 9.5 0 0 1 29 14.5 8.8 8.8 0 0 1 28.5 32z"/>'],['clover','Clover','<circle cx="20" cy="13" r="9"/><circle cx="12.5" cy="25" r="9"/><circle cx="27.5" cy="25" r="9"/>'],['tri','Triangle','<path d="M20 7l14 24H6z" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>']];
+const svg=(body:string,size:number,extra='')=>`<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 40 40" fill="currentColor"${extra}>${body}</svg>`;
+export const memberStyle=String.raw`.member-dialog{position:fixed;z-index:10;inset:0;display:grid;place-items:center;background:#000a;padding:16px}.member-box{width:min(420px,100%);border:1px solid var(--line-strong);border-radius:16px;background:var(--bg-2);box-shadow:0 24px 64px #0008}.member-head{display:flex;align-items:center;padding:14px 16px 14px 20px;border-bottom:1px solid var(--line)}.member-head h2{margin:0;font-size:15px}.member-head button{margin-left:auto}
+.member-body{display:grid;justify-items:center;gap:18px;padding:24px 20px}.member-look{position:relative;display:grid;place-items:center;width:84px;height:84px}.member-look svg{position:absolute;inset:0;width:84px;height:84px}.member-preview{position:relative;color:var(--bg-0);font-size:26px;font-weight:800}.member-body input{text-align:center;font-weight:650}
+.member-shapes{display:grid;grid-template-columns:repeat(4,52px);gap:10px 18px}.app .member-shapes button{display:grid;place-items:center;width:52px;height:52px;min-height:0;padding:0;border:1px solid transparent;border-radius:12px;background:transparent;color:var(--fg-3)}.app .member-shapes button[aria-checked=true]{border-color:var(--line-strong);background:var(--bg-3);color:var(--fg)}
+.member-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}.app .member-foot button{min-height:32px;padding:5px 16px;border-radius:999px;font-size:13px}`;
+export const memberDialog=String.raw`<div id="member-dialog" class="member-dialog" role="dialog" aria-modal="true" aria-labelledby="member-dialog-title" hidden><div class="member-box"><div class="member-head"><h2 id="member-dialog-title">New member</h2><button id="member-close" type="button" class="icon" aria-label="Close"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div class="member-body"><div id="member-look" class="member-look">${memberShapeIcons.map(([id,,body],i)=>svg(body,84,` id="member-look-${id}"${i?' style="display:none"':''}`)).join('')}<span id="member-preview" class="member-preview" aria-hidden="true"></span></div><label for="member-name" class="visually-hidden">Name</label><input id="member-name" maxlength="32" autocomplete="off" placeholder="Name"><div id="member-shapes" class="member-shapes" role="radiogroup" aria-label="Shape">${memberShapeIcons.map(([id,label,body],i)=>`<button id="member-shape-${id}" type="button" role="radio" aria-label="${label}" aria-checked="${i?'false':'true'}">${svg(body,32)}</button>`).join('')}</div></div>
+<div class="member-foot"><button id="member-cancel" type="button" class="secondary">Cancel</button><button id="member-create" type="button" disabled>Create</button></div></div></div><!-- /member-dialog -->`;
+export const memberClient=String.raw`
+const memberShapes=${JSON.stringify(memberShapeIcons.map(([id])=>id))};let memberDecision='',memberShape='round',memberSending=false;
+/** The colour the host will give the next member, so the preview matches the sidebar. */
+const memberNextColor=()=>'agent-'+(chatMembers().length%7+1);
+function memberRender(){const name=$('member-name').value.trim();$('member-preview').textContent=name?[...name][0]:'';$('member-look').style.color='var(--'+memberNextColor()+')';
+ for(const shape of memberShapes){$('member-shape-'+shape).setAttribute('aria-checked',String(shape===memberShape));$('member-look-'+shape).style.display=shape===memberShape?'':'none';}$('member-create').disabled=memberSending||!name;}
+function memberOpen(decisionId){memberDecision=decisionId;memberShape='round';$('member-name').value='';$('member-name').setAttribute('aria-invalid','false');memberRender();$('member-dialog').hidden=false;$('member-name').focus();}
+function memberClose(){$('member-dialog').hidden=true;const card=document.getElementById('chat-decision-'+memberDecision);memberDecision='';card?.querySelector?.('button')?.focus();}
+/** Create answers the card once with the name and shape; a lost answer is not resent, the next read shows the card's state.
+ * A refusal (taken or invalid name) committed nothing, so the dialog stays with its input and marks the name. */
+async function memberCreate(){const name=$('member-name').value.trim(),decisionId=memberDecision;if(!name||!decisionId||memberSending)return;memberSending=true;$('member-name').setAttribute('aria-invalid','false');memberRender();let refused=false;
+ try{const {response}=await request('/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),decisionId,answer:'act',member:{name,shape:memberShape}})});refused=response.status>=400&&response.status<500;}catch{}
+ memberSending=false;if(refused){$('member-name').setAttribute('aria-invalid','true');memberRender();$('member-name').focus();return;}
+ $('member-dialog').hidden=true;memberDecision='';await readChat();renderChat();$('chat-input').focus();}
+for(const shape of memberShapes)$('member-shape-'+shape).addEventListener('click',()=>{memberShape=shape;memberRender();});
+$('member-name').addEventListener('input',memberRender);
+$('member-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void memberCreate();}});
+$('member-create').addEventListener('click',()=>void memberCreate());
+$('member-cancel').addEventListener('click',memberClose);$('member-close').addEventListener('click',memberClose);
+$('member-dialog').addEventListener('keydown',event=>{if(event.key==='Escape')memberClose();});
+`;
