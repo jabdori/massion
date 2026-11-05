@@ -184,7 +184,7 @@ export class AssistantService {
   const turns=(snapshot?.value.turns??[]).map(t=>{
    const id=pin(t),intake=id?missions.get(id):null,work=intake?.value.works.find(w=>w.id===assistantWorkId(t.id)&&w.assistantSource?.turnId===t.id);
    return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),
-    ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id)}}:{})};
+    ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id),starting:!work.runtimeRun&&this.#starting.has(work.id)}}:{})};
   });
   return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
  }

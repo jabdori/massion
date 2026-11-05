@@ -423,3 +423,82 @@ test('actual SurrealDB: a work request commits the turn, the Work and its run on
 test('the fixed instruction answers simple requests directly and proposes work only for multi-step, outside-effect or checked requests',()=>{
  for(const phrase of ['Answer directly in reply, with work null','short calculations','Propose work','outside tool, site or app','sends, pays or deletes','explicitly asks for it to be checked','When in doubt, answer directly'])assert.ok(ASSISTANT_INSTRUCTION.includes(phrase),phrase);
 });
+
+test('31d: a replaced database clears the shown conversation and its cards and reads the current one',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ let feedId='feed:a';const turnId='assistant-turn:m:'+'o'.repeat(32);
+ const old={messages:[{id:'m:'+'o'.repeat(32),role:'owner',turnId:null,text:'Old database message'},{id:'r:'+turnId,role:'representative',turnId,text:'Old reply'}],turns:[{id:turnId,messageId:'m:'+'o'.repeat(32),status:'answered',displayStatus:'answered',proposal:{title:'Old Work'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'off',diagnostics:[]}},work:{missionId:'intake',missionRevision:2,workId:assistantWorkId(turnId),title:'Old Work',execution:'blocked',acceptance:'pending',started:false}}]};
+ const view=()=>feedId==='feed:a'?{feedId,cursor:1,head:1,segment:{number:1,revision:4,closed:false,full:false,previous:null,messages:old.messages},turns:old.turns}:{feedId,cursor:0,head:0,segment:null,turns:[]};
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/assistant/conversation'))return reply(view());
+  if(path.startsWith('/events'))return options.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feedId?reply({error:'Database changed'},409):reply({feedId,cursor:1,events:[]});
+  if(path.startsWith('/read-state'))return reply({feedId,cursor:0,snapshot:null});
+  return reply({error:'Not configured'},503);
+ },{'massion.workbench.feed':'feed:a'});
+ await settle();assert.match(app.node('chat-log').textContent,/Old database message/);
+ feedId='feed:b';await app.tick();await settle();
+ assert.equal(app.node('chat-log').textContent,'','no message or Work card of the replaced database stays shown');
+});
+
+test('31e: a card shown while the host starts its Work is read again, so a start refused before activation shows Start',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ const turnId='assistant-turn:m:'+'s'.repeat(32);let starting=true;
+ const view=()=>({feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:4,closed:false,full:false,previous:null,messages:[{id:'m:'+'s'.repeat(32),role:'owner',turnId:null,text:'Plan'},{id:'r:'+turnId,role:'representative',turnId,text:'Okay.'}]},
+  turns:[{id:turnId,messageId:'m:'+'s'.repeat(32),status:'answered',displayStatus:'answered',proposal:{title:'Plan'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'requested',diagnostics:[]}},work:{missionId:'intake',missionRevision:2,workId:assistantWorkId(turnId),title:'Plan',execution:'blocked',acceptance:'pending',started:starting,starting}}]});
+ const app=harness(async path=>path.startsWith('/assistant/conversation')?reply(view()):path.startsWith('/events')?reply({feedId:'feed:a',cursor:1,events:[]}):reply({error:'Not configured'},503));
+ const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
+ await app.node('chat-latest').fire('click');await settle();
+ const card=app.all().find(n=>n.id==='chat-card-'+turnId)!,start=card.children.find(c=>c.textContent==='Start')!;assert.equal(start.hidden,true);
+ assert.ok(timers.some(t=>t.ms===10000),'a card whose Work is starting schedules a reread');
+ starting=false;for(const t of timers.splice(0))if(t.ms===10000)t.fn();await settle();
+ assert.equal(start.hidden,false);assert.match(card.textContent,/Not started/);
+});
+
+test('24b: the read view marks a host start in flight as starting until it settles, even when it is refused before activation',async t=>{
+ const f=await setup(t),{m}=await f.ready();let refuse!:(error:Error)=>void;
+ const product=new ProductService(f.store,undefined,m);product.run=()=>new Promise((_,reject)=>{refuse=reject;});
+ const s=new AssistantService(f.store,product,m);f.script.push({content:turn('Sure.','Summarize')});await say(s,OWNER_REQUEST);
+ const work=async()=>(await s.read()).turns[0]!.work!;assert.deepEqual([(await work()).started,(await work()).starting],[true,true]);
+ refuse(new Error('Mission changed before activation'));await s.idle();assert.deepEqual([(await work()).started,(await work()).starting],[false,false]);
+});
+
+test('31f: a Send whose outcome is unknown is retried at its own segment, however far another tab moved the head',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ let head=1,lost=true;const posts:any[]=[];
+ const view=()=>({feedId:'feed:a',cursor:1,head,segment:{number:head,revision:head===1?3:2,closed:false,full:false,previous:head>1?'assistant-conversation:'+(head-1):null,messages:[]},turns:[]});
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/assistant/conversation'))return reply(view());
+  if(path==='/assistant/messages'){posts.push(JSON.parse(options.body));if(lost){lost=false;throw new Error('Failed to fetch');}return reply({message:{status:'replayed'},turn:{}});}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ });
+ await settle();const input=app.node('chat-input');input.value='Lost answer';await input.fire('input');await app.submit('chat-form');
+ assert.equal(app.node('chat-status').textContent,'Result unknown');assert.deepEqual([posts[0].segment,posts[0].expectedRevision],[1,3]);
+ head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');assert.equal(posts.length,2);assert.equal(posts[1].commandId,posts[0].commandId);
+ assert.deepEqual([posts[1].segment,posts[1].expectedRevision],[1,3],'the retry targets the segment of the first try, not the head');assert.equal(input.value,'');
+});
+
+test('19c: a Representative model as long as the manifest allows answers and pins its Work',async t=>{
+ const model='m'.repeat(256),manifest=parseHostManifest({version:1,revision:'fixture-long',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'compatible',baseUrl:'http://127.0.0.1:9999/v1/',models:['executor','verifier',model]}]});
+ const f=await setup(t,{manifest}),m=f.host();await f.grant(m);const s=f.service(m);await f.represent(s,m,model);
+ f.script.push({content:turn('Sure.','Summarize')});const result=await say(s,OWNER_REQUEST,'long-model');await s.idle();
+ assert.equal(result.message.status,'committed');assert.equal(result.turn.status,'answered');assert.equal(result.turn.outcome!.work.status,'admitted');
+ assert.equal((await f.intake()).works.find(w=>w.id===assistantWorkId(turnOf('long-model')))!.assistantSource!.representative.model,model);
+});
+
+test('31g: a draining host refuses before its replay, so a Send whose outcome is unknown keeps its own segment for the next try',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ let head=1,answer=0;const posts:any[]=[];
+ const view=()=>({feedId:'feed:a',cursor:1,head,segment:{number:head,revision:head===1?3:2,closed:false,full:false,previous:head>1?'assistant-conversation:'+(head-1):null,messages:[]},turns:[]});
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/assistant/conversation'))return reply(view());
+  if(path==='/assistant/messages'){posts.push(JSON.parse(options.body));answer++;if(answer===1)throw new Error('Failed to fetch');if(answer===2)return reply({error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false},503);return reply({message:{status:'replayed'},turn:{}});}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ });
+ await settle();const input=app.node('chat-input');input.value='Lost answer';await input.fire('input');await app.submit('chat-form');
+ assert.equal(app.node('chat-status').textContent,'Result unknown');
+ await app.submit('chat-form');assert.equal(app.node('chat-status').textContent,'Not sent');
+ head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');assert.equal(posts.length,3);
+ assert.deepEqual(posts.map(p=>[p.commandId===posts[0].commandId,p.segment,p.expectedRevision]),[[true,1,3],[true,1,3],[true,1,3]],'the drain refusal did not prove the message absent, so the retry stays at its segment');assert.equal(input.value,'');
+});

@@ -6,7 +6,10 @@ const chatDraftKey='massion.workbench.chat-draft';
 let chatView=null,chatSegment=null,chatReading=false,chatAgain=false,chatSending=false,chatPendingTimer=0;
 // Nodes are kept by message and turn ID so a reread never moves or recreates what is already shown: focus stays and the live log announces only new items.
 const chatCards=new Map(),chatNodes=new Map(),chatStarting=new Set();
-function chatDraft(){try{const value=JSON.parse(storage.get(chatDraftKey)||'null');return value&&typeof value.text==='string'&&typeof value.commandId==='string'?value:{text:'',commandId:''};}catch{return {text:'',commandId:''};}}
+// target is the segment and revision of a submission whose outcome is unknown: a retry goes there, where its message would sit, so the host replays it however far the head moved.
+function chatDraft(){try{const value=JSON.parse(storage.get(chatDraftKey)||'null'),target=value&&value.target;return value&&typeof value.text==='string'&&typeof value.commandId==='string'?{text:value.text,commandId:value.commandId,target:target&&Number.isSafeInteger(target.segment)&&target.segment>=1&&Number.isSafeInteger(target.expectedRevision)&&target.expectedRevision>=0?{segment:target.segment,expectedRevision:target.expectedRevision}:null}:{text:'',commandId:'',target:null};}catch{return {text:'',commandId:'',target:null};}}
+/** Records the target only while the stored draft is still this command, so an edit made while sending stays a new message. */
+function chatPin(commandId,target){const draft=chatDraft();if(draft.commandId===commandId)storage.set(chatDraftKey,JSON.stringify({text:draft.text,commandId,target}));}
 const chatReasons={assistant_route_missing:'no route',assistant_route_stale:'route unusable',settings_pending:'settings saving',settings_changed:'settings changed',default_route_missing:'no default route',default_route_stale:'default route unusable',assistant_intake_unsupported:'Mission not supported',assistant_verifier_same_model:'same model as the checker',host_busy:'host busy',host_draining:'host stopping',intake_conflict:'Mission changed',work_not_admitted:'refused'};
 function chatReason(list){const code=Array.isArray(list)&&list[0]&&typeof list[0].code==='string'?list[0].code:'';return Object.hasOwn(chatReasons,code)?chatReasons[code]:code.replace(/^assistant_/,'').replaceAll('_',' ');}
 function chatTurnLabel(turn){if(turn.displayStatus==='not_started'){const reason=chatReason(turn.diagnostics);return 'Not sent'+(reason?' · '+reason:'');}if(turn.displayStatus==='unknown')return 'Result unknown · not resent';if(turn.displayStatus==='failed')return 'No answer · not retried';if(turn.displayStatus==='pending')return '…';return '';}
@@ -47,8 +50,11 @@ async function readChat(){
  catch{if(!$('chat-status').textContent)chatShow('Unavailable');}finally{chatReading=false;chatControls();
   // A host that dies mid-turn leaves it pending and emits nothing more; the read turns it unknown after its deadline, so a shown pending turn is read again, also after a failed read.
   // ponytail: fixed interval because the view carries no deadlineAt; schedule at the deadline once the read exposes it.
-  clearTimeout(chatPendingTimer);chatPendingTimer=chatView&&chatView.turns.some(turn=>turn.displayStatus==='pending')?setTimeout(()=>void readChat(),10000):0;}
+  // A host's own start in flight emits nothing if it is refused before activation, so a card that shows it is read again too.
+  clearTimeout(chatPendingTimer);chatPendingTimer=chatView&&chatView.turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?setTimeout(()=>void readChat(),10000):0;}
 }
+/** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
+function chatReset(){chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();void readChat();}
 async function openChatWork(turnId){const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;
@@ -60,27 +66,29 @@ async function startChatWork(turnId){
 async function sendChat(){
  const text=$('chat-input').value;if(chatSending||!text.trim())return;
  if(new TextEncoder().encode(text).length>4096){chatShow('Too long');return;}
- const draft=chatDraft(),commandId=draft.text===text&&draft.commandId?draft.commandId:crypto.randomUUID();storage.set(chatDraftKey,JSON.stringify({text,commandId}));
+ const draft=chatDraft(),same=draft.text===text&&!!draft.commandId,commandId=same?draft.commandId:crypto.randomUUID();let pinned=same?draft.target:null;storage.set(chatDraftKey,JSON.stringify({text,commandId,target:pinned}));
  chatSending=true;chatShow('');chatControls();
  try{
   if(chatSegment||!chatView){chatSegment=null;await readChat();}
   for(let attempt=0;attempt<2;attempt++){
-   const view=chatView,segment=view&&view.segment;const target=!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision};
+   const view=chatView,segment=view&&view.segment;const target=pinned??(!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision});chatPin(commandId,target);
    const {response,body}=await request('/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json',...(view&&view.feedId?{'X-Massion-Feed':view.feedId}:{})},body:JSON.stringify({commandId,...target,text})},130000);
    // The private draft clears only on its committed receipt, and only while the input still holds the sent text: an edit made while waiting is unsent and stays.
    // A conflict commits nothing, so the same command ID is reused.
    if(response.ok){if($('chat-input').value===text){storage.remove(chatDraftKey);$('chat-input').value='';}await readChat();return;}
    // A changed database is not a revision race: the message goes to it only on the owner's next Send.
-   const feed=body.reason==='feed';await readChat();if(response.status===409&&attempt===0&&!feed&&!/^answer_in_progress/.test(body.error||''))continue;
-   // Only a refusal before the commit is "not sent"; any other answer may follow a stored message, so the result is unknown and Send replays it.
-   const refused=response.status===400||response.status===409||response.status===503&&body.outcome==='rejected';
+   // A conflict proves the message is not at its target (the host replays from there first; a feed conflict means the target belongs to a replaced database), so the target is dropped and the next try reads the head.
+   // A draining host refuses before that replay, so its refusal keeps the target.
+   const feed=body.reason==='feed',refused=response.status===400||response.status===409||response.status===503&&body.outcome==='rejected';if(response.status===409){pinned=null;chatPin(commandId,null);}
+   await readChat();if(response.status===409&&attempt===0&&!feed&&!/^answer_in_progress/.test(body.error||''))continue;
+   // Only a refusal before the commit is "not sent"; any other answer may follow a stored message, so the result is unknown and Send replays it at the kept target.
    chatShow(/^answer_in_progress/.test(body.error||'')?'Answer in progress':feed?'Not sent · database changed':refused?'Not sent':'Result unknown');return;
   }
  }catch{chatShow('Result unknown');await readChat();}finally{chatSending=false;chatControls();}
 }
 function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='string'&&(event.aggregateId.startsWith('assistant-conversation:')||chatView&&chatView.turns.some(turn=>turn.work&&turn.work.missionId===event.aggregateId))))void readChat();}
 $('chat-input').value=chatDraft().text;
-$('chat-input').addEventListener('input',()=>{const text=$('chat-input').value,draft=chatDraft();storage.set(chatDraftKey,JSON.stringify({text,commandId:draft.text===text?draft.commandId:''}));});
+$('chat-input').addEventListener('input',()=>{const text=$('chat-input').value,draft=chatDraft();storage.set(chatDraftKey,JSON.stringify(draft.text===text?draft:{text,commandId:'',target:null}));});
 $('chat-form').addEventListener('submit',event=>{event.preventDefault();void sendChat();});
 $('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;chatSegment=chatView.segment.number-1;void readChat();});
 $('chat-latest').addEventListener('click',()=>{chatSegment=null;void readChat();});
