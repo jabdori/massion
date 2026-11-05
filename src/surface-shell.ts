@@ -59,7 +59,7 @@ function renderShell(){
  const ordered=items.slice().reverse();if(shellOrder==='priority')ordered.sort((a,b)=>shellRank(a.work)-shellRank(b.work));
  // ponytail: decisions lead both orders; they join the recent order by time once Work rows carry times too.
  const decisions=chatDecisions(chatRep).filter(d=>d.state==='open').map(d=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-decision:'+d.id;const marks=element('span',undefined,'marks'),avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);open.append(element('strong',d.title),marks,element('span',d.question,'summary'));
-  open.addEventListener('click',()=>{chatOpenThread('');document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
+  open.addEventListener('click',()=>{if(chatOpenThread(''))document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
  $('activity-list').replaceChildren(...decisions,...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span','하','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
  $('activity-head').hidden=!items.length&&!decisions.length;
  shellMembers();
@@ -94,7 +94,8 @@ for(const [name,[,,rail]] of Object.entries(shellPages))if(rail)$(rail).addEvent
 $('side-representative').addEventListener('click',()=>chatOpenThread(''));
 $('rail-me').addEventListener('click',()=>shellMenu('rail-me','me-menu',$('me-menu').hidden));
 $('me-settings').addEventListener('click',()=>{shellMenu('rail-me','me-menu',false);shellShow('settings');$('page-heading').focus?.();});
-$('sidebar-toggle').addEventListener('click',()=>{if(paneWideOn)paneWide(false);const open=$('sidebar').hidden;$('sidebar').hidden=!open;$('sidebar-toggle').setAttribute('aria-expanded',String(open));});
+// In widened mode the toggle reads collapsed, so a click always opens the sidebar after narrowing.
+$('sidebar-toggle').addEventListener('click',()=>{const open=paneWideOn||$('sidebar').hidden;if(paneWideOn)paneWide(false);$('sidebar').hidden=!open;$('sidebar-toggle').setAttribute('aria-expanded',String(open));});
 $('activity-toggle').addEventListener('click',()=>{const on=shellActivity=!shellActivity;$('side-activity').hidden=!on;$('side-people').hidden=on;$('activity-toggle').setAttribute('aria-pressed',String(on));});
 $('activity-order').addEventListener('click',()=>shellMenu('activity-order','activity-order-menu',$('activity-order-menu').hidden));
 for(const order of ['priority','recent'])$('order-'+order).addEventListener('click',()=>{shellOrder=order;$('order-priority').setAttribute('aria-checked',String(order==='priority'));$('order-recent').setAttribute('aria-checked',String(order==='recent'));$('activity-order-label').textContent=order==='priority'?'Priority':'Recent';shellMenu('activity-order','activity-order-menu',false);$('activity-order').focus();renderShell();});

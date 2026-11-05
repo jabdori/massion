@@ -97,9 +97,9 @@ const OWNER='local-owner',host:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']}
 const display=(r:ScheduleRun,at:number)=>unknownRun(r,at)?'unknown':r.state==='started'?'running':r.state;
 const fact=(r:ScheduleRun,at:number)=>r.state==='done'?r.turnIds!.length+(r.turnIds!.length===1?' Work item':' Work items'):unknownRun(r,at)?'Not resent':r.reason??'';
 export class SchedulesService {
- readonly #store:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;#ticking=false;#unsettled=false;
- /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. */
- constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now){this.#store=store;this.#read=read;this.#clock=clock;}
+ readonly #store:Store<any>;readonly #ownerStore:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;#ticking=false;#unsettled=false;
+ /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. `ownerStore` takes the owner's own commit (the host passes its drain-aware store); a run's later host steps use `store`, so a run already started still finishes during drain. */
+ constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now,ownerStore:Store<any>=store){this.#store=store;this.#ownerStore=ownerStore;this.#read=read;this.#clock=clock;}
  /** True once any schedule write met an unknown commit outcome, so the host drain reports `unsettled`. */
  get unsettled(){return this.#unsettled;}
  async #state(){return await this.#store.load(SCHEDULES_ID) as Snapshot<SchedulesState>|null;}
@@ -124,11 +124,11 @@ export class SchedulesService {
   const action=(input as {action?:unknown})?.action,actions:Record<string,string[]>={create:['minute','offset','budget'],pause:['scheduleId'],resume:['scheduleId'],run:['scheduleId',...input&&typeof input==='object'&&Object.hasOwn(input,'retryOf')?['retryOf']:[]],close:['scheduleId','runId']};
   ensure(typeof action==='string'&&Object.hasOwn(actions,action),'Unknown schedule action');const keys=actions[action]!;ensure(exact(input,['commandId','action',...keys])&&id(input.commandId)&&(action==='create'||id(input.scheduleId)),'Exact schedule action fields required');
   const commandId=input.commandId as string;ensure(!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');const scheduleId=input.scheduleId as string;
-  if(action==='create')return this.#dispatch(commandId,owner,{type:'create-schedule',scheduleId:'schedule-'+hash(commandId).slice(0,16),kind:'briefing',minute:input.minute as number,offset:input.offset as number,budget:input.budget as {runs:number}});
-  if(action==='close')return this.#dispatch(commandId,owner,{type:'close-run',scheduleId,runId:input.runId as string});
-  if(action!=='run')return this.#dispatch(commandId,owner,{type:action==='pause'?'pause-schedule':'resume-schedule',scheduleId});
+  if(action==='create')return this.#dispatch(commandId,owner,{type:'create-schedule',scheduleId:'schedule-'+hash(commandId).slice(0,16),kind:'briefing',minute:input.minute as number,offset:input.offset as number,budget:input.budget as {runs:number}},this.#ownerStore);
+  if(action==='close')return this.#dispatch(commandId,owner,{type:'close-run',scheduleId,runId:input.runId as string},this.#ownerStore);
+  if(action!=='run')return this.#dispatch(commandId,owner,{type:action==='pause'?'pause-schedule':'resume-schedule',scheduleId},this.#ownerStore);
   ensure(!Object.hasOwn(input,'retryOf')||id(input.retryOf),'Exact schedule action fields required');
-  const runId=manualRunId(commandId),started=await this.#dispatch(HOST_STEPS['start-run']+runId,host,{type:'start-run',scheduleId,runId,manual:true,...Object.hasOwn(input,'retryOf')?{retryOf:input.retryOf as string}:{}});
+  const runId=manualRunId(commandId),started=await this.#dispatch(HOST_STEPS['start-run']+runId,host,{type:'start-run',scheduleId,runId,manual:true,...Object.hasOwn(input,'retryOf')?{retryOf:input.retryOf as string}:{}},this.#ownerStore);
   if(started.status==='committed')await this.#run(scheduleId,runId);return started;
  }
  /** The host scheduler: a due slot starts a run, or with no budget left records `Budget reached` and pauses. Returns the runs it started. */
@@ -147,16 +147,16 @@ export class SchedulesService {
   await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment}).catch(()=>{});
  }
  /** Every write goes here, so an unknown commit outcome is recorded once for the host drain, whether a request or the scheduler made it. */
- async #dispatch(commandId:string,actor:Actor,command:SchedulesCommand):Promise<CommitResult<SchedulesState>>{
-  try{return await this.#attempt(commandId,actor,command);}catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.#unsettled=true;throw error;}
+ async #dispatch(commandId:string,actor:Actor,command:SchedulesCommand,store=this.#store):Promise<CommitResult<SchedulesState>>{
+  try{return await this.#attempt(commandId,actor,command,store);}catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.#unsettled=true;throw error;}
  }
  /** Load, then look the receipt up, then reduce: an identical command committed concurrently replays instead of failing the reducer on its own applied state. CAS on the revision read. */
- async #attempt(commandId:string,actor:Actor,command:SchedulesCommand):Promise<CommitResult<SchedulesState>>{
+ async #attempt(commandId:string,actor:Actor,command:SchedulesCommand,store:Store<any>):Promise<CommitResult<SchedulesState>>{
   const identity={id:SCHEDULES_ID,commandId,fingerprint:fingerprint(actor.id,command)};
   for(let attempt=0;attempt<3;attempt++){
-   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const snapshot=await this.#state(),prior=await store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
    const {value,events}=applySchedules(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
-   const result=await this.#store.commit({id:SCHEDULES_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   const result=await store.commit({id:SCHEDULES_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
