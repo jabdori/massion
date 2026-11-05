@@ -128,11 +128,14 @@ async function chatReadLoop(){
   // ponytail: fixed interval because the view carries no deadlineAt; schedule at the deadline once the read exposes it.
   // A host's own start in flight emits nothing if it is refused before activation, so a card that shows it is read again too.
   // A running card's elapsed minutes come from the read, so it is read again each minute while one shows.
-  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],wait=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
+  // A schedule run still in time emits nothing when its host dies, so the conversation is read again just after its deadline to show the unknown-result card.
+  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],due=chatView&&Number.isSafeInteger(chatView.runDeadlineAt)?Math.max(1000,chatView.runDeadlineAt-Date.now()+1000):0,every=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0,wait=every&&due?Math.min(every,due):every||due;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
 function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
-async function openChatWork(turnId){const turn=chatRep&&chatRep.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
+/** A Representative turn by ID, also one a briefing carries from an earlier segment, so its Work links open. */
+function chatWorkTurn(turnId){if(!chatRep)return;return chatRep.turns.find(t=>t.id===turnId)??(Array.isArray(chatRep.briefings)?chatRep.briefings:[]).flatMap(b=>b&&Array.isArray(b.turns)?b.turns:[]).find(t=>t&&t.id===turnId);}
+async function openChatWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;
  // One request per card at a time; the card label from the reread, not a status line, says how it ended.

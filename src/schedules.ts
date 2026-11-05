@@ -108,15 +108,16 @@ export class SchedulesService {
   return {revision:s?.revision??0,schedules:(s?.value.schedules??[]).map(x=>({id:x.id,...BRIEFING,assignee:representativeName,destination:'Conversation with '+representativeName,active:x.active,nextAt:x.nextAt,minute:x.minute,offset:x.offset,budget:{runs:x.budget.runs,used:x.used},
    runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]]}))}))};
  }
- /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed. A briefing read from a segment other than `current` carries its turns, read from that segment, so rollover never empties it. */
+ /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed, and `runDeadlineAt` while a run is still in time, so the page reads again when it turns unknown. A briefing read from a segment other than `current` carries its turns, read from that segment, so rollover never empties it. */
  async conversation(current?:number){
-  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[],segments=new Map<number,Promise<Turn[]>>();
+  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[],segments=new Map<number,Promise<Turn[]>>();let deadline=Infinity;
   const turnsOf=(n:number)=>{if(!segments.has(n))segments.set(n,this.#read(n).then(v=>v.turns,()=>[]));return segments.get(n)!;};
   for(const x of s?.value.schedules??[])for(const r of x.runs){
    if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&r.segment!==current&&ids.length?(await turnsOf(r.segment)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:BRIEFING.title,turnIds:[...ids],...other?{turns:other}:{}});}
+   else if(r.state==='started'&&!unknownRun(r,now))deadline=Math.min(deadline,r.deadlineAt);
    else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:BRIEFING.title,state:unknown?'unknown':'failed',fact:fact(r,now),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id});}
   }
-  return {briefings,exceptions};
+  return {briefings,exceptions,...deadline<Infinity?{runDeadlineAt:deadline}:{}};
  }
  /** The owner's actions. Run now writes the host's start for the owner, with a run ID from the owner's command ID and no caller time in the command, so a lost Run now replays and runs once; Retry is Run now that closes the failed run in the same step. */
  async act(input:unknown):Promise<CommitResult<SchedulesState>>{

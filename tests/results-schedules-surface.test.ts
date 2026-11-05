@@ -10,14 +10,14 @@ const T0=Date.UTC(2026,10,5,23,0),sha='a'.repeat(64);
 const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',title:'River summary',at:T0,segment:1,turnId:'turn:1'};
 const turn={id:'turn:1',messageId:'m:1',status:'answered',displayStatus:'answered',at:T0-60000,proposal:{title:'River summary'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:'work:a',title:'River summary',execution:'settled',acceptance:'accepted',started:true}};
 const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:'Conversation with 하나',active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
-function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number}={}){
+function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number;runDeadlineAt?:number}={}){
  const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,events:[] as any[],cursor:1,posted:[] as {path:string;body:any}[],...initial};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){const body=JSON.parse(options.body);state.posted.push({path,body});if(path==='/assistant/schedules'&&body.action==='create')state.schedules=[schedule];return reply({status:'committed',revision:2},path==='/assistant/schedules'&&body.action==='create'?201:200);}
   if(path==='/assistant/results')return reply({feedId:'feed:a',results:state.results});
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:state.schedules});
   if(path.startsWith('/missions/intake/record-artifact'))return state.artifact===200?reply({content:'- Rivers carry water.\n- Rivers shape valleys.\nCities grew beside rivers.',byteLength:10}):reply({error:'Unavailable'},state.artifact);
-  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:2,members:[],decisions:[],exceptions:state.exceptions,segment:{number:2,revision:1,closed:false,full:false,previous:'assistant-conversation:1',messages:[]},turns:[]});
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:2,members:[],decisions:[],exceptions:state.exceptions,...'runDeadlineAt' in state?{runDeadlineAt:state.runDeadlineAt}:{},segment:{number:2,revision:1,closed:false,full:false,previous:'assistant-conversation:1',messages:[]},turns:[]});
   if(path.startsWith('/events')){const events=state.events;state.events=[];return reply({feedId:'feed:a',cursor:state.cursor,events});}
   return reply({error:'Not configured'},503);
  });
@@ -110,4 +110,11 @@ test('a host-run schedule rereads the Schedules page while it shows',async()=>{
  state.schedules=[{...schedule,active:false,budget:{runs:30,used:30}}];state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:3,type:'skip-run'}];state.cursor=2;
  await app.tick();await settle();
  assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-rows').textContent,/30 of 30 runs/);
+});
+
+test('a schedule run still in time has the conversation read again just after its deadline, so its unknown card shows without another event',async()=>{
+ const deadline=Date.now()+30000,{app,state}=fixture({runDeadlineAt:deadline});const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
+ runInContext('void readChat()',app.context);await settle();const read=timers.findLast(t=>t.ms>=29000&&t.ms<=31000);assert.ok(read,'one read is due at the deadline');
+ delete (state as any).runDeadlineAt;state.exceptions=[{id:'run-x',at:deadline,title:'Morning briefing',state:'unknown',fact:'Not resent',actions:['check','close'],scheduleId:'schedule-a',runId:'run-x'}];
+ timers.length=0;read.fn();await settle();assert.match(byId(app,'chat-run-exception-run-x')!.textContent,/Result unknown.*Check.*Close/);assert.deepEqual(timers.map(t=>t.ms).filter(ms=>ms!==15000),[],'no read is due once the run is unknown (15 s is the request timeout)');
 });
