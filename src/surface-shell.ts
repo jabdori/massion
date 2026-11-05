@@ -93,7 +93,8 @@ for(const [name,[,,rail]] of Object.entries(shellPages))if(rail)$(rail).addEvent
 $('side-representative').addEventListener('click',()=>chatOpenThread(''));
 $('rail-me').addEventListener('click',()=>shellMenu('rail-me','me-menu',$('me-menu').hidden));
 $('me-settings').addEventListener('click',()=>{shellMenu('rail-me','me-menu',false);shellShow('settings');$('page-heading').focus?.();});
-$('sidebar-toggle').addEventListener('click',()=>{if(paneWideOn)paneWide(false);const open=$('sidebar').hidden;$('sidebar').hidden=!open;$('sidebar-toggle').setAttribute('aria-expanded',String(open));});
+// In widened mode the toggle reads collapsed, so a click always opens the sidebar after narrowing.
+$('sidebar-toggle').addEventListener('click',()=>{const open=paneWideOn||$('sidebar').hidden;if(paneWideOn)paneWide(false);$('sidebar').hidden=!open;$('sidebar-toggle').setAttribute('aria-expanded',String(open));});
 $('activity-toggle').addEventListener('click',()=>{const on=shellActivity=!shellActivity;$('side-activity').hidden=!on;$('side-people').hidden=on;$('activity-toggle').setAttribute('aria-pressed',String(on));});
 $('activity-order').addEventListener('click',()=>shellMenu('activity-order','activity-order-menu',$('activity-order-menu').hidden));
 for(const order of ['priority','recent'])$('order-'+order).addEventListener('click',()=>{shellOrder=order;$('order-priority').setAttribute('aria-checked',String(order==='priority'));$('order-recent').setAttribute('aria-checked',String(order==='recent'));$('activity-order-label').textContent=order==='priority'?'Priority':'Recent';shellMenu('activity-order','activity-order-menu',false);$('activity-order').focus();renderShell();});
