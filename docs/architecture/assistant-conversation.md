@@ -1,6 +1,6 @@
 # Assistant conversation: the Representative answers and creates Work
 
-- Status: **PR 2a implemented** (segment storage, reducer, Mission-reader guard, lineage and backup; see [PR 2a implementation notes](#pr-2a-implementation-notes)). **PR 2b pending** (Representative settings, turn path, Work admission and start, HTTP, minimal surface). Revision 2 after three independent reviews (domain, safety, scope); see [Review disposition](#review-disposition). Revision 2.1 aligns the surface and HTTP sections with the v3 surface skeleton; domain, commands, invariants and tests 1–30 are unchanged.
+- Status: **PR 2a implemented** (segment storage, reducer, Mission-reader guard, lineage and backup; see [PR 2a implementation notes](#pr-2a-implementation-notes)). **PR 2b implemented** (Representative settings, turn path, Work admission and start, HTTP, minimal surface; see [PR 2b implementation notes](#pr-2b-implementation-notes)). Revision 2 after three independent reviews (domain, safety, scope); see [Review disposition](#review-disposition). Revision 2.1 aligns the surface and HTTP sections with the v3 surface skeleton; domain, commands, invariants and tests 1–30 are unchanged.
 - Date: 2026-11-05, above `2117f99` (PR #81, default route and persistent connections, since merged as `b7bb5f3`)
 - Requirements: SUR-02, ORG-02 (Representative first), COL-01, GOV-01, GOV-02, WRK-01 in [requirements](../product/requirements.md); item 2 of [Next implementation order](../product/scope.md#next-implementation-order); [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) §1, §2, §4, §5, §8, invariants 2, 3, 5, 6, 7 and "Consequences" item 2; [experience plan v2](../product/experience-plan.ko.md) §5.1, J1, B3; v3 surface skeleton (conversation first, workspace pane on demand; prototype artboards B1, B2, B3, B7, not yet in the repository)
 - Builds on: [Default execution route and persistent connections](default-route-and-persistent-connections.md), [Durable owner Work conversation](work-conversation.md), [Mission discussion before first Work](mission-conversation-to-work.md), [Owner conversation → reviewed new Work](conversation-work-draft.md), [Bounded provider dispatch](provider-dispatch.md), [Runtime lifetime](runtime-lifetime.md), [Portable backup](portable-backup.md), [ADR 0001](decisions/0001-product-owned-core.md)
@@ -21,14 +21,14 @@ This increment adds one path: the owner writes in one continuing conversation, t
 2. A Representative turn per owner message: one model call through an owner-chosen Representative route, with its own output cap.
 3. A strict output contract. The reply is text. A request that is work yields at most one Work proposal (a title only).
 4. Work admission through the existing `admit-work` command, with a new provenance pin to the owner message and the settled turn.
-5. Start of that Work through the existing selection-less `ProductService.run` (default route from PR #81), recorded under a distinct actor. There is no auto-start setting (ADR 0002 §6: no autonomy setting); a missing or stale default route leaves the Work admitted and not started, shown as an exception.
+5. Start of that Work through the existing selection-less `ProductService.run` (default route from PR #81), recorded under a distinct actor. There is no auto-start setting (ADR 0002 §6: no autonomy setting); a missing or stale default route at admission creates no Work (`not_created`, since the Work budget comes from the default route), and a route that stops resolving after admission leaves the Work admitted and not started; both are shown as exceptions.
 6. Unknown, failed and not-started turns stored and shown as exceptions, never resent.
 7. HTTP routes and a minimal conversation surface inside the existing Workbench: the conversation, one input, and a Work card that updates in place and opens the existing Work detail. See [Minimal surface](#minimal-surface).
 
 Delivery is split in two PRs so the storage change is reviewed without any model path:
 
 - **2a** (implemented): segment aggregate, reducer, Mission-reader guard, lineage and backup (tests 26–28, plus the reducer parts of tests 1–6). No adapter call exists yet.
-- **2b** (pending): Representative settings, turn path, Work admission and start, HTTP and the minimal surface (tests 7–25, 29–31).
+- **2b** (implemented): Representative settings, turn path, Work admission and start, HTTP and the minimal surface (tests 7–25, 29–31).
 
 ### Not in scope, and why
 
@@ -104,7 +104,7 @@ interface AssistantTurn {
   status: 'not_started' | 'pending' | 'answered' | 'failed' | 'unknown';
   diagnostics?: {code: string; message: string}[];        // not_started only
   route?: {profileId: string; configHash: string; provider: string; model: string;
-           mode: 'mock-http' | 'live'; outputTokenCap: number};
+           mode: 'mock-http' | 'live'; outputTokenCap: number};  // model ≤ 256 bytes, the manifest bound
   ownership?: RuntimeOwnership;     // hostSessionId, dispatchId, startedAt, deadlineAt
   requestHash?: string;             // providerRequestHash(request)
   contextMessageIds?: string[];
@@ -138,7 +138,7 @@ The reducer `applyAssistant(segment, command, actor, time)` lives in `src/assist
 | `open-assistant-segment` | `owner` | `segment`, `previous`, `messageId`, `text`, `turn` | Creation (revision 0 → 1) of segment `n + 1` with its first message and turn, same turn rules. |
 | `close-assistant-segment` | `owner` | `segment` | Closes a full segment; settles expired pending turns `unknown`. Refused while a turn is pending and unexpired. |
 | `settle-assistant-turn` | `assistant` | `turnId`, `status`, `usage`, `receipt`, `reply` and `proposal` (answered only) | Pending turns only, segment not closed. `answered`/`failed` require `observedAt < deadlineAt`. `answered` appends the reply message. `unknown` is always allowed for a pending turn. A settled turn never changes status again. |
-| `record-assistant-outcome` | `assistant` | `turnId`, `work`, `run` | Once, on an `answered` turn with a `proposal`. Adds no message, so it is allowed after close. |
+| `record-assistant-outcome` | `assistant` | `turnId`, optional `missionId` (the intake Mission the Work was admitted to), `work`, `run` | Once, on an `answered` turn with a `proposal`. Adds no message, so it is allowed after close. |
 
 The pending turn is a host pin inside the owner's command, as `executionGate` is inside the owner's `admit-work` today (`ProductService.admit`). The caller never supplies it; the HTTP body has no turn, route or ownership field.
 
@@ -209,7 +209,7 @@ interface AssistantSource {
   messageId: string;
   messageHash: string;            // hash(message)
   message: AssistantMessage;      // complete owner message, role 'owner'
-  representative: {provider: string; model: string};  // route that wrote the title
+  representative: {provider: string; model: string};  // route that wrote the title; model ≤ 256 bytes
 }
 ```
 
@@ -260,7 +260,7 @@ All in `POST /assistant/messages`:
 5. Validate as `ConfiguredTextRuntime.invoke` does, then parse `assistant-turn/v1`. Invalid is `failed`.
 6. Settle (`answered` with reply and proposal, `failed`, or `unknown`). Not fresh committed: stop.
 7. If answered with a proposal: resolve the default route for the intake Mission and check the intake oracle; unresolved or unsupported gives `work: not_created`. Otherwise load the intake Mission and dispatch `admit-work` once at its current revision as `assistant-representative` with `assistantSource`, the deterministic `workId`, `budget = 2 × cap` and the shared `executionGate` helper. `conflict` or `invalid` gives `not_created` with the reason; there is no second attempt. Commit outcome unknown: one lookup on `assistant-work:<turnId>`; still unknown gives `work: unknown`.
-8. If admitted fresh, await `ProductService.preflight` (selection-less) and check that the default route's verifier provider/model differs from `assistantSource.representative` (`assistant_verifier_same_model`). Ready gives `run: requested`; else `not_started` with diagnostics.
+8. If admitted fresh, await `ProductService.preflight` (selection-less). The run preflight (`ConfiguredTextRuntime.preflight`, which every run and every Start applies) refuses a verifier whose provider/model equals the Work's `assistantSource.representative` (`assistant_verifier_same_model`). Ready gives `run: requested`; else `not_started` with diagnostics.
 9. Dispatch `record-assistant-outcome`, release the settings registration.
 10. If `requested`: `ProductService.run(intakeMissionId, workId, 'assistant-run:' + turnId, revision, undefined, 'assistant-representative')`, not awaited; `AssistantService` keeps the promise for drain. A later refusal (race after preflight, such as `host_busy`) is not stored; the read path shows it (below).
 
@@ -280,6 +280,19 @@ All in `POST /assistant/messages`:
 - No Work state is sent. The model has no facts to claim status from, and the injection surface is smaller.
 - The whole request must fit `limits.maxInputBytes`; otherwise history is cut further, deterministically.
 - The output can carry only a reply and a title. It cannot choose a Mission, budget, route, source, memory, permission or a second Work.
+
+### Answer or work
+
+The fixed instruction tells the Representative when a request stays a reply and when it becomes a Work proposal (owner decision, 2026-11-05).
+
+| Answer directly (`work: null`) | Propose work |
+| --- | --- |
+| Questions, explanations, short calculations, summaries, translations, one-off drafts | Several steps or more than a few minutes |
+| The answer is the result | Leaves a file, document or code |
+| Touches nothing outside the conversation | Uses an outside tool, site or app; sends, pays or deletes |
+| | Repeats on a schedule, or the owner asks for a check |
+
+When unsure, the Representative answers directly. A reply is conversation, not an accepted result, so it gets no independent check, card or work room; the owner can ask for a check, which makes the next turn propose work. The classification is a model judgment; the host does not enforce it. Wrong classifications are counted for calibration (open question 3).
 
 ### Output contract `assistant-turn/v1`
 
@@ -439,6 +452,34 @@ Implemented in `src/assistant-conversation.ts` with tests in `tests/assistant-co
 | Expiry and settle | An observing command settles an expired pending turn `unknown` | `settle-assistant-turn` applies its own turn first, then sweeps the others, so the in-process owner can still record `unknown` (with usage and receipt) after the grace period | Sweeping first would refuse the owner's own `unknown` settle. |
 
 Not in 2a: the intake Mission validation at setting time and the conversation surface's feed listener (both need 2b settings and UI). The Mission-reader guard is `decodeMissionIdentifier` (every Mission ID route; connection ID routes use the plain `decodeIdentifier` and stay allowed), `createMission`, and `value.kind = NONE` in the catalog and inbox queries.
+
+## PR 2b implementation notes
+
+Implemented in `src/assistant-service.ts` (turn path, read view, settings entry), `src/connection-workbench.ts` (`HostSettingsV2`, `setRepresentative`, `removeRepresentative`, `resolveRepresentative`, turn registration), `src/configured-runtime.ts` (activation actor, `@9`), `src/product.ts` (`executionGate` helper, activation actor), `src/server.ts` (routes, drain) and `src/assistant-conversation-panel.ts` (surface), with tests in `tests/assistant-conversation.test.ts`. Differences from the text above, and why:
+
+| Topic | Design | Implemented | Reason |
+| --- | --- | --- | --- |
+| Test 9 | No usable default route: Work admitted, `run: not_started` | Merged into test 10: a missing or stale default route at admission gives `work: not_created` with `default_route_missing` or `default_route_stale` | Turn sequence step 7 and the budget rule ("no resolved default route, no Work; the host never picks a budget") leave no Work to start. A route that changes between admission and preflight is reported by preflight like any other `not_started` reason (test 11, 13). |
+| Test 14 | Mission at its Work limit | The deterministic Work ID already taken in the intake Mission gives `not_created` with `work_not_admitted` and the domain reason | The domain has no Work count limit; this is a real `invalid` admission. |
+| Live route without the live option | Status `live-disabled` | `list().representative.status` is `live-disabled`; a turn records `assistant_route_stale` whose message names `live-disabled` | The unresolved codes stay the four listed; the reason is in the message. |
+| Extra diagnostic codes | `conflict` or `invalid` gives `not_created` with the reason | `intake_conflict`, `work_not_admitted`, `admission_unknown`, `admission_unconfirmed` (lookup found the admission after an unknown commit; no run), `admission_replayed`, `host_draining`, `assistant_source_unavailable`, `preflight_unavailable` | Named reasons for the stored outcome; at most two diagnostics, 256 bytes each, as the reducer requires. |
+| Settle refused | Not specified | A refused settle (for example, the turn was settled `unknown` by another host after the grace period) returns the stored state and admits nothing | A turn is never resent or overridden. |
+| Run request | After outcome | Only after `record-assistant-outcome` committed fresh | A run must never follow an outcome that is not stored. |
+| Intake check at setting time | Route handler | `AssistantService.setSettings` (called by `POST /assistant-settings`); the error starts with `assistant_intake_unsupported` | One place for HTTP and tests. |
+| History | Up to 12 earlier messages | From the named segment, then back through closed segments by `previous` until 12 messages or 24 KiB | A fresh segment keeps the earlier context; at most a few segment loads. |
+| Read view | One store snapshot | `readState` of the segment plus one load of each intake Mission pinned in an outcome's `missionId` (the current setting only for an outcome without it); adds `segment.full`, `work.missionRevision` (for Start) `work.started` (`runtimeRun` present or a local start in progress) and `work.starting` (the local start only, no `runtimeRun` yet) | Two aggregates cannot share one snapshot read without a new query. A card survives a later change or removal of the Representative route. |
+| Output parser | Exact keys | `JSON.parse` plus exact-key checks | `ponytail:` duplicate keys are not detected (the last wins); a duplicate-aware parser is the upgrade if a model emits them. |
+| Turn deadline | `DEFAULT_RUN_TIMEOUT_MS` | Default unchanged; `AssistantService` takes `turnTimeoutMs` and `clock` options (tests only) | Deterministic hang and crash tests without waiting 120 s. |
+| Surface ids | Not specified | Section `id="conversation"`; controls use `chat-*` ids and globals | `conversation-*` ids and functions already belong to the Mission conversation panel. |
+| Surface labels | `Not sent · <reason>` and others | Reasons are short words mapped from codes (`no route`, `no default route`, `host busy`, `same model as the checker`, ...), so no visible text contains "assistant"; a send refusal shows `Answer in progress`, `Not sent` or `Not sent · database changed` (never retried automatically); a shown pending turn, or a card whose Work is `starting`, is read again every 10 s (`ponytail:` the read view carries no `deadlineAt`; a start refused before activation emits no event); a replaced database (the event feed recovers to a new `feedId`) clears the shown conversation and reads it again; Start shows on a card whose Work exists and has not started; `Earlier` and `Latest` switch segments | Labels only, no explanatory sentence. |
+| Client retry | Client may reuse its `commandId` against `n + 1` | On a 409 other than `answer_in_progress` the client re-reads and retries once with the same `commandId` | Nothing was committed, so the same ID is safe. |
+| Replay across a segment boundary | Lost response → same `commandId` replays | A retry aimed at `n + 1` (because its own commit filled `n`) finds the message in `n` and replays before closing anything; the conflict branch checks both segments too | The client sees a full head and targets the next segment; without this the delivered message read as `Not sent`. |
+| Settle refused at the deadline | Not specified | When an `answered` or `failed` settle is refused because the reducer's clock passed the deadline, the same settle command ID records `unknown` once | The turn never stays `pending` until the grace period ends; no second call. |
+| Same-model check and run | Verifier checked at preflight | The run receives the default choice that preflight saw; `ProductService.run` refuses with `default_route_changed` when the default resolves differently | A route change between the check and the run cannot start a run whose verifier was not checked. |
+| Drain after an unknown step | Not specified | An unknown settle, outcome or admission commit, or a run ending in `RunUnsettledError`, `RunAdmissionUnknownError` or `CommitOutcomeUnknownError`, makes `AssistantService.drain()` reject, so the host reports `unsettled` | Same exit signal as an owner run with the same errors. |
+| Lost HTTP response on the surface | Client reads `GET /assistant/conversation` | Only `400`, `409` and a `503` with `outcome: rejected` show `Not sent`; any other answer or a network failure shows `Result unknown`, re-reads, and keeps the draft, `commandId` and the request's `segment` and `expectedRevision`, so Send replays at the segment where the message would sit, however far the head moved meanwhile; a `409` drops the kept target, since the host replays from it first (a draining host's `503` refuses before that replay and keeps it) | The message commits before the model call, so a lost answer is not a refusal. |
+| Surface updates | Card updated in place | Message, state line and card nodes are kept by ID and a re-read only appends; the card body and Start are sibling buttons; Start hides while its request is in flight and its result shows on the card label; a read error shows `Unavailable` until the next read succeeds; text over 4096 UTF-8 bytes shows `Too long` without a request; the activity list leaves out conversation events | Focus stays put, the live log announces only new items, and no visible text says "assistant". |
+| Real database | Not listed | One end-to-end test on SurrealDB (skipped without `SURREAL_TEST_RUNTIME`) | Same pattern as the PR 2a storage test. |
 
 ## Open questions (owner decisions)
 
