@@ -281,6 +281,19 @@ All in `POST /assistant/messages`:
 - The whole request must fit `limits.maxInputBytes`; otherwise history is cut further, deterministically.
 - The output can carry only a reply and a title. It cannot choose a Mission, budget, route, source, memory, permission or a second Work.
 
+### Answer or work
+
+The fixed instruction tells the Representative when a request stays a reply and when it becomes a Work proposal (owner decision, 2026-11-05).
+
+| Answer directly (`work: null`) | Propose work |
+| --- | --- |
+| Questions, explanations, short calculations, summaries, translations, one-off drafts | Several steps or more than a few minutes |
+| The answer is the result | Leaves a file, document or code |
+| Touches nothing outside the conversation | Uses an outside tool, site or app; sends, pays or deletes |
+| | Repeats on a schedule, or the owner asks for a check |
+
+When unsure, the Representative answers directly. A reply is conversation, not an accepted result, so it gets no independent check, card or work room; the owner can ask for a check, which makes the next turn propose work. The classification is a model judgment; the host does not enforce it. Wrong classifications are counted for calibration (open question 3).
+
 ### Output contract `assistant-turn/v1`
 
 ```json

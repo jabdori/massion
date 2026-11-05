@@ -10,7 +10,7 @@ import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../s
 import type {HostSettingsStore,Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
-import {AssistantService} from '../src/assistant-service.ts';
+import {AssistantService,ASSISTANT_INSTRUCTION} from '../src/assistant-service.ts';
 import {RunUnsettledError} from '../src/configured-runtime.ts';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,assistantRunId,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 import type {AssistantSegment} from '../src/assistant-conversation.ts';
@@ -367,4 +367,8 @@ test('actual SurrealDB: a work request commits the turn, the Work and its run on
  const work=(await f.intake()).works.find(w=>w.id===assistantWorkId(result.turn.id))!;assert.equal(work.acceptance,'accepted');assert.equal(work.runtimeRun!.id,assistantRunId(result.turn.id));
  const replay=await s.send({commandId:'durable-1',segment:1,expectedRevision:0,text:OWNER_REQUEST});assert.equal(replay.message.status,'replayed');assert.equal(f.calls.representative,1);assert.equal(f.calls.executor,1);
  validateMissionJournalLineage(await growthJournal(store));
+});
+
+test('the fixed instruction answers simple requests directly and proposes work only for multi-step, outside-effect or checked requests',()=>{
+ for(const phrase of ['Answer directly in reply, with work null','short calculations','Propose work','outside tool, site or app','sends, pays or deletes','explicitly asks for it to be checked','When in doubt, answer directly'])assert.ok(ASSISTANT_INSTRUCTION.includes(phrase),phrase);
 });
