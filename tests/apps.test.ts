@@ -110,6 +110,17 @@ test('a narrower version applies at once, a wider one waits for the owner, rollb
  assert.ok((await service.decisions(null)).every(d=>d.state!=='open'),'a decision for a removed app goes stale');
 });
 
+test('an overlapping resend of every app command replays the first result instead of a digest conflict or a reducer error',async()=>{
+ const {store}=await setup();let tick=T0;const service=new AppsService(store,{network:mock(),clock:()=>tick++});
+ const both=async(run:()=>Promise<{status:string;revision:number}>)=>{const r=await Promise.all([run(),run()]);assert.deepEqual(r.map(x=>x.status).sort(),['committed','replayed']);assert.equal(r[0]!.revision,r[1]!.revision);};
+ await both(()=>install(service));const decisionId=(await service.decisions(null))[0]!.id;
+ await both(()=>answer(service,decisionId,'later'));await both(()=>answer(service,decisionId,'ask'));await both(()=>answer(service,decisionId,'act'));const appId=(await service.read()).apps[0]!.id;
+ const next=structuredClone(GITHUB_APP);next.manifest.version='1.4.1';await both(()=>service.offer({commandId:'assistant-app-update-1',pkg:next,origin:'catalog'}));
+ await both(()=>service.act({commandId:'c-rb',action:'rollback',appId,version:1}));
+ for(const action of ['disable','enable','remove'])await both(()=>service.act({commandId:'c-'+action,action,appId}));
+ assert.equal(store.inspect().filter(o=>o.aggregateId===APPS_ID).length,9,'each command commits once');
+});
+
 test('a package changed after its check never runs',async()=>{
  const {service,store}=await setup();
  await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');const appId=(await service.read()).apps[0]!.id;

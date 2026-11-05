@@ -212,13 +212,16 @@ export class AppsService {
   return this.#dispatch(this.#caller(input.commandId),OWNER,{type:'decide-app',decisionId:input.decisionId as string,answer:input.answer as 'act'|'later'|'ask'});
  }
  #caller(commandId:unknown){ensure(id(commandId)&&!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');return commandId;}
- /** Lookup before and after the load, CAS on the revision read; a lost command replays by its ID. */
+ /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
  async #dispatch(commandId:string,actorId:string,command:AppsCommand):Promise<CommitResult<AppsState>>{
   const identity={id:APPS_ID,commandId,fingerprint:fingerprint(actorId,command)},actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
   for(let attempt=0;attempt<3;attempt++){
-   const prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const snapshot=await this.#state(),{value,events}=applyApps(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
+   // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
+   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const {value,events}=applyApps(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:APPS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
+   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};
