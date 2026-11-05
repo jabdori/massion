@@ -14,6 +14,7 @@ import {conversationWorkPanel,conversationWorkClient} from './conversation-work-
 import {expiredPanel,expiredClient} from './expired-run-panel.ts';
 import {correctionPanel,correctionClient} from './work-correction-panel.ts';
 import {rejectedTextClient} from './rejected-text-panel.ts';
+import {reflectionTrailClient} from './reflection-trail-panel.ts';
 import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts';
 import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
@@ -570,6 +571,7 @@ function renderWork(work) {
   else body.append(element('p', 'No accepted Record. A completed attempt alone is not acceptance.'));
   if(work.record && work.acceptance==='accepted')body.append(recordTextPanel(work));
   if(work.execution==='settled'&&work.acceptance==='failed'&&work.verdict?.status==='failed'&&work.artifact)body.append(rejectedTextPanel(work));
+  if(reflectionTrailEligible(work))body.append(reflectionTrailPanel(work));
   const attempts = element('details'); attempts.append(workElement(work,'summary','Attempts, tasks & assignments','attempts-summary'), workElement(work,'pre',JSON.stringify({attempts:work.attempts,tasks:work.tasks,assignments:work.assignments},null,2),'attempts')); body.append(attempts); evidence.append(body); card.append(evidence);
   if (work.runtimeRun && work.runtimeRun.connectionBindings) body.append(element('h4','Selected connections'),workElement(work,'pre',JSON.stringify(work.runtimeRun.connectionBindings,null,2),'connections'));
   if (runtimeConfiguration && !work.runtimeRun && work.execution !== 'cancelled' && work.acceptance !== 'accepted') card.append(renderExecutionSelection(work));
@@ -1616,6 +1618,7 @@ ${missionConstraintsClient}
 ${neighborhoodClient}
 ${expiredClient}
 ${rejectedTextClient}
+${reflectionTrailClient}
 controls(); void connect();
 setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });

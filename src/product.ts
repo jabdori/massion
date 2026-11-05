@@ -5,6 +5,7 @@ import type {RunSequenceInput} from './run-sequence.ts';
 import {readWorkConversation,readMissionConversation} from './work-conversation.ts';
 import {readRuntimeOwnership} from './runtime-lifetime.ts';
 import {readRecordArtifact} from './record-artifact.ts';
+import {readReflectionTrail} from './reflection-trail.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
 import {DomainError,hash,memoryVersionHash} from './domain.ts';
@@ -106,6 +107,7 @@ export class ProductService {
  }
  async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
+ async reflectionTrail(missionId:string,workId:string,revision?:number,feedId?:string){return readReflectionTrail(this.app.store,this.artifacts,missionId,workId,revision,feedId);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
  /** A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
  private async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
