@@ -195,3 +195,16 @@ test('drain: a scheduler write with an unknown commit outcome makes the host dra
  const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:2000,scheduleIntervalMs:5});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));
  await attempted;assert.deepEqual(await server.drain(),{status:'unsettled',timedOut:false});
 });
+
+test('drain: a Run now whose finish commit turns unknown during drain makes the host drain unsettled',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-schedules-manual-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const inner=new InMemoryStore<any>(),created=applySchedules(null,create({budget:{runs:30},offset:540,minute:480}),owner,{observedAt:Date.now()});
+ await inner.commit({id:SCHEDULES_ID,expectedRevision:0,commandId:'c-1',fingerprint:'x',value:created.value,events:created.events,outbox:[]});
+ let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),inside=new Promise<void>(r=>entered=r);
+ const store=new Proxy(inner,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.id===SCHEDULES_ID&&input.commandId.startsWith('assistant-schedule-finish:')){entered();await gate;await target.commit(input);throw new CommitOutcomeUnknownError(input,new Error('ack lost'));}return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:2000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));
+ const port=(server.address() as {port:number}).port,id=(created.value as SchedulesState).schedules[0]!.id;
+ const run=fetch(`http://127.0.0.1:${port}/assistant/schedules`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-2',action:'run',scheduleId:id})});
+ await inside;const drained=server.drain();release();assert.equal((await run).status,200);
+ assert.deepEqual(await drained,{status:'unsettled',timedOut:false});
+});

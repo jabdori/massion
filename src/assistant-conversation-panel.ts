@@ -69,9 +69,10 @@ function chatDecisions(view=chatView){return (Array.isArray(view&&view.decisions
 /** Members from the latest read, for the sidebar and the name of an open member conversation. */
 function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&view.members)?view.members:[]).filter(m=>m&&chatText(m.id)&&chatText(m.name));}
 function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
-/** Opens the Representative ('') or a member conversation in the page; a switch drops the shown nodes and reads that thread. */
+/** Opens the Representative ('') or a member conversation in the page at its head; a switch drops the shown nodes and reads that thread, and reopening the thread shown at an earlier segment returns to the head, where briefings and exception cards are. */
 function chatOpenThread(id,name=''){
  if(id!==chatThread){if(chatSending)return;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ else if(chatSegment!==null){chatSegment=null;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
 /** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */

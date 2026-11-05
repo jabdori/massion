@@ -118,3 +118,19 @@ test('a schedule run still in time has the conversation read again just after it
  delete (state as any).runDeadlineAt;state.exceptions=[{id:'run-x',at:deadline,title:'Morning briefing',state:'unknown',fact:'Not resent',actions:['check','close'],scheduleId:'schedule-a',runId:'run-x'}];
  timers.length=0;read.fn();await settle();assert.match(byId(app,'chat-run-exception-run-x')!.textContent,/Result unknown.*Check.*Close/);assert.deepEqual(timers.map(t=>t.ms).filter(ms=>ms!==15000),[],'no read is due once the run is unknown (15 s is the request timeout)');
 });
+
+test('View in conversation from a past run returns to the head segment, where briefings and run exceptions show',async()=>{
+ const {app}=fixture({schedules:[schedule]});await settle();await app.node('rail-results').fire('click');await settle();
+ await byId(app,'result-row-intake/work:a')!.fire('click');await settle();assert.equal(runInContext('chatSegment',app.context),1,'the result opened its own earlier segment');
+ await app.node('rail-schedules').fire('click');await settle();const before=app.calls.length;
+ await button(app.node('schedule-runs'),'View in conversation')!.fire('click');await settle();
+ assert.equal(runInContext('chatSegment',app.context),null);assert.ok(app.calls.slice(before).some(c=>c.path==='/assistant/conversation'),'the head is read again');
+});
+
+test('an accepted Record arriving while Results shows rereads the page',async()=>{
+ const {app,state}=fixture({results:[]});await settle();await app.node('rail-results').fire('click');await settle();
+ assert.equal(app.node('results-empty').hidden,false);
+ state.results=[result];state.events=[{cursor:2,aggregateId:'intake',revision:4,type:'work-accepted'}];state.cursor=2;
+ await app.tick();await settle();
+ assert.equal(app.node('results-empty').hidden,true);assert.ok(byId(app,'result-row-intake/work:a'));
+});
