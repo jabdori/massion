@@ -152,6 +152,10 @@ test('unread memory survives viewing another segment and widening reports the hi
  await open(kids(app.node('side-work'))[0]!).fire('click');await settle();
  await app.node('pane-widen').fire('click');assert.equal(app.node('sidebar').hidden,true);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'false');
  await app.node('pane-widen').fire('click');assert.equal(app.node('sidebar').hidden,false);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'true');
+ await app.node('pane-widen').fire('click');await app.node('sidebar-toggle').fire('click');
+ assert.doesNotMatch(app.node('app').className,/\bwide\b/);assert.equal(app.node('sidebar').hidden,false);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'true');
+ await app.node('sidebar-toggle').fire('click');await app.node('pane-widen').fire('click');await app.node('sidebar-toggle').fire('click');
+ assert.equal(app.node('sidebar').hidden,false);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'true');
 });
 
 test('closing the selected tab while a read or write is in flight keeps it, and closing another tab still works',async()=>{
