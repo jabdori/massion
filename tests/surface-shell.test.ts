@@ -138,6 +138,17 @@ test('Work admitted from a Work tab switches to the Mission tab so the new card 
  assert.deepEqual(selectedTab(app),['Owner requests']);assert.equal(shown(app).length,2);
 });
 
+// write() argument slots after successMessage: correction is the 11th, saved-owner-message Work the 13th; a foreign missionId keeps their panels from rendering the stub.
+for(const [form,slot] of [['correction',10],['saved owner message',12]] as const)test(`a ${form} admission from a Work tab also switches to the Mission tab`,async()=>{
+ const {app}=fixture(two.slice(0,1),(path,options,state,mission)=>{const up=ready(path);if(up)return up;if(options?.method!=='POST'||path!=='/missions/intake/work')return undefined;const body=JSON.parse(options.body);state.works=[...state.works,{workId:body.workId,title:body.title,execution:'queued',acceptance:'pending',started:false}];state.revision++;return {status:'committed',feedId:'feed:a',revision:state.revision,value:mission()};});
+ await settle();
+ await open(kids(app.node('side-work'))[0]!).fire('click');await settle();assert.deepEqual(shown(app),['work-card-work:a']);
+ const extra=Array(slot+1).fill(null);extra[slot]={missionId:'elsewhere',body:{expectedRevision:0}};
+ (app.context as any).extraArgs=extra;
+ assert.equal(await runInContext("write('/missions/intake/work',{commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,workId:'work:c',title:'Third',budget:1},'intake','Admitted.',...extraArgs)",app.context),true);await settle();
+ assert.deepEqual(selectedTab(app),['Owner requests']);assert.equal(shown(app).length,2);
+});
+
 test('selecting a tab while a read or write is in flight leaves the tabs and the shown cards as they were',async()=>{
  const {app}=fixture(two);await settle();
  for(const line of kids(app.node('side-work'))){await open(line).fire('click');await settle();}
