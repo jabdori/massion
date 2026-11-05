@@ -10,17 +10,18 @@ const T0=Date.UTC(2026,10,5,23,0),sha='a'.repeat(64);
 const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',title:'River summary',at:T0,segment:1,turnId:'turn:1'};
 const turn={id:'turn:1',messageId:'m:1',status:'answered',displayStatus:'answered',at:T0-60000,proposal:{title:'River summary'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:'work:a',title:'River summary',execution:'settled',acceptance:'accepted',started:true}};
 const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:'Conversation with 하나',active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
-function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number;runDeadlineAt?:number}={}){
- const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,events:[] as any[],cursor:1,posted:[] as {path:string;body:any}[],...initial};
+function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number;runDeadlineAt?:number;head?:number}={}){
+ const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,events:[] as any[],cursor:1,head:2,feed:'feed:a',hold:null as null|Promise<void>,posted:[] as {path:string;body:any}[],...initial};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){const body=JSON.parse(options.body);state.posted.push({path,body});if(path==='/assistant/schedules'&&body.action==='create')state.schedules=[schedule];return reply({status:'committed',revision:2},path==='/assistant/schedules'&&body.action==='create'?201:200);}
-  if(path==='/assistant/results')return reply({feedId:'feed:a',results:state.results});
-  if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:state.schedules});
+  if(path==='/assistant/results'){const results=state.results;if(state.hold)await state.hold;return reply({feedId:state.feed,results});}
+  if(path==='/assistant/schedules'){const schedules=state.schedules;if(state.hold)await state.hold;return reply({feedId:state.feed,revision:1,schedules});}
+  if(path.startsWith('/read-state'))return reply({feedId:state.feed,cursor:0,snapshot:null});
   if(path.startsWith('/missions/intake/record-artifact'))return state.artifact===200?reply({content:'- Rivers carry water.\n- Rivers shape valleys.\nCities grew beside rivers.',byteLength:10}):reply({error:'Unavailable'},state.artifact);
-  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:2,members:[],decisions:[],exceptions:state.exceptions,...'runDeadlineAt' in state?{runDeadlineAt:state.runDeadlineAt}:{},segment:{number:2,revision:1,closed:false,full:false,previous:'assistant-conversation:1',messages:[]},turns:[]});
-  if(path.startsWith('/events')){const events=state.events;state.events=[];return reply({feedId:'feed:a',cursor:state.cursor,events});}
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:state.head,members:[],decisions:[],exceptions:state.exceptions,...'runDeadlineAt' in state?{runDeadlineAt:state.runDeadlineAt}:{},segment:{number:state.head,revision:1,closed:false,full:false,previous:state.head>1?'assistant-conversation:'+(state.head-1):null,messages:[]},turns:[]});
+  if(path.startsWith('/events')){if(options?.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==state.feed)return reply({error:'Database changed'},409);const events=state.events;state.events=[];return reply({feedId:state.feed,cursor:state.cursor,events});}
   return reply({error:'Not configured'},503);
- });
+ },{'massion.workbench.feed':'feed:a'});
  return {app,state};
 }
 /** Text written in the page markup (the DOM double models only nodes with IDs, not static text). */
@@ -142,4 +143,34 @@ test('a result clicked while a member send is pending opens nothing: Results sta
  assert.equal(app.node('page-results').hidden,false);assert.equal(app.node('pane-result').hidden,true);
  assert.equal(runInContext('chatSegment',app.context),null);assert.equal(runInContext('chatThread',app.context),'member:a');
  assert.ok(!app.calls.slice(reads).some(c=>c.path.startsWith('/assistant/conversation')||c.path.includes('record-artifact')));
+});
+
+test('a running past run whose host dies turns result unknown on the Schedules page just after its deadline, without another event',async()=>{
+ const deadline=Date.now()+30000,running={...schedule,runs:[{id:'run-2',at:T0,state:'running',fact:'',turnIds:[],deadlineAt:deadline},...schedule.runs]};
+ const {app,state}=fixture({schedules:[running]});const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
+ await settle();await app.node('rail-schedules').fire('click');await settle();
+ assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),'running');
+ const read=timers.findLast(t=>t.ms>=29000&&t.ms<=31000);assert.ok(read,'one read is due at the deadline');
+ state.schedules=[{...schedule,runs:[{id:'run-2',at:T0,state:'unknown',fact:'Not resent',turnIds:[]},...schedule.runs]}];timers.length=0;read.fn();await settle();
+ assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),'unknown');assert.match(app.node('schedule-runs').textContent,/Not resent/);
+ assert.ok(!timers.some(t=>t.ms>=29000&&t.ms<=31000),'no Schedules read is due once no run is running');
+});
+
+test('a replaced database clears Results and Schedules and rereads the shown page; a read sent before the replacement never lands',async()=>{
+ const {app,state}=fixture({schedules:[schedule]});await settle();await app.node('rail-results').fire('click');await settle();assert.ok(byId(app,'result-row-intake/work:a'));
+ let release!:()=>void;state.hold=new Promise<void>(r=>release=r);runInContext('void resultsLoad()',app.context);await settle();
+ state.hold=null;state.results=[];state.schedules=[];state.feed='feed:b';await app.tick();await settle();
+ assert.equal(byId(app,'result-row-intake/work:a'),undefined,'no result of the replaced database stays shown');assert.equal(app.node('results-empty').hidden,false);
+ release();await settle();assert.equal(byId(app,'result-row-intake/work:a'),undefined,'the read sent before the replacement is dropped');
+ await app.node('rail-schedules').fire('click');await settle();assert.equal(app.node('schedule-detail').hidden,true);assert.equal(app.node('schedules-empty').hidden,false);
+});
+
+test('a result opens its own segment even when the cached Representative head is stale, and its head segment opens as the head view',async()=>{
+ const {app,state}=fixture({head:1});await settle();await app.node('rail-results').fire('click');await settle();
+ runInContext("chatThread='member:a'",app.context);state.head=2;const before=app.calls.length;
+ await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
+ assert.equal(runInContext('chatSegment',app.context),1);assert.ok(app.calls.slice(before).some(c=>c.path==='/assistant/conversation?segment=1'),'the segment that made it, not the new head');
+ await app.node('rail-results').fire('click');await settle();state.results=[{...result,workId:'work:b',segment:2}];runInContext('void resultsLoad()',app.context);await settle();
+ const reads=app.calls.length;await byId(app,'result-row-intake/work:b')!.fire('click');await settle();
+ assert.equal(runInContext('chatSegment',app.context),null,'the head segment reads as the head view');assert.deepEqual(app.calls.slice(reads).map(c=>c.path).filter(p=>p.startsWith('/assistant/conversation')).slice(-2),['/assistant/conversation?segment=2','/assistant/conversation']);
 });

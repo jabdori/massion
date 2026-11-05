@@ -12,12 +12,19 @@ export const schedulesStyle=String.raw`.sched-empty{display:grid;justify-items:c
 export const schedulesPage=String.raw`<div id="page-schedules" class="page-body" hidden><div id="schedules-empty" class="sched-empty" hidden><span class="sched-icon">${icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',19)}</span><h2>Schedule a task</h2><div class="sched-examples"><button id="schedule-example-briefing" type="button" class="sched-example">${icon('<path d="M4 18h16M7 14a5 5 0 0 1 10 0M12 4v3M5.6 7.6l1.5 1.5M18.4 7.6l-1.5 1.5"/>',17)}<span><strong>Morning briefing</strong><span>Sums up yesterday's work each morning</span></span></button></div></div>
 <section id="schedule-detail" class="sched-detail" aria-labelledby="schedule-title" hidden><div class="sched-top"><h2 id="schedule-title"></h2><button id="schedule-active" type="button" class="switch" role="switch" aria-checked="false" aria-label="Active"></button><button id="schedule-run" type="button" class="secondary">Run now</button></div><dl id="schedule-rows" class="sched-rows"></dl><h3>Request</h3><p id="schedule-request" class="sched-request"></p><h3>Past runs</h3><ul id="schedule-runs" class="sched-runs"></ul></section></div><!-- /page-schedules -->`;
 export const schedulesClient=String.raw`
-let scheduleList=[],scheduleLoaded=false,scheduleBusy=false,schedulePausedOpen=false;
+let scheduleList=[],scheduleLoaded=false,scheduleBusy=false,schedulePausedOpen=false,scheduleLoadSeq=0,scheduleTimer=0;
 const scheduleValid=s=>s&&chatText(s.id)&&chatText(s.title)&&typeof s.active==='boolean'&&Number.isSafeInteger(s.nextAt)&&Number.isSafeInteger(s.minute)&&s.budget&&Number.isSafeInteger(s.budget.runs)&&Number.isSafeInteger(s.budget.used)&&Array.isArray(s.runs);
 const scheduleClock=minute=>String(Math.floor(minute/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0'),scheduleWhen=at=>chatDay(at)+' '+chatTime(at);
 // ponytail: the cycle shows the stored minute, which is the owner's local time while the browser keeps the offset it was created in.
 const scheduleCycle=s=>'Daily '+scheduleClock(s.minute);
-async function schedulesLoad(){try{const {response,body}=await request('/assistant/schedules');if(response.ok&&Array.isArray(body.schedules)){scheduleList=body.schedules.filter(scheduleValid);scheduleLoaded=true;}}catch{}renderSchedules();}
+/** Only the latest read lands, so a read sent before a database replacement or a later read never overwrites a newer one. */
+async function schedulesLoad(){const seq=++scheduleLoadSeq;let list=null;try{const {response,body}=await request('/assistant/schedules');if(response.ok&&Array.isArray(body.schedules))list=body.schedules.filter(scheduleValid);}catch{}
+ if(seq!==scheduleLoadSeq)return;if(list){scheduleList=list;scheduleLoaded=true;}renderSchedules();
+ // A running run whose host dies emits nothing, so the page reads again just after its deadline to show result unknown; a failed read retries every 10 s.
+ clearTimeout(scheduleTimer);const due=Math.min(...scheduleList.flatMap(s=>s.runs.filter(r=>r&&r.state==='running'&&Number.isSafeInteger(r.deadlineAt)).map(r=>r.deadlineAt)));
+ scheduleTimer=due<Infinity?setTimeout(()=>{if(!$('page-schedules').hidden)void schedulesLoad();},Math.max(list?1000:10000,due-Date.now()+1000)):0;}
+/** A replaced database drops the old schedules and any read in flight, and reads again while the page shows. */
+function schedulesReset(){scheduleLoadSeq++;clearTimeout(scheduleTimer);scheduleTimer=0;scheduleList=[];scheduleLoaded=false;renderSchedules();if(!$('page-schedules').hidden)void schedulesLoad();}
 /** Sends one owner action once; a lost answer is not resent, the next read shows the state. The conversation is read too, so a briefing or an exception card appears there. */
 async function scheduleAct(body){if(scheduleBusy)return;scheduleBusy=true;renderSchedules();
  try{await request('/assistant/schedules',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}
