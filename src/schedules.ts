@@ -9,7 +9,7 @@ import {representativeName} from './surface-shell.ts';
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const SCHEDULES_ID=ASSISTANT_CONVERSATION_PREFIX+'schedules',DAY_MS=86400000,RUN_MS=60000,MAX_RUNS=30,MAX_BUDGET=366,BRIEFING_TURNS=12;
 export const BRIEFING={title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.'};
-export interface ScheduleRun {id:string;slot:number;manual:boolean;state:'started'|'done'|'failed'|'closed';startedAt:number;deadlineAt:number;endedAt?:number;turnIds?:string[];reason?:string}
+export interface ScheduleRun {id:string;slot:number;manual:boolean;state:'started'|'done'|'failed'|'closed';startedAt:number;deadlineAt:number;endedAt?:number;turnIds?:string[];segment?:number;reason?:string}
 export interface Schedule {id:string;kind:'briefing';minute:number;offset:number;active:boolean;nextAt:number;budget:{runs:number};used:number;runs:ScheduleRun[]}
 export interface SchedulesState {kind:'schedules';id:string;schedules:Schedule[]}
 export type SchedulesCommand =
@@ -18,7 +18,8 @@ export type SchedulesCommand =
  | {type:'start-run';scheduleId:string;runId:string;slot:number;manual:false}
  /** Run now: its slot is the time the reducer observes; `retryOf` closes the failed run it retries in the same step. */
  | {type:'start-run';scheduleId:string;runId:string;manual:true;retryOf?:string}
- | {type:'finish-run';scheduleId:string;runId:string;turnIds:string[]}
+ /** `segment` is the conversation segment the turns were read from (0 when none), so a briefing keeps its Work after the segment rolls over. */
+ | {type:'finish-run';scheduleId:string;runId:string;turnIds:string[];segment:number}
  | {type:'fail-run';scheduleId:string;runId:string;reason:string}
  | {type:'skip-run';scheduleId:string;runId:string;slot:number}
  | {type:'close-run';scheduleId:string;runId:string};
@@ -65,8 +66,8 @@ export function applySchedules(current:SchedulesState|null,command:SchedulesComm
    s.used++;s.runs.push({id:command.runId,slot:command.manual?at:command.slot,manual:command.manual,state:'started',startedAt:at,deadlineAt:at+RUN_MS});if(!command.manual)s.nextAt=nextSlot(s.minute,s.offset,at);keep(s);break;
   }
   case 'finish-run': {
-   ensure(exact(command,['type','scheduleId','runId','turnIds'])&&Array.isArray(command.turnIds)&&command.turnIds.length<=BRIEFING_TURNS&&command.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Exact finish fields required');
-   const r=run(schedule());ensure(r.state==='started'&&at<r.deadlineAt,'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds]});break;
+   ensure(exact(command,['type','scheduleId','runId','turnIds','segment'])&&int(command.segment,0,Number.MAX_SAFE_INTEGER)&&Array.isArray(command.turnIds)&&command.turnIds.length<=BRIEFING_TURNS&&command.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Exact finish fields required');
+   const r=run(schedule());ensure(r.state==='started'&&at<r.deadlineAt,'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds],segment:command.segment});break;
   }
   case 'fail-run': {ensure(exact(command,['type','scheduleId','runId','reason'])&&typeof command.reason==='string'&&command.reason.length>0&&command.reason.length<=64,'Exact fail fields required');const r=run(schedule());ensure(r.state==='started','Only a started run fails','conflict');Object.assign(r,{state:'failed',endedAt:at,reason:command.reason});break;}
   case 'skip-run': {
@@ -91,28 +92,32 @@ export function replaySchedules(operation:Operation<SchedulesState>,prior:Operat
  ensure(hash(next.value)===hash(operation.value)&&hash(next.events)===hash(operation.events)&&operation.outbox.length===0,'schedules command/state transition');
 }
 
-type Turns={turns:{id:string;at?:number;work?:unknown}[]};
+type Turn={id:string;at?:number;work?:unknown};type Turns={segment?:{number:number}|null;turns:Turn[]};
 const OWNER='local-owner',host:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']},owner:Actor={id:OWNER,roles:['owner']};
 const display=(r:ScheduleRun,at:number)=>unknownRun(r,at)?'unknown':r.state==='started'?'running':r.state;
 const fact=(r:ScheduleRun,at:number)=>r.state==='done'?r.turnIds!.length+(r.turnIds!.length===1?' Work item':' Work items'):unknownRun(r,at)?'Not resent':r.reason??'';
 export class SchedulesService {
- readonly #store:Store<any>;readonly #read:()=>Promise<Turns>;readonly #clock:()=>number;#ticking=false;
- /** `read` is the Representative's conversation read; the briefing lists its Work turns, so no model is called. */
- constructor(store:Store<any>,read:()=>Promise<Turns>,clock:()=>number=Date.now){this.#store=store;this.#read=read;this.#clock=clock;}
+ readonly #store:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;#ticking=false;#unsettled=false;
+ /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. */
+ constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now){this.#store=store;this.#read=read;this.#clock=clock;}
+ /** True once any schedule write met an unknown commit outcome, so the host drain reports `unsettled`. */
+ get unsettled(){return this.#unsettled;}
  async #state(){return await this.#store.load(SCHEDULES_ID) as Snapshot<SchedulesState>|null;}
  async read(){
   const s=await this.#state(),now=this.#clock();
   return {revision:s?.revision??0,schedules:(s?.value.schedules??[]).map(x=>({id:x.id,...BRIEFING,assignee:representativeName,destination:'Conversation with '+representativeName,active:x.active,nextAt:x.nextAt,minute:x.minute,offset:x.offset,budget:{runs:x.budget.runs,used:x.used},
    runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]]}))}))};
  }
- /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed. */
- async conversation(){
-  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[];
+ /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed, and `runDeadlineAt` while a run is still in time, so the page reads again when it turns unknown. A briefing read from a segment other than `current` carries its turns, read from that segment, so rollover never empties it. */
+ async conversation(current?:number){
+  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[],segments=new Map<number,Promise<Turn[]>>();let deadline=Infinity;
+  const turnsOf=(n:number)=>{if(!segments.has(n))segments.set(n,this.#read(n).then(v=>v.turns,()=>[]));return segments.get(n)!;};
   for(const x of s?.value.schedules??[])for(const r of x.runs){
-   if(r.state==='done')briefings.push({id:r.id,at:r.endedAt!,title:BRIEFING.title,turnIds:[...r.turnIds!]});
+   if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&r.segment!==current&&ids.length?(await turnsOf(r.segment)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:BRIEFING.title,turnIds:[...ids],...other?{turns:other}:{}});}
+   else if(r.state==='started'&&!unknownRun(r,now))deadline=Math.min(deadline,r.deadlineAt);
    else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:BRIEFING.title,state:unknown?'unknown':'failed',fact:fact(r,now),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id});}
   }
-  return {briefings,exceptions};
+  return {briefings,exceptions,...deadline<Infinity?{runDeadlineAt:deadline}:{}};
  }
  /** The owner's actions. Run now writes the host's start for the owner, with a run ID from the owner's command ID and no caller time in the command, so a lost Run now replays and runs once; Retry is Run now that closes the failed run in the same step. */
  async act(input:unknown):Promise<CommitResult<SchedulesState>>{
@@ -136,17 +141,21 @@ export class SchedulesService {
  }
  /** Reads the conversation once and finishes the run; a failed read fails it. An unknown commit is left as it is: the run reads as unknown after its deadline and is never run again. */
  async #run(scheduleId:string,runId:string){
-  let turnIds:string[];
-  try{const view=await this.#read(),since=this.#clock()-DAY_MS;turnIds=view.turns.filter(t=>t.work&&Number.isSafeInteger(t.at)&&t.at!>=since).slice(-BRIEFING_TURNS).map(t=>t.id);}
+  let turnIds:string[],segment=0;
+  try{const view=await this.#read(),since=this.#clock()-DAY_MS;segment=view.segment?.number??0;turnIds=view.turns.filter(t=>t.work&&Number.isSafeInteger(t.at)&&t.at!>=since).slice(-BRIEFING_TURNS).map(t=>t.id);}
   catch{await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason:'Briefing unavailable'}).catch(()=>{});return;}
-  await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds}).catch(()=>{});
+  await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment}).catch(()=>{});
  }
- /** Lookup before and after the load, CAS on the revision read; a lost command replays by its ID. */
+ /** Every write goes here, so an unknown commit outcome is recorded once for the host drain, whether a request or the scheduler made it. */
  async #dispatch(commandId:string,actor:Actor,command:SchedulesCommand):Promise<CommitResult<SchedulesState>>{
+  try{return await this.#attempt(commandId,actor,command);}catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.#unsettled=true;throw error;}
+ }
+ /** Load, then look the receipt up, then reduce: an identical command committed concurrently replays instead of failing the reducer on its own applied state. CAS on the revision read. */
+ async #attempt(commandId:string,actor:Actor,command:SchedulesCommand):Promise<CommitResult<SchedulesState>>{
   const identity={id:SCHEDULES_ID,commandId,fingerprint:fingerprint(actor.id,command)};
   for(let attempt=0;attempt<3;attempt++){
-   const prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const snapshot=await this.#state(),{value,events}=applySchedules(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
+   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const {value,events}=applySchedules(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:SCHEDULES_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }

@@ -45,13 +45,13 @@ test('members appear under the Representative; selecting one opens its own conve
  assert.equal(app.node('side-members').hidden,false);const row=byId(app,'side-member-member-a')!;assert.ok(row);assert.equal(row.textContent,'셈셈');
  assert.match(app.node('chat-log').textContent,/Added: 셈/);
  await row.fire('click');await settle();
- assert.equal(app.node('page-heading').textContent,'셈셈','avatar letter, then the name');assert.equal(app.node('page-heading').children[0]!.style.background,'var(--agent-4)');assert.equal(row.attributes.get('aria-current'),'page');assert.equal(app.node('side-representative').attributes.get('aria-current'),'false');
+ assert.equal(app.node('page-heading').textContent,'셈셈','avatar letter, then the name');assert.deepEqual([row.children[0]!.attributes.get('data-shape'),app.node('page-heading').children[0]!.attributes.get('data-shape')],['drop','drop'],'the chosen shape stays in the sidebar and header');assert.match(workbenchPage,/\.avatar\[data-shape=drop\]\{border-radius:0;-webkit-mask:url\("data:image\/svg\+xml,/);assert.equal(app.node('page-heading').children[0]!.style.background,'var(--agent-4)');assert.equal(row.attributes.get('aria-current'),'page');assert.equal(app.node('side-representative').attributes.get('aria-current'),'false');
  assert.equal(app.node('chat-input').attributes.get('placeholder')??(app.node('chat-input') as any).placeholder,'Message 셈');
  assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
  assert.match(app.node('chat-log').textContent,/Use won from now on\./);assert.doesNotMatch(app.node('chat-log').textContent,/Added: 셈/,'decisions stay in the Representative conversation');
  app.node('chat-input').value='Weekday totals too';await app.node('chat-form').fire('submit');await settle();
  const sent=state.posted.find(p=>p.path==='/assistant/messages')!;assert.equal(sent.body.member,'member-a');
- await app.node('side-representative').fire('click');await settle();assert.equal(app.node('page-heading').textContent,'하하나');assert.match(app.node('chat-log').textContent,/Added: 셈/);
+ await app.node('side-representative').fire('click');await settle();assert.equal(app.node('page-heading').textContent,'하하나');assert.equal(app.node('page-heading').children[0]!.attributes.has('data-shape'),false);assert.match(app.node('chat-log').textContent,/Added: 셈/);
 });
 
 test('member avatars use the host colour; no titles or explanation sentences in the dialog; yellow stays in decision rules',()=>{
@@ -86,4 +86,22 @@ test('a send right after switching waits for the new thread\'s read and targets 
  await byId(app,'side-member-member-a')!.fire('click');
  app.node('chat-input').value='Weekday totals too';await app.node('chat-form').fire('submit');await settle();
  const sent=state.posted.find(p=>p.path==='/assistant/messages')!;assert.deepEqual([sent.body.member,sent.body.segment,sent.body.expectedRevision],['member-a',1,1]);
+});
+
+test('a replaced database without the open member falls back to the Representative conversation and its draft',async()=>{
+ let feedId='feed:a';const reads:string[]=[];
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/assistant/conversation')){reads.push(path);const member=new URLSearchParams(path.split('?')[1]??'').get('member');
+   if(feedId==='feed:b')return member?reply({error:'Unknown member'},404):reply({feedId,cursor:0,head:0,members:[],decisions:[],segment:null,turns:[]});
+   return reply({feedId,cursor:1,head:1,members:[sem],...(member?{member:{id:member,name:'셈'}}:{decisions:[]}),segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});}
+  if(path.startsWith('/events'))return options?.headers?.['X-Massion-Feed']&&options.headers['X-Massion-Feed']!==feedId?reply({error:'Database changed'},409):reply({feedId,cursor:1,events:[]});
+  if(path.startsWith('/read-state'))return reply({feedId,cursor:0,snapshot:null});
+  return reply({error:'Not configured'},503);
+ },{'massion.workbench.feed':'feed:a','massion.workbench.chat-draft':JSON.stringify({text:'Representative draft',commandId:'',target:null})});
+ await settle();await byId(app,'side-member-member-a')!.fire('click');await settle();
+ app.node('chat-input').value='Member draft';await app.node('chat-input').fire('input');
+ feedId='feed:b';reads.length=0;await app.tick();await settle();
+ assert.ok(reads.length&&reads.every(p=>!p.includes('member=')),'reads go to the Representative conversation');
+ assert.equal(app.node('chat-input').value,'Representative draft');assert.equal(app.node('page-heading').textContent,'하하나');
+ assert.equal(app.node('side-representative').attributes.get('aria-current'),'page');assert.equal(app.node('side-members').hidden,true);
 });

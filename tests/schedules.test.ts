@@ -5,7 +5,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
-import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
+import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import type {Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {AssistantService} from '../src/assistant-service.ts';
@@ -62,7 +62,7 @@ test('schedules reducer: the owner creates one briefing with a cumulative budget
  s=apply(s,start('run-1',T0),host,T0+5);assert.deepEqual([s.schedules[0]!.nextAt,s.schedules[0]!.used,s.schedules[0]!.runs[0]!.state],[T0+DAY,1,'started']);
  assert.throws(()=>apply(s,start('run-2',T0+10,true),host,T0+10),/started/,'one run at a time');
  assert.throws(()=>apply(s,{type:'close-run',scheduleId:'schedule-a',runId:'run-1'}),/close/,'a run still in time is not closed');
- s=apply(s,{type:'finish-run',scheduleId:'schedule-a',runId:'run-1',turnIds:['assistant-turn:m:1']},host,T0+6);assert.deepEqual([s.schedules[0]!.runs[0]!.state,s.schedules[0]!.runs[0]!.endedAt],['done',T0+6]);
+ s=apply(s,{type:'finish-run',scheduleId:'schedule-a',runId:'run-1',turnIds:['assistant-turn:m:1'],segment:1},host,T0+6);assert.deepEqual([s.schedules[0]!.runs[0]!.state,s.schedules[0]!.runs[0]!.endedAt],['done',T0+6]);
  s=apply(s,start('run-2',T0+100,true),host,T0+100);assert.equal(s.schedules[0]!.nextAt,T0+DAY,'Run now keeps the next slot');
  s=apply(s,{type:'fail-run',scheduleId:'schedule-a',runId:'run-2',reason:'Briefing unavailable'},host,T0+101);
  assert.throws(()=>apply(s,start('run-3',T0+DAY),host,T0+DAY),/budget/i,'the cumulative budget is spent');
@@ -81,7 +81,7 @@ test('scheduler: a due tick leaves one briefing of the last day\'s Work turns, n
  const calls=f.calls();f.setNow(view.nextAt+1000);const ran=await f.schedules.tick();assert.equal(ran.length,1);assert.equal(f.calls(),calls,'the briefing is written by the host, no model call');
  assert.equal((await f.schedules.tick()).length,0,'one run per slot');
  view=(await f.schedules.read()).schedules[0]!;assert.deepEqual([view.runs.length,view.runs[0]!.state,view.budget],[1,'done',{runs:30,used:1}]);assert.ok(view.nextAt>f.now());
- const conv=await f.schedules.conversation(),turns=(await f.assistant.read()).turns,receipt=turns.find(x=>x.work?.title==='Receipt sort')!;
+ const head=await f.assistant.read(),conv=await f.schedules.conversation(head.segment!.number),turns=head.turns,receipt=turns.find(x=>x.work?.title==='Receipt sort')!;
  assert.deepEqual(conv.briefings,[{id:view.runs[0]!.id,at:f.now(),title:'Morning briefing',turnIds:[receipt.id]}],'only Work turns from the 24 hours before the run');assert.deepEqual(conv.exceptions,[]);
  assert.equal(view.runs[0]!.fact,'1 Work item');
  validateMissionJournalLineage(f.store.inspect() as any);
@@ -93,9 +93,9 @@ test('scheduler: a started run that never finished reads as result unknown, is n
  // A host that dies between the start and the finish: the start is committed, the finish never is.
  const started=applySchedules(s.value,{type:'start-run',scheduleId:s.value.schedules[0].id,runId:'run-lost',slot,manual:false},host,{observedAt:slot+1});
  await f.store.commit({id:SCHEDULES_ID,expectedRevision:s.revision,commandId:'assistant-schedule-run:run-lost',fingerprint:'x',value:started.value,events:started.events,outbox:[]});
- f.setNow(slot+30000);assert.deepEqual((await f.schedules.conversation()).exceptions,[],'still in time');assert.equal((await f.schedules.tick()).length,0);
+ f.setNow(slot+30000);assert.deepEqual(await f.schedules.conversation(),{briefings:[],exceptions:[],runDeadlineAt:slot+1+60000},'still in time: the page is told when to read again');assert.equal((await f.schedules.tick()).length,0);
  f.setNow(slot+61000);const conv=await f.schedules.conversation();
- assert.deepEqual(conv.exceptions.map(e=>[e.title,e.state,e.fact,e.actions]),[['Morning briefing','unknown','Not resent',['check','close']]]);
+ assert.deepEqual(conv.exceptions.map(e=>[e.title,e.state,e.fact,e.actions]),[['Morning briefing','unknown','Not resent',['check','close']]]);assert.equal((conv as any).runDeadlineAt,undefined);
  assert.equal((await f.schedules.tick()).length,0,'the unknown slot is not run again');
  await assert.rejects(f.schedules.act({commandId:'c-2',action:'retry',scheduleId:s.value.schedules[0].id}),/action/i);
  f.setNow(slot+DAY+1000);assert.equal((await f.schedules.tick()).length,1,'the next slot runs');
@@ -167,4 +167,44 @@ test('HTTP: schedules and results routes take exact fields; the conversation rea
  const read=await fetch(url(`/missions/${row.missionId}/record-artifact?work=${encodeURIComponent(row.workId)}&record=${encodeURIComponent(row.recordId)}&version=${row.version}&sha256=${row.sha256}`)).then(r=>r.json()) as any;
  assert.match(read.content,/Answer bounded fixture text/,'the preview reads the exact accepted text');
  assert.equal((await fetch(url('/assistant/results?x=1'))).status,400);
+});
+
+test('a briefing keeps its Work after the conversation rolls over: one read from an earlier segment carries that segment\'s turns',async t=>{
+ const store=new InMemoryStore<any>(),work={id:'assistant-turn:m:1',at:T0,work:{title:'Receipt sort'}},reads:(number|undefined)[]=[];let head=1;
+ const s=new SchedulesService(store,async n=>{reads.push(n);const number=n??head;return number===1?{segment:{number:1},turns:[work,{id:'assistant-turn:m:2',at:T0}]}:{segment:{number},turns:[]};},()=>T0+1000);
+ await s.act({commandId:'c-1',action:'create',minute:480,offset:540,budget:{runs:30}});const id=(await s.read()).schedules[0]!.id;await s.act({commandId:'c-2',action:'run',scheduleId:id});
+ let [b]=(await s.conversation(1)).briefings;assert.deepEqual(b,{id:b!.id,at:T0+1000,title:'Morning briefing',turnIds:[work.id]},'the head segment shows it from its own turns');
+ head=2;reads.length=0;[b]=(await s.conversation(2)).briefings;assert.deepEqual([b!.turnIds,(b as any).turns],[[work.id],[work]],'after rollover the briefing still names its Work');assert.deepEqual(reads,[1]);
+});
+
+test('an identical schedule command committed between the receipt lookup and the state load replays, never 409s on its own applied state',async t=>{
+ const inner=new InMemoryStore<any>(),direct=new SchedulesService(inner,async()=>({turns:[]}),()=>T0);let race:(()=>Promise<unknown>)|undefined;
+ const store=new Proxy(inner,{get(target,key){if(key==='load')return async(id:string)=>{const run=race;race=undefined;if(run)await run();return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const s=new SchedulesService(store as Store<any>,async()=>({turns:[]}),()=>T0);
+ await s.act({commandId:'c-1',action:'create',minute:480,offset:540,budget:{runs:30}});const id=(await s.read()).schedules[0]!.id,pause={commandId:'c-2',action:'pause',scheduleId:id};
+ race=()=>direct.act(pause);assert.equal((await s.act(pause)).status,'replayed');
+ assert.equal((await s.read()).schedules[0]!.active,false);
+});
+
+test('drain: a scheduler write with an unknown commit outcome makes the host drain unsettled',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-schedules-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const inner=new InMemoryStore<any>(),now=Date.now(),created=applySchedules(null,create({budget:{runs:30},offset:0,minute:new Date(now-60000).getUTCHours()*60+new Date(now-60000).getUTCMinutes()}),owner,{observedAt:now-DAY});
+ await inner.commit({id:SCHEDULES_ID,expectedRevision:0,commandId:'c-1',fingerprint:'x',value:created.value,events:created.events,outbox:[]});
+ let tried!:()=>void;const attempted=new Promise<void>(r=>tried=r);
+ const store=new Proxy(inner,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.id===SCHEDULES_ID&&input.commandId.startsWith('assistant-schedule-run:')){await target.commit(input);tried();throw new CommitOutcomeUnknownError(input,new Error('ack lost'));}return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:2000,scheduleIntervalMs:5});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));
+ await attempted;assert.deepEqual(await server.drain(),{status:'unsettled',timedOut:false});
+});
+
+test('drain: a Run now whose finish commit turns unknown during drain makes the host drain unsettled',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-schedules-manual-unknown-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const inner=new InMemoryStore<any>(),created=applySchedules(null,create({budget:{runs:30},offset:540,minute:480}),owner,{observedAt:Date.now()});
+ await inner.commit({id:SCHEDULES_ID,expectedRevision:0,commandId:'c-1',fingerprint:'x',value:created.value,events:created.events,outbox:[]});
+ let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),inside=new Promise<void>(r=>entered=r);
+ const store=new Proxy(inner,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.id===SCHEDULES_ID&&input.commandId.startsWith('assistant-schedule-finish:')){entered();await gate;await target.commit(input);throw new CommitOutcomeUnknownError(input,new Error('ack lost'));}return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:2000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));
+ const port=(server.address() as {port:number}).port,id=(created.value as SchedulesState).schedules[0]!.id;
+ const run=fetch(`http://127.0.0.1:${port}/assistant/schedules`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-2',action:'run',scheduleId:id})});
+ await inside;const drained=server.drain();release();assert.equal((await run).status,200);
+ assert.deepEqual(await drained,{status:'unsettled',timedOut:false});
 });
