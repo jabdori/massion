@@ -10,7 +10,8 @@ export const appsPage=String.raw`<div id="page-app" class="page-body" hidden><di
 export const appsSide=String.raw`<nav id="side-app" aria-label="App" hidden></nav>`;
 export const appsPane=String.raw`<div id="pane-app" class="pane-app app-view" role="tabpanel" aria-label="App" hidden></div>`;
 export const appsClient=String.raw`
-let appsList=[],appShown='',appItem='',appPage=null,appSeq=0,settingsApps=null,settingsApp='';
+// Each async read has its own generation: a response is drawn only if no newer request of its kind started since (A, B, A again drops the first A).
+let appsList=[],appShown='',appItem='',appPage=null,appSeq=0,appItemSeq=0,appTabSeq=0,settingsApps=null,settingsApp='';
 const appsMark=name=>{const mark=element('span',[...name][0],'avatar app-mark');mark.setAttribute('aria-hidden','true');return mark;};
 /** Enabled apps from the conversation read (rail and room tabs); malformed entries are skipped. */
 function appsRail(view){
@@ -45,13 +46,13 @@ function renderAppSide(){
  else if(!appPage)parts.push(element('p','Not available','app-group'));
  const foot=element('div',undefined,'app-foot');foot.append(chatButton('App settings',()=>{shellShow('settings');settingsOpen('apps',appShown);},''));parts.push(foot);side.replaceChildren(...parts);
 }
-async function appSelect(ref){const id=appShown,seq=appSeq;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref,appPage&&appPage.feedId);if(seq===appSeq&&appItem===ref)$('app-view').replaceChildren(...appsViewNodes(v));}
+async function appSelect(ref){const id=appShown,seq=appSeq,gen=++appItemSeq;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref,appPage&&appPage.feedId);if(seq===appSeq&&gen===appItemSeq)$('app-view').replaceChildren(...appsViewNodes(v));}
 /** B22-room: a Work whose title names the prefix and a number gets that app's tab, drawn by its item view. */
 function appsRoomTabs(title){
  for(const a of appsList){if(!a.roomTab)continue;const at=String(title).indexOf(a.roomTab);if(at<0)continue;const ref=/^\d{1,9}/.exec(String(title).slice(at+a.roomTab.length));if(!ref)continue;
   const key='app:'+a.id+':'+ref[0];if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,title:a.roomTab+ref[0],appTab:{id:a.id,ref:ref[0]}});}
 }
-async function appsTabLoad(tab){$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref,chatView&&chatView.feedId);if(paneActive===tab.key)$('pane-app').replaceChildren(...appsViewNodes(v));}
+async function appsTabLoad(tab){const gen=++appTabSeq;$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref,chatView&&chatView.feedId);if(gen===appTabSeq&&paneActive===tab.key)$('pane-app').replaceChildren(...appsViewNodes(v));}
 /** One owner command from the conversation; the next read shows the state. */
 async function appsPost(body){try{await request('/assistant/apps',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}finally{await readChat();}}
 const appsJoin=v=>Array.isArray(v)&&v.length?v.join(' · '):'None';

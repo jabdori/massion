@@ -107,3 +107,33 @@ test('app views carry the database feed: the page asks with the conversation fee
  await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();
  assert.deepEqual(asked,[['page','feed:a'],['item','feed:page'],['item','feed:page']]);
 });
+
+test('every app read draws only its newest request: an item selected A, B, A again and a room tab left and reopened',async()=>{
+ const pending:{b:any;done:()=>void}[]=[];
+ const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?page:new Promise(done=>{const n=pending.length+1;pending.push({b,done:()=>done({title:'item '+b.ref+' #'+n,groups:[]})});}));await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ const row=(id:string)=>app.all().find(n=>n.id==='app-row-'+id)!;
+ await row('83').fire('click');await row('84').fire('click');await settle();
+ // The first row opens with the page (#1); then 83 (#2), 84 (#3), 84 again (#4). The newest answers first; the older ones arrive late.
+ await row('84').fire('click');await settle();pending[3]!.done();await settle();pending[1]!.done();pending[2]!.done();pending[0]!.done();await settle();
+ assert.equal(app.node('app-view').textContent,'item 84 #4');
+ pending.length=0;
+ (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
+ const tabs=app.node('pane-tabs').children;await tabs[1]!.children[0]!.fire('click');await settle();await tabs[0]!.children[0]!.fire('click');await settle();await tabs[1]!.children[0]!.fire('click');await settle();
+ pending[1]!.done();await settle();pending[0]!.done();await settle();
+ assert.equal(app.node('pane-app').textContent,'item 84 #2');
+});
+
+test('a late Settings > Apps read never replaces a newer one',async()=>{
+ const pending:(()=>void)[]=[];let reads=0;
+ const app=harness(async(path,options)=>{
+  if(path==='/assistant/apps'&&!options?.method){const n=++reads;return new Promise(done=>pending.push(()=>done(reply({feedId:'feed:a',revision:n,apps:[{...github,version:n===1?'old':'1.4.0'}],catalog:[]}))));}
+  if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members:[],decisions:[],apps:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ });await settle();
+ await open(app);await app.node('settings-nav-apps').fire('click');await settle();
+ pending[1]!();await settle();pending[0]!();await settle();
+ assert.match(app.node('settings-apps-body').textContent,/1\.4\.0/);assert.doesNotMatch(app.node('settings-apps-body').textContent,/old/);
+});
