@@ -44,6 +44,7 @@ ${shellSidebar}
 ${shellBand}
 <div id="sync-notice" class="notice" role="status" hidden></div>
 <div id="operation-notice" class="notice" role="alert" hidden></div>
+<div id="page-status" class="notice" role="alert" hidden></div>
 <div id="page-chat" class="page-body">
 ${chatPanel}
 </div>
@@ -264,7 +265,11 @@ function restoreControlFocus(previous, targetId) {
   const active = document.activeElement;
   if (!active || active.tagName === 'BODY' || active === previous || (active.id && active.id === previous?.id)) document.getElementById(targetId)?.focus();
 }
-function report(message, tone = '') { $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : ''); }
+function report(message, tone = '') {
+  $('status').textContent = message; $('status').className = 'status' + (tone ? ' ' + tone : '');
+  // The status lives in the work pane; while the pane is closed, problems also show on the page that sent the command.
+  $('page-status').textContent = message; $('page-status').hidden = !$('work-pane').hidden || tone !== 'error' && tone !== 'warning';
+}
 function controls() {
   const locked = reconnectRequired || busy || loading || !!unknownOperation || !!recoveryProblem;
   $('sync-notice').hidden = !reconnectRequired;

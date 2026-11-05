@@ -153,3 +153,30 @@ test('unread memory survives viewing another segment and widening reports the hi
  await app.node('pane-widen').fire('click');assert.equal(app.node('sidebar').hidden,true);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'false');
  await app.node('pane-widen').fire('click');assert.equal(app.node('sidebar').hidden,false);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'true');
 });
+
+test('closing the selected tab while a read or write is in flight keeps it, and closing another tab still works',async()=>{
+ const {app}=fixture([...two,{workId:'work:c',title:'Third',execution:'active',acceptance:'pending',started:true}]);await settle();
+ for(const line of kids(app.node('side-work'))){await open(line).fire('click');await settle();}
+ const tabs=()=>kids(app.node('pane-tabs')),close=(tab:Node)=>tab.children[1]!;assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);
+ runInContext('loading=true',app.context);
+ await close(tabs()[2]!).fire('click');assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);assert.deepEqual(shown(app),['work-card-work:c']);
+ await close(tabs()[0]!).fire('click');assert.equal(tabs().length,2);assert.deepEqual(selectedTab(app),['Third']);
+ runInContext('loading=false',app.context);await close(tabs()[1]!).fire('click');await settle();assert.deepEqual(selectedTab(app),['Second']);assert.deepEqual(shown(app),['work-card-work:b']);
+});
+
+test('a failed load from Settings shows its error on the page while the pane is closed',async()=>{
+ const {app}=fixture([],path=>path==='/missions/missing'?{error:'Mission not found'}:undefined);await settle();
+ await app.node('rail-me').fire('click');await app.node('me-settings').fire('click');
+ app.node('mission-id').value='missing';await app.submit('load-form');await settle();
+ assert.equal(app.node('work-pane').hidden,true);assert.equal(app.node('page-status').hidden,false);assert.match(app.node('page-status').textContent,/Refresh failed/);
+ app.node('mission-id').value='intake';await app.submit('load-form');await settle();
+ assert.equal(app.node('work-pane').hidden,false);assert.equal(app.node('page-status').hidden,true);
+});
+
+test('moving to another page sets the narrow-screen pane aside until a Work is opened again',async()=>{
+ assert.match(workbenchPage,/@media \(max-width:900px\)\{[^}]*\}[^@]*\.pane\.away\{display:none\}/);
+ const {app}=fixture(two);await settle();
+ await open(kids(app.node('side-work'))[0]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);
+ await app.node('rail-results').fire('click');assert.match(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('work-pane').hidden,false,'the tabs stay open');
+ await open(kids(app.node('side-work'))[1]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
+});
