@@ -139,5 +139,5 @@ test('HTTP: decisions, proposals and member threads take exact fields; the conve
  assert.equal((await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:'nobody'})).status,404);
  const sent=await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:memberId});assert.equal(sent.status,200);
  const thread=await fetch(url('/assistant/conversation?member='+memberId)).then(r=>r.json()) as any;
- assert.deepEqual(thread.member,{id:memberId,name:'셈'});assert.equal(thread.segment.messages[0].text,'Hi');assert.equal(thread.decisions,undefined,'decisions live in the Representative conversation');
+ assert.deepEqual(thread.member,{id:memberId,name:'셈'});assert.equal(thread.segment.messages[0].text,'Hi');assert.deepEqual(thread.decisions,[],'admission decisions live in the Representative conversation; a member thread carries only its skill decisions');
 });

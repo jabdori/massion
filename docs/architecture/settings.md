@@ -11,17 +11,18 @@ Settings was one long page of the earlier forms. Nothing showed what the Represe
 
 ## Surface
 
-- **Me > Settings** (or ⌘,) replaces the conversation and opens at General. The sidebar shows `Settings` and the sections `General`, `Memory`, `Members`, `Devices`, `Connections`, `Apps`, `Permissions`, `Advanced`; the current one carries `aria-current`.
+- **Me > Settings** (or ⌘,) replaces the conversation and opens at General. The sidebar shows `Settings` and the sections `General`, `Memory`, `Members`, `Devices`, `Connections`, `Apps`, `Improvements`, `Permissions`, `Advanced`; the current one carries `aria-current`.
 - Each section is a heading, group labels and rounded cards of rows: a title, a muted line and at most one control (B12, B13, B14). Settings apply at once; `Cancel` and `Add` appear only when making a new rule.
 - **General**: the Representative's name and the morning briefing (its cycle or `Off`, and `Open` to Schedules).
 - **Memory** (B12) reads the intake Mission (`GET /connections` names it, `GET /missions/:id` reads it):
   - `You said`: the latest explicit version of each memory, `content · version N · In use`, with a switch. Turning it off retires that version through `POST /missions/:id/memory-retirement` with the reason `Stopped in Settings`; a version no longer in effect reads `Not in use` with its switch disabled.
   - `Learned`: learned candidates with Growth evidence, `content · version N · Pending` or `In use`, and `Evidence` folding the recorded scores, held-out note and caution (the proposal's counterevidence). Nothing is adopted here.
   - `Change history`: adopted and reverted Growth, newest first. An adopted one that is still effective has `Revert`, which sends the existing owner `revert` through `POST /missions/:id/growth` with the exact baseline and candidate.
-- **Members** (B13): the Representative (★) and each admitted member with its model group name. A row opens that conversation. Archive and the member page (B19) are later.
+- **Members** (B13): the Representative (★) and each admitted member with its model group name. The Representative's row opens its conversation; a member's row opens the member page (B19-juno, [self-made skills](self-made-skills.md)) with `Message`. Archive is later.
 - **Devices** (B13-devices): `This Mac` and the host state (`Ready` or `Offline`).
 - **Connections** (B14): `Model groups` from `GET /connections`: each group's name, who uses it (the Representative uses Default; members their own), its description (the Default group's host string is not drawn), its models as `model Family` chips (the model family from the host map, `Unknown` when unmapped, so a model reached through OpenRouter counts with its family) and `N providers` counting distinct families. Then `Subscription logins` (CLI connections) and `API keys` (the others) as rows with their state. The earlier connection forms follow under `Connection setup`.
 - **Apps** (B23): `No apps installed`. The app runtime is a later step.
+- **Improvements** (B14): one card with skill and procedure candidates waiting for the owner, the ones that could not be checked, then past adoptions with their revert ([self-made skills](self-made-skills.md)).
 - **Permissions** (B14): two columns.
   - `Always ask`: the five fixed kinds, `Spend money`, `Send as me`, `Delete`, `Hand to a new member`, `Change check rules`.
   - `Allow without asking`: owner rules, each `what` and `kind · date` with `Remove`; `None` when empty. `Add rule` opens a field and a kind of the first four, with `Cancel` and `Add`.
@@ -66,4 +67,4 @@ interface PermissionsState {kind:'permissions'; id; rules: {id; what; kind:'spen
 - Connections: editing groups (B20), changing the checking model through a decision card, `Recheck` and `Add key` on rows; the earlier forms still carry explanation text.
 - Apps: everything (Q11).
 - Permissions: owner rules in `Always ask`, and the policy gate that reads `Allow without asking`.
-- Improvements (Q10) and the Settings search field.
+- The Settings search field.

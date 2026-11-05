@@ -46,7 +46,7 @@ test('Settings opens at General with its own sidebar of sections, and the conver
  await app.node('me-settings').fire('click');await settle();
  assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-heading').textContent,'Settings');
  assert.equal(app.node('side-settings').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.equal(app.node('activity-toggle').hidden,true);
- assert.deepEqual(['general','memory','members','devices','connections','apps','permissions','advanced'].map(s=>new RegExp('id="settings-nav-'+s+'"[^>]*>(?:<svg[\\s\\S]*?</svg>)?<span>([^<]*)</span>').exec(workbenchPage)?.[1]),['General','Memory','Members','Devices','Connections','Apps','Permissions','Advanced']);
+ assert.deepEqual(['general','memory','members','devices','connections','apps','improvements','permissions','advanced'].map(s=>new RegExp('id="settings-nav-'+s+'"[^>]*>(?:<svg[\\s\\S]*?</svg>)?<span>([^<]*)</span>').exec(workbenchPage)?.[1]),['General','Memory','Members','Devices','Connections','Apps','Improvements','Permissions','Advanced']);
  assert.equal(app.node('settings-nav-general').attributes.get('aria-current'),'page');assert.equal(app.node('settings-general').hidden,false);assert.equal(app.node('settings-advanced').hidden,true);
  assert.match(app.node('settings-general-body').textContent,/Name.*하나.*Morning briefing.*Daily 08:00/);
  await app.node('settings-nav-advanced').fire('click');assert.equal(app.node('settings-advanced').hidden,false,'the earlier forms keep a home');assert.equal(app.node('settings-general').hidden,true);
@@ -68,10 +68,10 @@ test('Memory shows what you said, what was learned with its evidence, and the ch
  assert.ok(!state.posted.some(p=>/adopt/.test(JSON.stringify(p.body))),'Settings adopts nothing');
 });
 
-test('Members lists the Representative and each member with its model group; a row opens that conversation',async()=>{
+test('Members lists the Representative and each member with its model group; a row opens the member page and Message opens that conversation',async()=>{
  const {app}=fixture();await settle();await open(app,'members');
  const body=app.node('settings-members-body');assert.match(body.textContent,/하나.*★.*Default.*셈.*Research/);
- await byId(app,'settings-member-member-a')!.fire('click');await settle();
+ await byId(app,'settings-member-member-a')!.fire('click');await settle();await button(app.node('settings-members-body'),'Message')!.fire('click');await settle();
  assert.equal(app.node('page-chat').hidden,false);assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
  await open(app,'devices');assert.match(app.node('settings-devices-body').textContent,/This Mac.*Ready/);
  await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,/No apps installed/);
