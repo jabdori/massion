@@ -24,7 +24,7 @@ The workbench was one long page: an intro, a column of Mission forms and a colum
 | Page | The conversation, or a full page: Results, Schedules, Settings | Rail and owner's menu |
 | Work pane | Tabs named after the Work, widen, close. The body is the existing Mission and Work detail, the operation status line and durable activity | Existing Mission read |
 
-- Settings holds what used to be the form column: host health, the provider notice, the connection form, Create a Mission, Continue a Mission and the development fixture. Nothing is removed; it moves out of the default view.
+- Settings holds what used to be the form column: host health, the provider notice, the connection form, Create a Mission, Continue a Mission and the development fixture. Nothing is removed; it moves out of the default view. [Settings](settings.md) now splits it into sections: the connection form under Connections > Connection setup, the rest under Advanced.
 - The sync and operation notices stay above the page. They are hidden unless the database changed or a write outcome is unknown, so normal is quiet and exceptions still speak (ADR 0002 §8).
 - The intro, the footer and the "Local development" header text are removed. They were explanation sentences.
 
@@ -48,6 +48,6 @@ Landmarks: `nav` for the rail, `aside` for the sidebar, `main` for the page and 
 ## Not in this increment
 
 - Profile popover on the header name, `@` completion and the 'Default permissions' chip (step 6 and 7).
-- Settings sections (step 9), installed app icons (apps). Results and Schedules content landed in [Results and schedules](results-and-schedules.md).
+- Installed app icons (apps). Settings sections landed in [Settings](settings.md). Results and Schedules content landed in [Results and schedules](results-and-schedules.md).
 - Work lines read from the current conversation segment only. Work from older segments or created by other members needs a host Work list query.
 - The widened pane does not yet split into the four areas.
