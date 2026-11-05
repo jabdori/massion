@@ -72,7 +72,7 @@ interface DefaultRoute {
 
 There is no `connections` field: the manifest is the only source of connections. Load validates every field exactly (unknown fields reject the whole document, so a raw-credential field can never be restored), the label/model rules of `selectModel`, `1 ≤ maxOutputTokens ≤ 4096`, and that grant and revoked identities are unique together. A failed check stops startup with "Host settings: stored document invalid" and does not overwrite the row.
 
-`DefaultRoute` stores both role pins, so the ADR 0002 different-family rule can be added later as one more check at set time and at resolution, reading `providerKind`/`model` from the two pinned profiles, without a storage migration.
+`DefaultRoute` stores both role pins, so each route view reports its family relation from the two pinned profiles without a storage migration ([family map](family-map-and-model-groups.md)).
 
 ### Selections and order
 
@@ -110,7 +110,7 @@ The constructor stays synchronous and keeps enrolling the manifest through the s
 | `discover(connectionId, expectedConfigHash)` | connection `configHash` |
 | `authorize(value)` | `version()`; also refuses an identity that is current or revoked |
 | `revoke({authorizationId, expectedConfigHash})` | `version()`. Removes the grant and any route naming it, records the identity as used. Like every change it waits until no Work is active, because adopting stored state rebuilds profiles; the next admission re-validates anyway. |
-| `setDefaultRoute({authorizationId, outputTokenCap, expectedConfigHash})` | `version()`. Takes executor and verifier from the grant's own pins and replaces any route for the same grant scope. Refused unless the route is usable now, which includes executor and verifier using different profiles and not the same provider kind and model. |
+| `setDefaultRoute({authorizationId, outputTokenCap, expectedConfigHash})` | `version()`. Takes executor and verifier from the grant's own pins and replaces any route for the same grant scope. Refused unless the route is usable now, Since ADR 0003 §7 the same profile or model may check; the route view reports `check: 'same-family'`. |
 | `removeDefaultRoute({authorizationId, expectedConfigHash})` | `version()` |
 | `resolveDefault(mission)` | pure read |
 
@@ -162,7 +162,7 @@ The server now distinguishes absent from present: `Object.hasOwn(body, 'selectio
 
 ## Recheck at admission and pins
 
-Nothing about admission changes. The resolved choice enters the same `prepare()` and is checked again at run admission. `activate-runtime` pins it. Revoking, changing a default, re-selecting a model or restarting never changes an admitted run, and an unknown outcome is never replayed. The domain does not record whether a choice came from a default; the pin is the evidence. Role independence stays the existing rule for explicit selections (distinct executor and verifier identities in separate calls). A default route is a standing choice, so it also requires different profiles and not the same provider kind and model; a stored route that breaks this is `default_route_stale`. The ADR 0002 family check is still not implemented.
+Nothing about admission changes. The resolved choice enters the same `prepare()` and is checked again at run admission. `activate-runtime` pins it. Revoking, changing a default, re-selecting a model or restarting never changes an admitted run, and an unknown outcome is never replayed. The domain does not record whether a choice came from a default; the pin is the evidence. Role independence stays the existing rule for explicit selections (distinct executor and verifier identities in separate calls). Since ADR 0003 §7 a default route may use the same profile or model for both roles; the verdict records the family relation ([family map](family-map-and-model-groups.md)).
 
 ## Restart restore
 
@@ -229,7 +229,7 @@ ADR 0001 says the loopback host is not production security. This change raises t
 - An unmanaged host stays session-only even with a store.
 - Another host's revoke is read before admission: `blocked` with `settings_changed`, the grant and route are gone, no call.
 - A default changed by another host during a sequence step: the next step is `blocked`, the first step keeps the original route, no step runs on the new one.
-- Stored routes must be one per scope and name a stored grant; a grant whose mode differs from the manifest mode rejects the document; a default with the same profile for both roles is refused.
+- Stored routes must be one per scope and name a stored grant; a grant whose mode differs from the manifest mode rejects the document; a default with the same profile for both roles is allowed and reported as `same-family`.
 - `SurrealHostSettings` over a fake transport: NONE, committed, conflict, a committed revision other than expected + 1, and the stored field mapping. With a disposable SurrealDB, two concurrent writers commit once and a late writer gets a conflict.
 - HTTP: `/run` and `/run-sequence` with `selection: null` are 400; a selection-less `/run` reports `source: 'default'`; a successful revoke is 200 and its body shows the committed revision with status `saved`.
 
@@ -239,7 +239,7 @@ Existing tests that construct `ConnectionWorkbench`/`createHostConnections` with
 
 - Workbench controls: grant status and Revoke, "Use as default", run-form prefill from the route. The HTTP API is complete; the panel still shows the session disclosure.
 - Persistence for an unmanaged host (no stable identities, and no grant can be created there in the normal CLI). A later `version: 2` can add it.
-- The ADR 0002 family map and different-family check.
+- The family map and family check: see [family map](family-map-and-model-groups.md).
 - A stable connection identity that survives manifest edits, or migration of grants between scopes.
 - Wildcard or cross-scope grants, or one default for every Mission scope.
 - Settings in portable backup; any secret storage, keychain, OAuth or account enrollment; an owner token for the loopback host.

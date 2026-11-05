@@ -121,10 +121,12 @@ test('12: the intake oracle is checked when it is set and again at admission',as
  assert.equal(result.turn.outcome!.work.status,'not_created');assert.equal(result.turn.outcome!.work.diagnostics[0]!.code,'assistant_intake_unsupported');assert.equal((await f.intake()).works.length,0);
 });
 
-test('13: a Representative route on the default verifier model never starts the Work',async t=>{
+test('13: a Representative route on the default verifier model starts the Work; the Record pins a same-family check naming the Representative (ADR 0003 §7)',async t=>{
  const f=await setup(t),m=f.host();await f.grant(m);const s=f.service(m);await f.represent(s,m,'verifier');
- f.script.push({content:turn('Sure.','Summarize')});const result=await say(s,OWNER_REQUEST,'same-1');
- assert.equal(result.turn.outcome!.work.status,'admitted');assert.equal(result.turn.outcome!.run.status,'not_started');assert.equal(result.turn.outcome!.run.diagnostics[0]!.code,'assistant_verifier_same_model');assert.equal(f.calls.executor,0);
+ f.script.push({content:turn('Sure.','Summarize')});const result=await say(s,OWNER_REQUEST,'same-1');await s.idle();
+ assert.equal(result.turn.outcome!.work.status,'admitted');assert.equal(result.turn.outcome!.run.status,'requested');assert.equal(f.calls.executor,1);assert.equal(f.calls.verifier,1);
+ const work=(await f.intake()).works.find(w=>w.id===assistantWorkId(turnOf('same-1')))!;assert.equal(work.acceptance,'accepted');
+ assert.deepEqual(work.record!.verdict.check,{relation:'same-family',producers:[{provider:'compatible',model:'executor',family:null},{provider:'compatible',model:'verifier',family:null}],checker:{provider:'compatible',model:'verifier',family:null}});
 });
 
 test('14: a concurrent intake write or a refused admission gives not_created with the reason, never a second attempt',async t=>{
@@ -176,9 +178,9 @@ test('18: a throw, a hang past the deadline and usage over the cap are unknown a
 test('19: Representative settings change the version, load from version 1 and store no secret',async t=>{
  const f=await setup(t),m=f.host();await m.restoreSettings();const before=m.list().configHash;const s=f.service(m);await f.represent(s,m);
  assert.notEqual(m.list().configHash,before);assert.equal(m.list().representative!.status,'active');assert.equal(m.list().representative!.intakeMissionId,'intake');
- const row=[...f.settings.rows.values()][0]!;assert.equal((row.value as any).version,2);assert.deepEqual(Object.keys((row.value as any).representative).sort(),['intakeMissionId','route']);assert.doesNotMatch(JSON.stringify(row.value),/secret|fixture-only-not-a-secret/i);
+ const row=[...f.settings.rows.values()][0]!;assert.equal((row.value as any).version,3);assert.deepEqual(Object.keys((row.value as any).representative).sort(),['intakeMissionId','route']);assert.doesNotMatch(JSON.stringify(row.value),/secret|fixture-only-not-a-secret/i);
  const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().representative,m.list().representative);assert.equal(restarted.list().configHash,m.list().configHash);
- const v1={...(row.value as any),version:1};delete v1.representative;const legacy=new InMemoryHostSettings();for(const [key,value] of f.settings.rows)legacy.rows.set(key,{...value,value:v1});const old=f.host(legacy);await old.restoreSettings();assert.equal(old.list().representative,null);
+ const v1={...(row.value as any),version:1};delete v1.representative;delete v1.modelGroups;const legacy=new InMemoryHostSettings();for(const [key,value] of f.settings.rows)legacy.rows.set(key,{...value,value:v1});const old=f.host(legacy);await old.restoreSettings();assert.equal(old.list().representative,null);
  const extra=new InMemoryHostSettings();for(const [key,value] of f.settings.rows)extra.rows.set(key,{...value,value:{...(row.value as any),representative:{...(row.value as any).representative,secretRef:'x'}}});await assert.rejects(f.host(extra).restoreSettings(),/stored document invalid/);
  await assert.rejects(s.setSettings({profileId:f.profile(m,'representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash,apiKey:'x'}),/Exact connection fields/);
  await assert.rejects(s.setSettings({profileId:f.profile(m,'representative'),outputTokenCap:5000,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}),/output cap exceeds the profile limit/);
@@ -336,16 +338,6 @@ test('13b: a run refuses to start when the default route changed after the prefl
  const check=(await product.preflight('intake','w',current.revision))!;assert.equal(check.ready,true);
  const result=await product.run('intake','w','run-1',current.revision,undefined,undefined,{...check.selection!.choice,verifierProfileId:'other'}) as any;
  assert.equal(f.calls.executor,0);assert.equal((await f.intake()).works[0]!.runtimeRun,undefined);assert.equal(result.status,'blocked');assert.match(result.reason,/default route changed/);
-});
-
-test('13c: a manual Start on Work whose pinned Representative shares the verifier model is refused by the run preflight',async t=>{
- const f=await setup(t),m=f.host();await f.grant(m);const s=f.service(m);await f.represent(s,m,'verifier');
- f.script.push({content:turn('Sure.','Summarize')});const result=await say(s,OWNER_REQUEST,'same-start'),workId=assistantWorkId(turnOf('same-start'));
- assert.equal(result.turn.outcome!.run.diagnostics[0]!.code,'assistant_verifier_same_model');
- const product=new ProductService(f.store,undefined,m),current=(await f.store.load('intake'))!;
- const check=(await product.preflight('intake',workId,current.revision))!;assert.equal(check.ready,false);assert.ok(check.diagnostics.some(d=>d.code==='assistant_verifier_same_model'));
- const run=await product.run('intake',workId,'owner-run',current.revision) as any;assert.equal(run.status,'blocked');assert.match(run.reason,/same provider and model as the Representative/);
- assert.equal(f.calls.executor,0);assert.equal(f.calls.verifier,0);assert.equal((await f.intake()).works.find(w=>w.id===workId)!.runtimeRun,undefined);
 });
 
 test('19b: removing the Representative route keeps earlier Work cards, read through the intake Mission pinned in the outcome',async t=>{

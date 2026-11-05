@@ -196,13 +196,13 @@ test('run-sequence: a default changed between steps stops at the configuration g
  const after=(await f.current()).value;assert.equal(after.works.find(w=>w.id==='fresh')!.runtimeRun!.authorizationId,'grant');assert.equal(after.works.find(w=>w.id==='second')!.runtimeRun,undefined);assert.deepEqual(f.calls,['executor','verifier']);
 });
 
-test('stored routes are unique per scope, grant modes match the manifest, and a default needs distinct models',async t=>{
+test('stored routes are unique per scope, grant modes match the manifest, and a default may check on the same profile',async t=>{
  const f=await setup(t),m=f.host();await f.grant(m);await f.makeDefault(m);const row=[...f.settings.rows.values()][0]!,original=structuredClone(row.value) as any;
  (row.value as any).defaultRoutes.push(structuredClone(original.defaultRoutes[0]));await assert.rejects(f.host().restoreSettings(),/stored document invalid/);
  row.value={...structuredClone(original),authorizations:[{...original.authorizations[0],mode:'live'}]};await assert.rejects(f.host().restoreSettings(),/stored document invalid/);
  row.value=structuredClone(original);const fresh=f.host();await fresh.restoreSettings();const same=f.profile(fresh,'executor');
  await fresh.save(()=>fresh.authorize({id:'same',scope:'other',executorProfileId:same,verifierProfileId:same,maxOutputTokensPerCall:4,expectedConfigHash:fresh.list().configHash}));
- await assert.rejects(fresh.save(()=>fresh.setDefaultRoute({authorizationId:'same',outputTokenCap:4,expectedConfigHash:fresh.list().configHash})),/same profile/);
+ await fresh.save(()=>fresh.setDefaultRoute({authorizationId:'same',outputTokenCap:4,expectedConfigHash:fresh.list().configHash}));const route=fresh.list().runtime.defaultRoutes.find((r:any)=>r.authorizationId==='same')!;assert.equal(route.status,'active');assert.equal(route.check,'same-family');
 });
 
 test('SurrealHostSettings: committed, conflict, invalid write result, NONE and field mapping over a fake transport',async()=>{

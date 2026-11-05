@@ -169,7 +169,6 @@ export class AssistantService {
   if(admitted.status==='conflict')return outcome('not_created',[diagnostic('intake_conflict','The intake Mission changed before admission; no second attempt was made.')]);
   if(admitted.status==='replayed')return outcome('admitted',[],'not_started',[diagnostic('admission_replayed','The Work admission was replayed; no run was requested.')]);
   const check=await this.#product.preflight(intakeMissionId,workId,admitted.revision);
-  // The run preflight refuses a verifier on the pinned Representative model (`assistant_verifier_same_model`).
   if(this.#draining)return outcome('admitted',[],'not_started',[diagnostic('host_draining','The local host is draining; the Work was not started.')]);
   if(!check?.ready)return outcome('admitted',[],'not_started',bounded(check?.diagnostics.length?check.diagnostics:[{code:'preflight_unavailable',message:'Run preflight was unavailable.'}]));
   // The run refuses to start if the default route no longer matches the choice this check saw.
