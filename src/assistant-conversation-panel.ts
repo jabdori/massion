@@ -74,6 +74,11 @@ function chatOpenThread(id,name=''){
  if(id!==chatThread){if(chatSending)return;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
+/** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */
+function chatRunExceptions(){return (Array.isArray(chatView&&chatView.exceptions)?chatView.exceptions:[]).filter(e=>e&&chatText(e.id)&&Number.isSafeInteger(e.at)&&chatText(e.title)&&(e.state==='failed'||e.state==='unknown')&&chatText(e.fact)&&chatText(e.scheduleId)&&chatText(e.runId)&&Array.isArray(e.actions)&&e.actions.every(a=>['check','retry','close'].includes(a))&&!(e.state==='unknown'&&e.actions.includes('retry')));}
+function chatRunException(e){return chatKeyed('run-exception-'+e.id,'div','chat-exception',JSON.stringify([e.title,e.state,e.fact,e.actions]),()=>{const main=element('div',undefined,'chat-exception-main'),head=element('p',undefined,'chat-exception-head'),actions=element('div',undefined,'chat-actions');
+ head.append(element('strong',e.title),element('span',e.state==='unknown'?'Result unknown':'Failed','chat-exception-state'));main.append(head,element('p',e.fact,'chat-exception-fact'));
+ for(const a of e.actions)actions.append(a==='check'?chatButton('Check',()=>readChat()):a==='retry'?chatButton('Retry',()=>scheduleAct({action:'run',scheduleId:e.scheduleId,retryOf:e.runId}),''):chatButton('Close',()=>scheduleAct({action:'close',scheduleId:e.scheduleId,runId:e.runId})));return [main,actions];});}
 function chatDecision(d){
  if(d.state==='later')return chatSystem(d.id,'Later: '+d.question,[['Ask again',()=>chatDecide(d.id,'ask')]]);if(d.state==='done')return chatSystem(d.id,d.line);
  const busy=chatDeciding.has(d.id),node=chatKeyed('decision-'+d.id,'section','chat-decision',JSON.stringify([d.question,d.at,d.rows,d.action,busy]),()=>{const head=element('p',undefined,'chat-decision-head'),rows=element('dl'),actions=element('div',undefined,'chat-actions');
@@ -92,7 +97,7 @@ function renderChat(){
  const view=chatView;if(!view)return;const turns=new Map(view.turns.map(turn=>[turn.id,turn])),items=[];let day='';
  // Decisions and briefings sit before the first owner message that started after them; a date line opens each day.
  // ponytail: they carry no segment, so an earlier segment shows none; filter by the segment's time span if old ones are missed there.
- const extras=chatSegment?[]:[...chatDecisions().map(d=>({at:d.at,node:()=>chatDecision(d)})),...chatBriefings().map(b=>({at:b.at,node:()=>chatBriefing(b,turns)}))].sort((a,b)=>a.at-b.at);
+ const extras=chatSegment?[]:[...chatDecisions().map(d=>({at:d.at,node:()=>chatDecision(d)})),...chatBriefings().map(b=>({at:b.at,node:()=>chatBriefing(b,turns)})),...chatRunExceptions().map(e=>({at:e.at,node:()=>chatRunException(e)}))].sort((a,b)=>a.at-b.at);
  const dated=(at,node)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);items.push(chatNode('date:'+day,day,'chat-date'));}items.push(node);};
  for(const message of view.segment?view.segment.messages:[]){
   const turn=message.role==='owner'?turns.get('assistant-turn:'+message.id):turns.get(message.turnId);

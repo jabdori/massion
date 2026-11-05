@@ -48,6 +48,6 @@ Landmarks: `nav` for the rail, `aside` for the sidebar, `main` for the page and 
 ## Not in this increment
 
 - Profile popover on the header name, `@` completion and the 'Default permissions' chip (step 6 and 7).
-- Results and Schedules content (step 8 in the program), Settings sections (step 9), installed app icons (apps).
+- Settings sections (step 9), installed app icons (apps). Results and Schedules content landed in [Results and schedules](results-and-schedules.md).
 - Work lines read from the current conversation segment only. Work from older segments or created by other members needs a host Work list query.
 - The widened pane does not yet split into the four areas.

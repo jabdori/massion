@@ -19,6 +19,8 @@ import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import {chatPanel,chatClient,chatStyle} from './assistant-conversation-panel.ts';
 import {memberDialog,memberClient,memberStyle} from './members-panel.ts';
+import {resultsPage,resultsPane,resultsClient,resultsStyle} from './results-panel.ts';
+import {schedulesPage,schedulesClient,schedulesStyle} from './schedules-panel.ts';
 import {shellStyle,shellRail,shellSidebar,shellBand,shellPaneBar,shellClient} from './surface-shell.ts';
 /** Self-contained loopback client. All user and host text is rendered through textContent. */
 export const workbenchPage = String.raw`<!doctype html>
@@ -36,6 +38,8 @@ export const workbenchPage = String.raw`<!doctype html>
 .expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
 ${chatStyle}
 ${memberStyle}
+${resultsStyle}
+${schedulesStyle}
 ${shellStyle}</style>
 </head>
 <body>
@@ -50,8 +54,8 @@ ${shellBand}
 ${chatPanel}
 </div>
 ${memberDialog}
-<div id="page-results" class="page-body" hidden><p class="page-empty">No results yet</p></div>
-<div id="page-schedules" class="page-body" hidden><p class="page-empty">No schedules</p></div>
+${resultsPage}
+${schedulesPage}
 <div id="page-settings" class="page-body" hidden><div class="settings-stack">
 <span id="health" role="status"><span class="dot"></span>Connecting</span>
 <div id="provider-notice" class="notice" role="status">Checking provider availability. No execution has been requested.</div>
@@ -100,6 +104,7 @@ ${memoryUsagePanel}
 <details style="margin-top:22px"><summary>Authoritative snapshot</summary><pre id="snapshot-json" tabindex="0"></pre></details></section>
 <section class="panel" aria-labelledby="activity-heading"><div class="section-top"><h2 id="activity-heading">Durable activity</h2><span id="event-state" class="tag" role="status">Connecting</span></div><p id="event-help" class="hint" style="margin-bottom:10px">Reading committed events. No progress is inferred from a model response.</p><ul id="event-list" class="event-list"><li>No activity loaded yet.</li></ul><small id="snapshot-time"></small></section>
 </div>
+${resultsPane}
 </section><!-- /work-pane -->
 </div>
 <script>
@@ -1620,6 +1625,8 @@ async function connect() {
 }
 ${chatClient}
 ${memberClient}
+${resultsClient}
+${schedulesClient}
 ${shellClient}
 ${missionCatalogClient}
 ${workInboxClient}
