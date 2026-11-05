@@ -87,7 +87,8 @@ function chatDecision(d){
  node.setAttribute('aria-label',d.question);return node;
 }
 /** Bullets name the Work and its current state from the turn, so a briefing never carries its own counts. */
-function chatBriefing(b,turns){const named=b.turnIds.map(id=>turns.get(id)).filter(turn=>turn&&turn.work);
+// A briefing from an earlier segment carries its own turns, read from that segment.
+function chatBriefing(b,turns){const own=Array.isArray(b.turns)?b.turns:[],named=b.turnIds.map(id=>turns.get(id)??own.find(turn=>turn&&turn.id===id)).filter(turn=>turn&&turn.work);
  return chatKeyed('briefing-'+b.id,'div','chat-briefing',JSON.stringify([b.title,b.at,named.map(turn=>[turn.id,turn.work.title,chatCardLabel(turn)])]),()=>{const head=element('p'),list=element('ul');head.append(element('strong',b.title),element('span',' | '+chatDay(b.at)+' '+chatTime(b.at)));
   for(const turn of named){const item=element('li');item.append(chatButton(turn.work.title,()=>shellOpenWork(turn.id),''),element('span',' '+chatCardLabel(turn)));list.append(item);}return [head,list];});}
 function chatSlot(turn){const kind=chatKind(turn);if(kind==='card')return [chatCard(turn)];const shown=turn.work?[chatFold(turn)]:[];

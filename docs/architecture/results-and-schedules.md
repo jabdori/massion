@@ -34,7 +34,7 @@ One aggregate `assistant-conversation:schedules` (kind `schedules`) under the re
 
 ```ts
 interface Schedule {id; kind:'briefing'; minute; offset; active; nextAt; budget:{runs}; used; runs: Run[]}
-interface Run {id; slot; manual; state:'started'|'done'|'failed'|'closed'; startedAt; deadlineAt; endedAt?; turnIds?; reason?}
+interface Run {id; slot; manual; state:'started'|'done'|'failed'|'closed'; startedAt; deadlineAt; endedAt?; turnIds?; segment?; reason?}
 ```
 
 - **One kind, the morning briefing.** At most one schedule exists. Its request, assignee (the Representative) and destination (the Representative's conversation) are fixed by the kind.
@@ -49,7 +49,7 @@ interface Run {id; slot; manual; state:'started'|'done'|'failed'|'closed'; start
 | `create-schedule {scheduleId, kind, minute, offset, budget}` | Owner | Only one schedule; active at once with the next slot |
 | `pause-schedule` / `resume-schedule {scheduleId}` | Owner | Resume computes the next slot from now; missed slots are not run |
 | `start-run {scheduleId, runId, slot, manual: false}` or `{scheduleId, runId, manual: true, retryOf?}` | Host | Active, budget left, no run of this schedule started and before its deadline. A scheduled start must be the due slot (`slot = nextAt ≤ now`) and advances `nextAt` past now. A manual one (Run now) carries no time: its slot is the observed time, so a resent command keeps its fingerprint and a clock that moved between reads does not refuse it; it keeps `nextAt`. `retryOf` names a failed run, which closes in the same step |
-| `finish-run {scheduleId, runId, turnIds}` | Host | Only a started run before its deadline |
+| `finish-run {scheduleId, runId, turnIds, segment}` | Host | Only a started run before its deadline |
 | `fail-run {scheduleId, runId, reason}` | Host | Only a started run |
 | `skip-run {scheduleId, runId, slot}` | Host | Due slot with no budget left: a failed run `Budget reached`, the schedule pauses |
 | `close-run {scheduleId, runId}` | Owner | A failed run, or a started run past its deadline (result unknown) |
@@ -66,7 +66,7 @@ Host command IDs are `assistant-schedule-run:<runId>` (start), `assistant-schedu
 
 `GET /assistant/conversation` (the Representative's) adds:
 
-- `briefings`: one per done run, `{id: runId, at: endedAt, title: 'Morning briefing', turnIds}`, the shape conversation-cards.md fixed.
+- `briefings`: one per done run, `{id: runId, at: endedAt, title: 'Morning briefing', turnIds}`, the shape conversation-cards.md fixed; a briefing read from a segment other than the one shown also carries `turns`, read from its own segment, so a rollover never empties it.
 - `exceptions`: one per run that failed or is unknown and not closed, `{id, at, title, state: 'failed'|'unknown', fact, actions, scheduleId, runId}`. `actions` is `['check', 'close']` for unknown, `['retry', 'close']` for failed, and `['close']` when the budget is spent. The client draws them like a Work's exception card: `● Morning briefing · Failed` and the fact, with `Check` (read again), `Retry` (Run now with `retryOf`, so the failed card closes with the new run) and `Close`.
 
 ### Routes

@@ -1,5 +1,6 @@
 /** Schedules page (docs/architecture/results-and-schedules.md, prototype B17 and B17-empty). One kind, the morning briefing; the host scheduler runs it. */
 import {icon} from './results-panel.ts';
+import {SCHEDULES_ID} from './schedules.ts';
 export const schedulesStyle=String.raw`.sched-empty{display:grid;justify-items:center;gap:16px;margin:24vh auto 0;max-width:600px}.sched-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--bg-3);color:var(--fg-2)}.sched-empty h2{margin:0 0 6px;font-size:17px}.sched-examples{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,280px));gap:12px;justify-content:center;width:100%}
 .app .sched-example{display:flex;gap:14px;align-items:center;min-height:0;padding:16px 18px;border:1px solid var(--line-strong);border-radius:10px;background:transparent;color:var(--fg-3);text-align:left;font-weight:500}.app .sched-example:hover{background:var(--bg-1)}.sched-example strong{display:block;color:var(--fg);font-size:13px;margin-bottom:4px}.sched-example span span{font-size:12px;color:var(--fg-2)}
 .sched-detail{max-width:680px;padding:12px 30px 32px}.sched-top{display:flex;align-items:center;gap:12px;margin:2px 0 18px}.sched-top h2{flex:1;margin:0;font-size:20px;font-weight:700}.app .sched-top>button{min-height:30px;padding:4px 12px;font-size:13px}
@@ -21,6 +22,8 @@ async function schedulesLoad(){try{const {response,body}=await request('/assista
 async function scheduleAct(body){if(scheduleBusy)return;scheduleBusy=true;renderSchedules();
  try{await request('/assistant/schedules',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}
  finally{scheduleBusy=false;await schedulesLoad();await readChat();}}
+/** A host-scheduled run changes the schedule without an owner action, so its events reread the page while it shows. */
+function schedulesEvents(events){if(!$('page-schedules').hidden&&events.some(event=>event.aggregateId==='${SCHEDULES_ID}'))void schedulesLoad();}
 function renderSchedules(){
  const active=scheduleList.filter(s=>s.active),paused=scheduleList.filter(s=>!s.active),shown=scheduleList[0];
  const row=s=>{const item=element('button',undefined,'side-sched');item.type='button';item.setAttribute('aria-current',String(s===shown?'page':'false'));item.append(element('span',s.title),element('span',(s.active?scheduleWhen(s.nextAt)+' · ':'')+scheduleCycle(s)));item.addEventListener('click',()=>$('schedule-title').focus?.());return item;};

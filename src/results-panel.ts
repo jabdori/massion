@@ -33,7 +33,7 @@ function renderResults(){
 /** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview). */
 async function resultOpen(r){
  chatOpenThread('');chatSegment=chatRep&&chatRep.head===r.segment?null:r.segment;void readChat();
- const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneMission='';renderPane();await resultLoad(r);
+ const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */
 async function resultLoad(r){

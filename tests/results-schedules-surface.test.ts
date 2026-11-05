@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {runInContext} from 'node:vm';
 import assert from 'node:assert/strict';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
@@ -10,14 +11,14 @@ const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,s
 const turn={id:'turn:1',messageId:'m:1',status:'answered',displayStatus:'answered',at:T0-60000,proposal:{title:'River summary'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:'work:a',title:'River summary',execution:'settled',acceptance:'accepted',started:true}};
 const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:'Conversation with 하나',active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
 function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number}={}){
- const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,posted:[] as {path:string;body:any}[],...initial};
+ const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,events:[] as any[],cursor:1,posted:[] as {path:string;body:any}[],...initial};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){const body=JSON.parse(options.body);state.posted.push({path,body});if(path==='/assistant/schedules'&&body.action==='create')state.schedules=[schedule];return reply({status:'committed',revision:2},path==='/assistant/schedules'&&body.action==='create'?201:200);}
   if(path==='/assistant/results')return reply({feedId:'feed:a',results:state.results});
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:state.schedules});
   if(path.startsWith('/missions/intake/record-artifact'))return state.artifact===200?reply({content:'- Rivers carry water.\n- Rivers shape valleys.\nCities grew beside rivers.',byteLength:10}):reply({error:'Unavailable'},state.artifact);
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:2,members:[],decisions:[],exceptions:state.exceptions,segment:{number:2,revision:1,closed:false,full:false,previous:'assistant-conversation:1',messages:[]},turns:[]});
-  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  if(path.startsWith('/events')){const events=state.events;state.events=[];return reply({feedId:'feed:a',cursor:state.cursor,events});}
   return reply({error:'Not configured'},503);
  });
  return {app,state};
@@ -94,4 +95,19 @@ test('schedule exceptions sit in the conversation like Work exceptions: unknown 
 
 test('no explanation sentences, no assistant label, and yellow stays in decision cards',()=>{
  for(const id of ['page-results','page-schedules']){const block=new RegExp('<div[^>]*id="'+id+'"[\\s\\S]*?<!-- /'+id+' -->').exec(workbenchPage)![0];assert.doesNotMatch(block.replace(/<[^>]*>/g,' '),/assistant/i);assert.doesNotMatch(block,/#f0bc4b|#231d0e/i);}
+});
+
+test('a background reread of the Mission loaded before a result was opened keeps the result tab',async()=>{
+ const {app}=fixture();await settle();runInContext("paneOpen('intake','','Owner requests')",app.context);
+ await app.node('rail-results').fire('click');await settle();await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
+ runInContext("paneFor({id:'intake',purpose:'Owner requests'})",app.context);
+ assert.equal(runInContext('paneActive',app.context),'result:intake/work:a');assert.equal(app.node('pane-result').hidden,false);
+});
+
+test('a host-run schedule rereads the Schedules page while it shows',async()=>{
+ const {app,state}=fixture({schedules:[schedule]});await settle();await app.node('rail-schedules').fire('click');await settle();
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');
+ state.schedules=[{...schedule,active:false,budget:{runs:30,used:30}}];state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:3,type:'skip-run'}];state.cursor=2;
+ await app.tick();await settle();
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-rows').textContent,/30 of 30 runs/);
 });

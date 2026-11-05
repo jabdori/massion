@@ -139,3 +139,9 @@ test('a slot that changes kind moves no other entry, so focus elsewhere stays an
  state.entries[0]!.work={...running,execution:'settled',acceptance:'accepted'};await app.node('chat-latest').fire('click');await settle();
  assert.ok(byId(app,'chat-fold-'+turnId(1)));for(const node of before)assert.equal(node.detaches,0,node.id||node.textContent);assert.ok(shown(app).includes(other));
 });
+
+test('a briefing read from an earlier segment shows the Work it carries after the conversation rolls over',async()=>{
+ const old={id:'assistant-turn:old',messageId:'old',status:'answered',displayStatus:'answered',at:T0-3600000,proposal:{title:'Old receipts'},work:{missionId:'intake',missionRevision:2,workId:'work:old',title:'Old receipts',execution:'settled',acceptance:'accepted',started:true}};
+ const {app}=fixture([{text:'Morning',at:T0+3600000}],{briefings:[{id:'briefing:2',at:T0,title:'Morning briefing',turnIds:[old.id],turns:[old]}]});await settle();
+ assert.match(byId(app,'chat-briefing-briefing:2')!.textContent,/Old receipts/);
+});

@@ -730,7 +730,7 @@ async function pollEvents() {
       if (!activity.some(old => old.cursor === event.cursor)) activity.push(event);
       if (event.aggregateId === selectedId && (!snapshot || event.revision > snapshot.revision)) eventRefreshNeeded = true;
     }
-    chatEvents(body.events);
+    chatEvents(body.events); schedulesEvents(body.events);
     if (unknownOperation) unknownOperation.reconcileCursor = body.cursor;
     activity.sort((a,b) => a.cursor - b.cursor);
     if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmOperation(unknownOperation); await clearPending(unknownOperation); controls(); report('Durable receipt found for ' + commandId + '. Refreshing current state; the command was not replayed.','success'); eventRefreshNeeded = true; }
