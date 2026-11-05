@@ -501,3 +501,22 @@ test('31g: a draining host refuses before its replay, so a Send whose outcome is
  head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');assert.equal(posts.length,3);
  assert.deepEqual(posts.map(p=>[p.commandId===posts[0].commandId,p.segment,p.expectedRevision]),[[true,1,3],[true,1,3],[true,1,3]],'the drain refusal did not prove the message absent, so the retry stays at its segment');assert.equal(input.value,'');
 });
+
+test('8b: the read gives each turn its start, and each Work its run start, steps and whether an outcome is unknown (conversation-cards.md)',async t=>{
+ const f=await setup(t),{s}=await f.ready();f.script.push({content:turn('I will write it.','Summarize the launch notes')});
+ await say(s,OWNER_REQUEST,'w-8b');await s.idle();
+ const view=await s.read(),segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment,work=(await f.intake()).works[0]!;
+ assert.equal(view.turns[0]!.at,segment.turns[0]!.ownership!.startedAt);
+ assert.equal(view.turns[0]!.work!.startedAt,work.runtimeRun!.ownership!.startedAt);assert.equal(typeof view.turns[0]!.work!.startedAt,'number');
+ const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.equal(view.turns[0]!.work!.unknown,false);
+});
+
+test('25b: an interrupted run reads as unknown, also after a plain cancel, until the owner quarantines it (ADR 0002 §8)',async t=>{
+ const f=await setup(t),{m,s}=await f.ready();f.hooks.executor=()=>new Promise(()=>{});f.script.push({content:turn('Starting.','Summarize')});
+ await say(s,OWNER_REQUEST,'int-25b');while(f.calls.executor===0)await new Promise(r=>setTimeout(r,5));
+ const owner=new Application(f.store as Store<Mission>,[{id:'local-owner',roles:['owner']}]),send=async(commandId:string,command:any)=>{const snap=(await f.store.load('intake'))!;return owner.dispatch({missionId:'intake',commandId,expectedRevision:snap.revision,actorId:'local-owner',command});};
+ const workId=(await f.intake()).works[0]!.id;await send('cancel-25b',{type:'cancel',workId});
+ await Promise.all([m.drain(),s.drain()]);let work=(await s.read()).turns[0]!.work!;assert.equal(work.execution,'cancelled');assert.equal(work.unknown,true);assert.equal(work.steps.done,0);
+ await send('quarantine-25b',{type:'quarantine-runtime',workId,runId:(await f.intake()).works[0]!.runtimeRun!.id,reason:'Checked with the vendor',acknowledgeUncertainOutcome:true});
+ work=(await s.read()).turns[0]!.work!;assert.equal(work.unknown,false);
+});

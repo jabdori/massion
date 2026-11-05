@@ -28,6 +28,8 @@ function clip(text:string,limit:number):string {let value=text.replace(/[\u0000-
 const diagnostic=(code:string,message:string):AssistantDiagnostic=>({code,message:clip(message,DIAGNOSTIC_BYTES)});
 const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic[]=>list.slice(0,2).map(d=>diagnostic(/^[a-z][a-z0-9_]{0,63}$/.test(d.code)?d.code:'diagnostic',d.message));
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
+/** The root task only contains the steps, so it is not counted (conversation-cards.md). */
+const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
 
 /** Strict `assistant-turn/v1`: exact keys at both levels, no repair, no partial acceptance. */
@@ -183,8 +185,10 @@ export class AssistantService {
   for(const t of snapshot?.value.turns??[]){const id=pin(t);if(id&&!missions.has(id))missions.set(id,id.startsWith(ASSISTANT_CONVERSATION_PREFIX)?null:await this.#store.load(id) as Snapshot<Mission>|null);}
   const turns=(snapshot?.value.turns??[]).map(t=>{
    const id=pin(t),intake=id?missions.get(id):null,work=intake?.value.works.find(w=>w.id===assistantWorkId(t.id)&&w.assistantSource?.turnId===t.id);
-   return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),
-    ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id),starting:!work.runtimeRun&&this.#starting.has(work.id)}}:{})};
+   return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.ownership?{at:t.ownership.startedAt}:{}),...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),
+    ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id),starting:!work.runtimeRun&&this.#starting.has(work.id),
+     // Card facts (conversation-cards.md): the durable run start, settled steps under the root task (the check is one), and an unknown effect outcome not yet answered by quarantine; a plain cancel is not that answer (ADR 0002 §8).
+     startedAt:work.runtimeRun?.ownership?.startedAt??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),steps:steps(work)}}:{})};
   });
   return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
  }

@@ -8,7 +8,7 @@ import type {Node} from './support/workbench-client.ts';
 const text=(html:string)=>html.replace(/<style>[\s\S]*?<\/style>|<script>[\s\S]*<\/script>/g,' ').replace(/<[^>]*>/g,' ');
 const opening=(id:string)=>new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>`).exec(workbenchPage)?.[0]??'';
 
-test('the skeleton has a rail, a sidebar, a page area and a work pane, with no explanation sentences, no assistant word and no yellow',()=>{
+test('the skeleton has a rail, a sidebar, a page area and a work pane, with no explanation sentences, no assistant word and no old warning yellow',()=>{
  for(const id of ['rail','rail-chat','rail-results','rail-schedules','rail-apps','rail-me','me-menu','me-settings','sidebar','side-representative','side-work','side-members','side-activity','activity-list','activity-toggle','sidebar-toggle','page-heading','page-chat','page-results','page-schedules','page-settings','work-pane','pane-tabs','pane-widen','pane-close'])assert.ok(opening(id),id);
  assert.match(opening('rail'),/^<nav\b[^>]*aria-label="/);assert.match(opening('sidebar'),/^<aside\b/);assert.match(opening('page'),/^<main\b/);assert.match(opening('work-pane'),/aria-label="/);
  for(const id of ['rail-apps','side-members','side-activity','me-menu','work-pane','page-results','page-schedules','page-settings'])assert.match(opening(id),/ hidden/,id);
@@ -20,8 +20,8 @@ test('the skeleton has a rail, a sidebar, a page area and a work pane, with no e
  const pane=/<section[^>]*id="work-pane"[\s\S]*?<!-- \/work-pane -->/.exec(workbenchPage)![0];for(const id of ['mission-panel','empty-state','event-list','status'])assert.match(pane,new RegExp(`id="${id}"`),id);
  const visible=text(workbenchPage);for(const gone of ['Work with a reason','Purpose → Work → Evidence','Loopback workbench','Local development'])assert.ok(!visible.includes(gone),gone);
  const shell=text(workbenchPage.slice(workbenchPage.indexOf('<body>'),workbenchPage.indexOf('<section id="conversation"')));assert.doesNotMatch(shell,/assistant|department|lead\b|team/i);
- // Yellow is for decision cards only (ADR 0002 §8); there are none yet.
- const style=workbenchPage.slice(0,workbenchPage.indexOf('</style>'));for(const yellow of ['#fcf3df','#e7dbbd','#f0bc4b','#855019','#77531d'])assert.ok(!style.includes(yellow),yellow);
+ // Yellow is for decision cards only (ADR 0002 §8): tests/conversation-cards.test.ts checks every yellow rule.
+ const style=workbenchPage.slice(0,workbenchPage.indexOf('</style>'));for(const yellow of ['#fcf3df','#e7dbbd','#855019','#77531d'])assert.ok(!style.includes(yellow),yellow);
 });
 
 type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean};
@@ -46,10 +46,10 @@ function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[
 const kids=(node:Node)=>node.children.filter(child=>!child.hidden);
 const titles=(list:Node)=>kids(list).map(row=>row.children.find(c=>c.tagName==='BUTTON')!.children.find(c=>c.tagName==='STRONG')!.textContent);
 
-test('Work lines show open Work under the Representative; the activity list orders by priority or recency, marks unread changes and every entry opens the same tab',async()=>{
+test('Work lines show running Work under the Representative; the activity list orders by priority or recency, marks unread changes and every entry opens the same tab',async()=>{
  const {app,state}=fixture([{workId:'work:b',title:'Running one',execution:'active',acceptance:'pending',started:true},{workId:'work:a',title:'Done one',execution:'settled',acceptance:'accepted',started:true},{workId:'work:c',title:'Failed one',execution:'settled',acceptance:'failed',started:true}]);
  await settle();
- const lines=kids(app.node('side-work')).map(n=>n.textContent);assert.equal(lines.length,2);assert.ok(lines[0]!.startsWith('Running one'));assert.ok(lines[1]!.startsWith('Failed one'));
+ const lines=kids(app.node('side-work')).map(n=>n.textContent);assert.equal(lines.length,1,'exceptions and finished Work live in the conversation');assert.ok(lines[0]!.startsWith('Running one'));
  assert.equal(app.node('side-members').hidden,true);assert.equal(app.node('rail-apps').hidden,true);
  await app.node('activity-toggle').fire('click');assert.equal(app.node('side-activity').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-pressed'),'true');
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Running one','Done one']);
@@ -69,9 +69,9 @@ test('Work lines show open Work under the Representative; the activity list orde
  assert.equal((app.context as any).document.activeElement.id,'work-heading-work:b');
  assert.deepEqual(kids(app.node('work-list')).map(card=>card.id),['work-card-work:b'],'a Work tab shows that Work only');
  // A Work line and a card open the same tab instead of a second one; another Work adds a tab and selects it.
- await kids(app.node('side-work'))[0]!.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();
+ await app.all().find(n=>n.id==='chat-fold-assistant-turn:m:'+'3'.repeat(32))!.fire('click');await settle();
  assert.equal(tabs().length,2);const selected=()=>tabs().filter(t=>t.children[0]!.attributes.get('aria-selected')==='true').map(t=>t.children[0]!.textContent);assert.deepEqual(selected(),['Failed one']);
- const card=app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'3'.repeat(32))!;await card.children.find(c=>c.className==='chat-card-open')!.fire('click');await settle();assert.equal(tabs().length,2);
+ await kids(app.node('activity-list')).find(r=>r.textContent.includes('Failed one'))!.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();assert.equal(tabs().length,2);
  await tabs()[0]!.children[0]!.fire('click');await settle();assert.deepEqual(selected(),['Running one']);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:b');
  // A background refresh never reopens a closed pane.
  await app.node('pane-close').fire('click');assert.equal(app.node('work-pane').hidden,true);assert.equal(tabs().length,0);
@@ -107,6 +107,8 @@ test('loading a Mission from Settings opens one pane tab named after its purpose
 });
 
 const open=(row:Node)=>row.children.find(c=>c.tagName==='BUTTON')!;
+// Running Work opens from its card, settled Work from its fold: the sidebar lists running Work only.
+const openTurn=(app:ReturnType<typeof harness>,index:number)=>{const turn='assistant-turn:m:'+String(index+1).repeat(32),node=app.all().find(n=>n.id==='chat-card-'+turn||n.id==='chat-fold-'+turn)!;return node.tagName==='BUTTON'?node:node.children.find(c=>c.className==='chat-card-open')!;};
 const shown=(app:ReturnType<typeof harness>)=>kids(app.node('work-list')).map(card=>card.id);
 const selectedTab=(app:ReturnType<typeof harness>)=>kids(app.node('pane-tabs')).filter(t=>t.children[0]!.attributes.get('aria-selected')==='true').map(t=>t.children[0]!.textContent);
 // Host ready, with a feed boundary that has no Mission selected, so writes and Settings lists are enabled.
@@ -151,7 +153,7 @@ for(const [form,slot] of [['correction',10],['saved owner message',12]] as const
 
 test('selecting a tab while a read or write is in flight leaves the tabs and the shown cards as they were',async()=>{
  const {app}=fixture(two);await settle();
- for(const line of kids(app.node('side-work'))){await open(line).fire('click');await settle();}
+ for(const id of ['chat-card-assistant-turn:m:'+'1'.repeat(32),'chat-fold-assistant-turn:m:'+'2'.repeat(32)]){const node=app.all().find(n=>n.id===id)!;await (node.tagName==='BUTTON'?node:node.children.find(c=>c.className==='chat-card-open')!).fire('click');await settle();}
  const before=selectedTab(app);runInContext('loading=true',app.context);
  await kids(app.node('pane-tabs'))[0]!.children[0]!.fire('click');assert.deepEqual(selectedTab(app),before);assert.deepEqual(shown(app),['work-card-work:b']);
 });
@@ -171,7 +173,7 @@ test('unread memory survives viewing another segment and widening reports the hi
 
 test('closing the selected tab while a read or write is in flight keeps it, and closing another tab still works',async()=>{
  const {app}=fixture([...two,{workId:'work:c',title:'Third',execution:'active',acceptance:'pending',started:true}]);await settle();
- for(const line of kids(app.node('side-work'))){await open(line).fire('click');await settle();}
+ for(const index of [0,1,2]){await openTurn(app,index).fire('click');await settle();}
  const tabs=()=>kids(app.node('pane-tabs')),close=(tab:Node)=>tab.children[1]!;assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);
  runInContext('loading=true',app.context);
  await close(tabs()[2]!).fire('click');assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);assert.deepEqual(shown(app),['work-card-work:c']);
@@ -193,7 +195,7 @@ test('moving to another page sets the narrow-screen pane aside until a Work is o
  const {app}=fixture(two);await settle();
  await open(kids(app.node('side-work'))[0]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);
  await app.node('rail-results').fire('click');assert.match(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('work-pane').hidden,false,'the tabs stay open');
- await open(kids(app.node('side-work'))[1]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
+ await openTurn(app,1).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
 });
 
 test('the narrow-screen sidebar opens below the band so its toggle stays reachable to close it',()=>{

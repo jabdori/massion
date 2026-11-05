@@ -26,8 +26,8 @@ function paneAway(on){$('work-pane').className='pane'+(on?' away':'');}
 function shellMenu(button,menu,open){$(menu).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(open)$(menu).children[0]?.focus?.();}
 function shellSeen(){try{const value=JSON.parse(storage.get(seenKey)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}}
 const shellKey=work=>work.missionId+'/'+work.workId;
-// Exceptions first, then running, then closed. Decision cards (step 6) will rank above exceptions.
-function shellRank(work){if(work.acceptance==='accepted'||work.execution==='cancelled')return 2;if(work.acceptance==='failed'||work.acceptance==='stale'||work.execution==='blocked')return 0;return 1;}
+// Exceptions first, then running, then closed; open decisions lead the list (conversation-cards.md).
+function shellRank(work){if(work.unknown)return 0;if(work.acceptance==='accepted'||work.execution==='cancelled')return 2;if(work.acceptance==='failed'||work.acceptance==='stale'||work.execution==='blocked')return 0;return 1;}
 function shellState(work){const rank=shellRank(work);return element('span',undefined,'state'+(rank===0?' exception':rank===2?' done':''));}
 /** Work lines and activity rows come from the conversation's Work cards; each row keeps its ID so a reread keeps focus. */
 // ponytail: only the shown conversation segment's cards; a host Work list query replaces this when members bring Work of their own.
@@ -36,10 +36,13 @@ function renderShell(){
  for(const item of items){const key=shellKey(item.work);kept[key]=typeof seen[key]==='string'?seen[key]:item.label;item.unread=kept[key]!==item.label;}
  if(JSON.stringify(kept)!==JSON.stringify(seen))storage.set(seenKey,JSON.stringify(kept));
  const focused=document.activeElement&&document.activeElement.id;
- $('side-work').replaceChildren(...items.filter(item=>shellRank(item.work)<2).map(item=>{const row=element('li'),open=element('button',undefined,'work-line');open.type='button';open.id='side-line-'+shellKey(item.work);const state=shellState(item.work);state.append(element('span',item.label,'visually-hidden'));open.append(element('span',item.work.title),state);open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
+ $('side-work').replaceChildren(...items.filter(item=>shellRank(item.work)===1&&item.work.started).map(item=>{const row=element('li'),open=element('button',undefined,'work-line');open.type='button';open.id='side-line-'+shellKey(item.work);const state=shellState(item.work);state.append(element('span',item.label,'visually-hidden'));open.append(element('span',item.work.title),state);open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
  const ordered=items.slice().reverse();if(shellOrder==='priority')ordered.sort((a,b)=>shellRank(a.work)-shellRank(b.work));
- $('activity-list').replaceChildren(...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span','하','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
- $('activity-head').hidden=!items.length;
+ // ponytail: decisions lead both orders; they join the recent order by time once Work rows carry times too.
+ const decisions=chatDecisions().filter(d=>d.state==='open').map(d=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-decision:'+d.id;const marks=element('span',undefined,'marks'),avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);open.append(element('strong',d.title),marks,element('span',d.question,'summary'));
+  open.addEventListener('click',()=>{shellShow('chat');document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
+ $('activity-list').replaceChildren(...decisions,...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span','하','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
+ $('activity-head').hidden=!items.length&&!decisions.length;
  if(focused&&document.activeElement?.id!==focused&&/^(side-line|activity-row)-/.test(focused))document.getElementById(focused)?.focus();
 }
 function shellMarkSeen(turn){const seen=shellSeen();seen[shellKey(turn.work)]=chatCardLabel(turn);storage.set(seenKey,JSON.stringify(seen));}
