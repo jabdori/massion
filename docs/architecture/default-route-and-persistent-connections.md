@@ -2,7 +2,7 @@
 
 - Status: implemented (server side, fixture-class evidence). Workbench controls are a later increment.
 - Date: 2026-11-05, above `5c75629` (main)
-- Requirements: RUN-01, WRK-01, GOV-01, GOV-02 in [requirements](../product/requirements.md); item 1 of [Next implementation order](../product/scope.md#next-implementation-order); [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) "Consequences and evidence gates" item 1; [experience plan v2](../product/experience-plan.ko.md) §5.8 and §14.3
+- Requirements: RUN-01, WRK-01, GOV-01, GOV-02 in [requirements](../product/requirements.md); item 1 of [Next implementation order](../product/scope.md#next-implementation-order); [ADR 0002](decisions/0002-assistant-first-surface-and-independent-checks.md) "Consequences and evidence gates" item 1; [experience plan v3](../product/experience-plan.ko.md) §5.8 and §14.3
 - Builds on: [Explicit execution connections and model selection](provider-selection.md), [Normal CLI host connection setup](cli-host-connections.md), [Provider connection setup](provider-connections.md), [Configured runtime](configured-runtime.md), [Bounded local Work admission capacity](host-admission.md), [Portable backup](portable-backup.md), [ADR 0001](decisions/0001-product-owned-core.md)
 
 ## Problem
