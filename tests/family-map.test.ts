@@ -140,3 +140,12 @@ test('a same-family check is refused while the model groups hold an available di
  await m.save(()=>m.removeModelGroup({id:'g',expectedConfigHash:m.list().configHash}));
  assert.equal((await product.preflight('mission','fresh',(await f.current()).revision))!.ready,true);
 });
+
+test('the default group keeps the usable pin when the Representative still holds a stale one for the same profile',async t=>{
+ const f=await setup(t,'openrouter',['openai/gpt-test','anthropic/claude-test']),m=f.host(),claude=f.profile(m,'anthropic/claude-test');
+ await m.save(()=>m.setRepresentative({profileId:claude,outputTokenCap:4,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}));
+ const connection=m.list().connections[0]!;await m.save(()=>m.selectModel(connection.id,{model:'anthropic/claude-test',label:'Relabelled',expectedConfigHash:connection.configHash}));
+ await f.route(m,'openai/gpt-test','anthropic/claude-test');assert.equal(m.list().runtime.defaultRoutes[0]!.status,'active');
+ const models=m.list().modelGroups[0]!.models as any[];assert.deepEqual(models.filter(x=>x.model==='anthropic/claude-test').map(x=>x.status),['available']);
+ const checked=m.chooseGroupModel('default',{outputTokenCap:4,producers:[{provider:'openrouter',model:'openai/gpt-test'}]}) as any;assert.equal(checked.model,'anthropic/claude-test');assert.equal(checked.relation,'different-family');assert.deepEqual(f.calls,[]);
+});
