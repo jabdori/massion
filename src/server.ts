@@ -56,7 +56,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  // Conversation host steps (settle, outcome) must still commit while draining; new owner turns are refused by the service itself.
  const assistant=new AssistantService(store,product,options.connections);
  // One conversation per member (members.md), kept so drain reaches its turns too.
- const members=new MembersService(store,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
+ // Owner decisions commit through the drain-aware store, so an answer resuming after drain starts is refused.
+ const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup}});memberChats.set(member.id,chat);}return {member,chat};};
  const server=createServer(async(req,res)=>{
   let mutationFeed='';
@@ -77,7 +78,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(req.method==='POST'&&(url.pathname==='/missions'||url.pathname.startsWith('/missions/')||url.pathname==='/fixture-run'||url.pathname==='/assistant/messages'||url.pathname==='/assistant/decisions')){mutationFeed=(await store.readState()).feedId;const requested=req.headers['x-massion-feed'];if(requested!==undefined){identifier(requested,'Feed identity');if(requested!==mutationFeed){send(409,{error:'Database changed before admission',reason:'feed',outcome:'rejected'});return;}}}
    const execute=async()=>{
    if(draining&&req.method!=='GET'){send(503,{error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false});return;}
-   if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
+   if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
    if(req.method==='GET'&&url.pathname==='/health'){send(200,{status:'ready',mode:'local-development',provider:'unavailable',fixture:'explicit-development-route-only'});return;}
    if(req.method==='GET'&&url.pathname==='/providers'){send(200,{providers:product.providers.list(),selection:product.providers.select(['text-output']),runtime:product.runtime?.configuration?.()??null});return;}
    if(req.method==='GET'&&url.pathname==='/connections'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');send(200,options.connections.list());return;}

@@ -88,9 +88,11 @@ export class MembersService {
   ensure(exact(input,['topic','workIds'])&&Array.isArray(input.workIds)&&input.workIds.length<=64&&input.workIds.every(id)&&new Set(input.workIds).size===input.workIds.length,'Exact member proposal fields required');
   ensure(input.workIds.length>=2,'At least two Works are required');const intake=this.#intake(),mission=intake?(await this.#store.load(intake))?.value as Mission|undefined:undefined;
   const now=new Date(this.#clock()),month=(t:number)=>{const d=new Date(t);return d.getUTCFullYear()===now.getUTCFullYear()&&d.getUTCMonth()===now.getUTCMonth();};
-  const works=(input.workIds as string[]).map(workId=>{const w=mission?.works?.find(x=>x.id===workId);ensure(w&&w.assistantSource,'Unknown Representative Work: '+workId);ensure(w.runtimeRun?.ownership&&month(w.runtimeRun.ownership.startedAt),'Work did not run this month: '+workId);return w;});
+  // One canonical order for identity, fingerprint and the rows, so a reordered ask replays.
+  const ordered=[...input.workIds as string[]].sort();
+  const works=ordered.map(workId=>{const w=mission?.works?.find(x=>x.id===workId);ensure(w&&w.assistantSource,'Unknown Representative Work: '+workId);ensure(w.runtimeRun?.ownership&&month(w.runtimeRun.ownership.startedAt),'Work did not run this month: '+workId);return w;});
   // The same topic over the same Works is one proposal: asking again replays it instead of opening a second card.
-  const commandId=PROPOSAL_PREFIX+hash({topic:input.topic,works:[...input.workIds as string[]].sort()}).slice(0,64);
+  const commandId=PROPOSAL_PREFIX+hash({topic:input.topic,works:ordered}).slice(0,64);
   return this.#dispatch(commandId,ASSISTANT_ACTOR_ID,{type:'propose-member',decisionId:proposalDecisionId(commandId),topic:input.topic as string,works:works.slice(0,2).map(w=>({title:w.title})),count:works.length});
  }
  /** The owner's answer to a card. `act` admits and needs a name and a shape; the member ID derives from the command ID, so a replay admits once. */
