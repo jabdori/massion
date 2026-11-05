@@ -61,11 +61,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  // Conversation host steps (settle, outcome) must still commit while draining; new owner turns are refused by the service itself.
  const assistant=new AssistantService(store,product,options.connections);
  // One conversation per member (members.md), kept so drain reaches its turns too; one created after drain starts is born draining.
- // Owner decisions commit through the drain-aware store, so an answer resuming after drain starts is refused.
+ // Owner decisions, permission rules and schedule actions commit through the drain-aware store, so a command resuming after drain starts is refused.
  const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  // The host scheduler (results-and-schedules.md) writes the briefing from the Representative's conversation read; it stops when the host drains or closes.
  // drain waits for a tick already in flight and reports `unsettled` when any schedule write met an unknown commit, read again once HTTP has closed so a Run now finishing during drain counts, so `drained` means its writes settled.
- let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(store),skills=new SkillsService(store),apps=new AppsService(ownerStore,{network:options.appNetwork});const schedules=new SchedulesService(store,n=>assistant.read(n)),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
+ let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore),skills=new SkillsService(ownerStore),apps=new AppsService(ownerStore,{network:options.appNetwork});const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
  const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup}});if(draining)chat.beginDrain();memberChats.set(member.id,chat);}return {member,chat};};
  const server=createServer(async(req,res)=>{
   let mutationFeed='';

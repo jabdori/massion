@@ -840,6 +840,8 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     }
     if (!['committed','replayed'].includes(result.status) || !validSnapshot(result, missionId)) throw new Error('The command response did not confirm a valid committed snapshot.');
     confirmOperation(operation); await clearPending(operation); if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission||constraintSubmission||conversationSubmission||memoryConflictSubmission||memoryExpirySubmission)&&selectedId!==missionId)return true; rememberMission(missionId); ++readSequence; installSnapshot(currentAcknowledgedSnapshot || result);
+    // Every Work admission (plain, correction, saved owner message) reveals the new card on the Mission tab.
+    if (path.endsWith('/work')) paneExplicit(missionId,'','');
     report(successMessage + ' Revision ' + result.revision + (result.status === 'replayed' ? ' (existing receipt).' : '.'),'success');
     return true;
   } catch (error) {
@@ -847,6 +849,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     if (confirmedOperations.has(operationKey(operation))) {
       const loaded = await loadMission(missionId, false);
       if (loaded) report('The host confirmed this command. Its current state was refreshed without replaying it.','success');
+      if (loaded && path.endsWith('/work')) paneExplicit(missionId,'','');
       return loaded;
     }
     unknownOperation = operation; rememberMission(missionId); controls();
@@ -1568,7 +1571,7 @@ $('work-form').addEventListener('submit', async event => {
   if (!title || !budgetText || !Number.isFinite(budget) || budget < 0) { report('Enter a Work title and a nonnegative finite budget.','error'); return; }
   const id = snapshot.value.id, submittedFocus = document.activeElement;
   const body = {commandId:crypto.randomUUID(),expectedRevision:snapshot.revision,workId:'work:' + crypto.randomUUID(),title,budget};
-  if (await write('/missions/' + encodeURIComponent(id) + '/work',body,id,'Work admitted. No model execution was started.')) { $('work-form').reset(); paneExplicit(id,'',''); }
+  if (await write('/missions/' + encodeURIComponent(id) + '/work',body,id,'Work admitted. No model execution was started.')) $('work-form').reset();
   if (selectedId === id && snapshot?.value.id === id && $('work-form').contains(submittedFocus)) restoreControlFocus(submittedFocus,submittedFocus.id);
 });
 $('load-form').addEventListener('submit', event => { event.preventDefault(); if (!busy) { paneExplicit('','',''); void loadMission($('mission-id').value.trim()); } });

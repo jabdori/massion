@@ -194,3 +194,30 @@ test('review: an allowed body warning does not hide a secret name; card versions
  await adopt(['six']);const card=(await service.decisions('member-juno')).find(c=>c.state==='open')!;assert.equal(card.action,'Use v6');
  await service.decide({commandId:'c-act',decisionId:card.id,answer:'act'});assert.equal((await state(store)).skills[0]!.current,6);assert.equal((await service.decisions('member-juno')).find(c=>c.id===card.id)!.line,'Changed: v6');
 });
+
+test('HTTP: an owner skill action resuming after drain starts is refused and stores nothing',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-skills-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const {store:raw}=await setup();let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(raw,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===SKILLS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,root,{drainTimeoutMs:3000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;hold=true;
+ const response=fetch(`http://127.0.0.1:${port}/assistant/skills`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-drain',action:'write',memberId:'member-juno',kind:'skill',name:'PR description',body:body(['List changed files'])})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);await drain;assert.equal(await raw.load(SKILLS_ID),null);
+});
+
+test('review: evaluator and producer output is taken field by field, so neither overrides the host-built check',async()=>{
+ const {service,store,verdict,next}=await setup();await propose(service);const c=(await state(store)).candidates[0]!;
+ // A same-family checker plus a forged deterministic `check`: before, the spread let the forged check win and adopt.
+ const forging=new SkillsService(store,{evaluator:async()=>({checker:claude,cases:3,baseline:1,candidate:3,heldOut:{cases:1,baseline:1,candidate:1},evidence:'runs',check:{relation:'deterministic',producers:[c.producer],checker:null}}) as any});
+ await assert.rejects(forging.check(c.id),/Exact evaluator output/);assert.equal((await state(store)).candidates[0]!.state,'pending');
+ verdict.value=evaluation('same-family');await service.check(c.id);assert.equal((await state(store)).candidates[0]!.state,'unchecked','the host check stays authoritative');
+ next.value={...next.value,body:body(['Other order']),evaluation:{relation:'deterministic'}} as any;await assert.rejects(propose(service,'w-done','repeat'),/Invalid draft/,'a draft carries only its own fields');
+});
+
+test('review: a multiline or long Work title becomes a bounded one-line source title',async()=>{
+ const {service,store}=await setup();const long='Review PR #84\nthen the follow-up\t'+'x'.repeat(600);
+ await store.commit({id:'intake-long',expectedRevision:0,commandId:'seed-long',fingerprint:'seed',value:{id:'intake-long',version:1,works:[{id:'w-long',title:long,acceptance:'accepted',record:{id:'rec-9'}}]},events:[],outbox:[]});
+ assert.equal((await service.propose({memberId:'member-juno',missionId:'intake-long',workId:'w-long',trigger:'repeat'})).status,'committed');
+ const title=(await state(store)).candidates[0]!.source.title;assert.equal([...title].length,512);assert.ok(title.startsWith('Review PR #84 then the follow-up x'));
+});

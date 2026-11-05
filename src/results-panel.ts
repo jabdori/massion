@@ -32,9 +32,9 @@ function renderResults(){
   row.id='result-row-'+resultKey(r);row.append(cell,element('td',r.title),who,element('td',resultWhen(r.at)));row.addEventListener('click',()=>void resultOpen(r));return row;}));
  $('results-tiles').replaceChildren(...resultRows.map(r=>{const tile=element('button',undefined,'result-tile');tile.type='button';tile.id='result-tile-'+resultKey(r);tile.append(resultIcon(),element('span',r.title),element('span',resultWhen(r.at)));tile.addEventListener('click',()=>void resultOpen(r));return tile;}));
 }
-/** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview). */
+/** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. */
 async function resultOpen(r){
- chatOpenThread('');chatSegment=chatRep&&chatRep.head===r.segment?null:r.segment;void readChat();
+ if(!chatOpenThread(''))return;chatSegment=chatRep&&chatRep.head===r.segment?null:r.segment;void readChat();
  const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneAway(false);renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */
