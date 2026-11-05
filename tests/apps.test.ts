@@ -173,6 +173,15 @@ test('routes: list, install, answer and view; the conversation read carries the 
  }
 });
 
+test('HTTP: an install resuming after drain starts is refused and stores nothing',async t=>{
+ const base=new InMemoryStore<any>();let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(base,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===APPS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store,process.cwd(),{drainTimeoutMs:3000,scheduleIntervalMs:0,appNetwork:mock()});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ hold=true;const response=fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-drain',action:'install',catalogId:'github'})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);await drain;assert.equal(await base.load(APPS_ID),null);
+});
+
 test('the app script never reaches the worker realm, and the worker itself has no network',worker,async t=>{
  const run=(body:string)=>runHandler({appId:'app-probe',pkg:pkg('massion.handle("run",async()=>{'+body+'})'),handler:'run',input:{},network:mock()});
  // The global's constructor and an error raised while posting a call stay inside the context, where no string becomes code.
