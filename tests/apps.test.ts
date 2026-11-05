@@ -162,6 +162,10 @@ test('routes: list, install, answer and view; the conversation read carries the 
   chat=(await get('/assistant/conversation')).body;assert.deepEqual(chat.apps.map((a:any)=>[a.name,a.page,a.item,a.roomTab]),[['GitHub',true,true,'PR #']]);
   const view=await post('/assistant/apps/view',{app:chat.apps[0].id,handler:'page'});assert.equal(view.status,200);assert.equal(view.body.title,'GitHub');
   assert.equal((await post('/assistant/apps/view',{app:chat.apps[0].id,handler:'item',ref:'../'})).status,400);
+  // A view runs app code against this database's config: it answers with its feed, and a view from a page of a replaced database is refused before it runs.
+  const feed=(await store.readState()).feedId;assert.equal(view.body.feedId,feed);
+  const stale=await fetch(base+'/assistant/apps/view',{method:'POST',headers:{...headers,'x-massion-feed':'other-feed'},body:JSON.stringify({app:chat.apps[0].id,handler:'item',ref:'84'})});assert.equal(stale.status,409);assert.equal(((await stale.json()) as any).reason,'feed');
+  assert.equal((await fetch(base+'/assistant/apps/view',{method:'POST',headers:{...headers,'x-massion-feed':feed},body:JSON.stringify({app:chat.apps[0].id,handler:'item',ref:'84'})})).status,200);
   // A view runs app code with a secret: no GET and no form post from another site.
   assert.notEqual((await fetch(base+'/assistant/apps/view?app='+chat.apps[0].id+'&handler=page')).status,200);
   assert.equal((await fetch(base+'/assistant/apps/view',{method:'POST',headers:{'content-type':'text/plain'},body:JSON.stringify({app:chat.apps[0].id,handler:'page'})})).status,415);
@@ -212,4 +216,15 @@ test('workers are bounded: a fifth concurrent call is refused at once',worker,as
  const slow=()=>runHandler({appId:'app-probe',pkg:pkg('massion.handle("run",async()=>{while(true){}})'),handler:'run',input:{},network:mock(),timeoutMs:1500});
  const running=[slow(),slow(),slow(),slow()].map(p=>p.catch(e=>e));
  await assert.rejects(slow(),/Busy/);await Promise.all(running);
+});
+
+test('a page whose rows an item request could not take is refused, so every row the owner can select opens its item',worker,async()=>{
+ const {service}=await setup();
+ const view=(id:string)=>'massion.handle("page",async()=>({title:"Issues",groups:[{title:"Open",rows:[{id:'+JSON.stringify(id)+',title:"x"}]}]}));massion.handle("item",async({ref})=>({title:ref,groups:[]}));';
+ const app=(id:string,version:string)=>pkg(view(id),{id:'issues',name:'Issues',version,description:'Lists issues',handlers:['page','item'],contributes:{page:{title:'Issues'},templates:[],skills:[],procedures:[],tools:[]}},{network:[],secrets:[]});
+ const tests=(id:string)=>[{handler:'item',input:{ref:'84'},responses:{},expect:{title:'84',groups:[]}},{handler:'page',input:{},responses:{},expect:{title:'Issues',groups:[{title:'Open',rows:[{id,title:'x'}]}]}}];
+ await service.offerSelfMade({commandId:'assistant-app-issues-1',memberId:'member-juno',missionId:'intake',workId:'w-done',pkg:app('issue:84','0.1.0'),tests:tests('issue:84')});
+ await answer(service,(await service.decisions('member-juno'))[0]!.id,'act','c-issues');const appId=(await service.read()).apps[0]!.id;
+ await assert.rejects(service.view({app:appId,handler:'page'}),/item refs/);
+ await assert.rejects(service.view({app:appId,handler:'item',ref:'issue:84'}),/Invalid ref/);
 });

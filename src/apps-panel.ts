@@ -20,7 +20,7 @@ function appsRail(view){
  box.hidden=!shown.length;appsCurrent();
 }
 function appsCurrent(){for(const b of $('rail-apps').children)b.setAttribute('aria-current',!$('page-app').hidden&&b.id==='rail-app-'+appShown?'page':'false');}
-async function appsRead(app,handler,ref){try{const {response,body}=await request('/assistant/apps/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ref===undefined?{app,handler}:{app,handler,ref})});return response.ok?body:null;}catch{return null;}}
+async function appsRead(app,handler,ref,feed){try{const {response,body}=await request('/assistant/apps/view',{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(ref===undefined?{app,handler}:{app,handler,ref})});return response.ok?body:null;}catch{return null;}}
 /** The host's components draw an app view: a title, a meta line, label/value fields and row groups. */
 function appsViewNodes(v){
  if(!v||!chatText(v.title)||!Array.isArray(v.groups))return [element('p','Not available','app-meta')];
@@ -33,7 +33,7 @@ function appsViewNodes(v){
 async function appOpen(id){
  const a=appsList.find(x=>x.id===id);if(!a)return;const seq=++appSeq;appShown=id;appItem='';appPage=null;shellShow('app');$('page-heading').textContent=a.name;$('app-view').replaceChildren();renderAppSide();appsCurrent();
  // A late response for an earlier open (another app, or this one reopened) is dropped before it touches the shared page.
- const page=await appsRead(id,'page');if(seq!==appSeq)return;appPage=page;renderAppSide();
+ const page=await appsRead(id,'page',undefined,chatView&&chatView.feedId);if(seq!==appSeq)return;appPage=page;renderAppSide();
  // Like B22, the first row opens with the page.
  const first=a.item&&page&&Array.isArray(page.groups)?page.groups.flatMap(g=>g&&Array.isArray(g.rows)?g.rows:[])[0]:null;if(first){if(!appItem)await appSelect(first.id);}else $('app-view').replaceChildren(...appsViewNodes(page));
 }
@@ -45,13 +45,13 @@ function renderAppSide(){
  else if(!appPage)parts.push(element('p','Not available','app-group'));
  const foot=element('div',undefined,'app-foot');foot.append(chatButton('App settings',()=>{shellShow('settings');settingsOpen('apps',appShown);},''));parts.push(foot);side.replaceChildren(...parts);
 }
-async function appSelect(ref){const id=appShown,seq=appSeq;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref);if(seq===appSeq&&appItem===ref)$('app-view').replaceChildren(...appsViewNodes(v));}
+async function appSelect(ref){const id=appShown,seq=appSeq;appItem=ref;renderAppSide();const v=await appsRead(id,'item',ref,appPage&&appPage.feedId);if(seq===appSeq&&appItem===ref)$('app-view').replaceChildren(...appsViewNodes(v));}
 /** B22-room: a Work whose title names the prefix and a number gets that app's tab, drawn by its item view. */
 function appsRoomTabs(title){
  for(const a of appsList){if(!a.roomTab)continue;const at=String(title).indexOf(a.roomTab);if(at<0)continue;const ref=/^\d{1,9}/.exec(String(title).slice(at+a.roomTab.length));if(!ref)continue;
   const key='app:'+a.id+':'+ref[0];if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,title:a.roomTab+ref[0],appTab:{id:a.id,ref:ref[0]}});}
 }
-async function appsTabLoad(tab){$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref);if(paneActive===tab.key)$('pane-app').replaceChildren(...appsViewNodes(v));}
+async function appsTabLoad(tab){$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref,chatView&&chatView.feedId);if(paneActive===tab.key)$('pane-app').replaceChildren(...appsViewNodes(v));}
 /** One owner command from the conversation; the next read shows the state. */
 async function appsPost(body){try{await request('/assistant/apps',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}finally{await readChat();}}
 const appsJoin=v=>Array.isArray(v)&&v.length?v.join(' · '):'None';

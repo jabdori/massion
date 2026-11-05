@@ -31,6 +31,8 @@ export type AppsCommand =
 export const isAppsState=(value:unknown):value is AppsState=>!!value&&typeof value==='object'&&(value as {kind?:unknown}).kind==='apps';
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
 const exact=(v:unknown,keys:string[],optional:string[]=[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&keys.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>keys.includes(k)||optional.includes(k));
+/** An item reference: what page rows name and item requests take. */
+const ref=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9._-]{1,64}$/.test(v)&&!/^\.+$/.test(v);
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
 const line=(v:unknown,chars:number):v is string=>typeof v==='string'&&v.trim()===v&&v.length>0&&[...v].length<=chars&&v.isWellFormed()&&!/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁤﻿]/.test(v);
 const list=(v:unknown,item:(x:unknown)=>boolean)=>Array.isArray(v)&&v.length<=16&&v.every(item)&&new Set(v.map(x=>hash(x))).size===v.length;
@@ -170,8 +172,12 @@ export class AppsService {
   const v=(await this.#state())?.value,a=v?.apps.find(x=>x.id===input.app);ensure(a&&a.current!==null,'Unknown app or not installed');ensure(a.enabled,'App is off','conflict');
   const cur=a.versions[a.current-1]!;ensure(packageHash(cur.package)===cur.hash,'Package changed after its check','conflict');
   ensure((input.handler==='page'||input.handler==='item')&&cur.package.manifest.handlers.includes(input.handler),'Unknown handler');
-  if(input.handler==='item')ensure(typeof input.ref==='string'&&/^[A-Za-z0-9._-]{1,64}$/.test(input.ref)&&!/^\.+$/.test(input.ref),'Invalid ref');else ensure(input.ref===undefined,'A page takes no ref');
-  return (await runHandler({appId:a.id,pkg:cur.package,handler:input.handler,input:input.handler==='item'?{ref:input.ref}:{},network:this.#network})).view;
+  const item=cur.package.manifest.handlers.includes('item');
+  if(input.handler==='item')ensure(ref(input.ref),'Invalid ref');else ensure(input.ref===undefined,'A page takes no ref');
+  const view=(await runHandler({appId:a.id,pkg:cur.package,handler:input.handler,input:input.handler==='item'?{ref:input.ref}:{},network:this.#network})).view;
+  // Page rows are what the owner selects as item refs, so a page is held to the same ref contract as the item request.
+  if(input.handler==='page'&&item)ensure(view.groups.every(g=>g.rows.every(r=>ref(r.id))),'Page row ids must be item refs');
+  return view;
  }
  /** Host step: a new catalog version (update). */
  async offer(input:{commandId:string;pkg:AppPackage;origin:'catalog'}){ensure(input.commandId.startsWith(HOST_PREFIX),'Host command identity required');return this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'offer-app',decisionId:appDecisionId(input.commandId),origin:'catalog',pkg:input.pkg});}
