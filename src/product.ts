@@ -24,10 +24,14 @@ export class ProductService {
  async create(input:Parameters<Application['create']>[0],commandId:string) {return this.app.create(input,'local-owner',commandId);}
  async admit(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;title:string;budget:number;conversationSource?:import('./conversation-work.ts').ConversationSelection;correction?:import('./work-correction.ts').CorrectionSelection}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','title','budget','correction','conversationSource']);
-  const selected=this.providers.select(['text-output']);const mission=await this.app.store.load(missionId);const available=mission&&this.runtime?.availability(mission.value);
-  // Even a configured model does not imply a permitted execution/assurance runtime.
-  const executionGate:ExecutionGate|undefined=available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
+  const executionGate=this.executionGate((await this.app.store.load(missionId))?.value);
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'admit-work',workId:input.workId,title:input.title,budget:input.budget,...(Object.hasOwn(input,'conversationSource')?{conversationSource:input.conversationSource}:{}),...(Object.hasOwn(input,'correction')?{correction:input.correction}:{}),...(executionGate?{executionGate}:{})}});
+ }
+ /** Shared by owner and Representative admission: the host, never the caller, pins this gate. */
+ executionGate(mission:Mission|undefined):ExecutionGate|undefined {
+  const selected=this.providers.select(['text-output']);const available=mission&&this.runtime?.availability(mission);
+  // Even a configured model does not imply a permitted execution/assurance runtime.
+  return available?.ready?undefined:this.runtime?.configuration?{code:'runtime_unavailable',detail:available?.reason??'Choose an explicitly authorized execution connection.'}:selected.status==='unavailable'?{code:selected.code,detail:selected.reason}:{code:'runtime_unavailable',detail:'A provider is configured, but general execution and independent assurance have not been enabled. No provider invocation was made.'};
  }
  async clarifyWork(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;questionId:string;text:string},answer:boolean) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','questionId','text']);const {commandId,expectedRevision,...question}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:answer?'answer-work-question':'ask-work-question',...question}});
@@ -108,7 +112,7 @@ export class ProductService {
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
  /** A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
- private async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
+ async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<(SelectionPreflight&{selection?:{source:'default';choice:ExecutionChoice}})|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
   const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value):undefined;
@@ -127,15 +131,17 @@ export class ProductService {
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry);
   return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice},undefined,busyAtEntry),selection:{source:'default' as const,choice:resolved.choice}};
  }
- async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
-  if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice);
+ /** `activationActorId` and `expectedDefault` are set only by the conversation host path; HTTP runs are the owner's. `expectedDefault` is the default choice an earlier check approved: a different one now refuses the run. */
+ async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
+  if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
   const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
   const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
   if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
+  if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
   // A local change cannot start while the run awaits the stored revision without the run seeing it; a changed revision blocks rather than re-resolving.
-  return {...await this.runtime.run(missionId,workId,runId,expectedRevision,resolved.choice),selection:{source:'default' as const,choice:resolved.choice}};
+  return {...await this.runtime.run(missionId,workId,runId,expectedRevision,resolved.choice,activationActorId),selection:{source:'default' as const,choice:resolved.choice}};
  }
  async intervene(missionId:string,input:{commandId:string;expectedRevision:number;command:Command}) {
   input=structuredClone(input);

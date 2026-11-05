@@ -5,14 +5,15 @@ import {validateRuntimeOwnership} from './runtime-lifetime.ts';
 import type {CommitResult,Store} from './storage.ts';
 /** Bounded segments of the one owner conversation, stored as their own aggregates beside Missions. Provenance only, never a grant. */
 export const ASSISTANT_CONVERSATION_PREFIX='assistant-conversation:',ASSISTANT_ACTOR_ID='assistant-representative';
-export const SEGMENT_MESSAGES=16,SEGMENT_BYTES=65536,MESSAGE_BYTES=4096,TITLE_BYTES=512,RECEIPT_BYTES=1024,DIAGNOSTIC_BYTES=256,CONTEXT_MESSAGES=12,PENDING_GRACE_MS=30000;
+export const SEGMENT_MESSAGES=16,SEGMENT_BYTES=65536,MESSAGE_BYTES=4096,TITLE_BYTES=512,RECEIPT_BYTES=1024,DIAGNOSTIC_BYTES=256,MODEL_BYTES=256,CONTEXT_MESSAGES=12,PENDING_GRACE_MS=30000;
 /** Worst-case serialized growth of one exchange: owner message, turn, reply, settle and outcome fields. Texts exclude C0 controls other than tab and line breaks, so JSON escaping at most doubles their bytes. */
 export const EXCHANGE_RESERVE_BYTES=28672;
 export interface AssistantMessage {id:string;ordinal:number;actorId:string;role:'owner'|'representative';turnId:string|null;text:string}
 export interface AssistantDiagnostic {code:string;message:string}
 export interface AssistantRoute {profileId:string;configHash:string;provider:string;model:string;mode:'mock-http'|'live';outputTokenCap:number}
 export interface AssistantUsage {inputTokens:number|null;outputTokens:number|null}
-export interface AssistantOutcome {work:{status:'admitted'|'not_created'|'unknown';diagnostics:AssistantDiagnostic[]};run:{status:'requested'|'not_started'|'off';diagnostics:AssistantDiagnostic[]}}
+/** `missionId` pins the intake Mission the Work was admitted to, so the card outlives a later settings change. Absent on outcomes recorded before it existed. */
+export interface AssistantOutcome {missionId?:string;work:{status:'admitted'|'not_created'|'unknown';diagnostics:AssistantDiagnostic[]};run:{status:'requested'|'not_started'|'off';diagnostics:AssistantDiagnostic[]}}
 export interface AssistantTurn {id:string;messageId:string;status:'not_started'|'pending'|'answered'|'failed'|'unknown';diagnostics?:AssistantDiagnostic[];route?:AssistantRoute;ownership?:RuntimeOwnership;requestHash?:string;contextMessageIds?:string[];usage?:AssistantUsage;receipt?:string;proposal?:{title:string};outcome?:AssistantOutcome}
 export interface AssistantSegment {kind:'assistant-conversation';id:string;segment:number;previous:{id:string;lastMessageId:string}|null;closed:boolean;timeWatermark:number;messages:AssistantMessage[];turns:AssistantTurn[]}
 export type AssistantTurnInput = {status:'pending';id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
@@ -22,7 +23,7 @@ export type AssistantCommand =
  | {type:'close-assistant-segment';segment:number}
  | {type:'settle-assistant-turn';turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:{title:string}|null}
  | {type:'settle-assistant-turn';turnId:string;status:'failed'|'unknown';usage:AssistantUsage;receipt:string}
- | {type:'record-assistant-outcome';turnId:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
+ | {type:'record-assistant-outcome';turnId:string;missionId?:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
 /** The owner's exact words pinned into a Work. The title stays the Representative's summary. */
 export interface AssistantSource {segmentId:string;turnId:string;messageId:string;messageHash:string;message:AssistantMessage;representative:{provider:string;model:string}}
 export const segmentId=(n:number)=>ASSISTANT_CONVERSATION_PREFIX+n,ownerMessageId=(commandId:string)=>'m:'+hash(commandId).slice(0,32),assistantTurnId=(messageId:string)=>'assistant-turn:'+messageId;
@@ -37,7 +38,7 @@ const role=(actor:Actor,needed:'owner'|'assistant')=>ensure(actor.roles.includes
 function diagnostics(v:unknown,min:number):AssistantDiagnostic[] {ensure(Array.isArray(v)&&v.length>=min&&v.length<=2&&Object.keys(v).length===v.length,'Invalid diagnostics bound');for(const d of v){ensure(exact(d,['code','message'])&&typeof d.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(d.code),'Invalid diagnostic');text(d.message,DIAGNOSTIC_BYTES,'diagnostic message');}return structuredClone(v);}
 /** Worst-case serialized outcome: an outcome may land after close, so room keeps one per answered proposal still without it. */
 const worstDiagnostic={code:'a'.repeat(64),message:'"'.repeat(DIAGNOSTIC_BYTES)};
-export const OUTCOME_RESERVE_BYTES=bytes({outcome:{work:{status:'not_created',diagnostics:[worstDiagnostic,worstDiagnostic]},run:{status:'not_started',diagnostics:[worstDiagnostic,worstDiagnostic]}}});
+export const OUTCOME_RESERVE_BYTES=bytes({outcome:{missionId:'a'.repeat(128),work:{status:'not_created',diagnostics:[worstDiagnostic,worstDiagnostic]},run:{status:'not_started',diagnostics:[worstDiagnostic,worstDiagnostic]}}});
 export function hasRoom(segment:Pick<AssistantSegment,'messages'|'turns'>):boolean {const owed=segment.turns.filter(t=>t.proposal&&!t.outcome).length;return segment.messages.length+2<=SEGMENT_MESSAGES&&bytes(segment)+EXCHANGE_RESERVE_BYTES+owed*OUTCOME_RESERVE_BYTES<=SEGMENT_BYTES;}
 /** Recorded host time only; a fast clock can make a turn unknown early, never accept a late reply. */
 function observe(segment:AssistantSegment,time:TimeObservation|undefined):number {ensure(exact(time,['observedAt'])&&count(time!.observedAt)&&time!.observedAt>=segment.timeWatermark,'Host clock observation unavailable or below the segment watermark');return segment.timeWatermark=time!.observedAt;}
@@ -46,7 +47,7 @@ function turnInput(v:unknown,messageId:string,observedAt:number):AssistantTurn {
  const t=v as AssistantTurnInput;ensure(t&&typeof t==='object'&&t.id===assistantTurnId(messageId),'Turn identity must derive from its owner message');
  if(t.status==='not_started'){ensure(exact(t,['status','id','diagnostics']),'Exact not-started turn fields required');return {id:t.id,messageId,status:t.status,diagnostics:diagnostics(t.diagnostics,1)};}
  ensure(t.status==='pending'&&exact(t,['status','id','route','ownership','requestHash','contextMessageIds']),'Exact pending turn fields required');const r=t.route;
- ensure(exact(r,['profileId','configHash','provider','model','mode','outputTokenCap'])&&id(r.profileId)&&sha(r.configHash)&&['mock-http','live'].includes(r.mode)&&count(r.outputTokenCap,1),'Invalid Representative route pin');text(r.provider,128,'route provider',true);text(r.model,128,'route model',true);
+ ensure(exact(r,['profileId','configHash','provider','model','mode','outputTokenCap'])&&id(r.profileId)&&sha(r.configHash)&&['mock-http','live'].includes(r.mode)&&count(r.outputTokenCap,1),'Invalid Representative route pin');text(r.provider,128,'route provider',true);text(r.model,MODEL_BYTES,'route model',true);
  validateRuntimeOwnership(t.ownership);ensure(t.ownership.startedAt<=observedAt&&observedAt<t.ownership.deadlineAt,'Pending turn ownership must contain the recorded time');ensure(sha(t.requestHash),'Invalid request hash');
  ensure(Array.isArray(t.contextMessageIds)&&t.contextMessageIds.length<=CONTEXT_MESSAGES&&Object.keys(t.contextMessageIds).length===t.contextMessageIds.length&&t.contextMessageIds.every(id)&&new Set(t.contextMessageIds).size===t.contextMessageIds.length,'Invalid context message pins');
  return {id:t.id,messageId,status:'pending',route:structuredClone(r),ownership:structuredClone(t.ownership),requestHash:t.requestHash,contextMessageIds:structuredClone(t.contextMessageIds)};
@@ -83,8 +84,8 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
    expire(state,t);break;
   }
   case 'record-assistant-outcome': {
-   role(actor,'assistant');ensure(exact(command,['type','turnId','work','run'])&&exact(command.work,['status','diagnostics'])&&exact(command.run,['status','diagnostics'])&&['admitted','not_created','unknown'].includes(command.work.status)&&['requested','not_started','off'].includes(command.run.status),'Exact outcome fields required');
-   ensure(command.work.status==='admitted'||command.run.status!=='requested','A run is requested only for an admitted Work');const outcome={work:{status:command.work.status,diagnostics:diagnostics(command.work.diagnostics,0)},run:{status:command.run.status,diagnostics:diagnostics(command.run.diagnostics,0)}};
+   role(actor,'assistant');ensure((exact(command,['type','turnId','work','run'])||exact(command,['type','turnId','missionId','work','run'])&&id(command.missionId))&&exact(command.work,['status','diagnostics'])&&exact(command.run,['status','diagnostics'])&&['admitted','not_created','unknown'].includes(command.work.status)&&['requested','not_started','off'].includes(command.run.status),'Exact outcome fields required');
+   ensure(command.work.status==='admitted'||command.run.status!=='requested','A run is requested only for an admitted Work');const outcome={...(command.missionId!==undefined?{missionId:command.missionId}:{}),work:{status:command.work.status,diagnostics:diagnostics(command.work.diagnostics,0)},run:{status:command.run.status,diagnostics:diagnostics(command.run.diagnostics,0)}};
    const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&turn.status==='answered'&&turn.proposal&&!turn.outcome,'Outcome is recorded once for an answered turn with a proposal');turn.outcome=outcome;if(!state.closed)expire(state,t);break;
   }
   default: throw new DomainError('Unknown command');
@@ -103,7 +104,7 @@ export function validateAssistantSource(v:unknown,workId:string):asserts v is As
  const s=v as AssistantSource;ensure(exact(s,['segmentId','turnId','messageId','messageHash','message','representative'])&&typeof s.segmentId==='string'&&/^assistant-conversation:[1-9][0-9]{0,15}$/.test(s.segmentId),'Exact assistant source fields required');
  ensure(typeof s.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(s.messageId)&&s.turnId===assistantTurnId(s.messageId),'Assistant source turn must derive from its owner message');
  const m=s.message;ensure(exact(m,['id','ordinal','actorId','role','turnId','text'])&&m.id===s.messageId&&m.role==='owner'&&m.turnId===null&&count(m.ordinal,1)&&id(m.actorId),'Assistant source must pin one complete owner message');text(m.text,MESSAGE_BYTES,'pinned owner message');
- ensure(s.messageHash===hash(m),'Assistant source message hash mismatch');ensure(exact(s.representative,['provider','model']),'Exact Representative pin required');text(s.representative.provider,128,'Representative provider',true);text(s.representative.model,128,'Representative model',true);
+ ensure(s.messageHash===hash(m),'Assistant source message hash mismatch');ensure(exact(s.representative,['provider','model']),'Exact Representative pin required');text(s.representative.provider,128,'Representative provider',true);text(s.representative.model,MODEL_BYTES,'Representative model',true);
  ensure(workId===assistantWorkId(s.turnId),'Assistant Work ID must derive from its turn');
 }
 export interface AssistantEnvelope {segment:number;commandId:string;expectedRevision:number;actorId:string;command:AssistantCommand}
