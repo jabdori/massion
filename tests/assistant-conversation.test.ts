@@ -185,6 +185,13 @@ test('19: Representative settings change the version, load from version 1 and st
  await m.save(()=>m.removeRepresentative({expectedConfigHash:m.list().configHash}));assert.equal(m.list().representative,null);
 });
 
+test('20d: reusing a committed command ID with different text is an idempotency conflict, not a replay',async t=>{
+ const f=await setup(t),{s}=await f.ready();await say(s,'First request','same-id');assert.equal(f.calls.representative,1);
+ const again=await s.send({commandId:'same-id',segment:1,expectedRevision:0,text:'Different request'});
+ assert.equal(again.message.status,'conflict');assert.equal((again.message as any).reason,'idempotency');assert.equal(again.turn,null);assert.equal(f.calls.representative,1);
+ const view=await s.read();assert.deepEqual(view.segment!.messages.filter((m:any)=>m.role==='owner').map((m:any)=>m.text),['First request']);
+});
+
 test('20: a lost response replays by command ID, including the commit that filled the segment, with no second call',async t=>{
  const f=await setup(t),{s}=await f.ready();const ids=Array.from({length:8},(_,i)=>'lost-'+i);
  for(const id of ids)await say(s,'Question '+id,id);assert.equal(f.calls.representative,8);const head=await s.read();assert.equal(head.segment!.full,true);

@@ -66,12 +66,13 @@ export class AssistantService {
   return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text));
  }
  async #load(n:number){return await this.#store.load(segmentId(n)) as Snapshot<AssistantSegment>|null;}
- /** A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
- async #replay(n:number,messageId:string,turnId:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k);if(found?.value.messages.some(m=>m.id===messageId))return this.#stored(found,turnId,'replayed');}return null;}
+ /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
+ * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
+ async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
  async #send(commandId:string,n:number,expectedRevision:number,text:string):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
-  const replayed=await this.#replay(n,messageId,turnId);if(replayed)return replayed;let current=await this.#load(n);
+  const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   let previous:{id:string;lastMessageId:string}|null=null,context:AssistantSegment|null=current?.value??null;
   if(expectedRevision===0){
    if(current)return {message:{status:'conflict',revision:current.revision,reason:'revision'},turn:null};
@@ -97,7 +98,7 @@ export class AssistantService {
    if(this.#draining)throw new HostDrainError();
    const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',messageId,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
-   if(message.status==='conflict')return await this.#replay(n,messageId,turnId)??{message,turn:null};
+   if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
    // Only a fresh committed pending turn permits the call.
    if(message.status!=='committed'||!call)return {message,turn:turnView(message.value,turnId)};
    return await this.#answer(n,turnId,messageId,turn as Extract<AssistantTurnInput,{status:'pending'}>,call,message);
