@@ -6,7 +6,7 @@
 
 ## Context
 
-The first live vertical slice ([evidence](../../acceptance/live-vertical-slice-ui-evidence.md)) showed that the product works and that the current surface is hard to use every day. One Work takes more than ten steps. The first [experience plan](../../product/experience-plan.ko.md) (v1, 2026-11-04) answered with a Work-centered four-area layout. Its v2 follows this ADR. A survey of recent agent products (2026-11-04) points the other way: one personal assistant, one continuing conversation, and work delegated behind it. Most of these products hide the organization and show work as cards inside the conversation.
+The first live vertical slice ([evidence](../../acceptance/live-vertical-slice-ui-evidence.md)) showed that the product works and that the current surface is hard to use every day. One Work takes more than ten steps. The first [experience plan](../../product/experience-plan.ko.md) (v1, 2026-11-04) answered with a Work-centered four-area layout. Its v2 and v3 follow this ADR. A survey of recent agent products (2026-11-04) points the other way: one personal assistant, one continuing conversation, and work delegated behind it. Most of these products hide the organization and show work as cards inside the conversation.
 
 Massion started with the same shape. Earlier designs routed all user input through one Representative. In the current rebuild, `representative` is a domain permission role (`src/domain.ts`). Two host paths send commands with it: the runtime actor `runtime-representative` (`src/configured-runtime.ts`) and the owner Growth proposal path (`src/product.ts`). No path lets the owner talk with a Representative or get its reply. The organization is two roles, executor and verifier. Durable organization (the archive's Core Office and built-in agents) and extensions are deferred in [scope](../../product/scope.md) ("Deferral is sequencing, not deletion").
 
@@ -18,8 +18,8 @@ A second question is who checks results. If the owner approves every change, the
 
 - Opening Massion continues the same conversation with one assistant. There is no "new conversation".
 - The owner names the assistant. Memory personalizes it.
-- The assistant reports first. A morning briefing is one message in the conversation, not a separate feed. Its frequency is off, low or high, and the owner changes it by telling the assistant.
-- Top-level tabs are Conversation, Delegated work and Results, plus Settings.
+- The assistant reports first. A morning briefing is one message in the conversation, not a separate feed. Its frequency is off, low or high, and the owner changes it by telling the assistant or on the schedules page.
+- There are no top-level tabs. A left rail opens the conversation, the results shelf, schedules and Settings. By default the sidebar lists pinned and recent Work; a toggle switches it to an activity view (needs a decision, running, recent). Work detail, previews and the browser open in a work pane beside the conversation.
 - The assistant is Massion's Representative. It receives requests, answers, and turns a request that is work into a Work.
 
 ### 2. Internal concepts stay internal
@@ -27,7 +27,7 @@ A second question is who checks results. If the owner approves every change, the
 - The words Work, Mission, organization, executor and verifier do not appear on the surface.
 - Work appears as a card in the conversation. Opening a card opens the Work detail.
 - The detail belongs to the assistant's delegated work. It is not a new conversation.
-- The four-area Work layout becomes the "Show details" view inside the Work detail.
+- The four-area Work layout becomes the "Show details" view, which is the widened Work detail pane.
 - The underlying entities, transitions and evidence do not change.
 
 ### 3. Members can be addressed directly
@@ -35,7 +35,7 @@ A second question is who checks results. If the owner approves every change, the
 - By default the assistant receives every message. `@name` addresses that member (an organization lead or an agent).
 - The exchange is recorded in the same thread as the assistant conversation.
 - An instruction about running Work is recorded as that Work's steering ("change direction").
-- New work given to a member is admitted as a Work and appears in Delegated work.
+- New work given to a member is admitted as a Work and appears in the activity view.
 - Pause, stop and reassignment pass the policy gate.
 - The member list lives in Settings and in `@` autocomplete, not on the main surface.
 
@@ -114,8 +114,8 @@ An external agent's work is admitted as a Work inside Massion. Each outgoing req
 ### 13. In-app tools and views
 
 - Order: result preview and in-conversation progress cards first; then an in-app browser with decision cards (screenshot, amount, expiry); file, change and terminal views for coding Work; an agent computer view later.
-- Larger views open as tabs in one tool panel beside the conversation.
-- An extension contributes tools and views together, in three places: a conversation card, a tool panel tab and a Work detail tab.
+- Larger views open as tabs in the work pane beside the conversation.
+- An extension contributes tools and views together, in three places: a conversation card, a work pane tab and a Work detail tab.
 
 ### 14. Spaces
 
@@ -168,6 +168,6 @@ Consequences:
 - A Representative that answers needs its own executor, budget and independent check. It is a new model path, not a relabeled role.
 - Hiding the organization raises expectations of an organization that "just handles it". The restoration order in section 10 must keep pace with the surface.
 - Automatic correction after a failed check needs an explicit bound (attempts and budget) in invariant documents before the assistant retries on its own. A new attempt is not a resend, so it does not conflict with the unknown-outcome rule.
-- Member spaces, connected machines, the "What the assistant knows about me" view, in-app tools and the coding Work flow need detailed designs beyond sections 13–15. Each must keep sections 4, 5 and 12.
+- Member spaces, connected machines, the Memory settings page (formerly "What the assistant knows about me"), in-app tools and the coding Work flow need detailed designs beyond sections 13–15. Each must keep sections 4, 5 and 12.
 
 Revisit this ADR when the step-count measurement fails, when calibration cannot keep revert rates bounded, or when an external adapter cannot prove single delivery. Record the evidence and the replacement rather than changing the product contract silently.
