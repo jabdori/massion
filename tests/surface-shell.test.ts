@@ -107,6 +107,8 @@ test('loading a Mission from Settings opens one pane tab named after its purpose
 });
 
 const open=(row:Node)=>row.children.find(c=>c.tagName==='BUTTON')!;
+// Running Work opens from its card, settled Work from its fold: the sidebar lists running Work only.
+const openTurn=(app:ReturnType<typeof harness>,index:number)=>{const turn='assistant-turn:m:'+String(index+1).repeat(32),node=app.all().find(n=>n.id==='chat-card-'+turn||n.id==='chat-fold-'+turn)!;return node.tagName==='BUTTON'?node:node.children.find(c=>c.className==='chat-card-open')!;};
 const shown=(app:ReturnType<typeof harness>)=>kids(app.node('work-list')).map(card=>card.id);
 const selectedTab=(app:ReturnType<typeof harness>)=>kids(app.node('pane-tabs')).filter(t=>t.children[0]!.attributes.get('aria-selected')==='true').map(t=>t.children[0]!.textContent);
 // Host ready, with a feed boundary that has no Mission selected, so writes and Settings lists are enabled.
@@ -156,7 +158,7 @@ test('unread memory survives viewing another segment and widening reports the hi
 
 test('closing the selected tab while a read or write is in flight keeps it, and closing another tab still works',async()=>{
  const {app}=fixture([...two,{workId:'work:c',title:'Third',execution:'active',acceptance:'pending',started:true}]);await settle();
- for(const line of kids(app.node('side-work'))){await open(line).fire('click');await settle();}
+ for(const index of [0,1,2]){await openTurn(app,index).fire('click');await settle();}
  const tabs=()=>kids(app.node('pane-tabs')),close=(tab:Node)=>tab.children[1]!;assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);
  runInContext('loading=true',app.context);
  await close(tabs()[2]!).fire('click');assert.equal(tabs().length,3);assert.deepEqual(selectedTab(app),['Third']);assert.deepEqual(shown(app),['work-card-work:c']);
@@ -178,7 +180,7 @@ test('moving to another page sets the narrow-screen pane aside until a Work is o
  const {app}=fixture(two);await settle();
  await open(kids(app.node('side-work'))[0]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);
  await app.node('rail-results').fire('click');assert.match(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('work-pane').hidden,false,'the tabs stay open');
- await open(kids(app.node('side-work'))[1]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
+ await openTurn(app,1).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
 });
 
 test('the narrow-screen sidebar opens below the band so its toggle stays reachable to close it',()=>{
