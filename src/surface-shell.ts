@@ -58,7 +58,7 @@ function renderShell(){
  const ordered=items.slice().reverse();if(shellOrder==='priority')ordered.sort((a,b)=>shellRank(a.work)-shellRank(b.work));
  // ponytail: decisions lead both orders; they join the recent order by time once Work rows carry times too.
  const decisions=chatDecisions(chatRep).filter(d=>d.state==='open').map(d=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-decision:'+d.id;const marks=element('span',undefined,'marks'),avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);open.append(element('strong',d.title),marks,element('span',d.question,'summary'));
-  open.addEventListener('click',()=>{chatOpenThread('');document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
+  open.addEventListener('click',()=>{if(chatOpenThread(''))document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
  $('activity-list').replaceChildren(...decisions,...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span','하','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
  $('activity-head').hidden=!items.length&&!decisions.length;
  shellMembers();

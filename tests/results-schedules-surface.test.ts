@@ -134,3 +134,12 @@ test('an accepted Record arriving while Results shows rereads the page',async()=
  await app.tick();await settle();
  assert.equal(app.node('results-empty').hidden,true);assert.ok(byId(app,'result-row-intake/work:a'));
 });
+
+test('a result clicked while a member send is pending opens nothing: Results stays, no preview, no segment read',async()=>{
+ const {app}=fixture();await settle();await app.node('rail-results').fire('click');await settle();
+ runInContext("chatThread='member:a';chatSending=true",app.context);const reads=app.calls.length;
+ await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
+ assert.equal(app.node('page-results').hidden,false);assert.equal(app.node('pane-result').hidden,true);
+ assert.equal(runInContext('chatSegment',app.context),null);assert.equal(runInContext('chatThread',app.context),'member:a');
+ assert.ok(!app.calls.slice(reads).some(c=>c.path.startsWith('/assistant/conversation')||c.path.includes('record-artifact')));
+});
