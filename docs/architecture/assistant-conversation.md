@@ -42,7 +42,7 @@ Delivery is split in two PRs so the storage change is reviewed without any model
 | Representative name and greeting, first run (B1) | Later | Pure surface. First run needs no connection choice in this increment: the conversation opens and an unconfigured route shows as a turn exception. B1 "Continue with Claude / ChatGPT" needs subscription login detection. |
 | Composer permission chip ("asks before money, sending, deleting") | Later | GOV-02 increment. |
 | Memory personalization | Later | The Representative context has no memory. The created Work still pins effective memory through `admit-work`. |
-| Answers checked by another model | Later | The family map is not implemented. |
+| Answers checked by another model | Later | Replies are not checked; Work results record their family check ([family map](family-map-and-model-groups.md)). |
 | Decision cards, "just do this next time" | Later | GOV-02 increment. |
 
 ## Current state (code evidence)
@@ -260,7 +260,7 @@ All in `POST /assistant/messages`:
 5. Validate as `ConfiguredTextRuntime.invoke` does, then parse `assistant-turn/v1`. Invalid is `failed`.
 6. Settle (`answered` with reply and proposal, `failed`, or `unknown`). Not fresh committed: stop.
 7. If answered with a proposal: resolve the default route for the intake Mission and check the intake oracle; unresolved or unsupported gives `work: not_created`. Otherwise load the intake Mission and dispatch `admit-work` once at its current revision as `assistant-representative` with `assistantSource`, the deterministic `workId`, `budget = 2 × cap` and the shared `executionGate` helper. `conflict` or `invalid` gives `not_created` with the reason; there is no second attempt. Commit outcome unknown: one lookup on `assistant-work:<turnId>`; still unknown gives `work: unknown`.
-8. If admitted fresh, await `ProductService.preflight` (selection-less). The run preflight (`ConfiguredTextRuntime.preflight`, which every run and every Start applies) refuses a verifier whose provider/model equals the Work's `assistantSource.representative` (`assistant_verifier_same_model`). Ready gives `run: requested`; else `not_started` with diagnostics.
+8. If admitted fresh, await `ProductService.preflight` (selection-less). The run preflight (`ConfiguredTextRuntime.preflight`, which every run and every Start applies) no longer refuses a verifier on the Work's `assistantSource.representative` model; the verdict pins the family relation with the Representative as a producer ([family map](family-map-and-model-groups.md)). Ready gives `run: requested`; else `not_started` with diagnostics.
 9. Dispatch `record-assistant-outcome`, release the settings registration.
 10. If `requested`: `ProductService.run(intakeMissionId, workId, 'assistant-run:' + turnId, revision, undefined, 'assistant-representative')`, not awaited; `AssistantService` keeps the promise for drain. A later refusal (race after preflight, such as `host_busy`) is not stored; the read path shows it (below).
 
@@ -306,7 +306,7 @@ Exact keys at both levels; no surrounding text. `reply` nonempty, well-formed, �
 ### Independent check
 
 - **Effect.** The only effect of a turn is one Work admission (and, if the owner allowed it, one run request). It is gated deterministically by the host: output contract, bounds, the unchanged domain admission, the lineage pins.
-- **Interpretation.** The title is the Representative's summary. The Work's result is checked by the existing independent verifier against the Mission criteria **and** the pinned owner message (@9), so a title that misreads the request fails assurance instead of becoming an accepted Record. The verifier may not be the same provider/model as the Representative route that wrote the title. This is a minimum until the family map exists.
+- **Interpretation.** The title is the Representative's summary. The Work's result is checked by the existing independent verifier against the Mission criteria **and** the pinned owner message (@9), so a title that misreads the request fails assurance instead of becoming an accepted Record. The Representative counts as a producer in the verdict's family check; a same-model check is allowed and recorded as `same-family` ([family map](family-map-and-model-groups.md), ADR 0003 §7).
 - **Reply text.** Conversation only. Never accepted, never a Record or Work input. The surface draws Work cards from Work state and the stored outcome, and adds host-written exception labels; it does not rely on the reply's claims.
 
 ## Unknown, failed and not-started turns
@@ -381,7 +381,7 @@ Deferred to the next step: rail, sidebar (pinned, recent, activity view), Shelf,
 12. Every segment command records its host time; replay uses only that time; the watermark never decreases.
 13. Segments never appear in Mission catalog, inbox or Mission routes.
 14. Segments and pins travel in portable backup and pass cross-aggregate lineage; the Representative route does not.
-15. The ADR 0002 family check is still not implemented; only the same-provider/model rule applies.
+15. The family check records how independent each check was; same-family checks are allowed ([family map](family-map-and-model-groups.md)).
 
 ## Acceptance tests (fixture and mock only)
 
@@ -404,7 +404,7 @@ Turns:
 10. No default route: no Work, outcome `not_created` with `default_route_missing`, the host exception line, zero executor calls.
 11. Host busy at preflight: outcome `run: not_started` with `host_busy`; the card shows it, not the admission blocker text.
 12. Intake Mission oracle changed by `revise-mission`: `not_created` with `assistant_intake_unsupported`; setting a Mission with another oracle is refused.
-13. Representative route model equals the default verifier model: `run: not_started` with `assistant_verifier_same_model`.
+13. Representative route model equals the default verifier model: the Work runs and its Record pins a `same-family` check naming the Representative (superseded by ADR 0003 §7).
 14. Concurrent intake Mission write between load and admission: `not_created` with the conflict reason; Mission at its Work limit: `not_created`.
 15. No route, stale route, live route without the live option, settings pending, settings changed: message stored with turn `not_started`, zero adapter calls; refresh shows the exception.
 16. Invalid outputs, one case each (not JSON, surrounding text, extra key, two titles, empty reply, oversize reply, multi-line title): `failed`, no reply, no Work, one call.
@@ -486,7 +486,7 @@ Implemented in `src/assistant-service.ts` (turn path, read view, settings entry)
 1. **Decided (owner, 2026-11-05): no auto-start setting.** A Representative Work starts on the default route like any other selection-less run, live or mock (ADR 0002 §6).
 2. **Single intake criteria (working default for PR 2b).** Every Representative Work is judged by the intake Mission's one criteria plus the pinned owner message. Per-request criteria drafts come later.
 3. **Wrong classification.** Record classification outcomes (Work cancelled within N minutes) for calibration (ADR 0002 §7).
-4. **Checking answers (working default for PR 2b).** A reply is conversation, not a result, so it is not checked. A different-family check is added with the family map.
+4. **Checking answers (working default for PR 2b).** A reply is conversation, not a result, so it is not checked. Work results carry the family check ([family map](family-map-and-model-groups.md)).
 5. **Cumulative Representative budget.** Required before the briefing. Per day, per segment, or an owner-set total?
 6. **Intake Mission (working default for PR 2b).** One owner-set intake Mission. The model never picks a scope; asking among several Missions comes later.
 
@@ -503,7 +503,7 @@ Implemented in `src/assistant-service.ts` (turn path, read view, settings entry)
 | Domain 7: more Mission readers | Accepted | Guard in `decodeMissionIdentifier` (single entry point for all Mission ID routes) plus `createMission`; `portable-backup.ts` `inventory()` added. Store wrapper not added: one guard suffices. |
 | Domain 8: extension version order | Accepted | `@9` first in the ternary; test 8 checks it (questions combination covered by the @9 prompt). |
 | Domain 9: caller occupies host IDs | Accepted | 400 for `assistant-` command and run IDs; lineage checks deterministic IDs. |
-| Safety 1: model title governs, no interpretation check | Accepted | `configured-runtime.ts:188/200` confirmed. @9 prompt and verifier check against the owner message; same provider/model refused. Family rule stays open. |
+| Safety 1: model title governs, no interpretation check | Accepted | `configured-runtime.ts:188/200` confirmed. @9 prompt and verifier check against the owner message; same provider/model refused until ADR 0003 §7; now recorded as a family check. |
 | Safety 2: auto-start widens permission, owner recorded | Accepted, partly | Distinct activation actor adopted. The `autoStart` field adopted here was removed by owner decision on 2026-11-05 (no autonomy setting). Three-state `off/mock-only/on` rejected: live is already gated by route mode and `--allow-live-model-calls`; the live question is open question 1. |
 | Safety 3: reply claims unperformed work | Accepted | Prompt drops Work state; fixed instruction forbids status claims; host exception lines from the stored outcome; test 17. |
 | Safety 4: `representative` role too broad | Accepted | Confirmed in `domain.ts`. New role `assistant` limited to the listed commands; test 1. |

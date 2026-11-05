@@ -1,6 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {Application} from './application.ts';
 import type {Mission,Command,Actor,Artifact,Work} from './domain.ts';
+import {workProducers} from './domain.ts';
+import {familyCheck} from './model-family.ts';
 import type {Store} from './storage.ts';
 import {BUILTIN_FIXTURE_EXTENSION,FIXTURE_PROVIDER,CALCULATION_CRITERIA_VERSION,DOCUMENT_CRITERIA_VERSION,createFixtureWorkspace,writeCalculationCandidate,independentlyVerifyCalculation,writeDocumentSummaryCandidate,independentlyVerifyDocumentSummary,evaluateCalculationImprovement,chooseFixtureVariant,sealArtifact,assertFixtureCapability} from './execution.ts';
 import type {FixtureWorkspace,FixtureVerification,Artifact as FixtureArtifact} from './execution.ts';
@@ -68,7 +70,7 @@ export class FixtureWorkflow {
   const assigned=w.assignments.find(a=>a.id===`${workId}:assurance`)!;
   assertFixtureCapability({...assigned.model,extensionVersion:assigned.extensionVersion,capability:kind==='calculation'?'controlled-code-verification':'controlled-document-verification'});
   const check=kind==='calculation'?await independentlyVerifyCalculation(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle):await independentlyVerifyDocumentSummary(workspace,asFixtureArtifact(w.artifact),w.criteria.oracle);
-  await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle}))}},'assurance');
+  await this.send({type:'verify',workId,verdict:{id:randomUUID(),verifierAssignmentId:`${workId}:assurance`,artifactSha256:w.artifact.sha256,artifactVersion:w.artifact.version,criteriaVersion:w.criteria.version,status:check.verdict,evidence:check.evidence.map(detail=>({kind:'independent-oracle',detail,source:check.process?.oracleSha256??w.criteria.oracle})),check:{relation:'deterministic',producers:familyCheck(workProducers(w),assigned.model).producers,checker:null}}},'assurance');
   return check;
  }
  async verifyAcceptedForMeasurement(workId:string,workspace:FixtureWorkspace):Promise<number> {

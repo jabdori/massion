@@ -90,7 +90,13 @@ function effect(value: unknown, recoveryPendingIds: readonly string[] = []): ass
   else text(item.receipt, 'effect receipt', 262_144);
 }
 function verdict(value: unknown): asserts value is Verdict {
-  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence']);
+  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence'], ['check']);
+  if (Object.hasOwn(item, 'check')) {
+    // Shape only here; the replayed verify command binds producers, checker and relation to the Work.
+    const check = object(item.check, 'family check', ['relation', 'producers', 'checker']); oneOf(check.relation, ['deterministic', 'different-family', 'same-family'], 'family relation');
+    const identity = (v: unknown) => { const m = object(v, 'model identity', ['provider', 'model', 'family']); text(m.provider, 'check provider'); text(m.model, 'check model'); ensure(m.family === null || typeof m.family === 'string', 'invalid check family'); };
+    array(check.producers, 'check producers').forEach(identity); if (check.checker !== null) identity(check.checker);
+  }
   text(item.id, 'verdict ID'); text(item.verifierAssignmentId, 'verifier assignment'); sha(item.artifactSha256, 'verdict artifact hash');
   integer(item.artifactVersion, 'verdict artifact version'); integer(item.criteriaVersion, 'verdict criteria version');
   oneOf(item.status, ['passed', 'failed', 'stale'], 'verdict status');
