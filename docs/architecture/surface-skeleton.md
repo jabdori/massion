@@ -18,7 +18,7 @@ The workbench was one long page: an intro, a column of Mission forms and a colum
 | Part | Holds | Source |
 |---|---|---|
 | Rail | Representative (back to the conversation), Results, Schedules, an empty installed-apps slot, and the owner's menu at the bottom with Settings | Static |
-| Sidebar, default | The Representative, then an empty members slot, then under the Representative one line per open Work | Work cards of the conversation read |
+| Sidebar, default | The Representative, then an empty members slot, then under the Representative one line per running Work ([surface skeleton 2](conversation-cards.md)) | Work cards of the conversation read |
 | Sidebar, activity | One list without group titles or counts. Sort menu: priority (exception → running → done) or recent. Row: bold title, grey state, avatar, unread dot | Same read |
 | Header | Sidebar toggle and the page name (the Representative's name on the conversation) | Static |
 | Page | The conversation, or a full page: Results, Schedules, Settings | Rail and owner's menu |
@@ -35,7 +35,7 @@ The workbench was one long page: an intro, a column of Mission forms and a colum
 - **Widen** hides the sidebar (its toggle then reads collapsed, and narrowing restores it) and narrows the conversation, so the pane takes the room (the "Show details" view). It is the four-area layout later; today it is the same detail, wider.
 - **Explicit opens always show their target.** The catalog, the unresolved Work list, a document use, a Mission link and the load form open the pane even after it was closed or while the same Mission is shown: a named Work gets its own tab, a Mission its Mission tab. Admitting Work switches to the Mission tab so the new card is visible. Only background rereads keep a closed pane closed. While a read or write is in flight, tab selection is ignored, so the tab and the cards below it never disagree.
 - **A database change** (new feed) clears the tabs and the unread memory, since neither belongs to the new database.
-- **Activity order.** Decision cards do not exist yet (step 6), so the priority order starts at exceptions: check failed, stale, blocked. A cancellation is the owner's stop, so it counts as done. Then running: working, waiting, not started. Then done. Recent is the reverse conversation order.
+- **Activity order.** Open decisions come first ([surface skeleton 2](conversation-cards.md)), then exceptions: check failed, stale, blocked, result unknown. A cancellation is the owner's stop, so it counts as done. Then running: working, waiting, not started. Then done. Recent is the reverse conversation order.
 - **Unread** is a per-viewer convenience in browser storage: the last state label the viewer saw per Work. A Work seen for the first time records its label without a dot; a later change shows the dot until the Work is opened. Losing the storage only loses dots.
 - **Names.** The Representative is drawn with its owner-chosen name. No naming setting exists yet, so the client uses the prototype's 하나. Members do not exist yet; the slot stays empty and hidden, as the experience plan asks for a first-time owner.
 - **Words.** The surface keeps the existing English labels and adds only names, page names and state labels. No "assistant", no titles, no explanation sentences. Yellow is not used: the prototype reserves it for decision cards, and the earlier warning notices become neutral.
