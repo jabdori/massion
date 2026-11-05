@@ -182,7 +182,10 @@ export class SkillsService {
  }
  /** Host step: the host evaluator (or a different-family model) compares baseline and candidate; the producer never judges. */
  async check(id:string):Promise<CommitResult<SkillsState>>{
-  const v=(await this.#state())?.value,c=v?.candidates.find(x=>x.id===id);ensure(c,'Unknown candidate');ensure(c.state==='pending','Only a pending candidate is checked','conflict');ensure(this.#evaluator,'No skill evaluator on this host');
+  const v=(await this.#state())?.value,c=v?.candidates.find(x=>x.id===id);ensure(c,'Unknown candidate');
+  // A resend after the first check committed rebuilds that command from the stored evaluation, so the dispatch lookup replays it.
+  if(c.state!=='pending'&&c.evaluation)return this.#dispatch(HOST_PREFIX+'-check:'+c.id,ASSISTANT_ACTOR_ID,{type:'check-skill',candidateId:c.id,evaluation:structuredClone(c.evaluation)});
+  ensure(c.state==='pending','Only a pending candidate is checked','conflict');ensure(this.#evaluator,'No skill evaluator on this host');
   const s=v!.skills.find(x=>x.id===c.skillId),base=c.base!==null&&s?s.versions[c.base-1]!.body:null;
   const out=await this.#evaluator({id:c.id,memberId:c.memberId,kind:c.kind,name:c.name,body:structuredClone(c.body),base:structuredClone(base),producer:structuredClone(c.producer)});
   // Exact fields, so an evaluator cannot slip in a `check` (or any other field) over the host-built one.
@@ -208,13 +211,16 @@ export class SkillsService {
   return this.#dispatch(this.#caller(input.commandId),OWNER,{type:'decide-skill',candidateId:(input.decisionId as string).slice(DECISION_PREFIX.length),answer:input.answer as 'act'|'later'|'ask'});
  }
  #caller(commandId:unknown){ensure(id(commandId)&&!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');return commandId;}
- /** Lookup before and after the load, CAS on the revision read; a lost command replays by its ID. */
+ /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
  async #dispatch(commandId:string,actorId:string,command:SkillsCommand):Promise<CommitResult<SkillsState>>{
   const identity={id:SKILLS_ID,commandId,fingerprint:fingerprint(actorId,command)},actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
   for(let attempt=0;attempt<3;attempt++){
-   const prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   const snapshot=await this.#state(),{value,events}=applySkills(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
+   // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
+   const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   const {value,events}=applySkills(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:SKILLS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
+   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.#store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}
    if(result.status!=='conflict'||result.reason!=='revision')return result;
   }
   return {status:'conflict',revision:(await this.#state())?.revision??0,reason:'revision'};

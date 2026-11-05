@@ -221,3 +221,26 @@ test('review: a multiline or long Work title becomes a bounded one-line source t
  assert.equal((await service.propose({memberId:'member-juno',missionId:'intake-long',workId:'w-long',trigger:'repeat'})).status,'committed');
  const title=(await state(store)).candidates[0]!.source.title;assert.equal([...title].length,512);assert.ok(title.startsWith('Review PR #84 then the follow-up x'));
 });
+
+test('review: an overlapping resend of any owner action replays the first result instead of failing the reducer on it',async()=>{
+ const {service,store,next,verdict}=await setup();
+ await propose(service);let s=await state(store);await service.check(s.candidates[0]!.id);s=await state(store);
+ const checked=await service.check(s.candidates[0]!.id);assert.equal(checked.status,'replayed','a resent host check replays without a second evaluation');
+ // The resend reads the skills state only after the first request committed, so it saw no operation before the load.
+ const load=store.load.bind(store);let held:(()=>void)|null=null,waiting=false;
+ store.load=async(id:string)=>{if(waiting&&id===SKILLS_ID){waiting=false;await new Promise<void>(r=>{held=r;});}return load(id);};
+ const twice=async(input:unknown,send=(x:unknown)=>service.act(x))=>{
+  waiting=true;const resend=send(input);while(!held)await new Promise(r=>setImmediate(r));
+  const first=await send(input);held!();held=null;const second=await resend;
+  assert.deepEqual([first.status,second.status],['committed','replayed']);assert.equal(first.revision,second.revision);};
+ await twice({commandId:'c-rev',action:'revert',skillId:s.skills[0]!.id});
+ await twice({commandId:'c-write',action:'write',memberId:'member-juno',kind:'procedure',name:'Release notes',body:body(['Collect merged PRs'])});
+ next.value={...next.value,name:'Commit message'};await propose(service,'w-done','repeat');const pending=(await state(store)).candidates.find(c=>c.state==='pending')!;
+ verdict.value=evaluation('same-family');await service.check(pending.id);
+ await twice({commandId:'c-drop',action:'drop',candidateId:pending.id});
+ // The owner-written procedure gets a candidate that waits for a decision card; the answer is resent while the first is in flight.
+ next.value={...next.value,kind:'procedure',name:'Release notes',body:body(['Collect merged PRs','Group by area'])};verdict.value=evaluation('different-family');await propose(service,'w-done','repeat');
+ await service.check((await state(store)).candidates.at(-1)!.id);const card=(await service.decisions('member-juno')).find(c=>c.state==='open')!;
+ await twice({commandId:'c-act',decisionId:card.id,answer:'act'},x=>service.decide(x));
+ const ops=store.inspect().filter(o=>o.aggregateId===SKILLS_ID).map(o=>o.commandId);assert.equal(ops.filter(c=>c.startsWith('c-')).length,4,'each action stored once');
+});
