@@ -1,6 +1,6 @@
 # Growth reflection trail and model-proposed memory candidates
 
-- Status: proposed design, not implemented
+- Status: stage 1 implemented (`src/reflection-trail.ts`, `tests/reflection-trail.test.ts`); stage 2 and later proposed, not implemented
 - Date: 2026-11-05, above `432ff8d` (main)
 - Requirements: GRO-01, MEM-01 in [requirements](../product/requirements.md)
 - Builds on: [User proposals and host-owned bounded evaluation](growth-proposals.md), [Explicit original source input for Work](work-sources.md), [Retained local document source](owner-documents.md), [Accepted text access](accepted-text-access.md), [Rejected candidate text](rejected-candidate-text.md), [ADR 0001](decisions/0001-product-owned-core.md)
@@ -144,6 +144,17 @@ The trail depends only on the Work's settled fields, the pinned memory versions 
 
 - `ProductService.reflectionTrail(missionId, workId)` and `GET /missions/:id/reflection-trail?workId=...&revision=...`. A stale `revision` returns 409, as with other guarded reads.
 - The Workbench shows the trail as literal text in the Work detail, whether or not a Record exists.
+
+### As implemented
+
+Stage 1 follows the shape above with these exact choices:
+
+- `work.ref` is `work:<work id>`. It is not in the citable ref table.
+- `verdict.evidence[].source` is omitted for `artifact-readback` evidence, because its source is the host artifact path. Other evidence keeps `source`.
+- Artifact text is read only for accepted Work (`readRecordArtifact`) and settled failed Work (`readRejectedText`). Any other artifact, a missing reader or a reader refusal (`RecordArtifactError`) gives `artifact.textUnavailable: true`; storage and feed failures propagate instead.
+- The 16,384-byte bound is measured on the canonical trail including `trailHash`.
+- `revision` is required on the HTTP read. A Work that is not eligible returns 409; an unknown Mission or Work returns 404. The host re-reads the Work after the text read and returns 409 if it changed. An `X-Massion-Feed` header that does not match the database feed returns 409, as on other guarded reads.
+- The Workbench Work detail has a "Reflection trail" section; the owner presses "Read reflection trail" and the reply is shown as literal JSON text. It is shown for every eligible Work.
 
 ### Acceptance for stage 1
 

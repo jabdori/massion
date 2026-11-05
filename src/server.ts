@@ -193,6 +193,12 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     const search=documentRoute[2]==='documents',allowed=search?['query']:['id','version','sha256'];if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1)||allowed.some(key=>!url.searchParams.has(key)))throw new RequestError(400,'Unique exact document query fields required');
     const result=search?await searchDocuments(store,id,{query:url.searchParams.get('query')!,...(feedId===undefined?{}:{feedId})}):await (documentRoute[2]==='document-usage'?readDocumentUsage:readDocument)(store,id,{id:url.searchParams.get('id')!,version:Number(url.searchParams.get('version')),contentSha256:url.searchParams.get('sha256')!,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or document version'});return;
    }
+   const trailRoute=/^\/missions\/([^/]+)\/reflection-trail$/.exec(url.pathname);
+   if(req.method==='GET'&&trailRoute){
+    const id=decodeMissionIdentifier(trailRoute[1]!),workId=url.searchParams.get('workId'),revision=url.searchParams.get('revision');identifier(workId,'Work identifier');
+    if([...url.searchParams.keys()].some(k=>!['workId','revision'].includes(k)||url.searchParams.getAll(k).length!==1)||!revision||!/^\d+$/.test(revision)||!Number.isSafeInteger(Number(revision)))throw new RequestError(400,'Unique Work and revision query fields required');
+    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const result=await product.reflectionTrail(id,workId,Number(revision),feedId);send(result?200:404,result??{error:'Unknown Mission or Work'});return;
+   }
    const rejectedRoute=/^\/missions\/([^/]+)\/rejected-artifact$/.exec(url.pathname);
    if(req.method==='GET'&&rejectedRoute){
     const id=decodeMissionIdentifier(rejectedRoute[1]!),workId=url.searchParams.get('work'),binding=url.searchParams.get('binding'),version=url.searchParams.get('version'),sha256=url.searchParams.get('sha256');identifier(workId,'Work identifier');const allowed=['work','binding','version','sha256'];
