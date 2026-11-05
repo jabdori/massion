@@ -180,3 +180,9 @@ test('moving to another page sets the narrow-screen pane aside until a Work is o
  await app.node('rail-results').fire('click');assert.match(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('work-pane').hidden,false,'the tabs stay open');
  await open(kids(app.node('side-work'))[1]!).fire('click');await settle();assert.doesNotMatch(app.node('work-pane').className,/\baway\b/);assert.equal(app.node('page-chat').hidden,false);
 });
+
+test('the narrow-screen sidebar opens below the band so its toggle stays reachable to close it',()=>{
+ const narrow=/@media \(max-width:900px\)\{\.sidebar\{([^}]*)\}/.exec(workbenchPage)?.[1]??'';
+ assert.match(narrow,/position:fixed/);assert.match(narrow,/top:44px/);
+ assert.match(workbenchPage,/\.band\{height:44px/,'the sidebar top matches the band height');
+});
