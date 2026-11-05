@@ -26,8 +26,10 @@ export type AssistantCommand =
  | {type:'record-assistant-outcome';turnId:string;missionId?:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
 /** The owner's exact words pinned into a Work. The title stays the Representative's summary. */
 export interface AssistantSource {segmentId:string;turnId:string;messageId:string;messageHash:string;message:AssistantMessage;representative:{provider:string;model:string}}
-export const segmentId=(n:number)=>ASSISTANT_CONVERSATION_PREFIX+n,ownerMessageId=(commandId:string)=>'m:'+hash(commandId).slice(0,32),assistantTurnId=(messageId:string)=>'assistant-turn:'+messageId;
+/** A thread is '' for the Representative or `member:<id>` for a member's one 1:1 conversation (members.md); both use this reducer. */
+export const segmentId=(n:number,thread='')=>ASSISTANT_CONVERSATION_PREFIX+(thread?thread+':':'')+n,ownerMessageId=(commandId:string)=>'m:'+hash(commandId).slice(0,32),assistantTurnId=(messageId:string)=>'assistant-turn:'+messageId;
 export const assistantWorkId=(turnId:string)=>'assistant-'+hash(turnId).slice(0,24),assistantRunId=(turnId:string)=>'assistant-run:'+turnId;
+export const segmentThread=(id:string):string|null=>{const m=/^assistant-conversation:(?:(member:[a-zA-Z0-9_-]{1,64}):)?([1-9][0-9]{0,15})$/.exec(id);return m?m[1]??'':null;};
 export const isAssistantSegment=(value:unknown):value is AssistantSegment=>!!value&&typeof value==='object'&&(value as {kind?:unknown}).kind==='assistant-conversation';
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&Object.keys(v).every(k=>keys.includes(k));
@@ -59,14 +61,14 @@ function append(segment:AssistantSegment,command:{messageId:string;text:string;t
  segment.messages.push({id:command.messageId,ordinal:segment.messages.length+1,actorId:actor.id,role:'owner',turnId:null,text:command.text});segment.turns.push(turn);
 }
 /** Reducer for one segment. `current` is null only for the open that creates it. */
-export function applyAssistant(current:AssistantSegment|null,command:AssistantCommand,actor:Actor,time:TimeObservation|undefined):{value:AssistantSegment;events:unknown[]} {
+export function applyAssistant(current:AssistantSegment|null,command:AssistantCommand,actor:Actor,time:TimeObservation|undefined,thread=''):{value:AssistantSegment;events:unknown[]} {
  ensure(actor&&id(actor.id),'Invalid actor');ensure((current===null)===(command?.type==='open-assistant-segment'),'Only an open creates a segment');
  const state:AssistantSegment=current?structuredClone(current):{kind:'assistant-conversation',id:'',segment:0,previous:null,closed:false,timeWatermark:0,messages:[],turns:[]};
  switch(command.type){
   case 'open-assistant-segment': {
    role(actor,'owner');ensure(exact(command,['type','segment','previous','messageId','text','turn'])&&count(command.segment,1),'Exact segment open fields required');
-   ensure(command.segment===1?command.previous===null:exact(command.previous,['id','lastMessageId'])&&command.previous!.id===segmentId(command.segment-1)&&id(command.previous!.lastMessageId),'Open must name the previous segment and its last message');
-   Object.assign(state,{id:segmentId(command.segment),segment:command.segment,previous:structuredClone(command.previous)});append(state,command,actor,observe(state,time));break;
+   ensure(command.segment===1?command.previous===null:exact(command.previous,['id','lastMessageId'])&&command.previous!.id===segmentId(command.segment-1,thread)&&id(command.previous!.lastMessageId),'Open must name the previous segment and its last message');
+   Object.assign(state,{id:segmentId(command.segment,thread),segment:command.segment,previous:structuredClone(command.previous)});append(state,command,actor,observe(state,time));break;
   }
   case 'append-assistant-message': role(actor,'owner');ensure(exact(command,['type','messageId','text','turn']),'Exact owner message fields required');append(state,command,actor,observe(state,time));break;
   case 'close-assistant-segment': {
@@ -94,12 +96,14 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
  return {value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),time:structuredClone(time)}]};
 }
 /** Host steps use deterministic command IDs; an owner message ID derives from the caller's command ID. */
-export function requireAssistantCommandIdentity(commandId:string,command:AssistantCommand):void {
+export function requireAssistantCommandIdentity(commandId:string,command:AssistantCommand,thread=''):void {
  ensure(typeof commandId==='string'&&commandId.length>0,'Missing command identity');
  if(command.type==='append-assistant-message'||command.type==='open-assistant-segment'){ensure(!commandId.startsWith('assistant-'),'Command IDs starting with assistant- are reserved for host steps');ensure(command.messageId===ownerMessageId(commandId),'Owner message ID must derive from the command ID');return;}
- const expected=command.type==='close-assistant-segment'?'assistant-close:'+command.segment:command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:null;
+ const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:null;
  ensure(expected!==null&&commandId===expected,`Command ID must be ${expected}`);
 }
+/** Command IDs are global in the store, so a member thread's close names its thread. */
+export const closeCommandId=(segment:number,thread='')=>'assistant-close:'+(thread?thread+':':'')+segment;
 export function validateAssistantSource(v:unknown,workId:string):asserts v is AssistantSource {
  const s=v as AssistantSource;ensure(exact(s,['segmentId','turnId','messageId','messageHash','message','representative'])&&typeof s.segmentId==='string'&&/^assistant-conversation:[1-9][0-9]{0,15}$/.test(s.segmentId),'Exact assistant source fields required');
  ensure(typeof s.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(s.messageId)&&s.turnId===assistantTurnId(s.messageId),'Assistant source turn must derive from its owner message');
@@ -110,24 +114,24 @@ export function validateAssistantSource(v:unknown,workId:string):asserts v is As
 export interface AssistantEnvelope {segment:number;commandId:string;expectedRevision:number;actorId:string;command:AssistantCommand}
 /** Same envelope as Mission commands: frozen input, lookup before and after the load, CAS on the named segment. */
 export class AssistantConversation {
- readonly store:Store<AssistantSegment>;private readonly actors:Map<string,Actor>;private readonly clock:()=>number;
- constructor(store:Store<any>,actors:readonly Actor[],clock:()=>number=Date.now){this.store=store;this.actors=new Map(actors.map(a=>[a.id,structuredClone(a)]));this.clock=clock;}
+ readonly store:Store<AssistantSegment>;private readonly actors:Map<string,Actor>;private readonly clock:()=>number;private readonly thread:string;
+ constructor(store:Store<any>,actors:readonly Actor[],clock:()=>number=Date.now,thread=''){this.store=store;this.actors=new Map(actors.map(a=>[a.id,structuredClone(a)]));this.clock=clock;this.thread=thread;}
  async dispatch(envelope:AssistantEnvelope):Promise<CommitResult<AssistantSegment>> {
   envelope=structuredClone(envelope);ensure(exact(envelope,['segment','commandId','expectedRevision','actorId','command']),'Exact assistant envelope fields required');
   const actor=this.actors.get(envelope.actorId);ensure(actor,'Unknown actor','denied');const {segment,commandId,expectedRevision,command}=envelope;
-  ensure(count(segment,1)&&count(expectedRevision),'Invalid segment or expected revision');requireAssistantCommandIdentity(commandId,command);
+  ensure(count(segment,1)&&count(expectedRevision),'Invalid segment or expected revision');requireAssistantCommandIdentity(commandId,command,this.thread);
   ensure((expectedRevision===0)===(command.type==='open-assistant-segment')&&(command.type!=='open-assistant-segment'||command.segment===segment),'Only an open of the named segment starts at revision 0');
-  const aggregate=segmentId(segment),fingerprint=hash({actorId:actor.id,command,expectedRevision}),identity={id:aggregate,commandId,fingerprint};
+  const aggregate=segmentId(segment,this.thread),fingerprint=hash({actorId:actor.id,command,expectedRevision}),identity={id:aggregate,commandId,fingerprint};
   const prior=await this.store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
   const snapshot=await this.store.load(aggregate);
   if((snapshot?.revision??0)!==expectedRevision){const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};}
-  if(command.type==='open-assistant-segment'&&segment>1){const before=(await this.store.load(segmentId(segment-1)))?.value;ensure(before?.closed,'Segment '+(segment-1)+' must be closed before the next opens','conflict');ensure(command.previous?.lastMessageId===before.messages.at(-1)!.id,'Open must name the previous segment last message');}
-  const {value,events}=applyAssistant(snapshot?.value??null,command,actor,{observedAt:this.clock()});
+  if(command.type==='open-assistant-segment'&&segment>1){const before=(await this.store.load(segmentId(segment-1,this.thread)))?.value;ensure(before?.closed,'Segment '+(segment-1)+' must be closed before the next opens','conflict');ensure(command.previous?.lastMessageId===before.messages.at(-1)!.id,'Open must name the previous segment last message');}
+  const {value,events}=applyAssistant(snapshot?.value??null,command,actor,{observedAt:this.clock()},this.thread);
   return this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
  }
 }
 /** Exponential then binary search over contiguous segments; 0 when none exists. */
-export async function headSegment(store:Pick<Store<unknown>,'load'>):Promise<number> {
- if(!await store.load(segmentId(1)))return 0;let low=1,high=2;while(await store.load(segmentId(high))){low=high;high*=2;}
- while(high-low>1){const mid=Math.floor((low+high)/2);if(await store.load(segmentId(mid)))low=mid;else high=mid;}return low;
+export async function headSegment(store:Pick<Store<unknown>,'load'>,thread=''):Promise<number> {
+ if(!await store.load(segmentId(1,thread)))return 0;let low=1,high=2;while(await store.load(segmentId(high,thread))){low=high;high*=2;}
+ while(high-low>1){const mid=Math.floor((low+high)/2);if(await store.load(segmentId(mid,thread)))low=mid;else high=mid;}return low;
 }

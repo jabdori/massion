@@ -43,7 +43,9 @@ test('a running Work is one card with assignee, role chips, steps and elapsed mi
  const slot=shown(app).indexOf(card);assert.ok(slot>0);
  state.entries[0]!.work={...running,execution:'settled',acceptance:'accepted',steps:{done:2,total:2}};await app.node('chat-latest').fire('click');await settle();
  assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-fold-'+turnId(1))!;assert.equal(line.tagName,'BUTTON');assert.equal(line.textContent,'Worked ›');assert.equal(shown(app).indexOf(line),slot,'the folded line takes the card slot');
- assert.equal(app.node('work-pane').hidden,true);await line.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
+ assert.equal(app.node('work-pane').hidden,true);await line.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);
+ // Work room participants (members.md): the producing seat, its role chip, and Check last.
+ assert.equal(app.node('pane-people').hidden,false);assert.equal(app.node('pane-people').textContent,'하하나Check','B7: the Representative and Check, no role chip for a Work it holds alone');assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
  assert.equal(posts(app).length,0);
 });
 

@@ -7,7 +7,9 @@ import {validateConversations} from './work-conversation.ts';
 import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
-import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,validateAssistantSource} from './assistant-conversation.ts';
+import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,segmentThread,validateAssistantSource} from './assistant-conversation.ts';
+import {isMembersState,replayMembers} from './members.ts';
+import type {MembersState} from './members.ts';
 import type {AssistantCommand,AssistantSegment,AssistantSource} from './assistant-conversation.ts';
 /** Strict, inert validation of the bounded portable Mission schema.
  * This verifies retained structure and evidence bindings, not historical
@@ -381,6 +383,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>();
   for (const operation of operations) {
+    if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isAssistantSegment(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySegment(operation as unknown as Operation<AssistantSegment>, previous as unknown as Map<string, Operation<AssistantSegment>>); previous.set(operation.aggregateId, operation); continue; }
     validateMissionLineage(operation.value);
     ensure(operation.aggregateId === operation.value.id, 'operation aggregate/Mission mismatch');
@@ -437,21 +440,21 @@ function checkAssistantSteps(operation: Operation<Mission>, actorId: string, com
 }
 /** Segments replay from their open with the recorded host time; roles follow the deterministic actor. */
 function replaySegment(operation: Operation<AssistantSegment>, previous: Map<string, Operation<AssistantSegment>>): void {
-  const prior = previous.get(operation.aggregateId);
-  ensure(operation.aggregateId === operation.value.id, 'operation aggregate/segment mismatch');
+  const prior = previous.get(operation.aggregateId), thread = segmentThread(operation.aggregateId);
+  ensure(thread !== null && operation.aggregateId === operation.value.id, 'operation aggregate/segment mismatch');
   ensure(operation.expectedRevision === (prior?.revision ?? 0) && operation.revision === operation.expectedRevision + 1, 'operation revision lineage mismatch');
   ensure(Array.isArray(operation.events) && operation.events.length === 1, 'segment operation requires one typed application event');
   const event = object(operation.events[0], 'segment event', ['type', 'actor', 'command', 'time']); text(event.actor, 'event actor ID');
   ensure(event.command && typeof event.command === 'object' && !Array.isArray(event.command), 'invalid journal command');
   const command = event.command as AssistantCommand; ensure(event.type === command.type, 'event and command type mismatch');
   ensure(operation.fingerprint === hash({ actorId: event.actor, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
-  requireAssistantCommandIdentity(operation.commandId, command);
+  requireAssistantCommandIdentity(operation.commandId, command, thread);
   const step = command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome';
   ensure((event.actor === ASSISTANT_ACTOR_ID) === step, 'segment step actor mismatch');
   if (!prior && command.type === 'open-assistant-segment' && command.segment > 1) {
-    const before = previous.get(segmentId(command.segment - 1))?.value;
+    const before = previous.get(segmentId(command.segment - 1, thread))?.value;
     ensure(before?.closed && command.previous?.lastMessageId === before.messages.at(-1)?.id, 'segment opened before its predecessor closed');
   }
-  const derived = applyAssistant(prior ? prior.value : null, command, { id: event.actor, roles: [step ? 'assistant' : 'owner'] }, event.time as import('./memory-expiry.ts').TimeObservation);
+  const derived = applyAssistant(prior ? prior.value : null, command, { id: event.actor, roles: [step ? 'assistant' : 'owner'] }, event.time as import('./memory-expiry.ts').TimeObservation, thread);
   equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition'); equal(operation.outbox, [], 'segment outbox');
 }

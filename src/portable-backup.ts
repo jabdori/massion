@@ -10,6 +10,7 @@ import { validateJournal, journalChecksum } from './storage.ts';
 import type { PortableJournal, SurrealStore } from './storage.ts';
 import { validateMissionLineage, validateMissionJournalLineage, collectMissionArtifacts } from './backup-lineage.ts';
 import { isAssistantSegment } from './assistant-conversation.ts';
+import { isMembersState } from './members.ts';
 
 export const BACKUP_FORMAT = 'massion-portable-text/v1';
 export const BACKUP_LIMITS = Object.freeze({ bundleBytes: 64 * 1024 * 1024, artifactBytes: 32_768, artifacts: 4096, operations: 10000 });
@@ -35,7 +36,7 @@ function inventory(journal: PortableJournal<Mission>): Artifact[] {
   validateMissionJournalLineage(journal.operations);
   const inventory = new Map<string, Artifact>();
   for (const operation of journal.operations) {
-    if (isAssistantSegment(operation.value)) continue; // Replayed by lineage; segments hold no artifacts.
+    if (isAssistantSegment(operation.value) || isMembersState(operation.value)) continue; // Replayed by lineage; segments and members hold no artifacts.
     validateMissionLineage(operation.value);
     if (operation.value.id !== operation.aggregateId) fail('Mission aggregate lineage mismatch');
     for (const artifact of collectMissionArtifacts(operation.value)) {

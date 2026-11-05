@@ -10,8 +10,10 @@ export const chatStyle=String.raw`.conversation{max-width:760px;margin:0 auto 22
 @media (max-width:600px){.chat-card-open,.chat-exception{flex-wrap:wrap}.chat-card-main{flex-basis:calc(100% - 25px)}.chat-card-who{margin-left:21px}.chat-exception-main{flex-basis:100%}}`;
 export const chatPanel=String.raw`<section id="conversation" class="conversation" aria-label="Conversation"><div class="chat-nav"><button id="chat-earlier" type="button" class="quiet" hidden>Earlier</button><button id="chat-latest" type="button" class="quiet" hidden>Latest</button></div><div id="chat-log" class="chat-log" role="log" aria-live="polite"></div><p id="chat-status" class="chat-state" role="status" hidden></p><form id="chat-form" class="chat-form"><label for="chat-input" class="visually-hidden">Message</label><textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message"></textarea><button id="chat-send" type="submit">Send</button></form></section>`;
 export const chatClient=String.raw`
-const chatDraftKey='massion.workbench.chat-draft';
-let chatView=null,chatSegment=null,chatReading=false,chatAgain=false,chatSending=false,chatPendingTimer=0;
+// chatThread is '' for the Representative or a member ID for that member's one 1:1 conversation (members.md); each keeps its own draft.
+let chatDraftKey='massion.workbench.chat-draft',chatThread='',chatThreadName='';
+// chatRep keeps the Representative's latest read: the sidebar's Work lines and the activity list's decisions stay while a member conversation is open.
+let chatView=null,chatRep=null,chatReadDone=null,chatSegment=null,chatReading=false,chatAgain=false,chatSending=false,chatPendingTimer=0;
 // Nodes are kept by message and turn ID so a reread never moves or recreates what is already shown: focus stays and the live log announces only new items.
 const chatCards=new Map(),chatNodes=new Map(),chatStarting=new Set(),chatClosing=new Set(),chatDeciding=new Set();
 // target is the segment and revision of a submission whose outcome is unknown: a retry goes there, where its message would sit, so the host replays it however far the head moved.
@@ -63,13 +65,20 @@ function chatException(turn,kind){
 }
 /** The host's optional decisions and briefings (conversation-cards.md); malformed entries are skipped. */
 const chatText=value=>typeof value==='string'&&value.length>0&&value.length<=2000;
-function chatDecisions(){return (Array.isArray(chatView&&chatView.decisions)?chatView.decisions:[]).filter(d=>d&&chatText(d.id)&&Number.isSafeInteger(d.at)&&chatText(d.title)&&chatText(d.question)&&chatText(d.action)&&Array.isArray(d.rows)&&d.rows.every(r=>Array.isArray(r)&&r.length===2&&chatText(r[0])&&typeof r[1]==='string')&&(d.state==='open'||d.state==='later'||d.state==='done'&&chatText(d.line)));}
+function chatDecisions(view=chatView){return (Array.isArray(view&&view.decisions)?view.decisions:[]).filter(d=>d&&chatText(d.id)&&Number.isSafeInteger(d.at)&&chatText(d.title)&&chatText(d.question)&&chatText(d.action)&&Array.isArray(d.rows)&&d.rows.every(r=>Array.isArray(r)&&r.length===2&&chatText(r[0])&&typeof r[1]==='string')&&(d.form===undefined||d.form==='member')&&(d.state==='open'||d.state==='later'||d.state==='done'&&chatText(d.line)));}
+/** Members from the latest read, for the sidebar and the name of an open member conversation. */
+function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&view.members)?view.members:[]).filter(m=>m&&chatText(m.id)&&chatText(m.name));}
+function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
+/** Opens the Representative ('') or a member conversation in the page; a switch drops the shown nodes and reads that thread. */
+function chatOpenThread(id,name=''){
+ if(id!==chatThread){if(chatSending)return;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
 function chatDecision(d){
  if(d.state==='later')return chatSystem(d.id,'Later: '+d.question,[['Ask again',()=>chatDecide(d.id,'ask')]]);if(d.state==='done')return chatSystem(d.id,d.line);
  const busy=chatDeciding.has(d.id),node=chatKeyed('decision-'+d.id,'section','chat-decision',JSON.stringify([d.question,d.at,d.rows,d.action,busy]),()=>{const head=element('p',undefined,'chat-decision-head'),rows=element('dl'),actions=element('div',undefined,'chat-actions');
   head.append(element('strong',d.question),element('span',chatTime(d.at)));for(const [label,value] of d.rows)rows.append(element('dt',label),element('dd',value));
-  actions.append(chatButton(d.action,()=>chatDecide(d.id,'act'),''),chatButton('Later',()=>chatDecide(d.id,'later')));for(const button of actions.children)button.disabled=busy;return [head,rows,actions];});
+  actions.append(chatButton(d.action,()=>d.form==='member'?memberOpen(d.id):chatDecide(d.id,'act'),''),chatButton('Later',()=>chatDecide(d.id,'later')));for(const button of actions.children)button.disabled=busy;return [head,rows,actions];});
  node.setAttribute('aria-label',d.question);return node;
 }
 /** Bullets name the Work and its current state from the turn, so a briefing never carries its own counts. */
@@ -100,11 +109,14 @@ function renderChat(){
  if(stick)page.scrollTop=page.scrollHeight;
  chatControls();renderShell();
 }
-async function readChat(){
- if(chatReading){chatAgain=true;return;}chatReading=true;
- try{do{chatAgain=false;const {response,body}=await request('/assistant/conversation'+(chatSegment?'?segment='+chatSegment:''));
+/** One read loop at a time; a caller during a read waits for the loop that will cover its thread, so a send right after a switch targets the new thread's head. */
+function readChat(){if(chatReading){chatAgain=true;return chatReadDone;}chatReading=true;return chatReadDone=chatReadLoop();}
+async function chatReadLoop(){
+ try{do{chatAgain=false;const thread=chatThread,query=[chatSegment?'segment='+chatSegment:'',thread?'member='+encodeURIComponent(thread):''].filter(Boolean).join('&'),{response,body}=await request('/assistant/conversation'+(query?'?'+query:''));
+  // A read for a thread the owner already left is dropped and the current one is read instead.
+  if(thread!==chatThread){chatAgain=true;continue;}
   if(!response.ok||!Number.isSafeInteger(body.head)||!Array.isArray(body.turns)||body.segment!==null&&(!body.segment||!Array.isArray(body.segment.messages)))throw new Error('Conversation unavailable');
-  chatView=body;renderChat();if($('chat-status').textContent==='Unavailable')chatShow('');}while(chatAgain);}
+  chatView=body;if(!thread)chatRep=body;renderChat();if($('chat-status').textContent==='Unavailable')chatShow('');}while(chatAgain);}
  catch{if(!$('chat-status').textContent)chatShow('Unavailable');}finally{chatReading=false;chatControls();
   // A host that dies mid-turn leaves it pending and emits nothing more; the read turns it unknown after its deadline, so a shown pending turn is read again, also after a failed read.
   // ponytail: fixed interval because the view carries no deadlineAt; schedule at the deadline once the read exposes it.
@@ -113,8 +125,9 @@ async function readChat(){
   clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],wait=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)?60000:0;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;}
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
-function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
-async function openChatWork(turnId){const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
+// A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
+function chatReset(){paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder','Message');if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
+async function openChatWork(turnId){const turn=chatRep&&chatRep.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;
  // One request per card at a time; the card label from the reread, not a status line, says how it ended.
@@ -146,7 +159,7 @@ async function sendChat(){
   if(chatSegment||!chatView){chatSegment=null;await readChat();}
   for(let attempt=0;attempt<2;attempt++){
    const view=chatView,segment=view&&view.segment;const target=pinned??(!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision});chatPin(commandId,target);
-   const {response,body}=await request('/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json',...(view&&view.feedId?{'X-Massion-Feed':view.feedId}:{})},body:JSON.stringify({commandId,...target,text})},130000);
+   const {response,body}=await request('/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json',...(view&&view.feedId?{'X-Massion-Feed':view.feedId}:{})},body:JSON.stringify({commandId,...target,text,...(chatThread?{member:chatThread}:{})})},130000);
    // The private draft clears only on its committed receipt, and only while the input still holds the sent text: an edit made while waiting is unsent and stays.
    // A conflict commits nothing, so the same command ID is reused.
    if(response.ok){if($('chat-input').value===text){storage.remove(chatDraftKey);$('chat-input').value='';}await readChat();return;}

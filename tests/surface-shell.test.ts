@@ -90,10 +90,10 @@ test('tabs close one at a time, widen takes the room, the sidebar hides, and the
  await close(tabs()[0]!).fire('click');assert.equal(app.node('work-pane').hidden,true);
  await app.node('sidebar-toggle').fire('click');assert.equal(app.node('sidebar').hidden,true);assert.equal(app.node('sidebar-toggle').attributes.get('aria-expanded'),'false');
  await app.node('sidebar-toggle').fire('click');assert.equal(app.node('sidebar').hidden,false);
- assert.equal(app.node('page-chat').hidden,false);assert.equal(app.node('page-heading').textContent,'하나');
+ assert.equal(app.node('page-chat').hidden,false);assert.equal(app.node('page-heading').textContent,'하하나','avatar letter, then the name');
  await app.node('rail-me').fire('click');assert.equal(app.node('me-menu').hidden,false);assert.equal(app.node('rail-me').attributes.get('aria-expanded'),'true');
  await app.node('me-settings').fire('click');assert.equal(app.node('me-menu').hidden,true);assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,'Settings');
- for(const [rail,page,name] of [['rail-results','page-results','Results'],['rail-schedules','page-schedules','Schedules'],['rail-chat','page-chat','하나']] as const){
+ for(const [rail,page,name] of [['rail-results','page-results','Results'],['rail-schedules','page-schedules','Schedules'],['rail-chat','page-chat','하하나']] as const){
   await app.node(rail).fire('click');assert.equal(app.node(page).hidden,false,page);assert.equal(app.node('page-heading').textContent,name);assert.equal(app.node(rail).attributes.get('aria-current'),'page');
   for(const other of ['page-chat','page-results','page-schedules','page-settings'])if(other!==page)assert.equal(app.node(other).hidden,true,other);
  }

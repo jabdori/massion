@@ -53,7 +53,7 @@ briefings: [{id, at, title, turnIds: [turnId]}]
 
 - **Decision card** (`state: 'open'`): the only yellow surface. Head: the question and its time, no category label. Body: label/value rows. Buttons: the action name and `Later`. No "don't ask again": rules belong to Settings > Permissions. A decision's Work title is its activity row title, and its question is the row summary; open decisions rank first in the activity list.
 - `Later` leaves the grey line `Later: question` with `Ask again`. A decided card leaves the host's `line` (for example `Rounding changed`).
-- The buttons send `POST /assistant/decisions` `{commandId, decisionId, answer: 'act'|'later'|'ask'}` and read the conversation again. A lost answer is not resent; the next read shows the state. The route lands with the first producer.
+- The buttons send `POST /assistant/decisions` `{commandId, decisionId, answer: 'act'|'later'|'ask'}` and read the conversation again. A lost answer is not resent; the next read shows the state. The route and the first producer, member admission, are in [Members](members.md); a card with `form: 'member'` asks for a name and a shape before `act`.
 - **Briefing**: one grey card, `title | date time`, then one bullet per named turn: the Work title as a link to the same entry as a card, then its current state word. Counts and states come from the current turn, never from the briefing.
 - **Grey system lines** are centred, muted and in `Label: subject` form.
 - Decisions and briefings carry no segment, so an earlier segment shows none of them; the latest segment shows them all.
