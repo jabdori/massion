@@ -115,6 +115,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const result=workAdmissionPreflight(snapshot,workId,expectedRevision,this.options.outputTokenCap);
   const work=snapshot.value.works.find(w=>w.id===workId)!;const available=this.availability({...snapshot.value,criteria:work.criteria});
   if(!available.ready)result.diagnostics.push({code:'runtime_unavailable',message:available.reason});
+  // The pinned Representative may not check its own title, whoever starts the run and whatever the route is now.
+  const writer=work.assistantSource?.representative,checker=this.options.verifier.adapter.descriptor;
+  if(writer&&writer.provider===checker.provider&&writer.model===checker.model)result.diagnostics.push({code:'assistant_verifier_same_model',message:'The verifier uses the same provider and model as the Representative that wrote this Work.'});
   const checked={...result,ready:result.diagnostics.length===0};return checked.ready&&this.busy(`${snapshot.value.id}\0${workId}`)?hostBusyPreflight(checked):checked;
  }
  hasActiveAdmission(){return [...this.runs.values()].some(run=>run.admitted);}

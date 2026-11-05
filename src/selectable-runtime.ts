@@ -53,7 +53,8 @@ export class SelectableTextRuntime implements WorkRuntime {
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight {
   const result=this.admission(snapshot,workId,expectedRevision,choice);if(!result.ready)return result;
   const work=snapshot.value.works.find(w=>w.id===workId)!;const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
-  return {...result,ready:prepared.diagnostics.length===0,diagnostics:prepared.diagnostics};
+  // The prepared runtime's own preflight is the one its run applies, Work-level checks included.
+  return prepared.runtime?prepared.runtime.preflight(snapshot,workId,expectedRevision):{...result,ready:false,diagnostics:prepared.diagnostics};
  }
  private admission(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice,owned=false):SelectionPreflight {
   const cap=choice&&Number.isSafeInteger(choice.outputTokenCap)&&choice.outputTokenCap>0?choice.outputTokenCap:undefined;

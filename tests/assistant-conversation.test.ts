@@ -76,7 +76,7 @@ test('7: a question gets one call and one reply, and the stored request hash is 
 test('8: a work request admits Work as the assistant actor, starts it on the default route and pins the owner message through @9',async t=>{
  const f=await setup(t),{s}=await f.ready();f.script.push({content:turn('I will write it.','Summarize the launch notes')});
  const result=await say(s,OWNER_REQUEST,'w-1'),turnId=turnOf('w-1'),workId=assistantWorkId(turnId);await s.idle();
- assert.deepEqual(result.turn.outcome,{work:{status:'admitted',diagnostics:[]},run:{status:'requested',diagnostics:[]}});
+ assert.deepEqual(result.turn.outcome,{missionId:'intake',work:{status:'admitted',diagnostics:[]},run:{status:'requested',diagnostics:[]}});
  const work=(await f.intake()).works.find(w=>w.id===workId)!;assert.equal(work.title,'Summarize the launch notes');assert.equal(work.budget.limit,8);
  const segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment,message=segment.messages[0]!;
  assert.deepEqual(work.assistantSource,{segmentId:segmentId(1),turnId,messageId:message.id,messageHash:hash(message),message,representative:{provider:'compatible',model:'representative'}});
@@ -331,6 +331,31 @@ test('13b: a run refuses to start when the default route changed after the prefl
  assert.equal(f.calls.executor,0);assert.equal((await f.intake()).works[0]!.runtimeRun,undefined);assert.equal(result.status,'blocked');assert.match(result.reason,/default route changed/);
 });
 
+test('13c: a manual Start on Work whose pinned Representative shares the verifier model is refused by the run preflight',async t=>{
+ const f=await setup(t),m=f.host();await f.grant(m);const s=f.service(m);await f.represent(s,m,'verifier');
+ f.script.push({content:turn('Sure.','Summarize')});const result=await say(s,OWNER_REQUEST,'same-start'),workId=assistantWorkId(turnOf('same-start'));
+ assert.equal(result.turn.outcome!.run.diagnostics[0]!.code,'assistant_verifier_same_model');
+ const product=new ProductService(f.store,undefined,m),current=(await f.store.load('intake'))!;
+ const check=(await product.preflight('intake',workId,current.revision))!;assert.equal(check.ready,false);assert.ok(check.diagnostics.some(d=>d.code==='assistant_verifier_same_model'));
+ const run=await product.run('intake',workId,'owner-run',current.revision) as any;assert.equal(run.status,'blocked');assert.match(run.reason,/same provider and model as the Representative/);
+ assert.equal(f.calls.executor,0);assert.equal(f.calls.verifier,0);assert.equal((await f.intake()).works.find(w=>w.id===workId)!.runtimeRun,undefined);
+});
+
+test('19b: removing the Representative route keeps earlier Work cards, read through the intake Mission pinned in the outcome',async t=>{
+ const f=await setup(t),{m,s}=await f.ready();f.script.push({content:turn('I will write it.','Summarize the launch notes')});
+ const result=await say(s,OWNER_REQUEST,'pin-1');await s.idle();
+ await s.removeSettings({expectedConfigHash:m.list().configHash});assert.equal(m.list().representative,null);
+ const view=await s.read();assert.equal(view.turns[0]!.work!.workId,assistantWorkId(turnOf('pin-1')));assert.equal(view.turns[0]!.work!.missionId,'intake');assert.equal(view.turns[0]!.work!.acceptance,'accepted');assert.equal(result.turn.outcome!.missionId,'intake');
+ validateMissionJournalLineage(structuredClone((f.store as InMemoryStore<any>).inspect()) as any);
+});
+
+test('20c: the second message of a new segment still sends 12 earlier messages, reaching back into the closed segment',async t=>{
+ const f=await setup(t),{s}=await f.ready();for(let i=0;i<8;i++)await say(s,'Question '+i,'h-'+i);
+ await say(s,'Question 8','h-8');await say(s,'Question 9','h-9');assert.equal((await s.read()).head,2);
+ const prompt=f.requests.at(-1)!.prompt;assert.equal(prompt.history.length,12);assert.equal(prompt.history[0].text,'Question 3');assert.equal(prompt.history.at(-1).text,'Hello.');
+ const segment=(await f.store.load(segmentId(2)))!.value as AssistantSegment;assert.equal(segment.turns[1]!.contextMessageIds!.length,12);
+});
+
 test('31b: lost responses read back as unknown, rereads keep nodes and focus, and labels stay short',async()=>{
  const {harness,reply,settle}=await import('./support/workbench-client.ts');
  const turnId='assistant-turn:m:'+'b'.repeat(32),workId=assistantWorkId(turnId);let cursor=1,events:any[]=[],fail=0,started=false,conversationReads=0;const posts:string[]=[];
@@ -358,6 +383,32 @@ test('31b: lost responses read back as unknown, rereads keep nodes and focus, an
  fail=1;events=[{cursor:3,aggregateId:'assistant-conversation:1',revision:7}];cursor=3;await app.tick();await settle();assert.equal(status.textContent,'Result unknown','a later read error does not hide the send result');
  status.textContent='';fail=1;events=[{cursor:4,aggregateId:'assistant-conversation:1',revision:8}];cursor=4;await app.tick();await settle();assert.equal(status.textContent,'Unavailable');
  events=[{cursor:5,aggregateId:'assistant-conversation:1',revision:9}];cursor=5;await app.tick();await settle();assert.equal(status.textContent,'');
+});
+
+test('31c: an edit made while sending survives the reply, a changed database is never resent automatically, and a shown pending turn is read again',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ const owner='m:'+'p'.repeat(32),turnId='assistant-turn:'+owner;let feedId='feed:a',pending=true,down=false,mode:'hold'|'feed'='hold';const posts:any[]=[];let hold!:()=>void;
+ const view=()=>({feedId,cursor:1,head:1,segment:{number:1,revision:3,closed:false,full:false,previous:null,messages:[{id:owner,role:'owner',turnId:null,text:'Earlier'}]},turns:[{id:turnId,messageId:owner,status:'pending',displayStatus:pending?'pending':'unknown'}]});
+ const app=harness(async(path,options)=>{
+  if(path.startsWith('/assistant/conversation'))return down?reply({error:'down'},503):reply(view());
+  if(path==='/assistant/messages'){posts.push(JSON.parse(options.body));if(mode==='feed'){feedId='feed:b';return reply({error:'Database changed before admission',reason:'feed',outcome:'rejected'},409);}await new Promise<void>(r=>hold=r);return reply({message:{status:'committed'},turn:{}});}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ });
+ const timers:{fn:()=>unknown;ms:number}[]=[];const context=app.context as any;context.setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
+ await settle();
+ // 4481357735: no event follows a dead host, so the shown pending turn is read again on a timer until it reads unknown.
+ const log=()=>app.node('chat-log').textContent,pendingRead=()=>timers.findLast(t=>t.ms===10000);
+ const reread=()=>{for(const t of timers.splice(0))if(t.ms===10000)t.fn();return settle();};
+ await app.node('chat-latest').fire('click');await settle();assert.ok(log().includes('…'));assert.ok(pendingRead(),'a shown pending turn schedules a reread');
+ down=true;await reread();assert.ok(pendingRead(),'a failed reread keeps the pending turn scheduled');down=false;
+ pending=false;await reread();assert.ok(log().includes('Result unknown · not resent'));assert.equal(pendingRead(),undefined,'nothing is scheduled once no turn is pending');
+ // 4481357724: the reply clears only what was sent.
+ const input=app.node('chat-input');input.value='First';await input.fire('input');void app.submit('chat-form');await settle();
+ input.value='Second, not sent';await input.fire('input');hold();await settle();
+ assert.equal(posts.length,1);assert.equal(posts[0].text,'First');assert.equal(input.value,'Second, not sent');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'Second, not sent');
+ // 4481357728: a changed database is not retried; the owner's next Send goes to the new one.
+ mode='feed';await app.submit('chat-form');assert.equal(posts.length,2);assert.equal(app.node('chat-status').textContent,'Not sent · database changed');assert.equal(input.value,'Second, not sent');
 });
 
 test('actual SurrealDB: a work request commits the turn, the Work and its run once, and the journal passes lineage',{skip:process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME},async t=>{

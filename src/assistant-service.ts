@@ -89,7 +89,7 @@ export class AssistantService {
   try{
    let turn:AssistantTurnInput,call:{request:ProviderRequest;controller:AbortController;adapter:ProviderAdapter;route:AssistantRoute;intakeMissionId:string}|undefined;
    if(resolution.status==='resolved'){
-    const {history,ids}=boundedHistory(context,text,resolution.maxInputBytes),controller=new AbortController(),startedAt=this.#clock();
+    const {history,ids}=boundedHistory(await this.#earlier(context),text,resolution.maxInputBytes),controller=new AbortController(),startedAt=this.#clock();
     const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({instruction:ASSISTANT_INSTRUCTION,currentMessage:text,history}),inputReferences:[],maxOutputTokens:resolution.route.outputTokenCap,signal:controller.signal};
     turn={status:'pending',id:turnId,route:resolution.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
     call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId};
@@ -123,9 +123,15 @@ export class AssistantService {
   if(!fresh||status!=='answered'||!parsed!.proposal)return {message,turn:turnView(latest.value,turnId)};
   // Settle first: the deadline binds only the reply. Admission and preflight follow, recorded once.
   const decided=await this.#admit(latest.value,turnId,messageId,parsed!.proposal.title,route,call.intakeMissionId);
-  const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,work:decided.work,run:decided.run});
+  const recorded=await this.#write(n,'assistant-outcome:'+turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-outcome',turnId,missionId:call.intakeMissionId,work:decided.work,run:decided.run});
   if(recorded&&decided.run.status==='requested'){const workId=assistantWorkId(turnId);this.#starting.add(workId);this.#track(this.#product.run(decided.intakeMissionId!,workId,assistantRunId(turnId),decided.revision!,undefined,ASSISTANT_ACTOR_ID,decided.choice).catch(error=>this.#note(error)).finally(()=>this.#starting.delete(workId)));}
   return {message,turn:turnView((await this.#load(n))!.value,turnId)};
+ }
+ /** Messages before the new one, reaching back through closed segments until the history bounds are met, so a fresh segment keeps the earlier context. */
+ async #earlier(segment:AssistantSegment|null):Promise<AssistantSegment['messages']>{
+  const messages=[...(segment?.messages??[])];let previous=segment?.previous,bytes=messages.reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0);
+  while(previous&&messages.length<CONTEXT_MESSAGES&&bytes<HISTORY_BYTES){const before=(await this.#store.load(previous.id))?.value as AssistantSegment|undefined;if(!before)break;messages.unshift(...before.messages);bytes+=before.messages.reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0);previous=before.previous;}
+  return messages;
  }
  /** One host step on a segment. Fresh commit is true; anything else stops the path without a second attempt at the effect. */
  async #write(n:number,commandId:string,actorId:string,command:AssistantCommand):Promise<boolean>{
@@ -162,21 +168,21 @@ export class AssistantService {
   if(admitted.status==='conflict')return outcome('not_created',[diagnostic('intake_conflict','The intake Mission changed before admission; no second attempt was made.')]);
   if(admitted.status==='replayed')return outcome('admitted',[],'not_started',[diagnostic('admission_replayed','The Work admission was replayed; no run was requested.')]);
   const check=await this.#product.preflight(intakeMissionId,workId,admitted.revision);
-  const verifier=check?.selection?this.#connections?.profileIdentity(check.selection.choice.verifierProfileId):null;
-  if(verifier&&verifier.provider===route.provider&&verifier.model===route.model)return outcome('admitted',[],'not_started',[diagnostic('assistant_verifier_same_model','The default verifier uses the same provider and model as the Representative route.')]);
+  // The run preflight refuses a verifier on the pinned Representative model (`assistant_verifier_same_model`).
   if(this.#draining)return outcome('admitted',[],'not_started',[diagnostic('host_draining','The local host is draining; the Work was not started.')]);
   if(!check?.ready)return outcome('admitted',[],'not_started',bounded(check?.diagnostics.length?check.diagnostics:[{code:'preflight_unavailable',message:'Run preflight was unavailable.'}]));
   // The run refuses to start if the default route no longer matches the choice this check saw.
   return {...outcome('admitted',[],'requested'),revision:admitted.revision,intakeMissionId,choice:check.selection?.choice};
  }
- /** One read of the named segment plus the intake Mission. No writes and no calls. */
+ /** One read of the named segment plus each intake Mission its cards pin. No writes and no calls. */
  async read(n?:number){
   if(n!==undefined&&(!Number.isSafeInteger(n)||n<1))throw new DomainError('Invalid segment');
   const head=await headSegment(this.#store),number=n??head,state=await this.#store.readState(number?segmentId(number):undefined),snapshot=(number?state.snapshot:null) as Snapshot<AssistantSegment>|null;
-  // ponytail: cards use the current intake Mission; per-turn Mission pins are the upgrade once more than one intake Mission exists.
-  const intakeId=this.#connections?.list().representative?.intakeMissionId,intake=intakeId?await this.#store.load(intakeId) as Snapshot<Mission>|null:null,now=this.#clock();
+  // A card reads the intake Mission pinned in its outcome; only outcomes recorded before the pin fall back to the current setting.
+  const fallback=this.#connections?.list().representative?.intakeMissionId,pin=(t:AssistantSegment['turns'][number])=>t.proposal?t.outcome?.missionId??fallback:undefined,missions=new Map<string,Snapshot<Mission>|null>(),now=this.#clock();
+  for(const t of snapshot?.value.turns??[]){const id=pin(t);if(id&&!missions.has(id))missions.set(id,id.startsWith(ASSISTANT_CONVERSATION_PREFIX)?null:await this.#store.load(id) as Snapshot<Mission>|null);}
   const turns=(snapshot?.value.turns??[]).map(t=>{
-   const work=t.proposal?intake?.value.works.find(w=>w.id===assistantWorkId(t.id)&&w.assistantSource?.turnId===t.id):undefined;
+   const id=pin(t),intake=id?missions.get(id):null,work=intake?.value.works.find(w=>w.id===assistantWorkId(t.id)&&w.assistantSource?.turnId===t.id);
    return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),
     ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id)}}:{})};
   });
@@ -197,9 +203,9 @@ function turnView(segment:AssistantSegment,turnId:string):AssistantTurnView|null
  return {id:t.id,status:t.status,...(reply!==undefined?{reply}:{}),...(t.outcome?{outcome:structuredClone(t.outcome)}:{}),...(t.diagnostics?{diagnostics:structuredClone(t.diagnostics)}:{})};
 }
 /** Up to 12 earlier messages and 24 KiB, oldest dropped first, then cut further until the request fits the profile input bound. */
-function boundedHistory(segment:AssistantSegment|null,current:string,maxInputBytes:number){
+function boundedHistory(messages:AssistantSegment['messages'],current:string,maxInputBytes:number){
  const picked:{id:string;role:string;text:string}[]=[];let bytes=0;
- for(const m of [...(segment?.messages??[])].reverse()){const size=Buffer.byteLength(m.text,'utf8');if(picked.length===CONTEXT_MESSAGES||bytes+size>HISTORY_BYTES)break;picked.unshift({id:m.id,role:m.role,text:m.text});bytes+=size;}
+ for(const m of [...messages].reverse()){const size=Buffer.byteLength(m.text,'utf8');if(picked.length===CONTEXT_MESSAGES||bytes+size>HISTORY_BYTES)break;picked.unshift({id:m.id,role:m.role,text:m.text});bytes+=size;}
  const fits=()=>Buffer.byteLength(JSON.stringify(JSON.stringify({instruction:ASSISTANT_INSTRUCTION,currentMessage:current,history:picked.map(({role,text})=>({role,text}))})),'utf8')+REQUEST_RESERVE_BYTES<=maxInputBytes;
  while(picked.length&&!fits())picked.shift();
  return {history:picked.map(({role,text})=>({role,text})),ids:picked.map(p=>p.id)};
