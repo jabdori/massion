@@ -127,12 +127,25 @@ test('a same-family check is refused while the model groups hold an available di
  const f=await setup(t,'openrouter',['openai/gpt-test','anthropic/claude-test']),m=f.host();const gpt=f.profile(m,'openai/gpt-test'),claude=f.profile(m,'anthropic/claude-test');
  await m.save(()=>m.saveModelGroup({id:'g',name:'G',description:'Checks text.',profileIds:[claude],expectedConfigHash:m.list().configHash}));
  await m.save(()=>m.authorize({id:'grant',scope:'local',executorProfileId:gpt,verifierProfileId:gpt,maxOutputTokensPerCall:4,expectedConfigHash:m.list().configHash}));
- await assert.rejects(m.save(()=>m.setDefaultRoute({authorizationId:'grant',outputTokenCap:4,expectedConfigHash:m.list().configHash})),/different family is available/);
+ // The route itself stays usable: whether another family is independent depends on the Work's producers.
+ await m.save(()=>m.setDefaultRoute({authorizationId:'grant',outputTokenCap:4,expectedConfigHash:m.list().configHash}));assert.equal(m.list().runtime.defaultRoutes[0]!.status,'active');
  const product=new ProductService(f.store,undefined,m),choice={executorProfileId:gpt,verifierProfileId:gpt,authorizationId:'grant',outputTokenCap:4};
+ assert.equal(m.resolveDefault((await f.current()).value).status,'resolved');
+ const byDefault=await product.preflight('mission','fresh',(await f.current()).revision);assert.equal(byDefault!.ready,false);assert.equal(byDefault!.diagnostics.at(-1)!.code,'verifier_family_available');
+ // A Representative-written Work already has an Anthropic producer, so no available model is independent and the same-family check is allowed.
+ const snapshot=structuredClone(await f.current()),fresh=snapshot.value.works.find(w=>w.id==='fresh')!;fresh.assistantSource={representative:{provider:'openrouter',model:'anthropic/claude-test'}} as any;
+ const written=m.preflight(snapshot,'fresh',snapshot.revision,choice);assert.ok(!written.diagnostics.some(d=>d.code==='verifier_family_available'),JSON.stringify(written.diagnostics));
  const refused=await product.preflight('mission','fresh',(await f.current()).revision,choice);assert.equal(refused!.ready,false);assert.equal(refused!.diagnostics.at(-1)!.code,'verifier_family_available');
  const run=await product.run('mission','fresh','run-refused',(await f.current()).revision,choice) as any;assert.notEqual(run.status,'settled');assert.deepEqual(f.calls,[]);
  await m.save(()=>m.removeModelGroup({id:'g',expectedConfigHash:m.list().configHash}));
- await m.save(()=>m.setDefaultRoute({authorizationId:'grant',outputTokenCap:4,expectedConfigHash:m.list().configHash}));assert.equal(m.list().runtime.defaultRoutes[0]!.status,'active');
- await m.save(()=>m.saveModelGroup({id:'g',name:'G',description:'Checks text.',profileIds:[claude],expectedConfigHash:m.list().configHash}));
- const stale=m.list().runtime.defaultRoutes[0]!;assert.equal(stale.status,'stale');assert.deepEqual(stale.diagnostics,['a different family is available for checking']);
+ assert.equal((await product.preflight('mission','fresh',(await f.current()).revision))!.ready,true);
+});
+
+test('the default group keeps the usable pin when the Representative still holds a stale one for the same profile',async t=>{
+ const f=await setup(t,'openrouter',['openai/gpt-test','anthropic/claude-test']),m=f.host(),claude=f.profile(m,'anthropic/claude-test');
+ await m.save(()=>m.setRepresentative({profileId:claude,outputTokenCap:4,intakeMissionId:'intake',expectedConfigHash:m.list().configHash}));
+ const connection=m.list().connections[0]!;await m.save(()=>m.selectModel(connection.id,{model:'anthropic/claude-test',label:'Relabelled',expectedConfigHash:connection.configHash}));
+ await f.route(m,'openai/gpt-test','anthropic/claude-test');assert.equal(m.list().runtime.defaultRoutes[0]!.status,'active');
+ const models=m.list().modelGroups[0]!.models as any[];assert.deepEqual(models.filter(x=>x.model==='anthropic/claude-test').map(x=>x.status),['available']);
+ const checked=m.chooseGroupModel('default',{outputTokenCap:4,producers:[{provider:'openrouter',model:'openai/gpt-test'}]}) as any;assert.equal(checked.model,'anthropic/claude-test');assert.equal(checked.relation,'different-family');assert.deepEqual(f.calls,[]);
 });

@@ -86,14 +86,28 @@ test('producer: rows come from Representative Works run this month; the card is 
  f.setNow(f.start+40*86400000);await assert.rejects(f.members.propose({topic:'Data analysis',workIds:ids}),/month/);f.setNow(f.start+1000);
  const r=await f.members.propose({topic:'Data analysis',workIds:ids});assert.equal(r.status,'committed');
  const view=await f.members.read();const card=view.decisions[0]!;
- assert.deepEqual(card,{id:card.id,at:f.start+1000,title:'Data analysis',question:'Data analysis came up 2 times this month. Add a member for it?',rows:[['This month','Discount totals by weekday · Order discount totals'],['Model group','Default']],action:'Add member',form:'member',state:'open'});
+ // Rows follow the Work ID order that also keys the proposal.
+ const titles=(ids[0]!<ids[1]!?['Discount totals by weekday','Order discount totals']:['Order discount totals','Discount totals by weekday']).join(' · ');
+ assert.deepEqual(card,{id:card.id,at:f.start+1000,title:'Data analysis',question:'Data analysis came up 2 times this month. Add a member for it?',rows:[['This month',titles],['Model group','Default']],action:'Add member',form:'member',state:'open'});
  assert.equal((await f.members.propose({topic:'Data analysis',workIds:ids})).status,'replayed');
+ assert.equal((await f.members.propose({topic:'Data analysis',workIds:[...ids].reverse()})).status,'replayed','the same Works in another order are the same proposal');
  await f.members.decide({commandId:'d-1',decisionId:card.id,answer:'later'});assert.equal((await f.members.read()).decisions[0]!.state,'later');
  await f.members.decide({commandId:'d-2',decisionId:card.id,answer:'ask'});assert.equal((await f.members.read()).decisions[0]!.state,'open');
  await assert.rejects(f.members.decide({commandId:'d-3',decisionId:card.id,answer:'act'}),/name/,'no autonomy: act needs a name and a shape');
  const act={commandId:'d-4',decisionId:card.id,answer:'act',member:{name:'셈',shape:'drop'}};
  await f.members.decide(act);assert.equal((await f.members.decide(act)).status,'replayed','a lost answer replays, admitting once');
  const after=await f.members.read();assert.deepEqual(after.members.map(m=>[m.name,m.look.shape]),[['셈','drop']]);assert.deepEqual([after.decisions[0]!.state,after.decisions[0]!.line],['done','Added: 셈']);
+});
+
+test('an identical answer racing a committed one replays instead of refusing the answered decision',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
+ const card=(await f.members.read()).decisions[0]!,act={commandId:'d-race',decisionId:card.id,answer:'act',member:{name:'셈',shape:'drop'}};
+ // The racing request's first lookup sees nothing; the other request commits right after it.
+ let raced=false;const store=new Proxy(f.store,{get(target,key){
+  if(key==='lookupOperation'&&!raced)return async(identity:any)=>{raced=true;const r=await target.lookupOperation(identity);assert.equal((await f.members.decide(act)).status,'committed');return r;};
+  const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ assert.equal((await new MembersService(store,()=>'intake').decide(act)).status,'replayed');
+ assert.deepEqual((await f.members.read()).members.map(m=>m.name),['셈'],'admitted once');
 });
 
 test('1:1 conversation: one thread per member through its model group, the member named as data, no Work admitted; lineage replays it',async t=>{
@@ -138,6 +152,30 @@ test('HTTP: decisions, proposals and member threads take exact fields; the conve
  assert.equal((await fetch(url('/assistant/conversation?member=nobody'))).status,404);
  assert.equal((await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:'nobody'})).status,404);
  const sent=await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:memberId});assert.equal(sent.status,200);
+ const csp=(await fetch(url('/'))).headers.get('content-security-policy')!;assert.match(csp,/img-src [^;]*data:/,'the avatar shape masks are data: images the page policy must allow');
  const thread=await fetch(url('/assistant/conversation?member='+memberId)).then(r=>r.json()) as any;
  assert.deepEqual(thread.member,{id:memberId,name:'셈'});assert.equal(thread.segment.messages[0].text,'Hi');assert.equal(thread.decisions,undefined,'decisions live in the Representative conversation');
+});
+
+test('HTTP: an owner decision resuming after drain starts is refused and admits nobody',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});const decisionId=(await f.members.read()).decisions[0]!.id;
+ let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===MEMBERS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,f.root,{connections:f.m,artifacts:f.artifacts,drainTimeoutMs:3000});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;hold=true;
+ const response=fetch(`http://127.0.0.1:${port}/assistant/decisions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'d-drain',decisionId,answer:'act',member:{name:'셈',shape:'drop'}})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);await drain;assert.deepEqual((await f.members.read()).members,[]);
+});
+
+test('HTTP: a first member message resuming after drain starts is refused and stores nothing',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
+ await f.members.decide({commandId:'d-1',decisionId:(await f.members.read()).decisions[0]!.id,answer:'act',member:{name:'셈',shape:'drop'}});const memberId=(await f.members.read()).members[0]!.id;
+ let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===MEMBERS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,f.root,{connections:f.m,artifacts:f.artifacts,drainTimeoutMs:3000});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;hold=true;const before=f.store.inspect().length;
+ const response=fetch(`http://127.0.0.1:${port}/assistant/messages`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'m-drain',segment:1,expectedRevision:0,text:'Hi',member:memberId})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);assert.equal((await drain).status,'drained');assert.equal(f.store.inspect().length,before,'no owner message was committed');
 });
