@@ -167,3 +167,15 @@ test('HTTP: an owner decision resuming after drain starts is refused and admits 
  await reached;const drain=server.drain();release();
  assert.equal((await response).status,503);await drain;assert.deepEqual((await f.members.read()).members,[]);
 });
+
+test('HTTP: a first member message resuming after drain starts is refused and stores nothing',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
+ await f.members.decide({commandId:'d-1',decisionId:(await f.members.read()).decisions[0]!.id,answer:'act',member:{name:'셈',shape:'drop'}});const memberId=(await f.members.read()).members[0]!.id;
+ let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===MEMBERS_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,f.root,{connections:f.m,artifacts:f.artifacts,drainTimeoutMs:3000});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const port=(server.address() as {port:number}).port;hold=true;const before=f.store.inspect().length;
+ const response=fetch(`http://127.0.0.1:${port}/assistant/messages`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'m-drain',segment:1,expectedRevision:0,text:'Hi',member:memberId})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);assert.equal((await drain).status,'drained');assert.equal(f.store.inspect().length,before,'no owner message was committed');
+});
