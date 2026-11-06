@@ -154,7 +154,7 @@ test('HTTP: decisions, proposals and member threads take exact fields; the conve
  const sent=await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:memberId});assert.equal(sent.status,200);
  const csp=(await fetch(url('/'))).headers.get('content-security-policy')!;assert.match(csp,/img-src [^;]*data:/,'the avatar shape masks are data: images the page policy must allow');
  const thread=await fetch(url('/assistant/conversation?member='+memberId)).then(r=>r.json()) as any;
- assert.deepEqual(thread.member,{id:memberId,name:'셈'});assert.equal(thread.segment.messages[0].text,'Hi');assert.equal(thread.decisions,undefined,'decisions live in the Representative conversation');
+ assert.deepEqual(thread.member,{id:memberId,name:'셈'});assert.equal(thread.segment.messages[0].text,'Hi');assert.deepEqual(thread.decisions,[],'admission decisions live in the Representative conversation; a member thread carries only its skill decisions');
 });
 
 test('HTTP: an owner decision resuming after drain starts is refused and admits nobody',async t=>{

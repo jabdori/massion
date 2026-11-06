@@ -80,7 +80,7 @@ The conversation read adds `decisions` in the shape fixed by [conversation-cards
 - The B21 card's row for the Work to hand the new member.
 - Member Work: assigning Work to a member, a team per Work with role chips, Work lines under members in the sidebar, steering a running Work from the 1:1 conversation, memory candidates.
 - A model group created at admission with a host description (ADR 0003 §3); members use the default group.
-- Member profile (B19), Settings > Members (B13), archive, merge, rename.
+- Archive, merge, rename. (Settings > Members and the member page with skills and procedures came with [settings](settings.md) and [self-made skills](self-made-skills.md); the `skills` and `procedures` slots on a member stay empty, the skills aggregate holds them.)
 - Avatar state marks (working dots, unread dot) and `@name` completion.
 - Organization version (ORG-01) widened to members; Work pins it.
 - `Undo` on a decided line.
