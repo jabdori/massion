@@ -22,6 +22,7 @@ export const settingsStyle=String.raw`.settings-stack{max-width:640px;margin:0 a
 .set-steps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1}.set-steps .set-chip{font-family:inherit}.set-steps i{color:var(--fg-4);font-style:normal;font-size:12px}.set-more{justify-self:start;margin-top:4px;padding:0;border:0;background:none;color:var(--fg-3);font-size:12px;min-height:0}.app .set-more:hover{background:none;color:var(--fg)}.set-evidence dl{display:grid;grid-template-columns:96px 1fr;row-gap:4px;margin:0}.set-evidence dt{color:var(--fg-3)}.set-evidence dd{margin:0;color:var(--fg)}.set-item{border-bottom:1px solid var(--line)}.set-item:last-child{border-bottom:0}.set-item>.set-row{border-bottom:0}.set-line{display:flex;gap:10px;align-items:center;margin-top:10px;padding:0 2px;color:var(--fg-3);font-size:12px}.set-line button{padding:0;border:0;background:none;color:var(--fg);font-size:12px;min-height:0}`;
 export const settingsClient=String.raw`
 const settingsNames=['general','memory','members','devices','connections','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
+const settingsStale={},settingsGen={};
 let settingsShown='general',settingsCatalog=null,settingsMission=null,settingsRules=null,settingsHealth='',settingsAdding=false,settingsBusy=false,settingsEvidence=new Set(),settingsSkills=null,settingsMember='',settingsDetails=new Set();
 const settingsRepName=()=>shellPages.chat[1];
 const settingsFamily=f=>({anthropic:'Anthropic',openai:'OpenAI',google:'Google',zhipu:'Z.ai'})[f]||f||'Unknown';
@@ -29,15 +30,20 @@ function settingsText(title,sub){const box=element('span',undefined,'set-text');
 function settingsRow(title,sub,...controls){const row=element('div',undefined,'set-row');row.append(settingsText(title,sub),...controls.filter(Boolean));return row;}
 function settingsCard(label,rows,action){const head=element('h3',label);if(action)head.append(action);const card=element('div',undefined,'set-card');card.append(...(rows.length?rows:[element('div','None','set-empty')]));return [head,card];}
 /** Opens one section and reads what it shows; nothing is written by opening. */
-function settingsOpen(name){settingsShown=name;settingsAdding=false;settingsMember='';for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
+function settingsOpen(name,app=''){settingsShown=name;settingsAdding=false;settingsMember='';settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
 async function settingsRead(path){try{const {response,body}=await request(path);return response.ok?body:null;}catch{return null;}}
+/** Each section's read has its own generation: a slower earlier read for the same section never overwrites a newer one. */
 async function settingsLoad(name){
+ const gen=settingsGen[name]=(settingsGen[name]||0)+1,read=async path=>{const body=await settingsRead(path);if(gen!==settingsGen[name])throw settingsStale;return body;};
+ try{
  if(name==='general')await schedulesLoad();
- if(name==='memory'||name==='members'||name==='connections')settingsCatalog=await settingsRead('/connections');
- if(name==='memory'){const id=settingsCatalog&&settingsCatalog.representative&&settingsCatalog.representative.intakeMissionId;settingsMission=id?await settingsRead('/missions/'+encodeURIComponent(id)):null;}
- if(name==='devices')settingsHealth=(await settingsRead('/health'))?.status==='ready'?'Ready':'Offline';
- if(name==='permissions')settingsRules=await settingsRead('/assistant/permissions');
- if(name==='members'||name==='improvements')settingsSkills=await settingsRead('/assistant/skills');
+ if(name==='memory'||name==='members'||name==='connections')settingsCatalog=await read('/connections');
+ if(name==='memory'){const id=settingsCatalog&&settingsCatalog.representative&&settingsCatalog.representative.intakeMissionId;settingsMission=id?await read('/missions/'+encodeURIComponent(id)):null;}
+ if(name==='devices')settingsHealth=(await read('/health'))?.status==='ready'?'Ready':'Offline';
+ if(name==='permissions')settingsRules=await read('/assistant/permissions');
+ if(name==='apps')settingsApps=await read('/assistant/apps');
+ if(name==='members'||name==='improvements')settingsSkills=await read('/assistant/skills');
+ }catch(error){if(error===settingsStale)return;throw error;}
  if(settingsShown===name)renderSettings();
 }
 /** One owner command, sent once; a lost answer is not resent, the next read shows the state. */
@@ -54,7 +60,7 @@ function renderSettings(){
   const rows=chatMembers().map(m=>{const row=element('button',undefined,'set-row'),a=element('span',[...m.name][0],'avatar');row.type='button';row.id='settings-member-'+m.id;a.setAttribute('aria-hidden','true');a.style.background=shellColor(m);row.append(a,settingsText(m.name),element('span',settingsGroupName(m.modelGroup||'default')+' ›','set-side'));row.addEventListener('click',()=>{settingsMember=m.id;renderSettings();});return row;});
   view.replaceChildren(...settingsCard('',[rep,...rows]).slice(1));}
  if(settingsShown==='devices')view.replaceChildren(...settingsCard('',[settingsRow('This Mac',settingsHealth)]).slice(1));
- if(settingsShown==='apps')view.replaceChildren(...settingsCard('Installed',[element('div','No apps installed','set-empty')]));
+ if(settingsShown==='apps')view.replaceChildren(...settingsAppsView());
  if(settingsShown==='connections')view.replaceChildren(...settingsConnectionsView());
  if(settingsShown==='permissions')view.replaceChildren(...settingsPermissionsView());
 }
