@@ -13,14 +13,17 @@ export const resultsPage=String.raw`<div id="page-results" class="page-body" hid
 <p id="results-empty" class="page-empty" hidden>No results yet</p><table id="results-table" class="results-table"><thead><tr><th scope="col">Name</th><th scope="col">Work</th><th scope="col">Assignee</th><th scope="col">Last activity</th></tr></thead><tbody id="results-rows"></tbody></table><div id="results-tiles" class="result-tiles" hidden></div></div></div><!-- /page-results -->`;
 export const resultsPane=String.raw`<div id="pane-result" class="pane-result" role="tabpanel" aria-label="Result" hidden><div class="result-bar"><div class="result-modes" role="tablist" aria-label="View"><button id="result-tab-preview" type="button" role="tab" aria-selected="true">Preview</button><button id="result-tab-original" type="button" role="tab" aria-selected="false">Original</button></div><button id="result-copy" type="button" class="secondary">Copy</button></div><div id="result-preview" class="result-doc" tabindex="0"></div><pre id="result-original" class="result-doc" hidden></pre></div>`;
 export const resultsClient=String.raw`
-let resultRows=[],resultGrid=false,resultSeq=0,resultText='';
+let resultRows=[],resultGrid=false,resultSeq=0,resultText='',resultLoadSeq=0;
 const resultKey=r=>r.missionId+'/'+r.workId,resultWhen=at=>Number.isSafeInteger(at)?new Date(at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+chatTime(at):'';
 const resultValid=r=>r&&chatText(r.missionId)&&chatText(r.workId)&&chatText(r.recordId)&&Number.isSafeInteger(r.version)&&/^[a-f0-9]{64}$/.test(r.sha256)&&chatText(r.title)&&Number.isSafeInteger(r.segment)&&r.segment>=1;
 // A CSS-drawn page: the client builds no markup from strings.
 function resultIcon(){const box=element('span',undefined,'result-kind');box.setAttribute('aria-hidden','true');return box;}
 /** Accepted Records live in the intake Mission, which is never a conversation aggregate, so its events reread the page while it shows. */
 function resultsEvents(events){if(!$('page-results').hidden&&events.some(event=>typeof event.aggregateId==='string'&&!event.aggregateId.startsWith('assistant-conversation:')))void resultsLoad();}
-async function resultsLoad(){try{const {response,body}=await request('/assistant/results');if(response.ok&&Array.isArray(body.results))resultRows=body.results.filter(resultValid);}catch{}renderResults();}
+/** Only the latest read lands, so a read sent before a database replacement or a later read never overwrites a newer one. */
+async function resultsLoad(){const seq=++resultLoadSeq;let rows=null;try{const {response,body}=await request('/assistant/results');if(response.ok&&Array.isArray(body.results))rows=body.results.filter(resultValid);}catch{}if(seq!==resultLoadSeq)return;if(rows)resultRows=rows;renderResults();}
+/** A replaced database drops the old rows, any read or preview in flight, and reads again while the page shows. */
+function resultsReset(){resultLoadSeq++;resultSeq++;resultRows=[];resultText='';renderResults();if(!$('page-results').hidden)void resultsLoad();}
 /** Rail > Results: its own sidebar (All, Documents, recent names), then a table or tiles. Every readable result is text, so Documents equals All. */
 function renderResults(){
  const side=$('side-results'),title=element('p','Results','side-title'),all=element('button',undefined,'side-item'),docs=element('button',undefined,'side-item');all.type=docs.type='button';all.setAttribute('aria-current','page');all.append(element('span','All'));docs.append(element('span','Documents'));
@@ -32,9 +35,9 @@ function renderResults(){
   row.id='result-row-'+resultKey(r);row.append(cell,element('td',r.title),who,element('td',resultWhen(r.at)));row.addEventListener('click',()=>void resultOpen(r));return row;}));
  $('results-tiles').replaceChildren(...resultRows.map(r=>{const tile=element('button',undefined,'result-tile');tile.type='button';tile.id='result-tile-'+resultKey(r);tile.append(resultIcon(),element('span',r.title),element('span',resultWhen(r.at)));tile.addEventListener('click',()=>void resultOpen(r));return tile;}));
 }
-/** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. */
+/** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. The segment is pinned: the read itself returns to the head view when that segment is the head, so a cached head never decides it. */
 async function resultOpen(r){
- if(!chatOpenThread(''))return;chatSegment=chatRep&&chatRep.head===r.segment?null:r.segment;void readChat();
+ if(!chatOpenThread(''))return;chatSegment=r.segment;void readChat();
  const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneAway(false);renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */

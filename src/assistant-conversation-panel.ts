@@ -119,9 +119,11 @@ function renderChat(){
 /** One read loop at a time; a caller during a read waits for the loop that will cover its thread, so a send right after a switch targets the new thread's head. */
 function readChat(){if(chatReading){chatAgain=true;return chatReadDone;}chatReading=true;return chatReadDone=chatReadLoop();}
 async function chatReadLoop(){
- try{do{chatAgain=false;const thread=chatThread,query=[chatSegment?'segment='+chatSegment:'',thread?'member='+encodeURIComponent(thread):''].filter(Boolean).join('&'),{response,body}=await request('/assistant/conversation'+(query?'?'+query:''));
+ try{do{chatAgain=false;const thread=chatThread,segment=chatSegment,query=[segment?'segment='+segment:'',thread?'member='+encodeURIComponent(thread):''].filter(Boolean).join('&'),{response,body}=await request('/assistant/conversation'+(query?'?'+query:''));
   // A read for a thread the owner already left is dropped and the current one is read instead.
   if(thread!==chatThread){chatAgain=true;continue;}
+  // A named segment that the read shows is the head is read again as the head view, where decisions, briefings and run exceptions show.
+  if(segment!==null&&segment===chatSegment&&body.head===segment){chatSegment=null;chatAgain=true;continue;}
   if(!response.ok||!Number.isSafeInteger(body.head)||!Array.isArray(body.turns)||body.segment!==null&&(!body.segment||!Array.isArray(body.segment.messages)))throw new Error('Conversation unavailable');
   chatView=body;if(!thread)chatRep=body;renderChat();if($('chat-status').textContent==='Unavailable')chatShow('');}while(chatAgain);}
  catch{if(!$('chat-status').textContent)chatShow('Unavailable');}finally{chatReading=false;chatControls();

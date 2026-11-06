@@ -93,9 +93,9 @@ test('scheduler: a started run that never finished reads as result unknown, is n
  // A host that dies between the start and the finish: the start is committed, the finish never is.
  const started=applySchedules(s.value,{type:'start-run',scheduleId:s.value.schedules[0].id,runId:'run-lost',slot,manual:false},host,{observedAt:slot+1});
  await f.store.commit({id:SCHEDULES_ID,expectedRevision:s.revision,commandId:'assistant-schedule-run:run-lost',fingerprint:'x',value:started.value,events:started.events,outbox:[]});
- f.setNow(slot+30000);assert.deepEqual(await f.schedules.conversation(),{briefings:[],exceptions:[],runDeadlineAt:slot+1+60000},'still in time: the page is told when to read again');assert.equal((await f.schedules.tick()).length,0);
+ f.setNow(slot+30000);assert.deepEqual((await f.schedules.read()).schedules[0]!.runs.map(r=>[r.state,(r as any).deadlineAt]),[['running',slot+1+60000]],'the Schedules page is told when to read again too');assert.deepEqual(await f.schedules.conversation(),{briefings:[],exceptions:[],runDeadlineAt:slot+1+60000},'still in time: the page is told when to read again');assert.equal((await f.schedules.tick()).length,0);
  f.setNow(slot+61000);const conv=await f.schedules.conversation();
- assert.deepEqual(conv.exceptions.map(e=>[e.title,e.state,e.fact,e.actions]),[['Morning briefing','unknown','Not resent',['check','close']]]);assert.equal((conv as any).runDeadlineAt,undefined);
+ assert.deepEqual(conv.exceptions.map(e=>[e.title,e.state,e.fact,e.actions]),[['Morning briefing','unknown','Not resent',['check','close']]]);assert.equal((conv as any).runDeadlineAt,undefined);assert.deepEqual((await f.schedules.read()).schedules[0]!.runs.map(r=>[r.state,(r as any).deadlineAt]),[['unknown',undefined]]);
  assert.equal((await f.schedules.tick()).length,0,'the unknown slot is not run again');
  await assert.rejects(f.schedules.act({commandId:'c-2',action:'retry',scheduleId:s.value.schedules[0].id}),/action/i);
  f.setNow(slot+DAY+1000);assert.equal((await f.schedules.tick()).length,1,'the next slot runs');
