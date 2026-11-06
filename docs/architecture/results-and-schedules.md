@@ -59,7 +59,7 @@ Host command IDs are `assistant-schedule-run:<runId>` (start), `assistant-schedu
 ### Host scheduler
 
 - `SchedulesService.tick()` runs every 30 seconds while the host serves, one at a time, and stops when it drains or closes; drain waits for a tick already in flight before it reports `drained`. For a due active schedule it starts a run, reads the conversation, then finishes the run. A second tick for the same slot replays the same start by command ID.
-- **Result unknown is never resent.** A run is `started` until it finishes or fails. A started run past its deadline (60 s) reads as result unknown: its slot is not run again, the next slot still runs, and the owner may close it. While a run is still in time the conversation read carries `runDeadlineAt`, and the page reads again just after it, so the card appears without another event.
+- **Result unknown is never resent.** A run is `started` until it finishes or fails. A started run past its deadline (60 s) reads as result unknown: its slot is not run again, the next slot still runs, and the owner may close it. While a run is still in time the conversation read carries `runDeadlineAt` and the Schedules read gives that run its `deadlineAt`; each page reads again just after it, so the card and the past run show result unknown without another event.
 - A read failure is a failed run with `Briefing unavailable`. A commit with an unknown outcome is left as it is: the run reads as unknown after its deadline.
 
 ### Conversation read
