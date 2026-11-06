@@ -13,6 +13,7 @@ import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {AssistantService} from './assistant-service.ts';
 import {MembersService} from './members.ts';
 import {SchedulesService} from './schedules.ts';
+import {PermissionsService} from './permissions.ts';
 import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
@@ -57,11 +58,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  // Conversation host steps (settle, outcome) must still commit while draining; new owner turns are refused by the service itself.
  const assistant=new AssistantService(store,product,options.connections);
  // One conversation per member (members.md), kept so drain reaches its turns too; one created after drain starts is born draining.
- // Owner decisions commit through the drain-aware store, so an answer resuming after drain starts is refused.
+ // Owner decisions, permission rules and schedule actions commit through the drain-aware store, so a command resuming after drain starts is refused.
  const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  // The host scheduler (results-and-schedules.md) writes the briefing from the Representative's conversation read; it stops when the host drains or closes.
  // drain waits for a tick already in flight and reports `unsettled` when any schedule write met an unknown commit, read again once HTTP has closed so a Run now finishing during drain counts, so `drained` means its writes settled.
- let ticking:Promise<unknown>|undefined;const schedules=new SchedulesService(store,n=>assistant.read(n)),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
+ let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore);const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
  const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup}});if(draining)chat.beginDrain();memberChats.set(member.id,chat);}return {member,chat};};
  const server=createServer(async(req,res)=>{
   let mutationFeed='';
@@ -79,7 +80,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
   const sendCommit=(result:{status:string;revision:number},created=false)=>send(result.status==='conflict'?409:created&&result.status==='committed'?201:200,result);
   try{
    const url=new URL(req.url??'/',`http://${expected}`);
-   if(req.method==='POST'&&(url.pathname==='/missions'||url.pathname.startsWith('/missions/')||url.pathname==='/fixture-run'||url.pathname==='/assistant/messages'||url.pathname==='/assistant/decisions'||url.pathname==='/assistant/schedules')){mutationFeed=(await store.readState()).feedId;const requested=req.headers['x-massion-feed'];if(requested!==undefined){identifier(requested,'Feed identity');if(requested!==mutationFeed){send(409,{error:'Database changed before admission',reason:'feed',outcome:'rejected'});return;}}}
+   if(req.method==='POST'&&(url.pathname==='/missions'||url.pathname.startsWith('/missions/')||url.pathname==='/fixture-run'||url.pathname==='/assistant/messages'||url.pathname==='/assistant/decisions'||url.pathname==='/assistant/schedules'||url.pathname==='/assistant/permissions')){mutationFeed=(await store.readState()).feedId;const requested=req.headers['x-massion-feed'];if(requested!==undefined){identifier(requested,'Feed identity');if(requested!==mutationFeed){send(409,{error:'Database changed before admission',reason:'feed',outcome:'rejected'});return;}}}
    const execute=async()=>{
    if(draining&&req.method!=='GET'){send(503,{error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false});return;}
    if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"});res.end(workbenchPage);return;}
@@ -92,7 +93,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     // The Representative's read carries the admission decisions; every read lists members for the sidebar.
     const thread=who===null?null:await memberChat(who),view=await (thread?thread.chat:assistant).read(raw===null?undefined:Number(raw)),org=await members.read();send(200,{...view,members:org.members,...(thread?{member:{id:thread.member.id,name:thread.member.name}}:{decisions:org.decisions,...await schedules.conversation(view.segment?.number)})});return;}
    if(req.method==='POST'&&url.pathname==='/assistant/messages'){const body=await readBody();const {member:who,...message}=body;if(Object.keys(message).length!==4||!['commandId','segment','expectedRevision','text'].every(k=>Object.hasOwn(message,k)))throw new RequestError(400,'Exact conversation message fields required');callerCommand(body.commandId);if(!Number.isSafeInteger(body.segment)||Number(body.segment)<1||!Number.isSafeInteger(body.expectedRevision)||Number(body.expectedRevision)<0||typeof body.text!=='string')throw new RequestError(400,'Invalid segment, expected revision or text');const result=await (Object.hasOwn(body,'member')?(await memberChat(who)).chat:assistant).send(message);send(result.message.status==='conflict'?409:200,result);return;}
-   if(req.method==='GET'&&(url.pathname==='/assistant/results'||url.pathname==='/assistant/schedules')){if([...url.searchParams.keys()].length)throw new RequestError(400,'No query is accepted');const state=await store.readState();send(200,url.pathname==='/assistant/results'?await assistant.results():{feedId:state.feedId,...await schedules.read()});return;}
+   if(req.method==='GET'&&(url.pathname==='/assistant/results'||url.pathname==='/assistant/schedules'||url.pathname==='/assistant/permissions')){if([...url.searchParams.keys()].length)throw new RequestError(400,'No query is accepted');const state=await store.readState();send(200,url.pathname==='/assistant/results'?await assistant.results():{feedId:state.feedId,...await (url.pathname==='/assistant/schedules'?schedules:permissions).read()});return;}
+   if(req.method==='POST'&&url.pathname==='/assistant/permissions'){const body=await readBody();callerCommand(body.commandId);sendCommit(await permissions.act(body),body.action==='allow');return;}
    if(req.method==='POST'&&url.pathname==='/assistant/schedules'){const body=await readBody();callerCommand(body.commandId);sendCommit(await schedules.act(body),body.action==='create');return;}
    if(req.method==='POST'&&url.pathname==='/assistant/decisions'){const body=await readBody();callerCommand(body.commandId);sendCommit(await members.decide(body));return;}
    if(req.method==='POST'&&(url.pathname==='/assistant-settings'||url.pathname==='/assistant-settings/remove')){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const body=await readBody();send(200,url.pathname==='/assistant-settings'?await assistant.setSettings(body):await assistant.removeSettings(body));return;}

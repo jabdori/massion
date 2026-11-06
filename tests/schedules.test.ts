@@ -208,3 +208,12 @@ test('drain: a Run now whose finish commit turns unknown during drain makes the 
  await inside;const drained=server.drain();release();assert.equal((await run).status,200);
  assert.deepEqual(await drained,{status:'unsettled',timedOut:false});
 });
+
+test('HTTP: an owner schedule action resuming after drain starts is refused and stores nothing',async t=>{
+ const f=await setup(t);let hold=false,held=()=>{},release=()=>{};const reached=new Promise<void>(r=>{held=r;}),gate=new Promise<void>(r=>{release=r;});
+ const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id===SCHEDULES_ID){hold=false;held();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const server=createWorkbench(store as Store<Mission>,f.root,{connections:f.m,artifacts:f.artifacts,drainTimeoutMs:3000,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ hold=true;const response=fetch(`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant/schedules`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-drain',action:'create',minute:480,offset:540,budget:{runs:30}})});
+ await reached;const drain=server.drain();release();
+ assert.equal((await response).status,503);assert.equal((await drain).status,'drained');assert.deepEqual((await f.schedules.read()).schedules,[]);
+});

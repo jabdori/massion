@@ -22,6 +22,7 @@ import {chatPanel,chatClient,chatStyle} from './assistant-conversation-panel.ts'
 import {memberDialog,memberClient,memberStyle} from './members-panel.ts';
 import {resultsPage,resultsPane,resultsClient,resultsStyle} from './results-panel.ts';
 import {schedulesPage,schedulesClient,schedulesStyle} from './schedules-panel.ts';
+import {settingsSection,settingsClient,settingsStyle} from './settings-panel.ts';
 import {shellStyle,shellRail,shellSidebar,shellBand,shellPaneBar,shellClient} from './surface-shell.ts';
 /** Self-contained loopback client. All user and host text is rendered through textContent. */
 export const workbenchPage = String.raw`<!doctype html>
@@ -41,6 +42,7 @@ ${chatStyle}
 ${memberStyle}
 ${resultsStyle}
 ${schedulesStyle}
+${settingsStyle}
 ${shellStyle}</style>
 </head>
 <body>
@@ -59,10 +61,14 @@ ${memberDialog}
 ${resultsPage}
 ${schedulesPage}
 <div id="page-settings" class="page-body" hidden><div class="settings-stack">
-<span id="health" role="status"><span class="dot"></span>Connecting</span>
-<div id="provider-notice" class="notice" role="status">Checking provider availability. No execution has been requested.</div>
+${settingsSection('general')}${settingsSection('memory')}${settingsSection('members')}${settingsSection('devices')}
+${settingsSection('connections',`<div id="settings-groups"></div><details id="settings-setup" class="set-setup"><summary>Connection setup</summary>
 <section class="panel" aria-labelledby="connection-heading"><h2 id="connection-heading">Connect a model provider</h2><p class="hint">Choose an API provider, discover its models or enter an exact model ID. Connections remain in this host session. API credentials stay with the host; do not paste API keys here. Subscription CLIs (Claude Code, Codex) are declared in the host manifest and use their own login; OAuth and ACP agent sessions are not implemented.</p>
 <form id="connection-form"><fieldset id="connection-fields"><label for="connection-kind">Provider API</label><select id="connection-kind"></select><label for="connection-label">Connection name</label><input id="connection-label" maxlength="512" required><label for="connection-base">API base URL</label><input id="connection-base" type="url" required><label for="connection-reference">Host credential reference (optional)</label><input id="connection-reference" maxlength="128" autocomplete="off" placeholder="Opaque reference, never an API key"><label for="connection-mode">Transport</label><select id="connection-mode"><option value="https">HTTPS API</option></select><button type="submit">Save connection</button></fieldset></form><p id="connection-status" class="hint" role="status">Checking connection setup…</p><div id="connection-list"></div></section>
+</details>`)}${settingsSection('apps')}${settingsSection('permissions')}
+<section id="settings-advanced" class="set-section" aria-labelledby="settings-advanced-title" hidden><h2 id="settings-advanced-title">Advanced</h2>
+<span id="health" role="status"><span class="dot"></span>Connecting</span>
+<div id="provider-notice" class="notice" role="status">Checking provider availability. No execution has been requested.</div>
 <section class="panel" aria-labelledby="create-heading"><div class="section-top"><h2 id="create-heading">Create a Mission</h2><span class="tag">01 / Purpose</span></div>
 <form id="mission-form"><fieldset id="mission-fields">
 <div class="field"><label for="purpose">Purpose</label><textarea id="purpose" rows="2" maxlength="16000" placeholder="What outcome should this Mission own?" required></textarea></div>
@@ -73,6 +79,7 @@ ${schedulesPage}
 </fieldset></form></section>
 <section class="panel" aria-labelledby="load-heading"><h2 id="load-heading">Continue a Mission</h2><form id="load-form"><label for="mission-id">Mission ID</label><input id="mission-id" maxlength="128" pattern="[a-zA-Z0-9:_\-]{1,128}" placeholder="mission:…" required><div class="row" style="margin-top:12px"><button id="load-mission" class="secondary" type="submit">Load / refresh</button></div><p class="hint">Reloads the authoritative snapshot. The last entered ID is remembered on this browser.</p></form>${missionCatalogPanel}${workInboxPanel}</section>
 <section class="panel fixture"><details><summary>Development fixture</summary><p>This controlled local fixture creates a separate Mission and runs real local file and process effects. Its predefined outputs demonstrate the lifecycle, not real model competence.</p><button id="run-fixture" class="secondary" type="button">Run development fixture</button><p class="hint">User Work never falls back to this fixture.</p></details></section>
+</section>
 </div></div><!-- /page-settings -->
 </main>
 <section id="work-pane" class="pane" aria-label="Work" hidden>
@@ -1637,6 +1644,7 @@ ${chatClient}
 ${memberClient}
 ${resultsClient}
 ${schedulesClient}
+${settingsClient}
 ${shellClient}
 ${missionCatalogClient}
 ${workInboxClient}
