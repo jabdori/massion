@@ -43,5 +43,6 @@ jobs:
         with:
           name: ui-contracts
           path: .runtime/ui-contracts/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
