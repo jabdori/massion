@@ -1,0 +1,613 @@
+{
+ "artboard": "B15",
+ "title": "B15 브라우저",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B15.dc.html",
+ "screenshot": "contracts/shots/B15.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 3,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 3,
+     "example": "스터디룸 신청",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "결정 대기",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 5,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 9,
+     "example": "주노",
+     "visible_text": "주노"
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date} {time}",
+     "required": false,
+     "order": 0,
+     "example": "11월 5일 (목) 10:02"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "다음 주 수요일 오후 3시에 도서관 스터디룸 4명으로 신청해 줘."
+    },
+    {
+     "role": "button",
+     "text": "{duration} 동안 작업 · 페이지 {count} 읽음 · 신청서 채움",
+     "required": false,
+     "order": 2,
+     "example": "2분 동안 작업 · 페이지 2개 읽음 · 신청서 채움"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "스터디룸 B가 비어 있어 신청서를 채우고 제출 직전에서 멈췄어요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "내 이름으로 신청서를 낼까요?"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 5,
+     "example": "10:04"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "신청 내용"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "스터디룸 B · 11월 11일 (수) 15:00–17:00 · 4명"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "보낼 곳"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "library.example.com"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "보낼 정보"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "이름 · 연락처 010-0000-0000"
+    },
+    {
+     "role": "text",
+     "text": "취소",
+     "required": false,
+     "order": 12
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "이용 하루 전까지 취소 가능"
+    },
+    {
+     "role": "button",
+     "text": "신청서 제출",
+     "required": false,
+     "order": 14
+    },
+    {
+     "role": "button",
+     "text": "나중에",
+     "required": true,
+     "order": 15
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": null,
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "이용 안내",
+     "visible_text": "도 이용 안내"
+    },
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 1,
+     "example": "빈 시간",
+     "visible_text": "도 빈 시간"
+    },
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 2,
+     "example": "신청",
+     "visible_text": "도 신청"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "library.example.com"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "시립도서관"
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": true,
+     "order": 6,
+     "example": "이용 안내"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "스터디룸"
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": true,
+     "order": 8,
+     "example": "신청"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "내 신청"
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": true,
+     "order": 10,
+     "example": "스터디룸 신청"
+    },
+    {
+     "role": "text",
+     "text": "이름",
+     "required": true,
+     "order": 11
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "홍길동"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "연락처"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "010-0000-0000"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "날짜"
+    },
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 16,
+     "example": "11월 11일 (수)"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "시간"
+    },
+    {
+     "role": "text",
+     "text": "{time}–{time}",
+     "required": false,
+     "order": 18,
+     "example": "15:00–17:00"
+    },
+    {
+     "role": "text",
+     "text": "방",
+     "required": false,
+     "order": 19,
+     "example": "방"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "스터디룸 B"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "인원"
+    },
+    {
+     "role": "text",
+     "text": "{count}",
+     "required": true,
+     "order": 22,
+     "example": "4명"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "신청서 제출"
+    },
+    {
+     "role": "chip",
+     "text": "{member}",
+     "required": true,
+     "order": 24,
+     "example": "하나"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    324,
+    808,
+    492,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 20,
+   "strings": 5,
+   "sentences": 0,
+   "longest": 8
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "conversation": {
+   "chars": 252,
+   "strings": 20,
+   "sentences": 3,
+   "longest": 36
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 123,
+   "strings": 24,
+   "sentences": 0,
+   "longest": 19
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "bubble.user",
+   "card.decision",
+   "composer",
+   "card.pane",
+   "chip"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "composer": [
+    324,
+    808,
+    492,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

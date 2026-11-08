@@ -1,0 +1,328 @@
+{
+ "artboard": "B17",
+ "title": "B17 예약",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B17.dc.html",
+ "screenshot": "contracts/shots/B17.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "예약",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "새 작업",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "활성",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "아침 브리핑 내일 {time} · 매일",
+     "required": true,
+     "order": 4,
+     "example": "아침 브리핑 내일 오전 8:00 · 매일",
+     "current": true
+    },
+    {
+     "role": "button",
+     "text": "주간 지출 정리 {date} · 매주 월요일 {time}",
+     "required": true,
+     "order": 5,
+     "example": "주간 지출 정리 11월 9일 · 매주 월요일 오전 9:00"
+    },
+    {
+     "role": "button",
+     "text": "{work_title} 다시 보기 {date} · 매주 월요일 {time}",
+     "required": true,
+     "order": 6,
+     "example": "경쟁사 가격 다시 보기 11월 9일 · 매주 월요일 오전 9:00"
+    },
+    {
+     "role": "button",
+     "text": "노트북 거치대 가격 보기 오늘 {time} · 매일",
+     "required": true,
+     "order": 7,
+     "example": "노트북 거치대 가격 보기 오늘 오후 6:00 · 매일"
+    },
+    {
+     "role": "button",
+     "text": "일시 정지됨",
+     "required": true,
+     "order": 8
+    }
+   ]
+  },
+  {
+   "region": "page",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "아침 브리핑",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "switch",
+     "text": "켜기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "지금 실행",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "맡은 사람",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 5,
+     "example": "하나"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "다음 실행"
+    },
+    {
+     "role": "text",
+     "text": "{date} {time}",
+     "required": true,
+     "order": 7,
+     "example": "11월 6일 (금) 오전 8:00"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "주기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "매일 오전 8:00"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "결과 받는 곳"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "하나와의 대화"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "요청"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "어제 맡긴 일을 정리해 줘. 끝난 것, 다시 맡긴 것, 결과를 모르는 것."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "지난 실행"
+    },
+    {
+     "role": "link",
+     "text": "{date} {time} 어제 맡긴 일 {count} 대화에서 보기",
+     "required": true,
+     "order": 15,
+     "example": "11월 5일 (목) 오전 8:00 어제 맡긴 일 2개 대화에서 보기"
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 121,
+   "strings": 20,
+   "sentences": 0,
+   "longest": 14
+  },
+  "page": {
+   "chars": 150,
+   "strings": 16,
+   "sentences": 1,
+   "longest": 41
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

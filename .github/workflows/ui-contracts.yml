@@ -1,0 +1,47 @@
+name: UI contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UI_CONTRACTS_BLOCKING: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Install locked development tools
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install headless browser and comparison tools
+        run: |
+          npm install --global agent-browser@0.41.2
+          agent-browser install --with-deps
+          sudo apt-get update
+          sudo apt-get install --yes imagemagick fonts-noto-cjk
+      - name: Check harness and copy lint
+        run: |
+          node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts
+          node scripts/check.mjs
+      - name: Capture all screen contracts
+        run: node scripts/ui-contracts/run.mjs
+      - name: Publish report summary
+        if: always()
+        run: |
+          if test -f .runtime/ui-contracts/report.md; then
+            sed '/^## /,$d' .runtime/ui-contracts/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload reports, snapshots and prototype / workbench PNG pairs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-contracts
+          path: .runtime/ui-contracts/
+          if-no-files-found: error
+          retention-days: 14

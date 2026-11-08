@@ -1,0 +1,372 @@
+{
+ "artboard": "B20-coding",
+ "title": "B20 설정 · 모델 그룹 편집",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B20-coding.dc.html",
+ "screenshot": "contracts/shots/B20-coding.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "설정",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "textbox",
+     "text": "설정 검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "일반",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "기기",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 6,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "link",
+     "text": "개선",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "page",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "heading",
+     "text": "코딩",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "이름",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "textbox",
+     "text": "그룹 이름",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "설명"
+    },
+    {
+     "role": "textbox",
+     "text": "그룹 설명",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "heading",
+     "text": "모델 2",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "text",
+     "text": "2",
+     "required": false,
+     "order": 7,
+     "example": "2"
+    },
+    {
+     "role": "status",
+     "text": "순서 바꾸기",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "text",
+     "text": "1",
+     "required": false,
+     "order": 9,
+     "example": "1"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "gpt-6.1-terra"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "Codex · 구독"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "OpenAI"
+    },
+    {
+     "role": "button",
+     "text": "gpt-6.1-terra 빼기",
+     "required": true,
+     "order": 13
+    },
+    {
+     "role": "status",
+     "text": "순서 바꾸기",
+     "required": true,
+     "order": 14
+    },
+    {
+     "role": "text",
+     "text": "2",
+     "required": false,
+     "order": 15,
+     "example": "2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "claude-sonnet-5-5"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "Claude Code · 구독"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "Anthropic"
+    },
+    {
+     "role": "button",
+     "text": "claude-sonnet-5-5 빼기",
+     "required": true,
+     "order": 19
+    },
+    {
+     "role": "button",
+     "text": "모델 추가",
+     "required": true,
+     "order": 20
+    },
+    {
+     "role": "heading",
+     "text": "사용하는 구성원",
+     "required": true,
+     "order": 21
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 22,
+     "example": "주노",
+     "visible_text": "주노"
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 18,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 3
+  },
+  "page": {
+   "chars": 100,
+   "strings": 18,
+   "sentences": 0,
+   "longest": 17
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

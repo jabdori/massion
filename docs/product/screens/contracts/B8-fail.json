@@ -1,0 +1,606 @@
+{
+ "artboard": "B8-fail",
+ "title": "B8 자세히 보기 · 이탈 원인 조사 실패",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B8-fail.dc.html",
+ "screenshot": "contracts/shots/B8-fail.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 4
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    52,
+    44,
+    380,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 0,
+     "example": "11월 5일 (목)"
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김: {work_title} · {time}",
+     "required": false,
+     "order": 1,
+     "example": "하나가 넘김: 이탈 원인 조사 · 09:40"
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 실패 확인 실패 · 근거 {count}",
+     "required": false,
+     "order": 2,
+     "example": "이탈 원인 조사 실패 확인 실패 · 근거 2건",
+     "current": true
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": null,
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "link",
+     "text": "좁히기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "실패",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{time} – {time}",
+     "required": false,
+     "order": 4,
+     "example": "09:40 – 11:20"
+    },
+    {
+     "role": "heading",
+     "text": "{work_title}",
+     "required": true,
+     "order": 5,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "text",
+     "text": "맡은 사람",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 7,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "확인한 쪽"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "gpt-6.1-terra"
+    },
+    {
+     "role": "text",
+     "text": "연결",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "구독 CLI"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "기준"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 13,
+     "example": "09:40"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "기준 내용"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "원인마다 해지 기록 근거 3건 이상"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "방향"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "기업 고객 따로 · 09:52"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "기준 고정"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 19,
+     "example": "09:40"
+    },
+    {
+     "role": "text",
+     "text": "확인",
+     "required": true,
+     "order": 20
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "1/1 · 아님"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 22,
+     "example": "근거 3건 이상"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "기업 고객 원인 1개가 근거 2건"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 24,
+     "example": "아님"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 25,
+     "example": "확인한 쪽"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 26,
+     "example": "gpt-6.1-terra · 따로 물어봄"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 27,
+     "example": "시각"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 28,
+     "example": "11:20"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 29,
+     "example": "전송 1회 보장"
+    },
+    {
+     "role": "text",
+     "text": "없음",
+     "required": true,
+     "order": 30
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "보냄"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 32,
+     "example": "바깥으로 보낸 것 없음"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 33,
+     "example": "설문 다시 보내기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 34,
+     "example": "건너뜀 · 지난달 설문 있음"
+    },
+    {
+     "role": "text",
+     "text": "기록",
+     "required": true,
+     "order": 35
+    },
+    {
+     "role": "text",
+     "text": "없음",
+     "required": true,
+     "order": 36
+    },
+    {
+     "role": "text",
+     "text": "기록",
+     "required": true,
+     "order": 37
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 38,
+     "example": "남기지 않음 · 확인에서 맞지 않음"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 39,
+     "example": "흐름"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 40,
+     "example": "09:40"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 41,
+     "example": "하나가 넘김"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 42,
+     "example": "09:52"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 43,
+     "example": "방향 바꿈: 기업 고객 따로"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 44,
+     "example": "10:05"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 45,
+     "example": "해지 사유 41건 · 조사"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 46,
+     "example": "10:24"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 47,
+     "example": "기업 9건, 그 외 32건 · 분류"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 48,
+     "example": "11:20"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 49,
+     "example": "확인 실패 · 근거 2건"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    76,
+    808,
+    332,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "퀼에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "header": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "conversation": {
+   "chars": 56,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 18
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 359,
+   "strings": 50,
+   "sentences": 0,
+   "longest": 19
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "composer",
+   "card.pane"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "main": [
+    52,
+    44,
+    380,
+    856
+   ],
+   "composer": [
+    76,
+    808,
+    332,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

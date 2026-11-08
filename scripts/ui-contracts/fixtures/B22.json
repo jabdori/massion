@@ -1,0 +1,424 @@
+{
+  "screen": "B22",
+  "description": "GitHub app page and selected pull request. Fixed API data; freeze browser Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#rail-app-app-github",
+  "steps": [
+    {
+      "selector": "#rail-app-app-github",
+      "action": "click",
+      "readySelector": "#app-view h2"
+    }
+  ],
+  "gaps": [],
+  "reuse": [
+    "tests/apps-surface.test.ts",
+    "tests/surface-shell.test.ts",
+    "tests/members-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": []
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [],
+            "memories": [],
+            "growth": [],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [],
+          "memories": [],
+          "growth": [],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/apps": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 3,
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "origin": "catalog",
+            "memberId": null,
+            "version": "1.4.0",
+            "enabled": true,
+            "installedAt": 1793851920000,
+            "check": null,
+            "permissions": {
+              "read": [
+                "저장소",
+                "PR",
+                "검사 결과"
+              ],
+              "write": [],
+              "network": [
+                "api.github.com"
+              ],
+              "files": [],
+              "secrets": [
+                {
+                  "slot": "github-token",
+                  "label": "GitHub 토큰"
+                }
+              ],
+              "events": [
+                "PR 열림",
+                "병합"
+              ]
+            },
+            "contributes": {
+              "page": {
+                "title": "GitHub"
+              },
+              "roomTab": {
+                "prefix": "PR #"
+              },
+              "templates": [
+                "코드 검토"
+              ],
+              "skills": [
+                "PR 요약"
+              ],
+              "procedures": [
+                "PR 검토"
+              ],
+              "tools": [
+                "gh"
+              ]
+            },
+            "versions": [
+              {
+                "index": 1,
+                "version": "1.3.2",
+                "at": 1793682720000,
+                "current": false
+              },
+              {
+                "index": 2,
+                "version": "1.4.0",
+                "at": 1793851920000,
+                "current": true
+              }
+            ]
+          }
+        ],
+        "catalog": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "description": "PR과 검사 결과",
+            "installed": true
+          }
+        ]
+      }
+    }
+  },
+  "appViews": [
+    {
+      "request": {
+        "app": "app-github",
+        "handler": "page"
+      },
+      "body": {
+        "feedId": "fixture:B2",
+        "title": "GitHub",
+        "meta": "jabdori/massion",
+        "groups": [
+          {
+            "title": "열림",
+            "rows": [
+              {
+                "id": "84",
+                "title": "feat(assistant): answer the owner and start Representative Work",
+                "meta": "#84 · 2026-11-05 10:28",
+                "state": "열림"
+              }
+            ]
+          },
+          {
+            "title": "병합됨",
+            "rows": [
+              {
+                "id": "83",
+                "title": "feat(assistant): store the continuing assistant conversation",
+                "meta": "#83",
+                "state": "병합됨"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "app": "app-github",
+        "handler": "item",
+        "ref": "84"
+      },
+      "body": {
+        "feedId": "fixture:B2",
+        "title": "feat(assistant): answer the owner and start Representative Work #84",
+        "meta": "열림 · jabdori · feat/assistant-conversation-turns → main",
+        "groups": [
+          {
+            "title": "파일 2",
+            "rows": [
+              {
+                "id": "src/assistant-service.ts",
+                "title": "src/assistant-service.ts",
+                "meta": "+206 −0"
+              },
+              {
+                "id": "tests/assistant-service.test.ts",
+                "title": "tests/assistant-service.test.ts",
+                "meta": "+563 −39"
+              }
+            ]
+          }
+        ],
+        "fields": [
+          [
+            "변경",
+            "+769 −39"
+          ]
+        ]
+      }
+    },
+    {
+      "request": {
+        "app": "app-github",
+        "handler": "item",
+        "ref": "83"
+      },
+      "body": {
+        "feedId": "fixture:B2",
+        "title": "feat(assistant): store the continuing assistant conversation #83",
+        "meta": "열림 · jabdori · feat/assistant-conversation-turns → main",
+        "groups": [
+          {
+            "title": "파일 2",
+            "rows": [
+              {
+                "id": "src/assistant-service.ts",
+                "title": "src/assistant-service.ts",
+                "meta": "+206 −0"
+              },
+              {
+                "id": "tests/assistant-service.test.ts",
+                "title": "tests/assistant-service.test.ts",
+                "meta": "+563 −39"
+              }
+            ]
+          }
+        ],
+        "fields": [
+          [
+            "변경",
+            "+769 −39"
+          ]
+        ]
+      }
+    }
+  ]
+}

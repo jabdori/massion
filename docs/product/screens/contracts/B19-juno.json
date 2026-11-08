@@ -1,0 +1,457 @@
+{
+ "artboard": "B19-juno",
+ "title": "B19 구성원 · 주노",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B19-juno.dc.html",
+ "screenshot": "contracts/shots/B19-juno.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "설정",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "textbox",
+     "text": "설정 검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "일반",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 4,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "기기",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "link",
+     "text": "개선",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "settings",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "heading",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "주노"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "일 0개 · 예약 0개"
+    },
+    {
+     "role": "link",
+     "text": "메시지 보내기",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "heading",
+     "text": "스킬",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "코드 읽기"
+    },
+    {
+     "role": "text",
+     "text": "기본",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "테스트 돌리기"
+    },
+    {
+     "role": "text",
+     "text": "기본",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "PR 설명 쓰기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "v2 · 11월 5일 고침"
+    },
+    {
+     "role": "heading",
+     "text": "절차",
+     "required": true,
+     "order": 11
+    },
+    {
+     "role": "chip",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "테스트 먼저 돌리기"
+    },
+    {
+     "role": "chip",
+     "text": "읽기",
+     "required": true,
+     "order": 13
+    },
+    {
+     "role": "chip",
+     "text": "확인",
+     "required": true,
+     "order": 14
+    },
+    {
+     "role": "chip",
+     "text": "기록",
+     "required": true,
+     "order": 15
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "PR 리뷰 · GitHub"
+    },
+    {
+     "role": "heading",
+     "text": "모델 그룹",
+     "required": true,
+     "order": 17
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "코딩"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "코드를 고치고 테스트를 돌려 봐요"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "모델 2개"
+    },
+    {
+     "role": "link",
+     "text": "설정 ›",
+     "required": true,
+     "order": 21
+    },
+    {
+     "role": "heading",
+     "text": "앱",
+     "required": true,
+     "order": 22
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "GitHub"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 24,
+     "example": "PR 리뷰 · gh"
+    },
+    {
+     "role": "link",
+     "text": "열기 ›",
+     "required": true,
+     "order": 25
+    },
+    {
+     "role": "heading",
+     "text": "최근 개선",
+     "required": true,
+     "order": 26
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 27,
+     "example": "PR 설명 쓰기 v1 → v2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 28,
+     "example": "11월 5일 · 바뀐 파일마다 테스트 여부 적기"
+    },
+    {
+     "role": "button",
+     "text": "되돌리기",
+     "required": true,
+     "order": 29
+    },
+    {
+     "role": "button",
+     "text": "자세히",
+     "required": true,
+     "order": 30
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "PR 리뷰 절차에 테스트 먼저 돌리기"
+    },
+    {
+     "role": "text",
+     "text": "{date} · {work_title}",
+     "required": false,
+     "order": 32,
+     "example": "11월 5일 · PR #84 검토"
+    },
+    {
+     "role": "button",
+     "text": "되돌리기",
+     "required": true,
+     "order": 33
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 34,
+     "example": "안 쓴 스킬 1개 보관"
+    },
+    {
+     "role": "button",
+     "text": "되돌리기",
+     "required": true,
+     "order": 35
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 18,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 3
+  },
+  "settings": {
+   "chars": 261,
+   "strings": 39,
+   "sentences": 1,
+   "longest": 26
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main",
+   "chip"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

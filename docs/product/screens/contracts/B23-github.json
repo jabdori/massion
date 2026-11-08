@@ -1,0 +1,461 @@
+{
+ "artboard": "B23-github",
+ "title": "B23 설정 · GitHub",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B23-github.dc.html",
+ "screenshot": "contracts/shots/B23-github.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "설정",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "textbox",
+     "text": "설정 검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "일반",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "기기",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 7,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "개선",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "settings",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "heading",
+     "text": "GitHub",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "1.4.0 · 11월 5일 설치"
+    },
+    {
+     "role": "link",
+     "text": "열기",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "끄기",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "heading",
+     "text": "권한",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "도구"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "PR 읽기 · PR 댓글 쓰기 · 브랜치 만들기"
+    },
+    {
+     "role": "text",
+     "text": "네트워크",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "api.github.com"
+    },
+    {
+     "role": "text",
+     "text": "파일",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "작업 폴더 읽기"
+    },
+    {
+     "role": "text",
+     "text": "토큰",
+     "required": true,
+     "order": 12
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "GitHub 토큰 · 저장됨"
+    },
+    {
+     "role": "text",
+     "text": "이벤트",
+     "required": true,
+     "order": 14
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "PR 열림 · 리뷰 요청"
+    },
+    {
+     "role": "heading",
+     "text": "추가하는 것",
+     "required": true,
+     "order": 16
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "구성원 템플릿"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "코드 리뷰"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "스킬"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "PR 요약"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 21,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "절차",
+     "required": true,
+     "order": 22
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "PR 리뷰"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 24,
+     "example": "주노"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 25,
+     "example": "도구"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 26,
+     "example": "gh"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 27,
+     "example": "주노, 퀼"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 28,
+     "example": "화면"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 29,
+     "example": "PR 목록 · PR 탭"
+    },
+    {
+     "role": "heading",
+     "text": "버전",
+     "required": true,
+     "order": 30
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "1.4.0"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 32,
+     "example": "현재 버전 · 11월 4일"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 33,
+     "example": "1.3.2"
+    },
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 34,
+     "example": "11월 2일"
+    },
+    {
+     "role": "button",
+     "text": "이 버전으로 되돌리기",
+     "required": true,
+     "order": 35
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 18,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 3
+  },
+  "settings": {
+   "chars": 219,
+   "strings": 37,
+   "sentences": 0,
+   "longest": 26
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

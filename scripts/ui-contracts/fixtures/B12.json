@@ -1,0 +1,1237 @@
+{
+  "screen": "B12",
+  "description": "Explicit and learned memories with evaluation history. Fixed API data; freeze Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#chat-decision-rounding",
+  "steps": [
+    {
+      "selector": "#rail-me",
+      "action": "click",
+      "readySelector": "#me-menu"
+    },
+    {
+      "selector": "#me-settings",
+      "action": "click",
+      "readySelector": "#page-settings"
+    },
+    {
+      "selector": "#settings-nav-memory",
+      "action": "click",
+      "readySelector": "#memory-switch-rounding"
+    }
+  ],
+  "gaps": [],
+  "reuse": [
+    "tests/settings-surface.test.ts",
+    "tests/results-schedules-surface.test.ts",
+    "tests/skills-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:summary",
+              "role": "owner",
+              "turnId": null,
+              "text": "아래 문단을 세 개의 요점으로 요약해 줘. 모든 단어는 6글자 이하."
+            },
+            {
+              "id": "m:calculation",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘."
+            },
+            {
+              "id": "r:calculation",
+              "role": "representative",
+              "turnId": null,
+              "text": "TOTAL: 3 cents"
+            },
+            {
+              "id": "m:oneline",
+              "role": "owner",
+              "turnId": null,
+              "text": "할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+            },
+            {
+              "id": "r:oneline",
+              "role": "representative",
+              "turnId": null,
+              "text": "TOTAL: 3 cents"
+            },
+            {
+              "id": "m:rounding",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
+            },
+            {
+              "id": "r:rounding",
+              "role": "representative",
+              "turnId": "assistant-turn:m:rounding",
+              "text": "TOTAL: 4 cents"
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:rounding",
+            "messageId": "m:rounding",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793851920000
+          },
+          {
+            "id": "assistant-turn:m:summary",
+            "messageId": "m:summary",
+            "status": "failed",
+            "displayStatus": "failed",
+            "at": 1793794320000
+          },
+          {
+            "id": "assistant-turn:m:rounding-work",
+            "messageId": "m:rounding-work",
+            "at": 1793855280000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "proposal": {
+              "title": "반올림 규칙"
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "rounding-work",
+              "title": "반올림 규칙",
+              "memberId": null,
+              "execution": "waiting",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793855280000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:rounding-work",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 3
+              }
+            }
+          },
+          {
+            "id": "assistant-turn:m:churn",
+            "messageId": "m:churn",
+            "at": 1793855280000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "proposal": {
+              "title": "이탈 원인 조사"
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "churn",
+              "title": "이탈 원인 조사",
+              "memberId": "member-quill",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793855280000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:churn",
+              "segment": 1,
+              "steps": {
+                "done": 2,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "rounding",
+            "at": 1793848320000,
+            "title": "반올림 규칙",
+            "question": "반올림을 합계에서 한 번으로 바꿀까요?",
+            "rows": [
+              [
+                "지금",
+                "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
+              ],
+              [
+                "변경 후",
+                "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
+              ]
+            ],
+            "detail": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+            "action": "바꾸기",
+            "state": "open"
+          }
+        ],
+        "briefings": [
+          {
+            "id": "morning",
+            "at": 1793833200000,
+            "title": "아침 브리핑",
+            "turnIds": [
+              "assistant-turn:m:rounding-work"
+            ]
+          }
+        ]
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": [
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "churn",
+            "title": "이탈 원인 조사",
+            "memberId": "member-quill",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:churn",
+            "segment": 1,
+            "steps": {
+              "done": 2,
+              "total": 5
+            }
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "rounding-work",
+            "title": "반올림 규칙",
+            "memberId": null,
+            "execution": "waiting",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:rounding-work",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 3
+            }
+          }
+        ]
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [
+          {
+            "id": "cc",
+            "label": "Claude Code",
+            "providerType": "claude-code-cli",
+            "connectionStatus": "cli-login-unverified",
+            "credentialConfigured": true,
+            "models": [],
+            "configHash": "fixture"
+          },
+          {
+            "id": "cx",
+            "label": "Codex",
+            "providerType": "codex-cli",
+            "connectionStatus": "cli-login-unverified",
+            "credentialConfigured": true,
+            "models": [],
+            "configHash": "fixture"
+          },
+          {
+            "id": "zai",
+            "label": "Z.ai GLM Coding Plan",
+            "providerType": "zai",
+            "connectionStatus": "fixture",
+            "credentialConfigured": true,
+            "models": [],
+            "configHash": "fixture"
+          }
+        ],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [
+          {
+            "id": "default",
+            "name": "기본",
+            "description": "",
+            "editable": false,
+            "models": [
+              {
+                "provider": "claude-code-cli",
+                "model": "claude-sonnet-5-5",
+                "label": "Claude Code",
+                "family": "anthropic",
+                "status": "available"
+              },
+              {
+                "provider": "codex-cli",
+                "model": "gpt-6.1-terra",
+                "label": "Codex",
+                "family": "openai",
+                "status": "available"
+              }
+            ]
+          },
+          {
+            "id": "research",
+            "name": "조사",
+            "description": "출처를 찾아 읽고 근거와 함께 요약해요",
+            "editable": true,
+            "models": [
+              {
+                "provider": "claude-code-cli",
+                "model": "claude-sonnet-5-5",
+                "label": "Claude Code",
+                "family": "anthropic",
+                "status": "available"
+              },
+              {
+                "provider": "zai",
+                "model": "glm-5.3",
+                "label": "Z.ai",
+                "family": "zhipu",
+                "status": "available"
+              }
+            ]
+          },
+          {
+            "id": "coding",
+            "name": "코딩",
+            "description": "코드를 고치고 테스트를 돌려 봐요",
+            "editable": true,
+            "models": [
+              {
+                "provider": "codex-cli",
+                "model": "gpt-6.1-terra",
+                "label": "Codex",
+                "family": "openai",
+                "status": "available"
+              },
+              {
+                "provider": "claude-code-cli",
+                "model": "claude-sonnet-5-5",
+                "label": "Claude Code",
+                "family": "anthropic",
+                "status": "available"
+              }
+            ]
+          }
+        ],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [
+              {
+                "id": "churn",
+                "title": "이탈 원인 조사",
+                "missionVersion": 1,
+                "missionSnapshot": {
+                  "version": 1,
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "constraints": []
+                },
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "execution": "active",
+                "acceptance": "pending",
+                "tasks": [
+                  {
+                    "id": "churn:root",
+                    "parentId": null,
+                    "status": "active"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "id": "churn:attempt:1",
+                    "number": 1,
+                    "criteria": {
+                      "version": 1,
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1"
+                    },
+                    "status": "active",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ]
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "churn:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "churn:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "churn:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "churn:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "effects": [
+                  {
+                    "id": "churn:effect",
+                    "taskId": "churn:root",
+                    "status": "succeeded",
+                    "target": "이탈 원인 조사",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "appliedMemoryVersions": [],
+                "budget": {
+                  "limit": 8,
+                  "reserved": 1,
+                  "measured": 1
+                }
+              },
+              {
+                "id": "rounding-work",
+                "title": "반올림 규칙",
+                "missionVersion": 1,
+                "missionSnapshot": {
+                  "version": 1,
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "constraints": []
+                },
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "execution": "waiting",
+                "acceptance": "pending",
+                "tasks": [
+                  {
+                    "id": "rounding-work:root",
+                    "parentId": null,
+                    "status": "active"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "id": "rounding-work:attempt:1",
+                    "number": 1,
+                    "criteria": {
+                      "version": 1,
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1"
+                    },
+                    "status": "active",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ]
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "rounding-work:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "rounding-work:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "rounding-work:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "rounding-work:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "effects": [
+                  {
+                    "id": "rounding-work:effect",
+                    "taskId": "rounding-work:root",
+                    "status": "succeeded",
+                    "target": "반올림 규칙",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "appliedMemoryVersions": [],
+                "budget": {
+                  "limit": 8,
+                  "reserved": 1,
+                  "measured": 1
+                },
+                "instructions": [
+                  {
+                    "actorId": "owner",
+                    "text": "확인 결과를 기다리기"
+                  }
+                ]
+              }
+            ],
+            "memories": [
+              {
+                "id": "rounding",
+                "version": 1,
+                "scope": "local",
+                "authority": "explicit",
+                "content": "줄마다 반올림",
+                "source": "소유자",
+                "effective": true
+              },
+              {
+                "id": "rounding",
+                "version": 2,
+                "scope": "local",
+                "authority": "learned",
+                "content": "합계에서 한 번 반올림",
+                "source": "사례 3건 확인",
+                "effective": false
+              },
+              {
+                "id": "tone",
+                "version": 1,
+                "scope": "local",
+                "authority": "explicit",
+                "content": "짧고 담백하게 답하기",
+                "source": "소유자",
+                "effective": true
+              }
+            ],
+            "growth": [
+              {
+                "id": "rounding-evaluation",
+                "proposer": "representative",
+                "target": "memory",
+                "baseline": "rounding@1",
+                "candidate": "rounding@2",
+                "counterevidence": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+                "evaluator": "independent-check",
+                "scores": {
+                  "baseline": 1,
+                  "candidate": 3,
+                  "heldOut": "{\"orders\":[1,2,3]}"
+                },
+                "status": "evaluated"
+              }
+            ],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [
+            {
+              "id": "churn",
+              "title": "이탈 원인 조사",
+              "missionVersion": 1,
+              "missionSnapshot": {
+                "version": 1,
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "constraints": []
+              },
+              "criteria": {
+                "version": 1,
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1"
+              },
+              "execution": "active",
+              "acceptance": "pending",
+              "tasks": [
+                {
+                  "id": "churn:root",
+                  "parentId": null,
+                  "status": "active"
+                }
+              ],
+              "attempts": [
+                {
+                  "id": "churn:attempt:1",
+                  "number": 1,
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "status": "active",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ]
+                }
+              ],
+              "assignments": [
+                {
+                  "id": "churn:executor",
+                  "actorId": "executor",
+                  "role": "executor",
+                  "taskId": "churn:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                },
+                {
+                  "id": "churn:verifier",
+                  "actorId": "verifier",
+                  "role": "verifier",
+                  "taskId": "churn:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                }
+              ],
+              "effects": [
+                {
+                  "id": "churn:effect",
+                  "taskId": "churn:root",
+                  "status": "succeeded",
+                  "target": "이탈 원인 조사",
+                  "authority": "소유자가 맡긴 일",
+                  "receipt": "고정된 화면 검증 데이터"
+                }
+              ],
+              "appliedMemoryVersions": [],
+              "budget": {
+                "limit": 8,
+                "reserved": 1,
+                "measured": 1
+              }
+            },
+            {
+              "id": "rounding-work",
+              "title": "반올림 규칙",
+              "missionVersion": 1,
+              "missionSnapshot": {
+                "version": 1,
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "constraints": []
+              },
+              "criteria": {
+                "version": 1,
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1"
+              },
+              "execution": "waiting",
+              "acceptance": "pending",
+              "tasks": [
+                {
+                  "id": "rounding-work:root",
+                  "parentId": null,
+                  "status": "active"
+                }
+              ],
+              "attempts": [
+                {
+                  "id": "rounding-work:attempt:1",
+                  "number": 1,
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "status": "active",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ]
+                }
+              ],
+              "assignments": [
+                {
+                  "id": "rounding-work:executor",
+                  "actorId": "executor",
+                  "role": "executor",
+                  "taskId": "rounding-work:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                },
+                {
+                  "id": "rounding-work:verifier",
+                  "actorId": "verifier",
+                  "role": "verifier",
+                  "taskId": "rounding-work:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                }
+              ],
+              "effects": [
+                {
+                  "id": "rounding-work:effect",
+                  "taskId": "rounding-work:root",
+                  "status": "succeeded",
+                  "target": "반올림 규칙",
+                  "authority": "소유자가 맡긴 일",
+                  "receipt": "고정된 화면 검증 데이터"
+                }
+              ],
+              "appliedMemoryVersions": [],
+              "budget": {
+                "limit": 8,
+                "reserved": 1,
+                "measured": 1
+              },
+              "instructions": [
+                {
+                  "actorId": "owner",
+                  "text": "확인 결과를 기다리기"
+                }
+              ]
+            }
+          ],
+          "memories": [
+            {
+              "id": "rounding",
+              "version": 1,
+              "scope": "local",
+              "authority": "explicit",
+              "content": "줄마다 반올림",
+              "source": "소유자",
+              "effective": true
+            },
+            {
+              "id": "rounding",
+              "version": 2,
+              "scope": "local",
+              "authority": "learned",
+              "content": "합계에서 한 번 반올림",
+              "source": "사례 3건 확인",
+              "effective": false
+            },
+            {
+              "id": "tone",
+              "version": 1,
+              "scope": "local",
+              "authority": "explicit",
+              "content": "짧고 담백하게 답하기",
+              "source": "소유자",
+              "effective": true
+            }
+          ],
+          "growth": [
+            {
+              "id": "rounding-evaluation",
+              "proposer": "representative",
+              "target": "memory",
+              "baseline": "rounding@1",
+              "candidate": "rounding@2",
+              "counterevidence": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+              "evaluator": "independent-check",
+              "scores": {
+                "baseline": 1,
+                "candidate": 3,
+                "heldOut": "{\"orders\":[1,2,3]}"
+              },
+              "status": "evaluated"
+            }
+          ],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:summary",
+              "role": "owner",
+              "turnId": null,
+              "text": "아래 문단을 세 개의 요점으로 요약해 줘. 모든 단어는 6글자 이하."
+            },
+            {
+              "id": "m:calculation",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘."
+            },
+            {
+              "id": "r:calculation",
+              "role": "representative",
+              "turnId": null,
+              "text": "TOTAL: 3 cents"
+            },
+            {
+              "id": "m:oneline",
+              "role": "owner",
+              "turnId": null,
+              "text": "할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+            },
+            {
+              "id": "r:oneline",
+              "role": "representative",
+              "turnId": null,
+              "text": "TOTAL: 3 cents"
+            },
+            {
+              "id": "m:rounding",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
+            },
+            {
+              "id": "r:rounding",
+              "role": "representative",
+              "turnId": "assistant-turn:m:rounding",
+              "text": "TOTAL: 4 cents"
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:rounding",
+            "messageId": "m:rounding",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793851920000
+          },
+          {
+            "id": "assistant-turn:m:summary",
+            "messageId": "m:summary",
+            "status": "failed",
+            "displayStatus": "failed",
+            "at": 1793794320000
+          },
+          {
+            "id": "assistant-turn:m:rounding-work",
+            "messageId": "m:rounding-work",
+            "at": 1793855280000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "proposal": {
+              "title": "반올림 규칙"
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "rounding-work",
+              "title": "반올림 규칙",
+              "memberId": null,
+              "execution": "waiting",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793855280000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:rounding-work",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 3
+              }
+            }
+          },
+          {
+            "id": "assistant-turn:m:churn",
+            "messageId": "m:churn",
+            "at": 1793855280000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "proposal": {
+              "title": "이탈 원인 조사"
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "churn",
+              "title": "이탈 원인 조사",
+              "memberId": "member-quill",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793855280000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:churn",
+              "segment": 1,
+              "steps": {
+                "done": 2,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "rounding",
+            "at": 1793848320000,
+            "title": "반올림 규칙",
+            "question": "반올림을 합계에서 한 번으로 바꿀까요?",
+            "rows": [
+              [
+                "지금",
+                "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
+              ],
+              [
+                "변경 후",
+                "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
+              ]
+            ],
+            "detail": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+            "action": "바꾸기",
+            "state": "open"
+          }
+        ],
+        "briefings": [
+          {
+            "id": "morning",
+            "at": 1793833200000,
+            "title": "아침 브리핑",
+            "turnIds": [
+              "assistant-turn:m:rounding-work"
+            ]
+          }
+        ]
+      }
+    },
+    "/assistant/skills": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 4,
+        "skills": [
+          {
+            "id": "member-quill-0",
+            "memberId": "member-quill",
+            "kind": "skill",
+            "name": "출처 확인",
+            "version": 1,
+            "author": "owner",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "조사",
+              "분류",
+              "요약",
+              "확인"
+            ]
+          },
+          {
+            "id": "member-quill-1",
+            "memberId": "member-quill",
+            "kind": "skill",
+            "name": "표 정리",
+            "version": 1,
+            "author": "member",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "조사",
+              "분류",
+              "요약",
+              "확인"
+            ]
+          },
+          {
+            "id": "member-quill-2",
+            "memberId": "member-quill",
+            "kind": "procedure",
+            "name": "자료 조사",
+            "version": 2,
+            "author": "member",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "조사",
+              "분류",
+              "요약",
+              "확인"
+            ]
+          },
+          {
+            "id": "member-juno-0",
+            "memberId": "member-juno",
+            "kind": "skill",
+            "name": "코드 읽기",
+            "version": 1,
+            "author": "owner",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "테스트 먼저",
+              "읽기",
+              "확인",
+              "기록"
+            ]
+          },
+          {
+            "id": "member-juno-1",
+            "memberId": "member-juno",
+            "kind": "skill",
+            "name": "PR 설명",
+            "version": 1,
+            "author": "member",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "테스트 먼저",
+              "읽기",
+              "확인",
+              "기록"
+            ]
+          },
+          {
+            "id": "member-juno-2",
+            "memberId": "member-juno",
+            "kind": "procedure",
+            "name": "PR 검토",
+            "version": 2,
+            "author": "member",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": [
+              "테스트 먼저",
+              "읽기",
+              "확인",
+              "기록"
+            ]
+          }
+        ],
+        "improvements": [
+          {
+            "id": "improvement-review",
+            "at": 1793851920000,
+            "type": "adopted",
+            "skillId": "member-juno-2",
+            "memberId": "member-juno",
+            "name": "PR 검토",
+            "kind": "procedure",
+            "from": 1,
+            "to": 2,
+            "source": "PR #84 검토",
+            "result": "2 → 4 / 4",
+            "checkedBy": "다른 제공사",
+            "revertible": true,
+            "reverted": null
+          }
+        ],
+        "candidates": [
+          {
+            "id": "candidate-read",
+            "at": 1793851920000,
+            "memberId": "member-juno",
+            "name": "코드 읽기",
+            "kind": "skill",
+            "state": "deciding",
+            "reason": null,
+            "result": "1 → 3 / 3"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,788 @@
+{
+ "artboard": "B22-room",
+ "title": "B22-room 주노와의 대화 · PR #84",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B22-room.dc.html",
+ "screenshot": "contracts/shots/B22-room.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 3,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 5,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "경쟁사 가격"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 9,
+     "example": "주노"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 11,
+     "example": "PR #84 검토",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 12
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "주노",
+     "visible_text": "주노"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 0,
+     "example": "11월 5일 (목)"
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김: {work_title} · {time}",
+     "required": false,
+     "order": 1,
+     "example": "하나가 넘김: PR #84 검토 · 10:40"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": false,
+     "order": 2,
+     "example": "주노"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 3,
+     "example": "10:40"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "맡았어요. 테스트가 빠진 곳 위주로 볼게요. 파일 11개, 테스트 파일은 1개예요."
+    },
+    {
+     "role": "status",
+     "text": "주노 작업 중",
+     "required": false,
+     "order": 5
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": false,
+     "order": 6,
+     "example": "PR #84 검토"
+    },
+    {
+     "role": "text",
+     "text": "실행 중",
+     "required": false,
+     "order": 7
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "읽기 4/11"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "확인 0/1"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "이번에도 테스트부터 돌려 줘."
+    },
+    {
+     "role": "link",
+     "text": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · {time}",
+     "required": false,
+     "order": 11,
+     "example": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · 10:44"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": false,
+     "order": 12,
+     "example": "주노"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 13,
+     "example": "10:44"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "읽던 파일까지 보고 테스트부터 돌릴게요. 절차에도 넣어 둘게요."
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": null,
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "PR #84 검토"
+    },
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 1,
+     "example": "PR #84"
+    },
+    {
+     "role": "link",
+     "text": "넓히기",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "열림"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "jabdori · 11월 5일 10:28"
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "heading",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "feat(assistant): answer the owner and start Representative Work"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "feat/assistant-conversation-turns → main"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "+769 −39"
+    },
+    {
+     "role": "text",
+     "text": "·",
+     "required": false,
+     "order": 10,
+     "example": "·"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "verify 통과"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "파일 11 주노가 읽음 4/11"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "11"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "주노가 읽음 4/11"
+    },
+    {
+     "role": "status",
+     "text": "읽음",
+     "required": true,
+     "order": 15
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "src/assistant-service.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "+206"
+    },
+    {
+     "role": "status",
+     "text": "읽음",
+     "required": true,
+     "order": 18
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "src/connection-workbench.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "+30"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "−12"
+    },
+    {
+     "role": "status",
+     "text": "읽음",
+     "required": true,
+     "order": 22
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "src/configured-runtime.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 24,
+     "example": "+15"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 25,
+     "example": "−9"
+    },
+    {
+     "role": "status",
+     "text": "읽음",
+     "required": true,
+     "order": 26
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 27,
+     "example": "src/product.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 28,
+     "example": "+13"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 29,
+     "example": "−7"
+    },
+    {
+     "role": "status",
+     "text": "읽는 중",
+     "required": true,
+     "order": 30
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "tests/assistant-conversation.test.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 32,
+     "example": "+370"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 33,
+     "example": "src/assistant-conversation-panel.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 34,
+     "example": "+83"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 35,
+     "example": "src/server.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 36,
+     "example": "+9"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 37,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 38,
+     "example": "src/workbench.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 39,
+     "example": "+7"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 40,
+     "example": "−2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 41,
+     "example": "src/selectable-runtime.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 42,
+     "example": "+3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 43,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 44,
+     "example": "docs/architecture/assistant-conversation.md"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 45,
+     "example": "+31"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 46,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 47,
+     "example": "docs/architecture/default-route-and-persistent-connections.md"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 48,
+     "example": "+2"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    320,
+    808,
+    500,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "주노에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 28,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 9
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "conversation": {
+   "chars": 201,
+   "strings": 18,
+   "sentences": 3,
+   "longest": 46
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 556,
+   "strings": 58,
+   "sentences": 0,
+   "longest": 63
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "card.conversation",
+   "bubble.user",
+   "composer"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "composer": [
+    320,
+    808,
+    500,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}
