@@ -101,3 +101,12 @@ test('Permissions: five kinds always asked; Add rule allows a first-kind action,
  await button(app.node('settings-permissions-body'),'Remove')!.fire('click');await settle();
  assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,/Allow without asking.*None/);
 });
+
+test('review 4: Connections has no unapproved discriminator picker or generated description',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.doesNotMatch(app.node('settings-groups').textContent,/Discriminator|Moderates between turns/);assert.doesNotMatch(workbenchPage,/Moderates between turns/);assert.equal(state.posted.length,0);
+});
+
+test('review 7: unusable discriminator profiles have no selectable control or save path',async()=>{
+ const profiles=[{id:'small',limits:{maxOutputTokens:2048},endpoint:'http://127.0.0.1:9999/v1/chat/completions'},{id:'path',limits:{maxOutputTokens:4096},endpoint:'http://127.0.0.1:9999/api/chat/completions'},{id:'live-disabled',limits:{maxOutputTokens:4096},endpoint:'https://example.test/v1/chat/completions'}].map(p=>({...p,providerKind:'compatible',label:p.id,model:p.id,diagnostics:[]}));
+ const app=harness(async(path)=>path==='/connections'?reply({configHash:'h',modelGroups:[],connections:[],runtime:{connections:profiles,defaultRoutes:[]},providerTypes:[],grants:[],liveExecutionEnabled:false}):reply({}));await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.ok(!app.all().some(n=>n.tagName==='OPTION'&&profiles.some(p=>p.id===n.value)));assert.ok(!app.calls.some(c=>c.options?.method==='POST'));
+});
