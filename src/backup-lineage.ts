@@ -338,8 +338,8 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
-  'reserve-moderation':{required:['workId','entry']},
-  'record-moderation':{required:['workId','questionId','result']},
+  'reserve-moderation':{required:['workId','entry'],optional:['hostVersion']},
+  'record-moderation':{required:['workId','questionId','result'],optional:['hostVersion']},
   'ask-work-question':{required:['workId','questionId','text']},
   'answer-work-question':{required:['workId','questionId','text']},
   'append-mission-message':{required:['messageId','replyTo','text']},

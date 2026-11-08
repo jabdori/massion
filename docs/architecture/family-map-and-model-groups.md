@@ -67,7 +67,7 @@ interface ModelGroup {id: string; name: string; description: string; models: Pro
 
 ## Q15 discriminator role
 
-Groups may carry `role: 'discriminator'`; omitted roles retain existing behavior. The role persists through the same settings CAS path and is shown by the minimal discriminator model picker in Settings > Connections. `resolveDiscriminator(groupId)` selects a compatible HTTP profile within the host output reservation and returns the typed System One adapter, holding settings until release. It honors the existing live gate; choosing a group never invokes it. These groups do not supply conversation text or count as available checking seats. See [Discriminator slot](discriminator-slot.md) for the shadow-only contract, journal and calibration boundary.
+Groups may carry `role: 'discriminator'`; omitted roles retain existing behavior. The role persists through the same settings CAS path. A discriminator picker and its default copy remain follow-up pending an approved artboard. `resolveDiscriminator(groupId)` selects a compatible HTTP profile within the host output reservation and returns the typed System One adapter, holding settings until release. It honors the existing live gate; choosing a group never invokes it. These groups do not supply conversation text or count as available checking seats. See [Discriminator slot](discriminator-slot.md) for the shadow-only contract, journal and calibration boundary.
 
 ## Invariants
 

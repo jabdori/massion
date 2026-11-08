@@ -97,7 +97,7 @@ test('the host drain fence rejects an in-flight reservation before any model cal
 
 test('an original pending reservation can recover once; a later call replays the committed result',async()=>{
  const {store}=await setup();const host=new Application(store,[{id:'discriminator-host',roles:['representative']}]),i=input();
- await host.dispatch({missionId:'m',commandId:'crash-reservation',expectedRevision:2,actorId:'discriminator-host',command:{type:'reserve-moderation',workId:'w',entry:{questionId:questionId(i),input:i,inputHash:hash(i),model:pin,thresholdVersion:DISCRIMINATOR_POLICY.version,startedAt:1,result:null}}});
+ await host.dispatch({missionId:'m',commandId:'crash-reservation',expectedRevision:2,actorId:'discriminator-host',command:{type:'reserve-moderation',workId:'w',entry:{questionId:questionId(i),input:i,inputHash:hash(i),model:pin,thresholdVersion:DISCRIMINATOR_POLICY.version,startedAt:Date.now(),result:null}}});
  let calls=0;const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,q=>{calls++;return answer(q);}),release(){}}));const result=await service.ask('m','moderator',i);assert.equal(result.status,'recorded');assert.deepEqual(await service.ask('m','moderator',i),result);assert.equal(calls,1);assert.equal((await store.load('m'))!.value.works[0]!.moderation!.length,1);
 });
 
@@ -132,4 +132,60 @@ test('malformed HTTP model metadata and answers retain bounded raw evidence and 
 test('every moment stays shadow-only for Korean, English and mixed input even with maximum confidence',async()=>{
  const {store}=await setup();const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,q=>({...answer(q),distribution:q.options.map(o=>Number(o===(q.kind==='choice'?(q.options.includes('agreement')?'agreement':'a'):'false')))})),release(){}}));
  let ordinal=0;for(const language of ['ko','en','mixed'] as const)for(const moment of [1,2,3,4,5,6] as const){const i={...input(++ordinal,moment),language},before=(await store.load('m'))!.value.works[0]!;const result=await service.ask('m','moderator',i);assert.equal(result.status,'recorded');if(result.status==='recorded')assert.equal(result.record.result.applied,false);const after=(await store.load('m'))!.value.works[0]!;assert.deepEqual({...after,moderation:undefined,budget:undefined},{...before,moderation:undefined,budget:undefined});}
+});
+
+async function reservePending(store:InMemoryStore<Mission>,i=input(),startedAt=100,version=DISCRIMINATOR_POLICY.version){const host=new Application(store,[{id:'discriminator-host',roles:['representative']}]);await host.dispatch({missionId:'m',commandId:'pending-'+i.turnOrdinal,expectedRevision:(await store.load('m'))!.revision,actorId:'discriminator-host',command:{type:'reserve-moderation',workId:i.workId,entry:{questionId:questionId(i),input:i,inputHash:hash(i),model:pin,thresholdVersion:version,startedAt,result:null}}});return host;}
+
+test('review 1: the next turn closes an expired reservation once and can answer without replaying its model',async()=>{
+ const {store}=await setup();await reservePending(store);let calls=0;const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,q=>{calls++;return answer(q);}),release(){}}),()=>3000);
+ assert.equal((await service.ask('m','moderator',input(2))).status,'recorded');const entries=(await store.load('m'))!.value.works[0]!.moderation!;assert.equal(entries[0]!.result!.decision,'timeout');assert.equal(entries[0]!.result!.rawOutput,null);assert.equal(calls,1);assert.equal((await service.ask('m','moderator',input())).status,'recorded');assert.equal(calls,1);validateMissionJournalLineage(store.inspect());
+});
+
+test('review 1: changed pins, closed Work and uncertain commits leave terminal failures instead of stranded reservations',async()=>{
+ for(const kind of ['pin','closed','uncertain'] as const){const {store,app}=await setup();let calls=0,fail=false;const guarded=new Proxy(store,{get(target,key){if(key==='commit')return async(c:any)=>{if(fail&&c.events[0].type==='record-moderation'){fail=false;throw Error('lost result');}return target.commit(c);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ if(kind!=='uncertain')await reservePending(store);const service=new DiscriminatorService(guarded,async()=>{if(kind==='closed')await app.dispatch({missionId:'m',commandId:'pause',expectedRevision:(await store.load('m'))!.revision,actorId:'local-owner',command:{type:'steer',workId:'w',instruction:'Pause'}});return {adapter:fixtureDiscriminator(kind==='pin'?{...pin,configHash:'b'.repeat(64)}:pin,q=>{calls++;return answer(q);}),release(){}};},()=>101);
+ if(kind==='uncertain'){fail=true;assert.deepEqual(await service.ask('m','moderator',input()),{status:'fixed-rules',reason:'unconfirmed'});}
+ const r=await service.ask('m','moderator',input());assert.equal(r.status,'recorded',kind);if(r.status==='recorded')assert.equal(r.record.result.decision,'invalid',kind);assert.equal(calls,kind==='uncertain'?1:0);assert.notEqual((await store.load('m'))!.value.works[0]!.budget.measured,null);
+ }
+});
+
+test('review 2: a late moderation timeout preserves measured usage and correction eligibility of a rejected Work',async t=>{
+ const {rejectedFixture}=await import('./support/rejected-text-fixture.ts'),{captureCorrection}=await import('../src/work-correction.ts');const f=await rejectedFixture(t),before=structuredClone((await f.current()).value),w=before.works.find(w=>w.id==='fresh')!,host={id:'discriminator-host',roles:['representative'] as const};
+ const i={...input(),workId:w.id};w.budget.limit+=16384;const measured=w.budget.measured;w.execution='active';w.acceptance='pending';const reserved=apply(before,{type:'reserve-moderation',workId:w.id,entry:{questionId:questionId(i),input:i,inputHash:hash(i),model:pin,thresholdVersion:DISCRIMINATOR_POLICY.version,startedAt:1,result:null}},host).value;const pending=reserved.works.find(w=>w.id==='fresh')!;pending.execution='settled';pending.acceptance='failed';
+ const result=apply(reserved,{type:'record-moderation',hostVersion:2,workId:w.id,questionId:questionId(i),result:{rawOutput:null,output:null,model:'fixture',usage:null,latencyMs:2000,hostTime:2001,decision:'timeout',applied:false,disabled:false}},host).value,after=result.works.find(w=>w.id==='fresh')!;assert.equal(after.budget.measured,measured);assert.equal(after.budget.reserved,pending.budget.reserved);assert.equal(captureCorrection(result,{workId:after.id,workHash:hash(after),reason:'Correct known rejection'},'local-owner').workId,after.id);
+});
+
+test('review 3: native HTTP noul records useful shadow decisions with exact stricter-only proposals',async()=>{
+ const {store}=await setup();for(const [moment,p,expected] of [[2,0.999,'challenge'],[3,0.001,'return-challenge'],[5,0.001,'stall'],[6,0.999,'owner-note']] as const){const i=input(moment,moment);i.features.exceptionCard=true;const adapter=httpDiscriminator({pin,endpoint:'http://127.0.0.1:9999/v1/systemone',mode:'local-http-mock',transport:async()=>new Response(JSON.stringify({model:'fixture',answers:{moderation:{type:'noul',noul:p}},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}})});const r=await new DiscriminatorService(store,async()=>({adapter,release(){}})).ask('m','moderator',i);assert.equal(r.status,'recorded');if(r.status==='recorded'){assert.equal(r.record.result.decision,'shadow');assert.equal(r.record.result.applied,false);assert.deepEqual(shadowProposal(i,r.record.result.output!),{kind:expected});}}
+ const decision=(i:ModerationInput,option:string)=>({...answer(buildQuestion(i)),distribution:buildQuestion(i).options.map(o=>Number(o===option)),confidence:0});
+ const grounds=input(7,3);grounds.features.hostChallengePassed=false;assert.equal(shadowProposal(grounds,decision(grounds,'false')),null);
+ const note=input(8,6);assert.equal(shadowProposal(note,decision(note,'true')),null);
+ const stall=input(9,5);stall.features.hostStall=true;assert.equal(shadowProposal(stall,decision(stall,'true')),null);assert.deepEqual(shadowProposal(stall,decision(stall,'false')),{kind:'stall'});assert.equal(stall.features.hostStall,true);
+ const speaker=input(10,1);assert.deepEqual(shadowProposal(speaker,{...decision(speaker,'b'),confidence:1}),{kind:'speaker',candidate:'b'});
+ const change=input(11,4);assert.deepEqual(shadowProposal(change,{...decision(change,'agreement'),confidence:1}),{kind:'sycophancy'});assert.equal(shadowProposal(change,{...decision(change,'evidence'),confidence:1}),null);
+});
+
+test('review 5: shadow calls preserve executor and verifier budget headroom',async()=>{
+ const {store,app}=await setup();await app.dispatch({missionId:'m',commandId:'tight-budget',expectedRevision:2,actorId:'local-owner',command:{type:'revise-budget',workId:'w',limit:8192,reason:'One bounded production and check'}});let calls=0;const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,q=>{calls++;return answer(q);}),release(){}}));
+ assert.deepEqual(await service.ask('m','moderator',input()),{status:'fixed-rules',reason:'budget'});assert.equal(calls,0);assert.equal((await store.load('m'))!.value.works[0]!.budget.reserved,0);
+});
+
+test('review 6: historical threshold versions replay unchanged and stay pinned for later turns of the Work',async()=>{
+ const {store}=await setup(),i=input(),host=await reservePending(store,i,100,'discriminator-shadow/v1'),q=buildQuestion(i),output={...answer(q),confidence:0};
+ await host.dispatch({missionId:'m',commandId:'legacy-result',expectedRevision:3,actorId:'discriminator-host',command:{type:'record-moderation',workId:'w',questionId:questionId(i),result:{rawOutput:output,output,model:'fixture',usage:{inputTokens:1,outputTokens:1},latencyMs:1,hostTime:101,decision:'below-threshold',applied:false,disabled:false}}});
+ assert.notEqual(DISCRIMINATOR_POLICY.version,'discriminator-shadow/v1');const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,()=>output),release(){}}),()=>200);const old=await service.replay('m',i);assert.equal(old.status,'recorded');if(old.status==='recorded')assert.equal(old.record.result.decision,'below-threshold');const next=await service.ask('m','moderator',input(2));assert.equal(next.status,'recorded');if(next.status==='recorded'){assert.equal(next.record.thresholdVersion,'discriminator-shadow/v1');assert.equal(next.record.result.decision,'below-threshold');}validateMissionLineage((await store.load('m'))!.value);validateMissionJournalLineage(store.inspect());
+});
+
+
+test('review 1: expiry after model resolution and three recovered timeouts are recorded without dispatch',async()=>{
+ const {store}=await setup();let now=101,calls=0;const service=new DiscriminatorService(store,async()=>{now=3000;return {adapter:fixtureDiscriminator(pin,q=>{calls++;return answer(q);}),release(){}};},()=>now);
+ await reservePending(store);const first=await service.ask('m','moderator',input());assert.equal(first.status,'recorded');if(first.status==='recorded')assert.equal(first.record.result.decision,'timeout');
+ for(const turn of [2,3]){await reservePending(store,input(turn));assert.equal((await service.ask('m','moderator',input(turn))).status,'recorded');}
+ assert.equal(calls,0);assert.deepEqual(await service.ask('m','moderator',input(4)),{status:'fixed-rules',reason:'failures'});assert.equal((await store.load('m'))!.value.works[0]!.moderation!.at(-1)!.result!.disabled,true);validateMissionJournalLineage(store.inspect());
+});
+
+test('review 6: legacy accounting and admission journals replay, but new records on a legacy Work preserve usage',async()=>{
+ const {store,app}=await setup();await app.dispatch({missionId:'m',commandId:'old-budget',expectedRevision:2,actorId:'local-owner',command:{type:'revise-budget',workId:'w',limit:4096,reason:'Historical pre-headroom budget'}});const i=input(),host=await reservePending(store,i,100,'discriminator-shadow/v1');
+ await host.dispatch({missionId:'m',commandId:'old-timeout',expectedRevision:4,actorId:'discriminator-host',command:{type:'record-moderation',workId:'w',questionId:questionId(i),result:{rawOutput:null,output:null,model:'fixture',usage:null,latencyMs:2000,hostTime:2100,decision:'timeout',applied:false,disabled:false}}});assert.equal((await store.load('m'))!.value.works[0]!.budget.measured,null);validateMissionJournalLineage(store.inspect());
+ const current=await setup();await reservePending(current.store,i,100,'discriminator-shadow/v1');const service=new DiscriminatorService(current.store,async()=>assert.fail('Expired reservation never calls a model'),()=>3000);assert.equal((await service.ask('m','moderator',i)).status,'recorded');assert.equal((await current.store.load('m'))!.value.works[0]!.budget.measured,0);validateMissionJournalLineage(current.store.inspect());
 });

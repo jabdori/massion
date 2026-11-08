@@ -102,9 +102,11 @@ test('Permissions: five kinds always asked; Add rule allows a first-kind action,
  assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,/Allow without asking.*None/);
 });
 
-test('Connections picks a discriminator with a pinned config, and old picker callbacks cannot save stale state',async()=>{
- const posted:any[]=[];let configHash='h1';const profile={id:'decision-profile',providerKind:'compatible',model:'local-decision',label:'Local decision',configHash:'p',diagnostics:[]};
- const app=harness(async(path,options)=>{if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});return reply({});}if(path==='/connections')return reply({configHash,modelGroups:[],connections:[],runtime:{connections:[profile],defaultRoutes:[]},providerTypes:[],grants:[]});if(path.startsWith('/assistant/conversation'))return reply({feedId:'f',cursor:1,head:1,members:[],decisions:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});if(path.startsWith('/events'))return reply({feedId:'f',cursor:1,events:[]});return reply({});});
- await settle();await open(app,'connections');const old=byId(app,'settings-discriminator-model')!;assert.ok(old);old.value=profile.id;configHash='h2';await app.node('settings-nav-connections').fire('click');await settle();await old.fire('change');assert.equal(posted.length,0);
- const picker=byId(app,'settings-discriminator-model')!;picker.value=profile.id;await picker.fire('change');await settle();assert.equal(posted.length,1);assert.equal(posted[0].path,'/model-groups');assert.deepEqual(posted[0].body,{id:'discriminator',name:'Discriminator',description:'Moderates between turns',role:'discriminator',profileIds:[profile.id],expectedConfigHash:'h2'});
+test('review 4: Connections has no unapproved discriminator picker or generated description',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.doesNotMatch(app.node('settings-groups').textContent,/Discriminator|Moderates between turns/);assert.doesNotMatch(workbenchPage,/Moderates between turns/);assert.equal(state.posted.length,0);
+});
+
+test('review 7: unusable discriminator profiles have no selectable control or save path',async()=>{
+ const profiles=[{id:'small',limits:{maxOutputTokens:2048},endpoint:'http://127.0.0.1:9999/v1/chat/completions'},{id:'path',limits:{maxOutputTokens:4096},endpoint:'http://127.0.0.1:9999/api/chat/completions'},{id:'live-disabled',limits:{maxOutputTokens:4096},endpoint:'https://example.test/v1/chat/completions'}].map(p=>({...p,providerKind:'compatible',label:p.id,model:p.id,diagnostics:[]}));
+ const app=harness(async(path)=>path==='/connections'?reply({configHash:'h',modelGroups:[],connections:[],runtime:{connections:profiles,defaultRoutes:[]},providerTypes:[],grants:[],liveExecutionEnabled:false}):reply({}));await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.ok(!app.all().some(n=>n.tagName==='OPTION'&&profiles.some(p=>p.id===n.value)));assert.ok(!app.calls.some(c=>c.options?.method==='POST'));
 });
