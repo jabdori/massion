@@ -1,0 +1,540 @@
+{
+ "artboard": "B7",
+ "title": "B7 업무 방 · 프린터 토너 주문 실행 중",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B7.dc.html",
+ "screenshot": "contracts/shots/B7.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 3,
+     "example": "프린터 토너 주문",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 5,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 9,
+     "example": "경쟁사 가격"
+    },
+    {
+     "role": "status",
+     "text": "확인 대기",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 11,
+     "example": "주노",
+     "visible_text": "주노"
+    },
+    {
+     "role": "status",
+     "text": "읽지 않음",
+     "required": true,
+     "order": 12
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date} {time}",
+     "required": false,
+     "order": 0,
+     "example": "11월 5일 (목) 14:08"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "작업 중 · 페이지 2개 읽음"
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": [
+    840,
+    44,
+    600,
+    856
+   ],
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "프린터 토너 주문"
+    },
+    {
+     "role": "link",
+     "text": "넓히기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "실행 중",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{duration}",
+     "required": true,
+     "order": 4,
+     "example": "1분"
+    },
+    {
+     "role": "button",
+     "text": "중지",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "heading",
+     "text": "{work_title}",
+     "required": true,
+     "order": 6,
+     "example": "프린터 토너 주문"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 7,
+     "example": "하나"
+    },
+    {
+     "role": "chip",
+     "text": "확인",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "text",
+     "text": "절차",
+     "required": true,
+     "order": 9
+    },
+    {
+     "role": "text",
+     "text": "{progress}",
+     "required": true,
+     "order": 10,
+     "example": "1/5"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "지난 주문 찾기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "레이저 토너 검정"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 13,
+     "example": "14:08"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "상품 확인"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "확인 중"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "결제 직전까지"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "결제"
+    },
+    {
+     "role": "chip",
+     "text": "{member}",
+     "required": true,
+     "order": 18,
+     "example": "나"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "주문 내역 확인"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "지난 주문 내역 · 레이저 토너 검정"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "상품 페이지 · 31,000원, 재고 있음"
+    },
+    {
+     "role": "button",
+     "text": "확인 대기 주문 내역 {count}",
+     "required": true,
+     "order": 22,
+     "example": "확인 대기 주문 내역 1건"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    324,
+    808,
+    492,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 28,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 9
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 140,
+   "strings": 22,
+   "sentences": 0,
+   "longest": 23
+  },
+  "conversation": {
+   "chars": 60,
+   "strings": 4,
+   "sentences": 1,
+   "longest": 29
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.pane",
+   "shell.composer",
+   "bubble.user",
+   "composer",
+   "card.pane",
+   "chip"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "pane": [
+    840,
+    44,
+    600,
+    856
+   ],
+   "composer": [
+    324,
+    808,
+    492,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

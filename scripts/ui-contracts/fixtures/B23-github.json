@@ -1,0 +1,332 @@
+{
+  "screen": "B23-github",
+  "description": "GitHub app permissions and version settings. Fixed API data; freeze browser Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#rail-app-app-github",
+  "steps": [
+    {
+      "selector": "#rail-me",
+      "action": "click",
+      "readySelector": "#me-menu"
+    },
+    {
+      "selector": "#me-settings",
+      "action": "click",
+      "readySelector": "#page-settings"
+    },
+    {
+      "selector": "#settings-nav-apps",
+      "action": "click",
+      "readySelector": "#settings-app-app-github"
+    },
+    {
+      "selector": "#settings-app-app-github",
+      "action": "click",
+      "readySelector": "#settings-apps-body .set-head"
+    }
+  ],
+  "gaps": [],
+  "reuse": [
+    "tests/apps-surface.test.ts",
+    "tests/surface-shell.test.ts",
+    "tests/members-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": []
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [],
+            "memories": [],
+            "growth": [],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [],
+          "memories": [],
+          "growth": [],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/apps": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 3,
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "origin": "catalog",
+            "memberId": null,
+            "version": "1.4.0",
+            "enabled": true,
+            "installedAt": 1793851920000,
+            "check": null,
+            "permissions": {
+              "read": [
+                "저장소",
+                "PR",
+                "검사 결과"
+              ],
+              "write": [],
+              "network": [
+                "api.github.com"
+              ],
+              "files": [],
+              "secrets": [
+                {
+                  "slot": "github-token",
+                  "label": "GitHub 토큰"
+                }
+              ],
+              "events": [
+                "PR 열림",
+                "병합"
+              ]
+            },
+            "contributes": {
+              "page": {
+                "title": "GitHub"
+              },
+              "roomTab": {
+                "prefix": "PR #"
+              },
+              "templates": [
+                "코드 검토"
+              ],
+              "skills": [
+                "PR 요약"
+              ],
+              "procedures": [
+                "PR 검토"
+              ],
+              "tools": [
+                "gh"
+              ]
+            },
+            "versions": [
+              {
+                "index": 1,
+                "version": "1.3.2",
+                "at": 1793682720000,
+                "current": false
+              },
+              {
+                "index": 2,
+                "version": "1.4.0",
+                "at": 1793851920000,
+                "current": true
+              }
+            ]
+          }
+        ],
+        "catalog": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "description": "PR과 검사 결과",
+            "installed": true
+          }
+        ]
+      }
+    }
+  }
+}

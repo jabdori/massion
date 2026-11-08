@@ -1,0 +1,623 @@
+{
+ "artboard": "B4",
+ "title": "B4 결정 카드",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B4.dc.html",
+ "screenshot": "contracts/shots/B4.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 3,
+     "example": "프린터 토너 주문",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "결정 대기",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 5,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 9,
+     "example": "경쟁사 가격"
+    },
+    {
+     "role": "status",
+     "text": "확인 대기",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 11,
+     "example": "주노",
+     "visible_text": "주노"
+    },
+    {
+     "role": "status",
+     "text": "읽지 않음",
+     "required": true,
+     "order": 12
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date} {time}",
+     "required": false,
+     "order": 0,
+     "example": "11월 5일 (목) 14:08"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+    },
+    {
+     "role": "button",
+     "text": "{duration} 동안 작업 · 페이지 {count} 읽음",
+     "required": true,
+     "order": 2,
+     "example": "3분 동안 작업 · 페이지 3개 읽음"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "34,000원 결제할까요?"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 5,
+     "example": "14:11"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "상품"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "레이저 토너 검정 1개 · 지난 주문과 같은 상품"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "판매처"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "오피스몰 · shop.example.com"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "금액"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "34,000원 · 배송비 포함 · 카드 끝자리 0000"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "결제 기한"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "14:30까지"
+    },
+    {
+     "role": "text",
+     "text": "취소",
+     "required": false,
+     "order": 14
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "결제 후 취소 신청 가능"
+    },
+    {
+     "role": "button",
+     "text": "{amount} 결제",
+     "required": false,
+     "order": 16,
+     "example": "34,000원 결제"
+    },
+    {
+     "role": "button",
+     "text": "나중에",
+     "required": true,
+     "order": 17
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": null,
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "브라우저"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "shop.example.com"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "오피스몰"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "장바구니"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "주문 / 결제"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "내 주문"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "주문 / 결제"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "레이저 토너 검정"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "수량 1 · 지난 주문과 같은 상품"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 10,
+     "example": "31,000원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "배송지"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "집 · 저장된 주소"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "결제 수단"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "카드 끝자리 0000"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "배송비"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 16,
+     "example": "3,000원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "합계"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 18,
+     "example": "34,000원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "34,000원 결제하기"
+    },
+    {
+     "role": "chip",
+     "text": "{member}",
+     "required": true,
+     "order": 20,
+     "example": "하나"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    324,
+    808,
+    492,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 28,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 9
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "conversation": {
+   "chars": 238,
+   "strings": 22,
+   "sentences": 3,
+   "longest": 30
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 141,
+   "strings": 21,
+   "sentences": 0,
+   "longest": 19
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "bubble.user",
+   "card.decision",
+   "composer",
+   "card.pane",
+   "chip"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
+   "composer": [
+    324,
+    808,
+    492,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

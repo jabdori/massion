@@ -1,0 +1,538 @@
+{
+ "artboard": "B9",
+ "title": "B9 활동",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B9.dc.html",
+ "screenshot": "contracts/shots/B9.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 3,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 3,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 5,
+     "example": "주노",
+     "visible_text": "주노"
+    },
+    {
+     "role": "button",
+     "text": "우선순위",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.",
+     "required": true,
+     "order": 7,
+     "example": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.",
+     "visible_text": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3. 하"
+    },
+    {
+     "role": "status",
+     "text": "읽지 않음",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.",
+     "required": true,
+     "order": 9,
+     "example": "이탈 원인 조사 해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.",
+     "visible_text": "이탈 원인 조사 해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요. 퀼"
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 2
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    1140,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 0,
+     "example": "11월 4일 (수)"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "아래 문단을 세 개의 요점으로 요약해 줘. 모든 단어는 6글자 이하."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "응답이 끊겼어요 · 21:12"
+    },
+    {
+     "role": "button",
+     "text": "다시 시도",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "반올림을 합계에서 한 번으로 바꿀까요?"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 5,
+     "example": "21:20"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "지금"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "변경 후"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
+    },
+    {
+     "role": "text",
+     "text": "주의",
+     "required": false,
+     "order": 10
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요."
+    },
+    {
+     "role": "button",
+     "text": "바꾸기",
+     "required": true,
+     "order": 12
+    },
+    {
+     "role": "button",
+     "text": "나중에",
+     "required": true,
+     "order": 13
+    },
+    {
+     "role": "link",
+     "text": "사례 보기",
+     "required": true,
+     "order": 14
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "Subtotal is 3 + 3 = 6 cents. A 50 percent discount gives 3 cents, which is already a whole number, so rounding once at the aggregate level does not change it."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "TOTAL: 3 cents"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "TOTAL: 3 cents"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "TOTAL: 4 cents"
+    },
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 22,
+     "example": "11월 5일 (목)"
+    },
+    {
+     "role": "text",
+     "text": "아침 브리핑 | {date} {time}",
+     "required": false,
+     "order": 23,
+     "example": "아침 브리핑 | 11월 5일 (목) 오전 8:00"
+    },
+    {
+     "role": "text",
+     "text": "반올림 규칙 결정 대기 {time}",
+     "required": false,
+     "order": 24,
+     "example": "반올림 규칙 결정 대기 21:20"
+    },
+    {
+     "role": "link",
+     "text": "반올림 규칙",
+     "required": true,
+     "order": 25
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "dialog:하나",
+   "rect": null,
+   "elements": [
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나"
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "이 Mac"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "준비됨"
+    },
+    {
+     "role": "link",
+     "text": "더 보기",
+     "required": true,
+     "order": 5
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 115,
+   "strings": 8,
+   "sentences": 2,
+   "longest": 47
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "conversation": {
+   "chars": 599,
+   "strings": 38,
+   "sentences": 7,
+   "longest": 158
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "dialog:하나": {
+   "chars": 19,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 5
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "bubble.user",
+   "card.decision",
+   "card.conversation",
+   "composer"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

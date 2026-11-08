@@ -1,0 +1,104 @@
+{
+ "artboard": "B1-signin",
+ "title": "B1 첫 실행 · 로그인 없음",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B1-signin.dc.html",
+ "screenshot": "contracts/shots/B1-signin.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "page",
+   "rect": [
+    0,
+    0,
+    1440,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "Massion",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "Claude로 계속하기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "ChatGPT로 계속하기",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "다른 방법으로 계속하기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "page": {
+   "chars": 44,
+   "strings": 4,
+   "sentences": 0,
+   "longest": 13
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.main"
+  ],
+  "regions": {
+   "main": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

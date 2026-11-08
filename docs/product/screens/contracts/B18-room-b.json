@@ -1,0 +1,990 @@
+{
+ "artboard": "B18-room-b",
+ "title": "B18 퀼 · 경쟁사 가격 업무 방",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B18-room-b.dc.html",
+ "screenshot": "contracts/shots/B18-room-b.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 3,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 5,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "경쟁사 가격",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "확인 대기",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 9,
+     "example": "주노"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 11,
+     "example": "PR #84 검토"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 12
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "퀼",
+     "visible_text": "퀼"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    500,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 0,
+     "example": "11월 5일 (목)"
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김: {work_title} · {time}",
+     "required": false,
+     "order": 1,
+     "example": "하나가 넘김: 이탈 원인 조사 · 09:40"
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중",
+     "required": true,
+     "order": 2,
+     "example": "이탈 원인 조사 실행 중 1시간 12분 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": false,
+     "order": 3,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 4,
+     "example": "09:41"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "맡았어요. 지난 90일 해지 건부터 볼게요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
+     "example": "기업 고객은 따로 봐 줘."
+    },
+    {
+     "role": "link",
+     "text": "방향 바꿈: {work_title} · {time}",
+     "required": true,
+     "order": 7,
+     "example": "방향 바꿈: 이탈 원인 조사 · 09:52"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": false,
+     "order": 8,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 9,
+     "example": "09:52"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "기업 고객은 따로 나눠서 같이 정리할게요."
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김: {work_title} · {time}",
+     "required": false,
+     "order": 11,
+     "example": "하나가 넘김: 경쟁사 가격 · 10:30"
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 1 개 · 확인 대기",
+     "required": true,
+     "order": 12,
+     "example": "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 표 1 개 · 확인 대기",
+     "visible_text": "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 표 1개 · 확인 대기",
+     "current": true
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "앞으로 표 금액은 원 단위로 써 줘."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "기억 후보: 표 금액은 원 단위"
+    },
+    {
+     "role": "button",
+     "text": "남기기",
+     "required": true,
+     "order": 15
+    },
+    {
+     "role": "button",
+     "text": "지우기",
+     "required": true,
+     "order": 16
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": false,
+     "order": 17,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 18,
+     "example": "10:41"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+    }
+   ]
+  },
+  {
+   "region": "pane",
+   "rect": null,
+   "elements": [
+    {
+     "role": "tab",
+     "text": "{work_title}",
+     "required": true,
+     "order": 0,
+     "example": "경쟁사 가격"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간 닫기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "확인 대기",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "{duration}",
+     "required": true,
+     "order": 3,
+     "example": "22분"
+    },
+    {
+     "role": "button",
+     "text": "중지",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "heading",
+     "text": "{work_title}",
+     "required": true,
+     "order": 5,
+     "example": "경쟁사 가격"
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김 · {time}",
+     "required": true,
+     "order": 6,
+     "example": "하나가 넘김 · 10:30"
+    },
+    {
+     "role": "listitem",
+     "text": "{member}",
+     "required": true,
+     "order": 7,
+     "example": "퀼"
+    },
+    {
+     "role": "listitem",
+     "text": "조사",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "listitem",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "표 정리"
+    },
+    {
+     "role": "listitem",
+     "text": "확인",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "출처 고르기"
+    },
+    {
+     "role": "text",
+     "text": "{count}",
+     "required": true,
+     "order": 12,
+     "example": "3곳"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 13,
+     "example": "10:32"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "가격 모으기"
+    },
+    {
+     "role": "text",
+     "text": "{progress}",
+     "required": true,
+     "order": 15,
+     "example": "3/3"
+    },
+    {
+     "role": "text",
+     "text": "조사",
+     "required": true,
+     "order": 16
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 17,
+     "example": "10:40"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "C사"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "연간 요금만 공개"
+    },
+    {
+     "role": "text",
+     "text": "요약",
+     "required": true,
+     "order": 20
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "건너뜀 · 표만 요청"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 22,
+     "example": "표 만들기"
+    },
+    {
+     "role": "text",
+     "text": "{progress}",
+     "required": true,
+     "order": 23,
+     "example": "1/1"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 24,
+     "example": "표 정리"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 25,
+     "example": "10:47"
+    },
+    {
+     "role": "text",
+     "text": "확인",
+     "required": true,
+     "order": 26
+    },
+    {
+     "role": "text",
+     "text": "{progress}",
+     "required": true,
+     "order": 27,
+     "example": "0/1"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 28,
+     "example": "대기"
+    },
+    {
+     "role": "text",
+     "text": "기록",
+     "required": true,
+     "order": 29
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 30,
+     "example": "다음 단계"
+    },
+    {
+     "role": "log",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "주고받은 말"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 32,
+     "example": "퀼 → 조사 10:32"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 33,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 34,
+     "example": "10:32"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 35,
+     "example": "세 곳 요금제 페이지에서 월 요금만 모아 줘."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 36,
+     "example": "조사 → 퀼 10:40"
+    },
+    {
+     "role": "chip",
+     "text": "조사",
+     "required": true,
+     "order": 37
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 38,
+     "example": "10:40"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 39,
+     "example": "A사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 40,
+     "example": "퀼 → 표 정리 10:42"
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 41,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 42,
+     "example": "10:42"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 43,
+     "example": "C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 44,
+     "example": "표 정리 → 퀼 10:47"
+    },
+    {
+     "role": "chip",
+     "text": "{content}",
+     "required": false,
+     "order": 45,
+     "example": "표 정리"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 46,
+     "example": "10:47"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 47,
+     "example": "표 1개, 요금제 6개예요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 48,
+     "example": "회사"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 49,
+     "example": "요금제"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 50,
+     "example": "월 요금"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 51,
+     "example": "출처"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 52,
+     "example": "A사"
+    },
+    {
+     "role": "text",
+     "text": "기본",
+     "required": true,
+     "order": 53
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 54,
+     "example": "9,900원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 55,
+     "example": "링크"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 56,
+     "example": "A사"
+    },
+    {
+     "role": "text",
+     "text": "팀",
+     "required": false,
+     "order": 57,
+     "example": "팀"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 58,
+     "example": "19,900원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 59,
+     "example": "링크"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 60,
+     "example": "B사"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 61,
+     "example": "개인"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 62,
+     "example": "8,000원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 63,
+     "example": "링크"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 64,
+     "example": "B사"
+    },
+    {
+     "role": "text",
+     "text": "팀",
+     "required": false,
+     "order": 65,
+     "example": "팀"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 66,
+     "example": "19,000원"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 67,
+     "example": "링크"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 68,
+     "example": "B사"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 69,
+     "example": "기업"
+    },
+    {
+     "role": "text",
+     "text": "{amount}",
+     "required": true,
+     "order": 70,
+     "example": "45,000원"
+    },
+    {
+     "role": "text",
+     "text": "확인 대기",
+     "required": true,
+     "order": 71
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 72,
+     "example": "출처 3곳과 숫자 대조"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    320,
+    808,
+    460,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "퀼에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 28,
+   "strings": 6,
+   "sentences": 0,
+   "longest": 9
+  },
+  "header": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "conversation": {
+   "chars": 301,
+   "strings": 38,
+   "sentences": 5,
+   "longest": 27
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  },
+  "pane": {
+   "chars": 549,
+   "strings": 96,
+   "sentences": 8,
+   "longest": 35
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "card.conversation",
+   "bubble.user",
+   "composer",
+   "chip"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    44,
+    500,
+    856
+   ],
+   "composer": [
+    320,
+    808,
+    460,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

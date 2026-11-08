@@ -1,0 +1,161 @@
+{
+  "B1-signin": {
+    "file": "artboards/B1-signin.png"
+  },
+  "B1": {
+    "file": "artboards/B1.png"
+  },
+  "B10-preview": {
+    "file": "artboards/B10-preview.png"
+  },
+  "B10": {
+    "file": "artboards/B10.png"
+  },
+  "B11-quill": {
+    "file": "artboards/B11-quill.png"
+  },
+  "B11": {
+    "file": "artboards/B11.png"
+  },
+  "B12": {
+    "file": "artboards/B12.png"
+  },
+  "B13-devices": {
+    "file": "artboards/B13-devices.png"
+  },
+  "B13": {
+    "file": "artboards/B13.png"
+  },
+  "B14": {
+    "file": "artboards/B14.png"
+  },
+  "B15": {
+    "file": "artboards/B15.png"
+  },
+  "B16-later": {
+    "file": "artboards/B16-later.png"
+  },
+  "B16-sent": {
+    "file": "artboards/B16-sent.png"
+  },
+  "B16": {
+    "file": "artboards/B16.png"
+  },
+  "B17-empty": {
+    "file": "artboards/B17-empty.png"
+  },
+  "B17": {
+    "file": "artboards/B17.png"
+  },
+  "B18-room-b": {
+    "file": "artboards/B18-room-b.png"
+  },
+  "B18": {
+    "file": "artboards/B18.png"
+  },
+  "B19-juno": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B19": {
+    "file": "artboards/B19.png"
+  },
+  "B2": {
+    "file": "artboards/B2.png"
+  },
+  "B20-coding": {
+    "file": "artboards/B20-coding.png"
+  },
+  "B20": {
+    "file": "artboards/B20.png"
+  },
+  "B21-name": {
+    "file": "artboards/B21-name.png"
+  },
+  "B21": {
+    "file": "artboards/B21.png"
+  },
+  "B22-room-steps": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B22-room": {
+    "file": "artboards/B22-room.png"
+  },
+  "B22": {
+    "file": "artboards/B22.png"
+  },
+  "B23-github": {
+    "file": "artboards/B23-github.png"
+  },
+  "B23": {
+    "file": "artboards/B23.png"
+  },
+  "B24-done": {
+    "file": "artboards/B24-done.png"
+  },
+  "B24-later": {
+    "file": "artboards/B24-later.png"
+  },
+  "B24": {
+    "file": "artboards/B24.png"
+  },
+  "B25-done": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B25-later": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B25": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B3-run": {
+    "file": null,
+    "reason": "Exact PNG absent from the supplied final/ directory."
+  },
+  "B3": {
+    "file": "artboards/B3.png"
+  },
+  "B4": {
+    "file": "artboards/B4.png"
+  },
+  "B5": {
+    "file": "artboards/B5.png"
+  },
+  "B6": {
+    "file": "artboards/B6.png"
+  },
+  "B7-churn": {
+    "file": "artboards/B7-churn.png"
+  },
+  "B7-done": {
+    "file": "artboards/B7-done.png"
+  },
+  "B7-fail": {
+    "file": "artboards/B7-fail.png"
+  },
+  "B7-unknown": {
+    "file": "artboards/B7-unknown.png"
+  },
+  "B7": {
+    "file": "artboards/B7.png"
+  },
+  "B8-done": {
+    "file": "artboards/B8-done.png"
+  },
+  "B8-fail": {
+    "file": "artboards/B8-fail.png"
+  },
+  "B8-unknown": {
+    "file": "artboards/B8-unknown.png"
+  },
+  "B8": {
+    "file": "artboards/B8.png"
+  },
+  "B9": {
+    "file": "artboards/B9.png"
+  }
+}

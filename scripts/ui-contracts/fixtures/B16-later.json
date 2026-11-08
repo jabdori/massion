@@ -1,0 +1,290 @@
+{
+  "screen": "B16-later",
+  "description": "Deferred external-member delegation. Fixed API data; freeze browser Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#chat-system-delegate",
+  "steps": [],
+  "gaps": [
+    "The external-device detail link and remote execution progress are not exposed by the production conversation."
+  ],
+  "reuse": [
+    "tests/apps-surface.test.ts",
+    "tests/surface-shell.test.ts",
+    "tests/members-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:delegate",
+              "role": "owner",
+              "turnId": null,
+              "text": "massion 저장소에서 깨지는 테스트 하나 고쳐 줘."
+            },
+            {
+              "id": "r:delegate",
+              "role": "representative",
+              "turnId": null,
+              "text": "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "delegate",
+            "at": 1793837520000,
+            "title": "외부 구성원",
+            "question": "노트북의 Claude Code에게 처음 맡길까요?",
+            "rows": [
+              [
+                "받는 곳",
+                "Claude Code · 내 노트북"
+              ],
+              [
+                "보낼 내용",
+                "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
+              ],
+              [
+                "보내지 않는 것",
+                "기억 · 다른 일 · 연결 키"
+              ]
+            ],
+            "detail": "보낸 요청은 거둘 수 없어요.",
+            "action": "맡기기",
+            "state": "later",
+            "line": "노트북의 Claude Code에게 맡겼어요."
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": []
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [],
+            "memories": [],
+            "growth": [],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [],
+          "memories": [],
+          "growth": [],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:delegate",
+              "role": "owner",
+              "turnId": null,
+              "text": "massion 저장소에서 깨지는 테스트 하나 고쳐 줘."
+            },
+            {
+              "id": "r:delegate",
+              "role": "representative",
+              "turnId": null,
+              "text": "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "delegate",
+            "at": 1793837520000,
+            "title": "외부 구성원",
+            "question": "노트북의 Claude Code에게 처음 맡길까요?",
+            "rows": [
+              [
+                "받는 곳",
+                "Claude Code · 내 노트북"
+              ],
+              [
+                "보낼 내용",
+                "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
+              ],
+              [
+                "보내지 않는 것",
+                "기억 · 다른 일 · 연결 키"
+              ]
+            ],
+            "detail": "보낸 요청은 거둘 수 없어요.",
+            "action": "맡기기",
+            "state": "later",
+            "line": "노트북의 Claude Code에게 맡겼어요."
+          }
+        ],
+        "briefings": []
+      }
+    }
+  }
+}

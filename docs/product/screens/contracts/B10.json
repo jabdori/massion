@@ -1,0 +1,343 @@
+{
+ "artboard": "B10",
+ "title": "B10 결과물",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B10.dc.html",
+ "screenshot": "contracts/shots/B10.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "결과물",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "전체",
+     "required": true,
+     "order": 2,
+     "current": true
+    },
+    {
+     "role": "button",
+     "text": "문서",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "파일",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "button",
+     "text": "이미지",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "text",
+     "text": "최근 파일",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 7,
+     "example": "경쟁사 가격 표"
+    },
+    {
+     "role": "link",
+     "text": "요일별 할인 합계",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "회의 메모 정리.pdf",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "page",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "전체",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "textbox",
+     "text": "결과물 검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "격자",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "목록",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "table",
+     "text": "결과물",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "row",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "이름 만든 일 맡은 사람 최근 활동"
+    },
+    {
+     "role": "columnheader",
+     "text": "이름",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "columnheader",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "만든 일"
+    },
+    {
+     "role": "columnheader",
+     "text": "맡은 사람",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "columnheader",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "최근 활동"
+    },
+    {
+     "role": "row",
+     "text": "{work_title} {work_title} 퀼 {date} {time}",
+     "required": false,
+     "order": 10,
+     "example": "경쟁사 가격 표 경쟁사 가격 퀼 11월 5일 10:47"
+    },
+    {
+     "role": "status",
+     "text": "{member}",
+     "required": true,
+     "order": 11,
+     "example": "퀼"
+    },
+    {
+     "role": "row",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "요일별 할인 합계 요일별 할인 합계 하 11월 5일 10:12"
+    },
+    {
+     "role": "status",
+     "text": "{member}",
+     "required": true,
+     "order": 13,
+     "example": "하나"
+    },
+    {
+     "role": "row",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "회의 메모 정리.pdf 회의 메모 정리 하 10월 31일"
+    },
+    {
+     "role": "status",
+     "text": "{member}",
+     "required": true,
+     "order": 15,
+     "example": "하나"
+    },
+    {
+     "role": "row",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "로고 시안 3종.png 로고 시안 만들기 하 10월 30일"
+    },
+    {
+     "role": "status",
+     "text": "{member}",
+     "required": true,
+     "order": 17,
+     "example": "하나"
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 46,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 12
+  },
+  "page": {
+   "chars": 284,
+   "strings": 49,
+   "sentences": 0,
+   "longest": 12
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

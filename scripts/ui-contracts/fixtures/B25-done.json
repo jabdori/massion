@@ -1,0 +1,1362 @@
+{
+  "screen": "B25-done",
+  "description": "Self-made PR listing app installed. Fixed API data; freeze browser Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#side-member-member-juno",
+  "steps": [
+    {
+      "selector": "#side-member-member-juno",
+      "action": "click",
+      "readySelector": "#chat-system-install"
+    }
+  ],
+  "gaps": [],
+  "reuse": [
+    "tests/apps-surface.test.ts",
+    "tests/surface-shell.test.ts",
+    "tests/members-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:pr84",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘."
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:pr84",
+              "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "r:made-app",
+              "role": "representative",
+              "turnId": null,
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:pr84",
+            "messageId": "m:pr84",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "pr84",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793850000000,
+              "endedAt": 1793851080000,
+              "turnId": "assistant-turn:m:pr84",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "install",
+            "at": 1793851920000,
+            "title": "PR 목록 가져오기",
+            "question": "PR 목록 가져오기를 설치할까요?",
+            "rows": [
+              [
+                "하는 일",
+                "열린 PR · 병합된 PR 목록 가져오기"
+              ],
+              [
+                "읽기",
+                "PR 목록"
+              ],
+              [
+                "쓰기",
+                "없음"
+              ],
+              [
+                "네트워크",
+                "api.github.com"
+              ],
+              [
+                "파일",
+                "없음"
+              ],
+              [
+                "토큰",
+                "GitHub 토큰 1개"
+              ],
+              [
+                "이벤트",
+                "없음"
+              ],
+              [
+                "확인",
+                "테스트 5/5 통과 · 선언한 권한만 씀"
+              ],
+              [
+                "출처",
+                "PR #84 검토"
+              ]
+            ],
+            "detail": "직접 만든 앱 · 주노가 만듦 · 0.1.0",
+            "action": "설치",
+            "state": "done",
+            "line": "PR 목록 가져오기 설치됨",
+            "remove": "app-pr-list"
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": [
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "pr84",
+            "title": "PR #84 검토",
+            "memberId": "member-juno",
+            "execution": "settled",
+            "acceptance": "accepted",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793850000000,
+            "endedAt": 1793851080000,
+            "turnId": "assistant-turn:m:pr84",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 5
+            }
+          }
+        ]
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [
+              {
+                "id": "pr84",
+                "title": "PR #84 검토",
+                "missionVersion": 1,
+                "missionSnapshot": {
+                  "version": 1,
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "constraints": []
+                },
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "execution": "settled",
+                "acceptance": "accepted",
+                "tasks": [
+                  {
+                    "id": "pr84:root",
+                    "parentId": null,
+                    "status": "settled",
+                    "result": "화면 검증 데이터 준비"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "id": "pr84:attempt:1",
+                    "number": 1,
+                    "criteria": {
+                      "version": 1,
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1"
+                    },
+                    "status": "settled",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "results": [
+                      {
+                        "taskId": "pr84:root",
+                        "result": "화면 검증 데이터 준비"
+                      }
+                    ]
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "pr84:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "pr84:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "effects": [
+                  {
+                    "id": "pr84:effect",
+                    "taskId": "pr84:root",
+                    "status": "succeeded",
+                    "target": "PR #84 검토",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "appliedMemoryVersions": [],
+                "budget": {
+                  "limit": 8,
+                  "reserved": 1,
+                  "measured": 1
+                },
+                "artifact": {
+                  "id": "artifact-pr84",
+                  "version": 1,
+                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                  "path": "fixtures/pr84.txt",
+                  "kind": "text"
+                },
+                "verdict": {
+                  "id": "verdict-pr84",
+                  "verifierAssignmentId": "pr84:verifier",
+                  "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                  "artifactVersion": 1,
+                  "criteriaVersion": 1,
+                  "status": "passed",
+                  "evidence": [
+                    {
+                      "kind": "fixture",
+                      "detail": "고정된 결과 확인",
+                      "source": "UI contract fixture"
+                    }
+                  ]
+                },
+                "record": {
+                  "artifactSnapshot": {
+                    "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                    "path": "fixtures/snapshots/pr84.txt"
+                  },
+                  "id": "record-pr84",
+                  "workId": "pr84",
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "artifact": {
+                    "id": "artifact-pr84",
+                    "version": 1,
+                    "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                    "path": "fixtures/pr84.txt",
+                    "kind": "text"
+                  },
+                  "verdict": {
+                    "id": "verdict-pr84",
+                    "verifierAssignmentId": "pr84:verifier",
+                    "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                    "artifactVersion": 1,
+                    "criteriaVersion": 1,
+                    "status": "passed",
+                    "evidence": [
+                      {
+                        "kind": "fixture",
+                        "detail": "고정된 결과 확인",
+                        "source": "UI contract fixture"
+                      }
+                    ]
+                  },
+                  "receipts": [
+                    {
+                      "id": "pr84:effect",
+                      "taskId": "pr84:root",
+                      "status": "succeeded",
+                      "target": "PR #84 검토",
+                      "authority": "소유자가 맡긴 일",
+                      "receipt": "고정된 화면 검증 데이터"
+                    }
+                  ],
+                  "assignments": [
+                    {
+                      "id": "pr84:executor",
+                      "actorId": "executor",
+                      "role": "executor",
+                      "taskId": "pr84:root",
+                      "model": {
+                        "provider": "fixture",
+                        "model": "claude-sonnet-5-5",
+                        "configVersion": "fixture-v1",
+                        "reason": "Deterministic UI fixture; no model invocation",
+                        "evidenceClass": "fixture"
+                      },
+                      "extensionVersion": "fixture-v1"
+                    },
+                    {
+                      "id": "pr84:verifier",
+                      "actorId": "verifier",
+                      "role": "verifier",
+                      "taskId": "pr84:root",
+                      "model": {
+                        "provider": "fixture",
+                        "model": "gpt-6.1-terra",
+                        "configVersion": "fixture-v1",
+                        "reason": "Deterministic UI fixture; no model invocation",
+                        "evidenceClass": "fixture"
+                      },
+                      "extensionVersion": "fixture-v1"
+                    }
+                  ],
+                  "memoryVersions": [],
+                  "evidenceClass": "fixture",
+                  "checksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3"
+                },
+                "endedAt": 1793851080000
+              }
+            ],
+            "memories": [],
+            "growth": [],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [
+            {
+              "id": "pr84",
+              "title": "PR #84 검토",
+              "missionVersion": 1,
+              "missionSnapshot": {
+                "version": 1,
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "constraints": []
+              },
+              "criteria": {
+                "version": 1,
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1"
+              },
+              "execution": "settled",
+              "acceptance": "accepted",
+              "tasks": [
+                {
+                  "id": "pr84:root",
+                  "parentId": null,
+                  "status": "settled",
+                  "result": "화면 검증 데이터 준비"
+                }
+              ],
+              "attempts": [
+                {
+                  "id": "pr84:attempt:1",
+                  "number": 1,
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "status": "settled",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "results": [
+                    {
+                      "taskId": "pr84:root",
+                      "result": "화면 검증 데이터 준비"
+                    }
+                  ]
+                }
+              ],
+              "assignments": [
+                {
+                  "id": "pr84:executor",
+                  "actorId": "executor",
+                  "role": "executor",
+                  "taskId": "pr84:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                },
+                {
+                  "id": "pr84:verifier",
+                  "actorId": "verifier",
+                  "role": "verifier",
+                  "taskId": "pr84:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                }
+              ],
+              "effects": [
+                {
+                  "id": "pr84:effect",
+                  "taskId": "pr84:root",
+                  "status": "succeeded",
+                  "target": "PR #84 검토",
+                  "authority": "소유자가 맡긴 일",
+                  "receipt": "고정된 화면 검증 데이터"
+                }
+              ],
+              "appliedMemoryVersions": [],
+              "budget": {
+                "limit": 8,
+                "reserved": 1,
+                "measured": 1
+              },
+              "artifact": {
+                "id": "artifact-pr84",
+                "version": 1,
+                "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                "path": "fixtures/pr84.txt",
+                "kind": "text"
+              },
+              "verdict": {
+                "id": "verdict-pr84",
+                "verifierAssignmentId": "pr84:verifier",
+                "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                "artifactVersion": 1,
+                "criteriaVersion": 1,
+                "status": "passed",
+                "evidence": [
+                  {
+                    "kind": "fixture",
+                    "detail": "고정된 결과 확인",
+                    "source": "UI contract fixture"
+                  }
+                ]
+              },
+              "record": {
+                "artifactSnapshot": {
+                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                  "path": "fixtures/snapshots/pr84.txt"
+                },
+                "id": "record-pr84",
+                "workId": "pr84",
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "artifact": {
+                  "id": "artifact-pr84",
+                  "version": 1,
+                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                  "path": "fixtures/pr84.txt",
+                  "kind": "text"
+                },
+                "verdict": {
+                  "id": "verdict-pr84",
+                  "verifierAssignmentId": "pr84:verifier",
+                  "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+                  "artifactVersion": 1,
+                  "criteriaVersion": 1,
+                  "status": "passed",
+                  "evidence": [
+                    {
+                      "kind": "fixture",
+                      "detail": "고정된 결과 확인",
+                      "source": "UI contract fixture"
+                    }
+                  ]
+                },
+                "receipts": [
+                  {
+                    "id": "pr84:effect",
+                    "taskId": "pr84:root",
+                    "status": "succeeded",
+                    "target": "PR #84 검토",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "pr84:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "pr84:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "memoryVersions": [],
+                "evidenceClass": "fixture",
+                "checksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3"
+              },
+              "endedAt": 1793851080000
+            }
+          ],
+          "memories": [],
+          "growth": [],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:pr84",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘."
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:pr84",
+              "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "r:made-app",
+              "role": "representative",
+              "turnId": null,
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:pr84",
+            "messageId": "m:pr84",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "pr84",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793850000000,
+              "endedAt": 1793851080000,
+              "turnId": "assistant-turn:m:pr84",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "install",
+            "at": 1793851920000,
+            "title": "PR 목록 가져오기",
+            "question": "PR 목록 가져오기를 설치할까요?",
+            "rows": [
+              [
+                "하는 일",
+                "열린 PR · 병합된 PR 목록 가져오기"
+              ],
+              [
+                "읽기",
+                "PR 목록"
+              ],
+              [
+                "쓰기",
+                "없음"
+              ],
+              [
+                "네트워크",
+                "api.github.com"
+              ],
+              [
+                "파일",
+                "없음"
+              ],
+              [
+                "토큰",
+                "GitHub 토큰 1개"
+              ],
+              [
+                "이벤트",
+                "없음"
+              ],
+              [
+                "확인",
+                "테스트 5/5 통과 · 선언한 권한만 씀"
+              ],
+              [
+                "출처",
+                "PR #84 검토"
+              ]
+            ],
+            "detail": "직접 만든 앱 · 주노가 만듦 · 0.1.0",
+            "action": "설치",
+            "state": "done",
+            "line": "PR 목록 가져오기 설치됨",
+            "remove": "app-pr-list"
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:pr84",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘."
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:pr84",
+              "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "r:made-app",
+              "role": "representative",
+              "turnId": null,
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:pr84",
+            "messageId": "m:pr84",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "pr84",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793850000000,
+              "endedAt": 1793851080000,
+              "turnId": "assistant-turn:m:pr84",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "install",
+            "at": 1793851920000,
+            "title": "PR 목록 가져오기",
+            "question": "PR 목록 가져오기를 설치할까요?",
+            "rows": [
+              [
+                "하는 일",
+                "열린 PR · 병합된 PR 목록 가져오기"
+              ],
+              [
+                "읽기",
+                "PR 목록"
+              ],
+              [
+                "쓰기",
+                "없음"
+              ],
+              [
+                "네트워크",
+                "api.github.com"
+              ],
+              [
+                "파일",
+                "없음"
+              ],
+              [
+                "토큰",
+                "GitHub 토큰 1개"
+              ],
+              [
+                "이벤트",
+                "없음"
+              ],
+              [
+                "확인",
+                "테스트 5/5 통과 · 선언한 권한만 씀"
+              ],
+              [
+                "출처",
+                "PR #84 검토"
+              ]
+            ],
+            "detail": "직접 만든 앱 · 주노가 만듦 · 0.1.0",
+            "action": "설치",
+            "state": "done",
+            "line": "PR 목록 가져오기 설치됨",
+            "remove": "app-pr-list"
+          }
+        ],
+        "briefings": [],
+        "member": {
+          "id": "member-juno",
+          "name": "주노",
+          "look": {
+            "shape": "round",
+            "color": "agent-3"
+          },
+          "modelGroup": "coding"
+        }
+      }
+    },
+    "/assistant/conversation?segment=1&member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:pr84",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘."
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:pr84",
+              "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "r:made-app",
+              "role": "representative",
+              "turnId": null,
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:pr84",
+            "messageId": "m:pr84",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "pr84",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793850000000,
+              "endedAt": 1793851080000,
+              "turnId": "assistant-turn:m:pr84",
+              "segment": 1,
+              "steps": {
+                "done": 1,
+                "total": 5
+              }
+            }
+          }
+        ],
+        "decisions": [
+          {
+            "id": "install",
+            "at": 1793851920000,
+            "title": "PR 목록 가져오기",
+            "question": "PR 목록 가져오기를 설치할까요?",
+            "rows": [
+              [
+                "하는 일",
+                "열린 PR · 병합된 PR 목록 가져오기"
+              ],
+              [
+                "읽기",
+                "PR 목록"
+              ],
+              [
+                "쓰기",
+                "없음"
+              ],
+              [
+                "네트워크",
+                "api.github.com"
+              ],
+              [
+                "파일",
+                "없음"
+              ],
+              [
+                "토큰",
+                "GitHub 토큰 1개"
+              ],
+              [
+                "이벤트",
+                "없음"
+              ],
+              [
+                "확인",
+                "테스트 5/5 통과 · 선언한 권한만 씀"
+              ],
+              [
+                "출처",
+                "PR #84 검토"
+              ]
+            ],
+            "detail": "직접 만든 앱 · 주노가 만듦 · 0.1.0",
+            "action": "설치",
+            "state": "done",
+            "line": "PR 목록 가져오기 설치됨",
+            "remove": "app-pr-list"
+          }
+        ],
+        "briefings": [],
+        "member": {
+          "id": "member-juno",
+          "name": "주노",
+          "look": {
+            "shape": "round",
+            "color": "agent-3"
+          },
+          "modelGroup": "coding"
+        }
+      }
+    },
+    "/assistant/apps": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 3,
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "origin": "catalog",
+            "memberId": null,
+            "version": "1.4.0",
+            "enabled": true,
+            "installedAt": 1793851920000,
+            "check": null,
+            "permissions": {
+              "read": [
+                "저장소",
+                "PR",
+                "검사 결과"
+              ],
+              "write": [],
+              "network": [
+                "api.github.com"
+              ],
+              "files": [],
+              "secrets": [
+                {
+                  "slot": "github-token",
+                  "label": "GitHub 토큰"
+                }
+              ],
+              "events": [
+                "PR 열림",
+                "병합"
+              ]
+            },
+            "contributes": {
+              "page": {
+                "title": "GitHub"
+              },
+              "roomTab": {
+                "prefix": "PR #"
+              },
+              "templates": [
+                "코드 검토"
+              ],
+              "skills": [
+                "PR 요약"
+              ],
+              "procedures": [
+                "PR 검토"
+              ],
+              "tools": [
+                "gh"
+              ]
+            },
+            "versions": [
+              {
+                "index": 1,
+                "version": "1.3.2",
+                "at": 1793682720000,
+                "current": false
+              },
+              {
+                "index": 2,
+                "version": "1.4.0",
+                "at": 1793851920000,
+                "current": true
+              }
+            ]
+          },
+          {
+            "id": "app-pr-list",
+            "name": "PR 목록 가져오기",
+            "origin": "self-made",
+            "memberId": "member-juno",
+            "version": "0.1.0",
+            "enabled": true,
+            "installedAt": 1793851920000,
+            "check": null,
+            "permissions": {
+              "read": [
+                "저장소",
+                "PR",
+                "검사 결과"
+              ],
+              "write": [],
+              "network": [
+                "api.github.com"
+              ],
+              "files": [],
+              "secrets": [
+                {
+                  "slot": "github-token",
+                  "label": "GitHub 토큰"
+                }
+              ],
+              "events": [
+                "PR 열림",
+                "병합"
+              ]
+            },
+            "contributes": {
+              "tools": [
+                "pr-list"
+              ]
+            },
+            "versions": [
+              {
+                "index": 1,
+                "version": "1.3.2",
+                "at": 1793682720000,
+                "current": false
+              },
+              {
+                "index": 2,
+                "version": "1.4.0",
+                "at": 1793851920000,
+                "current": true
+              }
+            ],
+            "source": {
+              "title": "PR #84 검토"
+            }
+          }
+        ],
+        "catalog": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "description": "PR과 검사 결과",
+            "installed": true
+          }
+        ]
+      }
+    },
+    "/missions/intake/record-artifact?work=pr84&record=record-pr84&version=1&sha256=2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "revision": 3,
+        "missionId": "intake",
+        "workId": "pr84",
+        "recordId": "record-pr84",
+        "recordChecksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3",
+        "artifactId": "artifact-pr84",
+        "artifactVersion": 1,
+        "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+        "evidenceClass": "fixture",
+        "content": "PR #84 검토\n테스트 1/1 · 읽기 11/11 · 확인 1/1\n",
+        "byteLength": 58,
+        "artifact": {
+          "id": "artifact-pr84",
+          "version": 1,
+          "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
+          "kind": "text"
+        },
+        "criteriaVersion": 1
+      }
+    }
+  }
+}
