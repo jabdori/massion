@@ -12,6 +12,99 @@ The authoritative store is a separate **SurrealDB 3.3.0** service. Actual integr
 
 **Evidence boundaries:** demonstrated model execution and memory routing use deterministic fixtures or local HTTP mocks. A separately configured bounded-text provider path exists but is disabled without explicit matching configuration; no live model has been tested. They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
 
+## Install
+
+This candidate runs from a source checkout on macOS or Linux. Install Node
+**24.19.0 or a newer 24.x**, npm, Python 3 and the official **SurrealDB 3.3.0**
+binary. Use the [official release assets](https://github.com/surrealdb/surrealdb/releases/tag/v3.3.0)
+for your OS/architecture and verify the published SHA-256 before extracting.
+The Linux amd64 checksum used by CI is recorded in
+[storage configuration](docs/architecture/storage.md#runtime-and-tested-configuration).
+Put `surreal` on PATH, or use its absolute path in the commands below.
+
+```sh
+git clone https://github.com/jabdori/massion.git
+cd massion
+node --version
+surreal version
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
+There are no runtime npm dependencies and no build step. This is a private
+development package; installation does not publish a version or create a release.
+
+For a clean installation check without accounts or model credentials:
+
+```sh
+MASSION_SURREAL_BINARY=/absolute/path/to/surreal bash scripts/install-smoke.sh
+```
+
+The script installs locked development tools (npm registry access required), starts
+owned disposable databases, runs the normal CLI with local fixtures, checks
+restart, schema migration and backup/restore, then cleans up. Provider calls are
+disabled. CI runs this same script in its separate `install-smoke` job.
+
+## First run with persistent local data
+
+From the checkout, start a separate database in one terminal:
+
+```sh
+mkdir -p .runtime/db-tmp
+surreal start "surrealkv://$(pwd -P)/.runtime/database" \
+  --bind 127.0.0.1:18080 --unauthenticated \
+  --default-namespace massion --default-database massion \
+  --temporary-directory "$(pwd -P)/.runtime/db-tmp" \
+  --deny-net --deny-scripting
+```
+
+In a second terminal, from the same checkout:
+
+```sh
+MASSION_SURREAL_RPC=http://127.0.0.1:18080/rpc \
+MASSION_SURREAL_NAMESPACE=massion MASSION_SURREAL_DATABASE=massion npm start
+```
+
+Wait for `Massion development workbench: http://127.0.0.1:8765`, then open that
+address. The unconfigured host loads no model credentials and runs no model;
+Work requiring one stays blocked until you explicitly configure and authorize a
+connection. See [host connection setup](docs/architecture/cli-host-connections.md).
+To try the controlled file/process scenario separately, use `npm run demo` through
+the disposable launcher shown below; fixture results are not model evidence.
+
+This is a loopback-only, single-owner development setup without authentication.
+Keep both services private. Ctrl-C in the host terminal drains admitted work;
+wait for `hostShutdown` with `status: "drained"` before stopping the database.
+An `unsettled` result exits nonzero and requires inspection, not replay.
+
+## Where data lives and how to upgrade
+
+| Data | Location in the persistent example |
+| --- | --- |
+| Mission/Work history, conversations, members, schedules, permissions, host settings | SurrealKV directory `.runtime/database`, namespace/database `massion` |
+| Sealed bounded text and runtime workspaces | `.runtime/workspaces/model-artifacts` and `.runtime/workspaces` |
+| Explicit model manifest and credential references | The file passed with `--host-config`; secrets remain in their original configured source |
+| Relocated restored text | The directory passed with `--restored-artifact-root`, resolved by its retained bundle |
+
+Paths are relative to the host's working directory. Always start from the same
+directory and retain the namespace/database selection. A different checkout or
+working directory does not move the old files. `.runtime` is ignored by Git.
+The disposable launcher **deletes its database at exit** and is for tests/demos;
+it is not the persistent installation above.
+
+Before replacing the checkout, drain and stop **every** host using the database.
+Export the supported portable data below; to preserve the complete installation
+(including host settings and non-text fixture files), also stop SurrealDB and
+retain an offline copy of its whole data directory, workspaces and explicit
+configuration. Never copy a live SurrealKV directory as a consistent backup.
+Retain these originals until the upgraded host and restored evidence are checked.
+
+On startup the host migrates legacy storage version 0 to version 1 atomically,
+before HTTP admission or scheduled work. Journal format 2 and portable format v1
+stay unchanged. Reopening version 1 does not rewrite history. A newer or malformed
+storage version prevents startup; use the matching newer host or a separate copy
+of the pre-upgrade backup. Do not edit the stored version to force a downgrade.
+There is no online multi-host migration or automatic effect recovery.
+
 ## Run tests
 
 Requirements: Node **24.19.0**, Python 3 for the disposable service launcher, and the official **SurrealDB 3.3.0** binary for durable tests. No runtime npm package is required. Development checks use pinned TypeScript 7.0.2 and Node types 24.19.1.
@@ -71,6 +164,66 @@ relocated accepted text through the normal CLI/workbench, explicitly select
 `--restored-bundle /absolute/private-backup.json --restored-artifact-root /absolute/restored-text-root`.
 See [normal restored reads](docs/architecture/restored-artifact-reader.md). This reads
 existing restored evidence and restores no execution grants or effects.
+
+Drain and stop the host first; leave its database running for export. For the
+persistent installation above, from the checkout:
+
+```sh
+mkdir -p .runtime/backups
+node scripts/backup.ts export http://127.0.0.1:18080/rpc massion massion \
+  "$(pwd -P)/.runtime/workspaces/model-artifacts" \
+  "$(pwd -P)/.runtime/backups/work.json"
+```
+
+The private file is created with mode 0600 and must not already exist. Keep it
+outside the machine as appropriate for your own backup policy. It includes the
+complete supported journal and referenced bounded text, **not** host settings,
+provider configuration, credentials or arbitrary files. Unsupported non-text
+artifacts fail closed; use the offline full-installation copy described above
+for those. Restored pending/unknown effects retain their uncertainty.
+
+For restore, start a second **new** SurrealKV database on port 18081, using the
+first-run command with a new data path, temporary directory and default
+namespace/database `restored`. Keep its host offline. Then:
+
+```sh
+node scripts/backup.ts restore-check http://127.0.0.1:18081/rpc restored restored \
+  "$(pwd -P)/.runtime/restored-text" "$(pwd -P)/.runtime/backups/work.json"
+node scripts/backup.ts restore http://127.0.0.1:18081/rpc restored restored \
+  "$(pwd -P)/.runtime/restored-text" "$(pwd -P)/.runtime/backups/work.json"
+MASSION_SURREAL_RPC=http://127.0.0.1:18081/rpc \
+MASSION_SURREAL_NAMESPACE=restored MASSION_SURREAL_DATABASE=restored \
+  npm start -- --restored-bundle "$(pwd -P)/.runtime/backups/work.json" \
+  --restored-artifact-root "$(pwd -P)/.runtime/restored-text"
+```
+
+The destination database must be empty and the artifact root must not exist.
+Retain the bundle to resolve original Record paths after relocation. The offline
+size check does not prove server capacity. If restore reports an unknown outcome,
+keep the bundle, staged root, database and reported restore identity; inspect them
+read-only before any separate recovery. Never rerun an uncertain restore into the
+same destination. To export relocated data again, use the relocation-aware API in
+the [backup guide](docs/architecture/portable-backup.md#local-owner-cli).
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| Unsupported Node version or TypeScript syntax errors | Use Node >=24.19.0 <25, then run the locked install command again. |
+| Missing RPC endpoint, connection refused or missing namespace/database | Start the separate database first; check the exact loopback URL and namespace/database variables. There is no file-store fallback. |
+| Port already in use | Stop the service that owns it or choose a free port; set `MASSION_PORT` for the host and update the RPC URL for the database. |
+| Unsupported storage schema version | Stop; use a compatible newer checkout. Do not reset the marker or overwrite the data. |
+| Schema upgrade outcome unconfirmed, or shutdown unsettled | Keep the database offline from hosts, retain the original files and inspect durable state. An acknowledgement lost in transit does not prove rollback. |
+| Work blocked with no provider | Configure an explicit connection and permission; installation alone does not authorize model calls. |
+| Backup/restore refuses paths or an occupied destination | Use canonical absolute paths (`pwd -P`), no symlinks, a new bundle filename, a fresh empty database and a new artifact directory. Do not delete originals to bypass the check. |
+| Restore size check blocked | Read the reported RPC size and independently verify server capacity; the bounded `--rpc-body-budget` option changes only the client guard. |
+| Restored text unavailable | Keep both startup flags, the original bundle and its exact restored root together; ordinary startup cannot guess old paths. |
+| A response or model outcome is unknown | Inspect the original operation and evidence. Do not resend merely because time passed or the host restarted. |
+
+For a diagnostic report, include the Node/SurrealDB versions, failing command,
+exit status and non-sensitive error text. Do not attach credentials or private
+backup contents. The macOS case-insensitive-filesystem failure in the Turkish
+inventory test is known; Linux CI remains the full durable-suite gate.
 
 ## Repository map
 

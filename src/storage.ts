@@ -397,7 +397,8 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
   };
 }
 
-/** Explicit first-schema provisioning. Never called implicitly by load or commit. */
+export const STORAGE_SCHEMA_VERSION = 1;
+/** Offline startup only. Each forward step and its marker commit together. Journal format stays at 2. */
 export const SCHEMA_QUERY = `
 BEGIN TRANSACTION;
 RETURN {
@@ -407,8 +408,11 @@ DEFINE TABLE IF NOT EXISTS massion_audit SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_event SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_outbox SCHEMALESS;
 DEFINE TABLE IF NOT EXISTS massion_feed SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS massion_host_settings SCHEMALESS;
 LET $feed = SELECT * FROM ONLY massion_feed:global;
+LET $version = IF $feed.storageVersion = NONE { 0 } ELSE { $feed.storageVersion };
+IF !type::is_int($version) OR $version < 0 OR $version > ${STORAGE_SCHEMA_VERSION} {
+  THROW 'Unsupported storage schema version; use a compatible Massion host, never downgrade this database';
+};
 IF $feed = NONE {
   IF array::len(SELECT id FROM massion_operation LIMIT 1) > 0 OR
     array::len(SELECT id FROM massion_state LIMIT 1) > 0 OR
@@ -421,17 +425,35 @@ IF $feed = NONE {
 } ELSE IF $feed.schemaVersion != 2 {
   THROW 'Unsupported storage schema version';
 };
-DEFINE FIELD IF NOT EXISTS cursor ON massion_feed TYPE int ASSERT $value >= 0 AND $value <= 9007199254740991;
-DEFINE FIELD IF NOT EXISTS cursor ON massion_operation TYPE int ASSERT $value > 0 AND $value <= 9007199254740991;
-DEFINE INDEX IF NOT EXISTS operation_cursor ON massion_operation FIELDS cursor UNIQUE;
-IF $feed.feedId = NONE { UPDATE massion_feed:global SET feedId = $feedId; };
+IF $version < 1 {
+  DEFINE FIELD IF NOT EXISTS cursor ON massion_feed TYPE int ASSERT $value >= 0 AND $value <= 9007199254740991;
+  DEFINE FIELD IF NOT EXISTS cursor ON massion_operation TYPE int ASSERT $value > 0 AND $value <= 9007199254740991;
+  DEFINE INDEX IF NOT EXISTS operation_cursor ON massion_operation FIELDS cursor UNIQUE;
+  DEFINE TABLE IF NOT EXISTS massion_host_settings SCHEMALESS;
+  IF $feed.feedId = NONE { UPDATE massion_feed:global SET feedId = $feedId; };
+  UPDATE massion_feed:global SET storageVersion = 1;
+} ELSE IF $feed.feedId = NONE {
+  THROW 'Storage feed identity is not initialized';
+};
 RETURN true;
 };
 COMMIT TRANSACTION;
 `;
-export async function initializeSurrealSchema(transport: QueryTransport): Promise<void> {
-  const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
-  if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
+export async function initializeSurrealSchema(transport: QueryTransport, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  try {
+    const result = await transport.query(SCHEMA_QUERY, {feedId:randomUUID()});
+    if (oneResult(result) !== true) throw new StorageProtocolError('Schema initialization was not confirmed');
+  } catch (error) {
+    if (error instanceof StorageQueryError && !(error instanceof StorageContentionError)) throw error;
+    // A lost acknowledgement or concurrent initializer permits readback, never a write retry.
+    let feed: unknown;
+    try { feed = oneResult(await transport.query('RETURN SELECT storageVersion, schemaVersion, feedId FROM ONLY massion_feed:global;', {})); } catch {}
+    if (!object(feed) || feed.storageVersion !== STORAGE_SCHEMA_VERSION || feed.schemaVersion !== 2 || typeof feed.feedId !== 'string' || !feed.feedId) {
+      throw new StorageProtocolError('Schema upgrade outcome is unconfirmed; keep the database offline and inspect its stored version before restarting');
+    }
+  }
+  signal?.throwIfAborted();
 }
 
 export const LOAD_QUERY = `RETURN SELECT aggregateId, revision, value FROM ONLY type::record('massion_state', $aggregateKey);`;
