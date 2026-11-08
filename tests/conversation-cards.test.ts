@@ -19,6 +19,7 @@ function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[
   return {feedId:'feed:a',cursor:state.cursor,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns,...state.extra};};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});return reply({},state.answer);}
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.filter(t=>t.work).map(t=>({memberId:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:state.cursor,events:state.events});
   if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:{revision:state.revision,value:mission()}});

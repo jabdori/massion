@@ -8,6 +8,7 @@ import {readRecordArtifact} from './record-artifact.ts';
 import {readReflectionTrail} from './reflection-trail.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
+import {MEMBERS_ID,isMembersState} from './members.ts';
 import {DomainError,hash,memoryVersionHash} from './domain.ts';
 import {ROUNDING_ORACLE,keys,orderCases,calculationPlan} from './growth-evaluation.ts';
 import {verifyGrowthCalculation} from './execution.ts';
@@ -15,8 +16,8 @@ import type {OrderCase} from './growth-evaluation.ts';
 import {ProviderRegistry} from './providers.ts';
 import type {Mission,Command,ExecutionGate} from './domain.ts';
 import type {ExecutionChoice,SelectionPreflight,DefaultResolution} from './selectable-runtime.ts';
-import {workAdmissionPreflight,rejectedRun,hostBusyPreflight} from './configured-runtime.ts';
-import type {WorkRuntime} from './configured-runtime.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence} from './configured-runtime.ts';
+import type {WorkRuntime,RuntimeFence} from './configured-runtime.ts';
 import type {Store} from './storage.ts';
 /** Current local-owner API. Production authentication and provider execution remain explicit gates. */
 export class ProductService {
@@ -113,11 +114,22 @@ export class ProductService {
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
  async reflectionTrail(missionId:string,workId:string,revision?:number,feedId?:string){return readReflectionTrail(this.app.store,this.artifacts,missionId,workId,revision,feedId);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
- /** A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
- async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
+ /** Unselected Work keeps its pinned member; resolve that member’s group for both preflight and run. A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
+ async resolveFresh(mission:Mission,workId?:string,fence?:RuntimeFence):Promise<DefaultResolution>{
+  const source=mission.works.find(w=>w.id===workId)?.assistantSource;let group:string|undefined;
+  if(source?.memberId){const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===source.memberId):undefined;
+   if(!member)return {status:'unresolved',diagnostics:[{code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'}]};
+   if(member.modelGroup!=='default'){if(!this.runtime!.resolveGroupWork)return {status:'unresolved',diagnostics:[{code:'model_group_missing',message:'No member group routing is configured on this host.'}]};group=member.modelGroup;}
+  }
+  const resolve=()=>group?this.runtime!.resolveGroupWork!(group,mission,source!.representative):this.runtime!.resolveDefault!(mission),local=resolve();if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;
+  if(fence){const changed=await checkRuntimeFence(this.app.store,this.runtime!,fence,false);if(changed)return {status:'unresolved',diagnostics:[changed]};}
+  const refreshed=await this.runtime!.refreshStoredSettings();if(fence&&refreshed)fence.configuration=hash(this.runtime!.configuration?.()??null);return resolve();
+ }
+
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<(SelectionPreflight&{selection?:{source:'default';choice:ExecutionChoice}})|null> {
-  const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
-  const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value):undefined;
+  choice=structuredClone(choice);const [fence,snapshot]=await Promise.all([this.runtime?captureRuntimeFence(this.app.store,this.runtime):undefined,this.app.store.load(missionId)]);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
+  const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
+  const changed=fence?await checkRuntimeFence(this.app.store,this.runtime!,fence):undefined;if(changed){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return {...result,ready:false,diagnostics:[...result.diagnostics,changed]};}
   if(resolved?.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return {...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]};}
   if(resolved)return {...this.runtime!.preflight!(snapshot,workId,expectedRevision,resolved.choice),selection:{source:'default',choice:resolved.choice}};
   if(this.runtime?.preflight)return this.runtime.preflight(snapshot,workId,expectedRevision,choice);
@@ -125,25 +137,29 @@ export class ProductService {
   return {...result,ready:false,diagnostics:[...result.diagnostics,{code:'selection_unavailable',message:'No runtime with execution preflight is configured.'}]};
  }
  async runSequence(missionId:string,input:RunSequenceInput){if(!this.runtime)throw new DomainError('No explicitly configured Work runtime');
+  input=structuredClone(input);
   if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
   // Capacity is captured before any await so a request made while the host is busy is refused, not deferred.
   const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
+  const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,input.works?.[0]?.workId,fence);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
-  if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry);
-  return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice},undefined,busyAtEntry),selection:{source:'default' as const,choice:resolved.choice}};
+  if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry,undefined,fence);
+  return {...await runSequence(this.app.store,this.runtime,missionId,input,undefined,busyAtEntry,(mission,workId)=>this.resolveFresh(mission,workId),fence),selection:{source:'default' as const,choice:resolved.choice}};
  }
  /** `activationActorId` and `expectedDefault` are set only by the conversation host path; HTTP runs are the owner's. `expectedDefault` is the default choice an earlier check approved: a different one now refuses the run. */
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
-  if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
+  choice=structuredClone(choice);expectedDefault=structuredClone(expectedDefault);
   const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
+  const [fence,snapshot]=await Promise.all([captureRuntimeFence(this.app.store,this.runtime),this.app.store.load(missionId)]);if(!snapshot)throw new DomainError('Unknown Mission');
+  const resolved=choice===undefined&&this.runtime.resolveDefault?await this.resolveFresh(snapshot.value,workId,fence):undefined;
+  const changed=await checkRuntimeFence(this.app.store,this.runtime,fence);if(changed)return rejectedRun({...workAdmissionPreflight(snapshot,workId,expectedRevision),ready:false,diagnostics:[changed]},snapshot);
+  if(!resolved){if(busyAtEntry){const checked=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return rejectedRun(checked.ready?hostBusyPreflight(checked):checked,snapshot);}return withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,choice,activationActorId));}
   if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}
   if(expectedDefault&&hash(resolved.choice)!==hash(expectedDefault)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,{code:'default_route_changed',message:'The default route changed after the check this run was approved by; nothing was started.'}]},snapshot);}
   // A local change cannot start while the run awaits the stored revision without the run seeing it; a changed revision blocks rather than re-resolving.
-  return {...await this.runtime.run(missionId,workId,runId,expectedRevision,resolved.choice,activationActorId),selection:{source:'default' as const,choice:resolved.choice}};
+  return {...await withRuntimeFence(fence,()=>this.runtime!.run(missionId,workId,runId,expectedRevision,resolved.choice,activationActorId)),selection:{source:'default' as const,choice:resolved.choice}};
  }
  async intervene(missionId:string,input:{commandId:string;expectedRevision:number;command:Command}) {
   input=structuredClone(input);

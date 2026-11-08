@@ -9,7 +9,7 @@ import {validateProviderDispatchClaims} from './provider-dispatch.ts';
 import {validateRuntimeOwnership,validateRuntimeInterruption} from './runtime-lifetime.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 import {ASSISTANT_ACTOR_ID,applyAssistant,assistantRunId,isAssistantSegment,requireAssistantCommandIdentity,segmentId,segmentThread,validateAssistantSource} from './assistant-conversation.ts';
-import {isMembersState,replayMembers} from './members.ts';
+import {MEMBERS_ID,isMembersState,replayMembers} from './members.ts';
 import {isSchedulesState,replaySchedules} from './schedules.ts';
 import type {SchedulesState} from './schedules.ts';
 import {isPermissionsState,replayPermissions} from './permissions.ts';
@@ -162,7 +162,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+    ['moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+  if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
   clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
   validateProviderDispatchClaims(value as Work);validateModeration(value as Work);
@@ -450,6 +451,8 @@ function checkAssistantSteps(operation: Operation<Mission>, actorId: string, com
   ensure(segment && turn?.status === 'answered' && turn.proposal && turn.messageId === source.messageId, 'assistantSource must pin an answered turn with a proposal at an earlier cursor');
   const message = segment.messages.find(entry => entry.id === source.messageId);
   ensure(message && hash(message) === source.messageHash, 'assistantSource must pin the stored owner message');
+  const members=previous.get(MEMBERS_ID)?.value as unknown as MembersState|undefined,member=members?.members.find(m=>m.id===source.memberId);
+  ensure(turn.proposal.member===undefined?source.memberId===undefined:!!member&&member.name.toLowerCase()===turn.proposal.member.toLowerCase(),'assistant Work member must match its proposal and an earlier admitted member');
   ensure(turn.proposal.title === command.title, 'assistant Work title must equal the proposal title');
   ensure(turn.route?.provider === source.representative.provider && turn.route.model === source.representative.model, 'assistantSource Representative must equal the answered turn route');
 }
@@ -464,7 +467,7 @@ function replaySegment(operation: Operation<AssistantSegment>, previous: Map<str
   const command = event.command as AssistantCommand; ensure(event.type === command.type, 'event and command type mismatch');
   ensure(operation.fingerprint === hash({ actorId: event.actor, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
   requireAssistantCommandIdentity(operation.commandId, command, thread);
-  const step = command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome';
+  const step = command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome' || command.type === 'record-assistant-steer';
   ensure((event.actor === ASSISTANT_ACTOR_ID) === step, 'segment step actor mismatch');
   if (!prior && command.type === 'open-assistant-segment' && command.segment > 1) {
     const before = previous.get(segmentId(command.segment - 1, thread))?.value;

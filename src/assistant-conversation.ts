@@ -14,18 +14,25 @@ export interface AssistantRoute {profileId:string;configHash:string;provider:str
 export interface AssistantUsage {inputTokens:number|null;outputTokens:number|null}
 /** `missionId` pins the intake Mission the Work was admitted to, so the card outlives a later settings change. Absent on outcomes recorded before it existed. */
 export interface AssistantOutcome {missionId?:string;work:{status:'admitted'|'not_created'|'unknown';diagnostics:AssistantDiagnostic[]};run:{status:'requested'|'not_started'|'off';diagnostics:AssistantDiagnostic[]}}
-export interface AssistantTurn {id:string;messageId:string;status:'not_started'|'pending'|'answered'|'failed'|'unknown';diagnostics?:AssistantDiagnostic[];route?:AssistantRoute;ownership?:RuntimeOwnership;requestHash?:string;contextMessageIds?:string[];usage?:AssistantUsage;receipt?:string;proposal?:{title:string};outcome?:AssistantOutcome}
+export interface AssistantTurn {id:string;messageId:string;status:'not_started'|'pending'|'answered'|'failed'|'unknown';diagnostics?:AssistantDiagnostic[];route?:AssistantRoute;ownership?:RuntimeOwnership;requestHash?:string;contextMessageIds?:string[];usage?:AssistantUsage;receipt?:string;proposal?:AssistantProposal;steer?:AssistantSteer;outcome?:AssistantOutcome}
+/** `member` is the name the Representative's model gave (member-work.md); the host checks it at admission. */
+export interface AssistantProposal {title:string;member?:string}
+/** A member thread's remark recorded as a Work's steering, or refused before or at its commit. */
+export interface AssistantSteer {missionId:string;workId:string;status:'proposed'|'recorded'|'not_recorded'|'unknown';expectedRevision?:number;confirmedBy?:string}
+export const MEMBER_NAME_CHARS=32;
 export interface AssistantSegment {kind:'assistant-conversation';id:string;segment:number;previous:{id:string;lastMessageId:string}|null;closed:boolean;timeWatermark:number;messages:AssistantMessage[];turns:AssistantTurn[]}
 export type AssistantTurnInput = {status:'pending';id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
 export type AssistantCommand =
  | {type:'append-assistant-message';messageId:string;text:string;turn:AssistantTurnInput}
  | {type:'open-assistant-segment';segment:number;previous:{id:string;lastMessageId:string}|null;messageId:string;text:string;turn:AssistantTurnInput}
  | {type:'close-assistant-segment';segment:number}
- | {type:'settle-assistant-turn';turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:{title:string}|null}
+ | {type:'settle-assistant-turn';turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:AssistantProposal|null;steer?:AssistantSteer}
  | {type:'settle-assistant-turn';turnId:string;status:'failed'|'unknown';usage:AssistantUsage;receipt:string}
+ | {type:'confirm-assistant-steer';turnId:string;workRevision:number}
+ | {type:'record-assistant-steer';turnId:string;status:Exclude<AssistantSteer['status'],'proposed'>}
  | {type:'record-assistant-outcome';turnId:string;missionId?:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
 /** The owner's exact words pinned into a Work. The title stays the Representative's summary. */
-export interface AssistantSource {segmentId:string;turnId:string;messageId:string;messageHash:string;message:AssistantMessage;representative:{provider:string;model:string}}
+export interface AssistantSource {segmentId:string;turnId:string;messageId:string;messageHash:string;message:AssistantMessage;representative:{provider:string;model:string};memberId?:string}
 /** A thread is '' for the Representative or `member:<id>` for a member's one 1:1 conversation (members.md); both use this reducer. */
 export const segmentId=(n:number,thread='')=>ASSISTANT_CONVERSATION_PREFIX+(thread?thread+':':'')+n,ownerMessageId=(commandId:string)=>'m:'+hash(commandId).slice(0,32),assistantTurnId=(messageId:string)=>'assistant-turn:'+messageId;
 export const assistantWorkId=(turnId:string)=>'assistant-'+hash(turnId).slice(0,24),assistantRunId=(turnId:string)=>'assistant-run:'+turnId;
@@ -35,6 +42,7 @@ function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'confli
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&Object.keys(v).every(k=>keys.includes(k));
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v),sha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v),count=(v:unknown,min=0)=>Number.isSafeInteger(v)&&Number(v)>=min;
 const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v),'utf8');
+export function memberName(v:unknown):asserts v is string {text(v,TITLE_BYTES,'member name',true);ensure([...v].length<=MEMBER_NAME_CHARS&&v.trim()===v,'Invalid member name');}
 function text(v:unknown,limit:number,name:string,oneLine=false):asserts v is string {ensure(typeof v==='string'&&v.trim().length>0&&v.isWellFormed()&&Buffer.byteLength(v,'utf8')<=limit&&!(oneLine?/[\u0000-\u001f]/:/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/).test(v),`Invalid ${name}: nonempty well-formed text within ${limit} bytes${oneLine?' on one line':''}`);}
 const role=(actor:Actor,needed:'owner'|'assistant')=>ensure(actor.roles.includes(needed),'Actor lacks required role','denied');
 function diagnostics(v:unknown,min:number):AssistantDiagnostic[] {ensure(Array.isArray(v)&&v.length>=min&&v.length<=2&&Object.keys(v).length===v.length,'Invalid diagnostics bound');for(const d of v){ensure(exact(d,['code','message'])&&typeof d.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(d.code),'Invalid diagnostic');text(d.message,DIAGNOSTIC_BYTES,'diagnostic message');}return structuredClone(v);}
@@ -76,14 +84,22 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
    expire(state,t);ensure(!state.turns.some(x=>x.status==='pending'),'answer_in_progress: a turn is still pending','conflict');ensure(!hasRoom(state),'Only a full segment closes');state.closed=true;break;
   }
   case 'settle-assistant-turn': {
-   role(actor,'assistant');const answered=command.status==='answered';ensure(['answered','failed','unknown'].includes(command.status)&&exact(command,['type','turnId','status','usage','receipt',...(answered?['reply','proposal']:[])]),'Exact settle fields required');
+   role(actor,'assistant');const answered=command.status==='answered';ensure(['answered','failed','unknown'].includes(command.status)&&(exact(command,['type','turnId','status','usage','receipt',...(answered?['reply','proposal']:[])])||answered&&exact(command,['type','turnId','status','usage','receipt','reply','proposal','steer'])),'Exact settle fields required');
    ensure(exact(command.usage,['inputTokens','outputTokens'])&&[command.usage.inputTokens,command.usage.outputTokens].every(n=>n===null||count(n)),'Invalid usage');text(command.receipt,RECEIPT_BYTES,'receipt',true);
-   if(command.status==='answered'){text(command.reply,MESSAGE_BYTES,'reply');ensure(command.proposal===null||exact(command.proposal,['title']),'Invalid proposal');if(command.proposal)text(command.proposal.title,TITLE_BYTES,'proposal title',true);}
+   if(command.status==='answered'){text(command.reply,MESSAGE_BYTES,'reply');ensure(command.proposal===null||exact(command.proposal,['title'])||exact(command.proposal,['title','member']),'Invalid proposal');if(command.proposal){text(command.proposal.title,TITLE_BYTES,'proposal title',true);if(Object.hasOwn(command.proposal,'member'))memberName(command.proposal.member);}
+    // Only a member thread steers, and it never proposes alongside.
+    if(Object.hasOwn(command,'steer')){const st=command.steer!;ensure(thread!==''&&command.proposal===null&&(exact(st,['missionId','workId','status'])||exact(st,['missionId','workId','status','expectedRevision'])&&count(st.expectedRevision,1))&&id(st.missionId)&&id(st.workId)&&['proposed','recorded','not_recorded','unknown'].includes(st.status),'Invalid steer');}}
    const t=observe(state,time);ensure(!state.closed,'Segment is closed; no reply lands after close');const turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&turn.status==='pending','Only a pending turn settles, once');
    if(command.status!=='unknown')ensure(t<turn.ownership!.deadlineAt,'A reply after the deadline is not accepted; settle unknown');
    turn.status=command.status;turn.usage=structuredClone(command.usage);turn.receipt=command.receipt;
-   if(command.status==='answered'){ensure(command.usage.outputTokens!==null&&command.usage.outputTokens<=turn.route!.outputTokenCap,'Answered usage must be known and within the cap');if(command.proposal)turn.proposal={title:command.proposal.title};state.messages.push({id:'r:'+turn.id,ordinal:state.messages.length+1,actorId:actor.id,role:'representative',turnId:turn.id,text:command.reply});}
+   if(command.status==='answered'){ensure(command.usage.outputTokens!==null&&command.usage.outputTokens<=turn.route!.outputTokenCap,'Answered usage must be known and within the cap');if(command.proposal)turn.proposal=structuredClone(command.proposal);if(command.steer)turn.steer=structuredClone(command.steer);state.messages.push({id:'r:'+turn.id,ordinal:state.messages.length+1,actorId:actor.id,role:'representative',turnId:turn.id,text:command.reply});}
    expire(state,t);break;
+  }
+  case 'confirm-assistant-steer': {
+   role(actor,'owner');ensure(thread!==''&&exact(command,['type','turnId','workRevision'])&&count(command.workRevision,1),'Exact steering confirmation fields required');const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn?.status==='answered'&&turn.steer?.status==='proposed'&&state.messages.find(m=>m.id===turn.messageId)?.actorId===actor.id,'Only the message owner confirms its proposed target');turn.steer={...turn.steer,status:'unknown',expectedRevision:command.workRevision,confirmedBy:actor.id};if(!state.closed)expire(state,t);break;
+  }
+  case 'record-assistant-steer': {
+   role(actor,'assistant');ensure(thread!==''&&exact(command,['type','turnId','status'])&&['recorded','not_recorded','unknown'].includes(command.status),'Exact steering outcome fields required');const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&['answered','unknown'].includes(turn.status)&&turn.steer?.status==='unknown','Only an unresolved steering intent takes an outcome');turn.steer.status=command.status;if(!state.closed)expire(state,t);break;
   }
   case 'record-assistant-outcome': {
    role(actor,'assistant');ensure((exact(command,['type','turnId','work','run'])||exact(command,['type','turnId','missionId','work','run'])&&id(command.missionId))&&exact(command.work,['status','diagnostics'])&&exact(command.run,['status','diagnostics'])&&['admitted','not_created','unknown'].includes(command.work.status)&&['requested','not_started','off'].includes(command.run.status),'Exact outcome fields required');
@@ -99,13 +115,13 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
 export function requireAssistantCommandIdentity(commandId:string,command:AssistantCommand,thread=''):void {
  ensure(typeof commandId==='string'&&commandId.length>0,'Missing command identity');
  if(command.type==='append-assistant-message'||command.type==='open-assistant-segment'){ensure(!commandId.startsWith('assistant-'),'Command IDs starting with assistant- are reserved for host steps');ensure(command.messageId===ownerMessageId(commandId),'Owner message ID must derive from the command ID');return;}
- const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:null;
+ const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:command.type==='record-assistant-steer'?'assistant-steer-outcome:'+command.turnId:command.type==='confirm-assistant-steer'?'assistant-confirm-steer:'+command.turnId:null;
  ensure(expected!==null&&commandId===expected,`Command ID must be ${expected}`);
 }
 /** Command IDs are global in the store, so a member thread's close names its thread. */
 export const closeCommandId=(segment:number,thread='')=>'assistant-close:'+(thread?thread+':':'')+segment;
 export function validateAssistantSource(v:unknown,workId:string):asserts v is AssistantSource {
- const s=v as AssistantSource;ensure(exact(s,['segmentId','turnId','messageId','messageHash','message','representative'])&&typeof s.segmentId==='string'&&/^assistant-conversation:[1-9][0-9]{0,15}$/.test(s.segmentId),'Exact assistant source fields required');
+ const s=v as AssistantSource;ensure((exact(s,['segmentId','turnId','messageId','messageHash','message','representative'])||exact(s,['segmentId','turnId','messageId','messageHash','message','representative','memberId'])&&id(s.memberId))&&typeof s.segmentId==='string'&&/^assistant-conversation:[1-9][0-9]{0,15}$/.test(s.segmentId),'Exact assistant source fields required');
  ensure(typeof s.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(s.messageId)&&s.turnId===assistantTurnId(s.messageId),'Assistant source turn must derive from its owner message');
  const m=s.message;ensure(exact(m,['id','ordinal','actorId','role','turnId','text'])&&m.id===s.messageId&&m.role==='owner'&&m.turnId===null&&count(m.ordinal,1)&&id(m.actorId),'Assistant source must pin one complete owner message');text(m.text,MESSAGE_BYTES,'pinned owner message');
  ensure(s.messageHash===hash(m),'Assistant source message hash mismatch');ensure(exact(s.representative,['provider','model']),'Exact Representative pin required');text(s.representative.provider,128,'Representative provider',true);text(s.representative.model,MODEL_BYTES,'Representative model',true);
@@ -124,10 +140,12 @@ export class AssistantConversation {
   const aggregate=segmentId(segment,this.thread),fingerprint=hash({actorId:actor.id,command,expectedRevision}),identity={id:aggregate,commandId,fingerprint};
   const prior=await this.store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
   const snapshot=await this.store.load(aggregate);
-  if((snapshot?.revision??0)!==expectedRevision){const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};}
+  const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;
+  if((snapshot?.revision??0)!==expectedRevision)return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};
   if(command.type==='open-assistant-segment'&&segment>1){const before=(await this.store.load(segmentId(segment-1,this.thread)))?.value;ensure(before?.closed,'Segment '+(segment-1)+' must be closed before the next opens','conflict');ensure(command.previous?.lastMessageId===before.messages.at(-1)!.id,'Open must name the previous segment last message');}
   const {value,events}=applyAssistant(snapshot?.value??null,command,actor,{observedAt:this.clock()},this.thread);
-  return this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
+  const result=await this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
+  if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}return result;
  }
 }
 /** Exponential then binary search over contiguous segments; 0 when none exists. */

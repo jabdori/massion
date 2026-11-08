@@ -57,6 +57,8 @@ export interface Work {
   tasks: Task[]; attempts: Attempt[]; assignments: Assignment[]; effects: Effect[];
   artifact?: Artifact; verdict?: Verdict; record?: AcceptedRecord;
   appliedMemoryVersions: string[]; budget: { limit: number; reserved: number; measured: number | null; unit?:'output-tokens' };
+  /** Host time recorded by the last command that ended or stopped the Work (member-work.md). Absent on Works ended before it existed. */
+  endedAt?: number;
 }
 export interface Memory { id: string; version: number; scope: string; authority: 'explicit' | 'learned'; content: string; source: string; effective: boolean }
 export interface Growth { id: string; proposer: string; target: 'memory' | 'prompt' | 'policy' | 'organization'; baseline: string; candidate: string; counterevidence: string; evaluator?: string; scores?: { baseline: number; candidate: number; heldOut: string }; status: 'proposed' | 'evaluated' | 'adopted' | 'reverted'; observation?: { workId: string; metric: number }; previousEffective?: string[] }
@@ -205,9 +207,12 @@ export function pinnedWorkSources(mission:Mission,work:Work):WorkSource[]|undefi
 export function freshSourceWork(w:Work):boolean {
  return w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution)&&!w.runtimeRun&&!w.runtimeRecovery&&!w.effects.length&&!w.assignments.length&&!w.artifact&&!w.verdict&&!w.record&&w.attempts.length===1&&w.attempts[0]?.status==='queued'&&w.tasks.length===1&&w.tasks[0]?.status==='queued'&&!w.tasks[0]?.result;
 }
-export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation): { value: Mission; events: unknown[] } {
+/** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
+export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
+export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2}): { value: Mission; events: unknown[] } {
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
-  text(actor.id, 'actor');ensure(requiresMemoryTime(current,command.type)||time===undefined,'Unexpected expiry clock context');
+  text(actor.id, 'actor');ensure(requiresMemoryTime(current,command.type)||endsWork(command.type)||time===undefined,'Unexpected expiry clock context');
+  if(time&&Object.hasOwn(time,'workEndVersion'))ensure(time.workEndVersion===2&&endsWork(command.type),'Invalid Work end version');
   const state = structuredClone(current);
   const work = 'workId' in command ? state.works.find(w => w.id === command.workId) : undefined;
   if ('workId' in command && command.type !== 'admit-work' && command.type !== 'observe-growth') ensure(work, 'Unknown work');
@@ -383,7 +388,9 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     case 'relate': { role(actor,'representative','verifier'); const r=command.relation; text(r.from,'relation source'); text(r.to,'relation target'); text(r.provenance,'provenance'); ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type'); ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions'); state.relations.push(structuredClone(r)); break; }
     default: throw new DomainError('Unknown command');
   }
-  return { value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),...(requiresMemoryTime(current,command.type)?{time:structuredClone(time)}:{})}] };
+  // Missing time keeps pre-Q12 journals unchanged; unversioned time keeps the original overwrite rule.
+  if(time!==undefined&&endsWork(command.type)){ensure(Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Invalid end time');const w=needWork();if(time.workEndVersion===undefined||(command.type!=='steer'||w.runtimeRun)&&(w.endedAt===undefined||w.runtimeRun?.ownership&&w.endedAt<w.runtimeRun.ownership.startedAt))w.endedAt=time.observedAt;}
+  return { value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),...(requiresMemoryTime(current,command.type)||time!==undefined?{time:structuredClone(time)}:{})}] };
 }
 export function affectedBy(mission: Mission, id: string, version: number): string[] {
   const seen=new Set<string>(); const queue=[{id,version}];
