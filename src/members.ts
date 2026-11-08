@@ -81,6 +81,7 @@ function card(state:MembersState,d:MemberDecision){
 }
 const OWNER='local-owner';
 export class MembersService {
+ readonly #groupWrites=new Map<string,Promise<CommitResult<MembersState>>>();
  readonly #store:Store<any>;readonly #intake:()=>string|undefined;readonly #clock:()=>number;
  constructor(store:Store<any>,intake:()=>string|undefined,clock:()=>number=Date.now){this.#store=store;this.#intake=intake;this.#clock=clock;}
  async #state(){return await this.#store.load(MEMBERS_ID) as Snapshot<MembersState>|null;}
@@ -107,7 +108,9 @@ export class MembersService {
  }
  async setGroup(input:unknown,connections:ConnectionWorkbench):Promise<CommitResult<MembersState>>{
   ensure(exact(input,['commandId','memberId','modelGroup'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&id(input.modelGroup),'Exact member group fields required');
-  return this.#dispatch(input.commandId,OWNER,{type:'set-member-group',memberId:input.memberId,modelGroup:input.modelGroup},connections);
+  const commandId=input.commandId,command:MembersCommand={type:'set-member-group',memberId:input.memberId,modelGroup:input.modelGroup},pending=this.#groupWrites.get(commandId);
+  if(pending){await pending;return this.#dispatch(commandId,OWNER,command,connections);}
+  const result=this.#dispatch(commandId,OWNER,command,connections);this.#groupWrites.set(commandId,result);try{return await result;}finally{this.#groupWrites.delete(commandId);}
  }
  /** Lookup after the load, CAS on the revision read; a lost or overlapping answer replays by command ID. */
  async #dispatch(commandId:string,actorId:string,command:MembersCommand,connections?:ConnectionWorkbench):Promise<CommitResult<MembersState>>{
@@ -115,9 +118,8 @@ export class MembersService {
   for(let attempt=0;attempt<3;attempt++){
    // Load first, then look up: an answer committed before the load is found here, one after it fails the commit and is found on retry.
    const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
-   if(command.type==='set-member-group')ensure(connections?.list().modelGroups.some(g=>g.id===command.modelGroup),'Unknown model group');
-   const {value,events}=applyMembers(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
-   const result=await this.#store.commit({id:MEMBERS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
+   const commit=()=>{const {value,events}=applyMembers(snapshot?.value??null,command,actor,{observedAt:this.#clock()});return this.#store.commit({id:MEMBERS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});};
+   const result=command.type==='set-member-group'?await connections!.save(()=>{ensure(connections!.list().modelGroups.some(g=>g.id===command.modelGroup),'Unknown model group');return commit();}):await commit();
    // A stale revision or the same command ID committed meanwhile: the next lookup replays it or reports a different command.
    if(result.status!=='conflict')return result;
   }

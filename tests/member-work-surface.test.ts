@@ -10,8 +10,8 @@ const quill={id:'member-q',name:'Quill',look:{shape:'drop',color:'agent-1'},mode
 type Row={workId:string;title:string;memberId:string|null;execution:string;acceptance:string;started:boolean;startedAt?:number|null;endedAt?:number|null;turnId?:string};
 const row=(r:Row)=>({missionId:'intake',missionRevision:3,unknown:false,startedAt:T0,endedAt:null,segment:1,turnId:'assistant-turn:m:'+r.workId.padEnd(32,'0'),...r});
 function fixture(initial:{works?:Row[];turns?:any[];messages?:any[];memberThread?:{messages:any[];turns:any[]}}={}){
- const state={works:(initial.works??[]).map(row),feedId:'feed:a',hold:null as null|Promise<void>,chatHold:null as null|Promise<void>,worksStatus:200,worksBody:undefined as unknown,worksCalls:0,turns:initial.turns??[],messages:initial.messages??[]};
- const view=(member:string|null)=>({feedId:state.feedId,cursor:1,head:1,members:[quill],...(member?{member:{id:member,name:'Quill'},decisions:[]}:{decisions:[]}),
+ const state={works:(initial.works??[]).map(row),feedId:'feed:a',hold:null as null|Promise<void>,chatHold:null as null|Promise<void>,worksStatus:200,worksBody:undefined as unknown,worksCalls:0,members:[quill],turns:initial.turns??[],messages:initial.messages??[]};
+ const view=(member:string|null)=>({feedId:state.feedId,cursor:1,head:1,members:state.members,...(member?{member:{id:member,name:'Quill'},decisions:[]}:{decisions:[]}),
   segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:member?initial.memberThread?.messages??[]:state.messages},turns:member?initial.memberThread?.turns??[]:state.turns});
  const app=harness(async(path)=>{
   if(path==='/assistant/works'){state.worksCalls++;const snapshot=structuredClone(state.worksBody??{feedId:state.feedId,works:state.works}),status=state.worksStatus,hold=state.hold;if(hold)await hold;return reply(snapshot,status);}
@@ -28,9 +28,9 @@ test('Work lines come from the host Work list: the Representative\'s and each me
  const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
  await settle();
  assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.split('Working')[0]),['Weekly totals'],'the shown segment has no cards; the lines still show');
- assert.deepEqual(memberLines(app).map(t=>t.replace(/Working|Waiting/,'')),['Churn causes','Price table']);
+ assert.deepEqual(memberLines(app).map(t=>t.replace('Working','')),['Churn causes']);
  await app.node('activity-toggle').fire('click');
- const titles=kids(app.node('activity-list')).map(li=>li.children[0]!.children.find(c=>c.tagName==='STRONG')!.textContent);assert.deepEqual(titles,['Churn causes','Price table','Weekly totals','Old summary']);
+ const titles=kids(app.node('activity-list')).map(li=>li.children[0]!.children.find(c=>c.tagName==='STRONG')!.textContent);assert.deepEqual(titles,['Price table','Churn causes','Weekly totals','Old summary']);
  const marks=kids(app.node('activity-list'))[0]!.children[0]!.children.find(c=>c.className==='marks')!;assert.equal(marks.children[0]!.textContent,'Q','a member Work shows its member');
 });
 
@@ -74,7 +74,7 @@ test('a member message that steered a Work carries the steering tag',async()=>{
  const m='c'.repeat(32);
  const {app}=fixture({memberThread:{messages:[{id:'m:'+m,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:assistant-turn:m:'+m,role:'representative',turnId:'assistant-turn:m:'+m,text:'Sure.'}],turns:[{id:'assistant-turn:m:'+m,messageId:'m:'+m,status:'answered',displayStatus:'answered',at:T0,steer:{missionId:'intake',workId:'w1',status:'recorded',title:'Churn causes'}}]}});
  await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
- assert.equal(app.all().find(n=>n.id==='chat-steer-assistant-turn:m:'+m)!.textContent,'↩ Churn causes · Steered');
+ assert.equal(app.all().find(n=>n.id==='chat-system-steer-assistant-turn:m:'+m)!.textContent,'Steered: Churn causes');
 });
 
 test('a changed Work-list feed replaces the old list and rereads member identities',async()=>{
@@ -133,10 +133,10 @@ test('folded durations use whole elapsed minutes, never wall time, and missing o
 test('steering is shown only when recorded, keeps its node on reread and treats the title as text',async()=>{
  const id='e'.repeat(32),steer={missionId:'intake',workId:'w1',status:'not_recorded',title:'<img src=x>'},turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',at:T0,steer};
  const {app}=fixture({memberThread:{messages:[{id:'m:'+id,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:'+turn.id,role:'representative',turnId:turn.id,text:'Sure.'}],turns:[turn]}});await settle();
- await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.equal(app.all().find(n=>n.id==='chat-steer-'+turn.id),undefined);
- steer.status='recorded';await runInContext('readChat()',app.context);await settle();const tag=app.all().find(n=>n.id==='chat-steer-'+turn.id)!;
- assert.equal(tag.textContent,'↩ <img src=x> · Steered');assert.equal(tag.children[0]!.tagName,'SPAN');
- await runInContext('readChat()',app.context);await settle();assert.equal(tag.detaches,0);assert.equal(app.all().find(n=>n.id==='chat-steer-'+turn.id),tag);
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.equal(app.all().find(n=>n.id==='chat-system-steer-'+turn.id),undefined);
+ steer.status='recorded';await runInContext('readChat()',app.context);await settle();const tag=app.all().find(n=>n.id==='chat-system-steer-'+turn.id)!;
+ assert.equal(tag.textContent,'Steered: <img src=x>');assert.equal(tag.children[0]!.tagName,'SPAN');assert.equal(tag.className,'chat-system');
+ await runInContext('readChat()',app.context);await settle();assert.equal(tag.detaches,0);assert.equal(app.all().find(n=>n.id==='chat-system-steer-'+turn.id),tag);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -144,4 +144,46 @@ test('a new conversation feed clears old Work even when the replacement list can
  const {app,state}=fixture({works:[{workId:'w1',title:'Old database',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
  state.feedId='feed:b';state.worksStatus=503;await runInContext('readChat()',app.context);await settle();
  assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');
+});
+
+test('a waiting Work needs attention and stops sidebar and minute polling, including in member chat',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
+ assert.deepEqual(memberLines(app),['Churn causesWorking']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
+ state.works=[{...state.works[0]!,execution:'waiting'}];await runInContext('readChat()',app.context);await settle();
+ assert.deepEqual(memberLines(app),[]);assert.match(app.node('activity-list').textContent,/Churn causes.*Waiting/);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.deepEqual(memberLines(app),[]);assert.equal(runInContext('chatPendingTimer',app.context),0);
+});
+
+test('card polling and elapsed time require active execution, while start-in-flight keeps its short poll',async()=>{
+ const work={...row({workId:'w1',title:'Churn causes',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true}),starting:false};
+ const turn={id:work.turnId,messageId:'m:card',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
+ const {app,state}=fixture({turns:[turn],messages:[{id:'reply',role:'representative',turnId:turn.id,text:'On it.'}]});await settle();
+ const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!;
+ assert.match(card.textContent,/Waiting/);assert.doesNotMatch(card.textContent,/\d+ min/);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ const timers=new Map<number,number>();let next=0;app.context.setTimeout=(_run:()=>void,delay:number)=>{timers.set(++next,delay);return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ for(const [execution,starting,delay] of [['active',false,60000],['waiting',false,0],['queued',false,0],['blocked',false,0],['settled',false,0],['queued',true,10000]] as const){
+  state.turns[0].work={...work,execution,starting};await runInContext('readChat()',app.context);await settle();
+  assert.equal(timers.get(runInContext('chatPendingTimer',app.context))??0,delay,execution+(starting?' starting':''));
+ }
+});
+
+test('an unresolved member identity stays neutral on its card, activity row and room, then follows the roster',async()=>{
+ const work=row({workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}),turn={id:work.turnId,messageId:'m:card',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
+ const {app,state}=fixture({works:[work],turns:[turn],messages:[{id:'reply',role:'representative',turnId:turn.id,text:'On it.'}]});state.members=[];await settle();await runInContext('readChat()',app.context);await settle();
+ const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!,who=card.children[0]!.children.find(n=>n.className==='chat-card-who')!;
+ const neutral=(avatar:Node,label?:Node)=>{assert.equal(avatar.textContent,'');assert.equal(avatar.style.background,'var(--agent-0)');assert.equal(avatar.attributes.has('data-shape'),false);if(label)assert.equal(label.textContent,'');};
+ neutral(who.children[0]!,who.children[1]!);
+ const activityAvatar=()=>kids(app.node('activity-list'))[0]!.children[0]!.children.find(n=>n.className==='marks')!.children[0]!;neutral(activityAvatar());
+ await card.children[0]!.fire('click');await settle();neutral(app.node('pane-people').children[0]!,app.node('pane-people').children[1]!);
+ state.members=[quill];await runInContext('readChat()',app.context);await settle();assert.equal(who.children[0]!.textContent,'Q');assert.equal(who.children[1]!.textContent,'Quill');assert.equal(activityAvatar().textContent,'Q');assert.equal(app.node('pane-people').textContent,'QQuillCheck');
+ state.members=[];await runInContext('readChat()',app.context);await settle();neutral(who.children[0]!,who.children[1]!);neutral(activityAvatar());neutral(app.node('pane-people').children[0]!,app.node('pane-people').children[1]!);
+});
+
+test('unknown steering offers only read-only Check and changes to Steered only after a recorded read',async()=>{
+ const id='f'.repeat(32),steer={missionId:'intake',workId:'w1',status:'unknown',title:'Churn causes'},turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',steer};
+ const {app}=fixture({memberThread:{messages:[{id:turn.messageId,role:'owner',turnId:null,text:'Annual plans only.'}],turns:[turn]}});await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ const line=app.all().find(n=>n.id==='chat-system-steer-'+turn.id);assert.ok(line,'unknown steering stays visible');assert.equal(line.className,'chat-system');assert.equal(line.children[0]!.textContent,'Result unknown: Churn causes');assert.doesNotMatch(line.textContent,/Steered/);
+ const buttons=line.children.filter(n=>n.tagName==='BUTTON');assert.deepEqual(buttons.map(n=>n.textContent),['Check']);
+ const reads=()=>app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,before=reads();await buttons[0]!.fire('click');await settle();assert.ok(reads()>before);assert.equal(line.children[0]!.textContent,'Result unknown: Churn causes');assert.equal(line.detaches,0);
+ steer.status='recorded';await buttons[0]!.fire('click');await settle();assert.equal(line.textContent,'Steered: Churn causes');assert.equal(line.children.filter(n=>n.tagName==='BUTTON').length,0);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });

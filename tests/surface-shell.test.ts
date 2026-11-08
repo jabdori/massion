@@ -80,7 +80,7 @@ test('Work lines show running Work under the Representative; the activity list o
 });
 
 test('tabs close one at a time, widen takes the room, the sidebar hides, and the owner menu opens Settings with the earlier forms',async()=>{
- const {app}=fixture([{workId:'work:a',title:'First',execution:'active',acceptance:'pending',started:true},{workId:'work:b',title:'Second',execution:'waiting',acceptance:'pending',started:true}]);
+ const {app}=fixture([{workId:'work:a',title:'First',execution:'active',acceptance:'pending',started:true},{workId:'work:b',title:'Second',execution:'active',acceptance:'pending',started:true}]);
  await settle();
  for(const line of kids(app.node('side-work')).reverse()){await line.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();}
  const tabs=()=>kids(app.node('pane-tabs'));assert.equal(tabs().length,2);

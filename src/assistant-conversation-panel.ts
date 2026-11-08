@@ -44,7 +44,7 @@ function chatCard(turn){
   card.chatWho=element('span',undefined,'chat-card-who');const avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');card.chatElapsed=element('span');card.chatWho.append(avatar,element('span','${representativeName}'),card.chatElapsed);
   open.append(card.chatRing,main,card.chatWho);open.addEventListener('click',()=>void shellOpenWork(turn.id));
   card.chatStart=element('button','Start','secondary');card.chatStart.type='button';card.chatStart.addEventListener('click',()=>void startChatWork(turn.id));card.append(open,card.chatStart);chatCards.set(turn.id,card);}
- const w=turn.work,steps=w&&w.steps,running=w&&w.started&&w.execution!=='blocked'&&Number.isSafeInteger(w.startedAt);
+ const w=turn.work,steps=w&&w.steps,running=w&&w.started&&w.execution==='active'&&Number.isSafeInteger(w.startedAt);
  card.chatTitle.textContent=w?w.title:turn.proposal.title;card.chatState.textContent=chatCardLabel(turn);card.chatWho.hidden=card.chatChips.hidden=!w;
  shellWorkIdentity(card.chatWho.children[0],card.chatWho.children[1],w);
  card.chatSteps.textContent=steps&&Number.isSafeInteger(steps.done)&&Number.isSafeInteger(steps.total)&&steps.total>0?steps.done+'/'+steps.total:'';card.chatSteps.hidden=!card.chatSteps.textContent;
@@ -106,7 +106,7 @@ function renderChat(){
   if(message.role==='owner'&&turn&&Number.isSafeInteger(turn.at))while(extras.length&&extras[0].at<turn.at){const extra=extras.shift();dated(extra.at,extra.node());}
   dated(message.role==='owner'&&turn?turn.at:null,chatNode(message.id,message.text,message.role==='owner'?'chat-owner':'chat-reply'));if(!turn)continue;
   // The state line always follows its message, empty when there is nothing to say, so a later reply only appends.
-  if(message.role==='owner'){items.push(chatNode('state:'+turn.id,chatTurnLabel(turn),'chat-state'));if(turn.steer&&turn.steer.status==='recorded'&&chatText(turn.steer.title))items.push(chatKeyed('steer-'+turn.id,'p','chat-state',turn.steer.title,()=>[element('span','↩ '+turn.steer.title+' · Steered')]));}
+  if(message.role==='owner'){items.push(chatNode('state:'+turn.id,chatTurnLabel(turn),'chat-state'));const steer=turn.steer;if(steer&&chatText(steer.title)){if(steer.status==='recorded')items.push(chatSystem('steer-'+turn.id,'Steered: '+steer.title));else if(steer.status==='unknown')items.push(chatSystem('steer-'+turn.id,'Result unknown: '+steer.title,[['Check',()=>readChat()]]));}}
   else if(turn.proposal)items.push(...chatSlot(turn));
  }
  for(const extra of extras)dated(extra.at,extra.node());
@@ -135,7 +135,7 @@ function chatScheduleRead(){
   // A host's own start in flight emits nothing if it is refused before activation, so a card that shows it is read again too.
   // A running card's elapsed minutes come from the read, so it is read again each minute while one shows.
   // A schedule run still in time emits nothing when its host dies, so the conversation is read again just after its deadline to show the unknown-result card.
-  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],due=chatView&&Number.isSafeInteger(chatView.runDeadlineAt)?Math.max(1000,chatView.runDeadlineAt-Date.now()+1000):0,every=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started)||shellWorks.some(w=>w.started&&shellRank(w)===1)?60000:0,wait=every&&due?Math.min(every,due):every||due;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;
+  clearTimeout(chatPendingTimer);const turns=chatView?chatView.turns:[],due=chatView&&Number.isSafeInteger(chatView.runDeadlineAt)?Math.max(1000,chatView.runDeadlineAt-Date.now()+1000):0,every=turns.some(turn=>turn.displayStatus==='pending'||turn.work&&turn.work.starting)?10000:turns.some(turn=>chatKind(turn)==='card'&&turn.work&&turn.work.started&&turn.work.execution==='active')||shellWorks.some(w=>w.started&&w.execution==='active'&&shellRank(w)===1)?60000:0,wait=every&&due?Math.min(every,due):every||due;chatPendingTimer=wait?setTimeout(()=>void readChat(),wait):0;
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
 // A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
