@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
-import {mkdtemp,readFile,realpath,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,realpath,rm,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -50,7 +50,20 @@ test('normal CLI unknown migration during shutdown exits unsettled without resub
  rpc.listen(0,'127.0.0.1');await once(rpc,'listening');t.after(()=>{rpc.closeAllConnections();rpc.close();});const address=rpc.address();assert.ok(address&&typeof address==='object');
  const cli=await host(t,cwd,{MASSION_SURREAL_RPC:`http://127.0.0.1:${address.port}/rpc`});await until(()=>received);
  cli.child.kill('SIGTERM');await pause(100);release();const [code,signal]=await cli.exited;
- assert.equal(signal,null);assert.equal(code,1);assert.match(cli.logs(),/unsettled/);assert.doesNotMatch(cli.logs(),/Massion development workbench:|"status":"drained"/);assert.equal(writes,1);assert.equal(reads,1);
+ assert.equal(signal,null);assert.equal(code,1);assert.match(cli.logs(),/unsettled/);assert.match(cli.logs(),/Schema upgrade outcome is unconfirmed/);assert.doesNotMatch(cli.logs(),/Massion development workbench:|"status":"drained"/);assert.equal(writes,1);assert.equal(reads,1);
+});
+
+test('normal CLI shutdown logs a rejected future schema instead of hiding the startup error',{timeout:15000},async t=>{
+ const cwd=await root(t);let release!:()=>void,received=false,calls=0;
+ const gate=new Promise<void>(r=>release=r);t.after(()=>release());
+ const rpc=createServer(async(req,res)=>{let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text);calls++;received=true;await gate;
+  res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:body.id,result:[{status:'OK',result:null},{status:'ERR',result:'Unsupported storage schema version'}]}));
+ });
+ rpc.listen(0,'127.0.0.1');await once(rpc,'listening');t.after(()=>{rpc.closeAllConnections();rpc.close();});const address=rpc.address();assert.ok(address&&typeof address==='object');
+ const cli=await host(t,cwd,{MASSION_SURREAL_RPC:`http://127.0.0.1:${address.port}/rpc`});await until(()=>received);
+ cli.child.kill('SIGTERM');await pause(100);release();const [code,signal]=await cli.exited;
+ assert.equal(signal,null);assert.equal(code,1);assert.match(cli.logs(),/unsettled/);assert.match(cli.logs(),/Unsupported storage schema version/);assert.equal(calls,1);
+ assert.doesNotMatch(cli.logs(),/Massion development workbench:|"status":"drained"/);
 });
 
 test('installed normal CLI creates data once, drains, restarts, backs up and restores with fixtures',{skip:!process.env.MASSION_TEST_SURREAL_RPC,timeout:45000},async t=>{
@@ -85,6 +98,10 @@ test('installed normal CLI creates data once, drains, restarts, backs up and res
  const scenario=JSON.parse(demo.stdout);assert.equal(scenario.realProvider,false);
  for(const id of [scenario.workA,scenario.workB]){const work=scenario.works.find((w:any)=>w.id===id);assert.equal(work?.acceptance,'accepted');assert.ok(work.record);}
  await transport.query('UPDATE massion_feed:global SET storageVersion=2;',{});
+ const futureFeed=await transport.query('SELECT * FROM massion_feed;',{}),futureBundle=join(cwd,'future-backup.json');
+ const exportFuture=spawnSync(process.execPath,[backupCLI,'export',endpoint,namespace,'source',nativeRoot,futureBundle],{cwd,env:{},encoding:'utf8',timeout:15000});
+ assert.equal(exportFuture.status,1);assert.match(exportFuture.stderr,/Unsupported storage schema version/);await assert.rejects(access(futureBundle));
+ assert.deepEqual(await transport.query('SELECT * FROM massion_feed;',{}),futureFeed);
  const refused=await host(t,cwd,env),[code]=await refused.exited;assert.equal(code,1);assert.match(refused.logs(),/Unsupported storage schema version/);assert.doesNotMatch(refused.logs(),/Massion development workbench:/);
  assert.deepEqual(await store.exportJournal(),original);
  t.diagnostic('Normal CLI, offline fixtures, restart, backup/restore, stale-feed refusal, future-schema refusal; live provider calls: 0');

@@ -57,7 +57,42 @@ Primary references: [SurrealDB transactions](https://surrealdb.com/docs/learn/qu
 [GitHub Node CI](https://docs.github.com/en/actions/tutorials/build-and-test-code/nodejs).
 Current docs were checked; the actual 3.3.0 binary is the compatibility gate.
 
-## Final candidate evidence
+## PR #98 review follow-up plan
+
+Preserve startup and readback errors without turning a lost write response into
+permission to retry. Keep the original cause and a failed readback cause; when
+readback itself is unavailable, surface the original transport failure. During
+shutdown, include the actual startup/drain error message in the unsettled log.
+Before CLI export, check storage/journal versions read-only; never migrate during
+export. Pin explicit legacy version 0 and missing current feed identity with
+unchanged-state tests, and document the latter's recovery boundary.
+
+Make installation refuse a symlinked `node_modules` before invoking npm. Make
+each smoke invocation fail if it executes no tests or skips any: this catches
+both a missing DB environment and a renamed backup test filter. Use the built-in
+TAP reporter and verify its final counters rather than assuming exit zero proves
+coverage. Test these refusal paths with temporary fixtures and fake prerequisite
+commands, never the shared dependency directory. All six findings get focused
+regressions before implementation, followed by the full supported checks.
+
+### Review revision evidence
+
+- New failure cases reproduced before fixes: lost diagnostic causes, omitted
+  shutdown error, future-schema export, skipped/empty smoke and symlinked install.
+  The existing feed-identity guard also gained explicit version-0/version-1 tests.
+- Linux arm64 / Node 24.22.2 / SurrealDB 3.3.0, network disabled: installation smoke
+  **13/13 plus 1/1** old-backup contract; `npm run check` **1,118 passed, 0 failed,
+  348 skipped**; full owned durable aggregate **1,433 passed, 0 failed, 33 skipped**
+  (1,466 total). Type checking and runtime syntax passed within `npm run check`.
+- macOS / Node 24.21.0 `npm test`: **1,125 passed, 1 failed, 340 skipped**; only the
+  previously documented case-insensitive-path inventory failure remains.
+- Shell syntax and diff checks passed. Shared `node_modules` remained a symlink
+  and was never passed to npm; installation used a separate clean snapshot.
+- The original PR's CI smoke job failed before tests on a SurrealDB download
+  HTTP 504; its original aggregate job passed. These are separate from the
+  network-isolated review-revision checks above.
+
+## Original candidate evidence
 
 Verified on 2026-11-08, with fixtures/local mocks only and no live model calls:
 

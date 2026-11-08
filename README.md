@@ -43,6 +43,9 @@ The script installs locked development tools (npm registry access required), sta
 owned disposable databases, runs the normal CLI with local fixtures, checks
 restart, schema migration and backup/restore, then cleans up. Provider calls are
 disabled. CI runs this same script in its separate `install-smoke` job.
+It refuses a symlinked `node_modules`; run from a clean clone to protect shared
+worktree dependencies. Each smoke stage requires executed tests with no skips or
+empty test plans, so missing database configuration cannot silently pass CI.
 
 ## First run with persistent local data
 
@@ -213,6 +216,7 @@ the [backup guide](docs/architecture/portable-backup.md#local-owner-cli).
 | Missing RPC endpoint, connection refused or missing namespace/database | Start the separate database first; check the exact loopback URL and namespace/database variables. There is no file-store fallback. |
 | Port already in use | Stop the service that owns it or choose a free port; set `MASSION_PORT` for the host and update the RPC URL for the database. |
 | Unsupported storage schema version | Stop; use a compatible newer checkout. Do not reset the marker or overwrite the data. |
+| Storage feed identity is not initialized | Keep hosts stopped and retain the database. A current-version database has lost its identity; inspect the original metadata or restore a verified backup into a fresh destination. Do not invent a new identity or reset the version to bypass the guard. |
 | Schema upgrade outcome unconfirmed, or shutdown unsettled | Keep the database offline from hosts, retain the original files and inspect durable state. An acknowledgement lost in transit does not prove rollback. |
 | Work blocked with no provider | Configure an explicit connection and permission; installation alone does not authorize model calls. |
 | Backup/restore refuses paths or an occupied destination | Use canonical absolute paths (`pwd -P`), no symlinks, a new bundle filename, a fresh empty database and a new artifact directory. Do not delete originals to bypass the check. |

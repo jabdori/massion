@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
-import {SCHEMA_QUERY,initializeSurrealSchema,createHttpRpcTransport,StorageQueryError,StorageContentionError,SurrealStore} from '../src/storage.ts';
+import {SCHEMA_QUERY,initializeSurrealSchema,assertStorageVersion,createHttpRpcTransport,StorageQueryError,StorageContentionError,StorageProtocolError,SurrealStore} from '../src/storage.ts';
 
 test('startup abort fences schema submission and late acknowledgement',async()=>{
  const abort=new AbortController();abort.abort();let writes=0;
@@ -35,6 +35,30 @@ test('unconfirmed migration is not retried or treated as an open database',async
  let calls=0;
  await assert.rejects(initializeSurrealSchema({query:async()=>{calls++;throw new StorageQueryError('newer schema');}}),/newer schema/);
  assert.equal(calls,1);
+});
+
+test('failed schema readback retains original connection/HTTP failure and both causes without retry',async()=>{
+ for(const original of [new TypeError('connect ECONNREFUSED'),new StorageProtocolError('SurrealDB HTTP status 403'),new Error('write response lost')]){
+  const readback=new TypeError('readback connection refused');let calls=0;
+  await assert.rejects(initializeSurrealSchema({query:async()=>{throw ++calls===1?original:readback;}}),error=>{
+   assert.ok(error instanceof Error);assert.ok(error.message.includes(original.message));assert.ok(error.message.includes(readback.message));
+   assert.ok(error.cause instanceof AggregateError);assert.deepEqual(error.cause.errors,[original,readback]);return true;
+  });assert.equal(calls,2);
+ }
+ const original=new Error('write response lost');let calls=0;
+ await assert.rejects(initializeSurrealSchema({query:async()=>{if(++calls===1)throw original;return [null];}}),error=>{
+  assert.ok(error instanceof Error);assert.match(error.message,/unconfirmed/);assert.equal(error.cause,original);return true;
+ });assert.equal(calls,2);
+});
+
+test('read-only export compatibility accepts legacy/current markers and refuses malformed or future schemas',async()=>{
+ for(const feed of [{schemaVersion:2},{schemaVersion:2,storageVersion:0},{schemaVersion:2,storageVersion:1},null,
+  ...[2,-1,0.5,null,'1',true].map(storageVersion=>({schemaVersion:2,storageVersion})),{schemaVersion:3,storageVersion:1}]){
+  let calls=0;const check=assertStorageVersion({query:async sql=>{calls++;assert.match(sql,/^RETURN SELECT /);assert.doesNotMatch(sql,/DEFINE|UPDATE|CREATE/);return [feed];}});
+  if(feed&&feed.schemaVersion===2&&(!('storageVersion' in feed)||feed.storageVersion===0||feed.storageVersion===1))await check;
+  else await assert.rejects(check,/Unsupported storage schema version/);
+  assert.equal(calls,1);
+ }
 });
 
 const endpoint=process.env.MASSION_TEST_SURREAL_RPC;
@@ -80,4 +104,17 @@ test('actual forward step creates missing legacy identity, rolls back on failure
  const empty=await database();await initializeSurrealSchema(empty);
  assert.equal((await empty.query('RETURN massion_feed:global.storageVersion;',{}))[0],1);
  assert.deepEqual(await new SurrealStore(empty).exportJournal(),{schemaVersion:2,head:0,operations:[]});
+});
+
+test('actual explicit version zero upgrades but current version without identity refuses unchanged',{skip:!endpoint},async()=>{
+ const transport=await database();
+ await transport.query(await readFile(new URL('./fixtures/schema-v0.surql',import.meta.url),'utf8'),{feedId:'explicit-zero-feed'});
+ await transport.query('UPDATE massion_feed:global SET storageVersion=0;',{});
+ await initializeSurrealSchema(transport);
+ assert.equal((await transport.query('RETURN massion_feed:global.storageVersion;',{}))[0],1);
+ assert.equal((await transport.query('RETURN massion_feed:global.feedId;',{}))[0],'explicit-zero-feed');
+ await transport.query('UPDATE massion_feed:global UNSET feedId;',{});
+ const before=await transport.query(contents,{});
+ await assert.rejects(initializeSurrealSchema(transport),/Storage feed identity is not initialized/);
+ assert.deepEqual(await transport.query(contents,{}),before);
 });

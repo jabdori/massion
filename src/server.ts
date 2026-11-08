@@ -266,7 +266,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{
   if(shutdown)return;stopping.abort();const draining=server?.drain();
   const timer=setTimeout(()=>{console.error(JSON.stringify({hostShutdown:{status:'unsettled',timedOut:true}}));process.exit(1);},10000);
-  shutdown=(async()=>{try{await startup;const result=await draining??{status:'drained',timedOut:false};console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);}catch{console.error('Local host startup/drain unsettled; inspect the stored schema and original durable state. No write retry or remote stop inferred.');process.exit(1);}finally{clearTimeout(timer);}})();
+  shutdown=(async()=>{try{await startup;const result=await draining??{status:'drained',timedOut:false};console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);}catch(error){console.error('Local host startup/drain unsettled; inspect the stored schema and original durable state. No write retry or remote stop inferred.',error instanceof Error?error.message:String(error));process.exit(1);}finally{clearTimeout(timer);}})();
  });
  const startup=(async()=>{
  const hostStartup=await loadHostStartup(process.argv.slice(2));

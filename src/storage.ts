@@ -115,7 +115,7 @@ export class EventCursorError extends RangeError {
   }
 }
 export class StorageProtocolError extends Error {
-  constructor(message: string) { super(message); this.name = 'StorageProtocolError'; }
+  constructor(message: string, options?: ErrorOptions) { super(message, options); this.name = 'StorageProtocolError'; }
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -398,6 +398,14 @@ export function createHttpRpcTransport(options: HttpRpcOptions): QueryTransport 
 }
 
 export const STORAGE_SCHEMA_VERSION = 1;
+/** Export checks compatibility without initializing or migrating an offline source. */
+export async function assertStorageVersion(transport: QueryTransport): Promise<void> {
+  const feed = oneResult(await transport.query('RETURN SELECT storageVersion, schemaVersion FROM ONLY massion_feed:global;', {}));
+  if (!object(feed) || feed.schemaVersion !== 2 || Object.hasOwn(feed, 'storageVersion') &&
+      (!revision(feed.storageVersion) || feed.storageVersion > STORAGE_SCHEMA_VERSION)) {
+    throw new StorageQueryError('Unsupported storage schema version; use a compatible Massion host, never downgrade this database');
+  }
+}
 /** Offline startup only. Each forward step and its marker commit together. Journal format stays at 2. */
 export const SCHEMA_QUERY = `
 BEGIN TRANSACTION;
@@ -448,9 +456,13 @@ export async function initializeSurrealSchema(transport: QueryTransport, signal?
     if (error instanceof StorageQueryError && !(error instanceof StorageContentionError)) throw error;
     // A lost acknowledgement or concurrent initializer permits readback, never a write retry.
     let feed: unknown;
-    try { feed = oneResult(await transport.query('RETURN SELECT storageVersion, schemaVersion, feedId FROM ONLY massion_feed:global;', {})); } catch {}
+    try { feed = oneResult(await transport.query('RETURN SELECT storageVersion, schemaVersion, feedId FROM ONLY massion_feed:global;', {})); }
+    catch (readbackError) {
+      throw new StorageProtocolError(`Schema initialization failed: ${error instanceof Error ? error.message : String(error)}; readback failed: ${readbackError instanceof Error ? readbackError.message : String(readbackError)}. No write retry was made; inspect connectivity and stored state before restarting.`,
+        {cause: new AggregateError([error, readbackError], 'Schema initialization and readback failed')});
+    }
     if (!object(feed) || feed.storageVersion !== STORAGE_SCHEMA_VERSION || feed.schemaVersion !== 2 || typeof feed.feedId !== 'string' || !feed.feedId) {
-      throw new StorageProtocolError('Schema upgrade outcome is unconfirmed; keep the database offline and inspect its stored version before restarting');
+      throw new StorageProtocolError('Schema upgrade outcome is unconfirmed; keep the database offline and inspect its stored version before restarting', {cause: error});
     }
   }
   signal?.throwIfAborted();
