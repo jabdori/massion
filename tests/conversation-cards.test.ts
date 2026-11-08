@@ -6,17 +6,17 @@ import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
 
 // docs/architecture/conversation-cards.md: one slot per Work that changes in place, exception cards with only the safe action, decision cards as the only yellow.
-type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;unknown?:boolean;startedAt?:number|null;steps?:{done:number;total:number}};
+type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;unknown?:boolean;startedAt?:number|null;steps?:{done:number;total:number};progress?:{make:{done:number;total:number};check:{done:number;total:number}}};
 type Entry={text:string;at?:number;work?:Work;outcome?:'unknown'|'not_created'};
 const T0=Date.UTC(2026,10,5,0,40);
-function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[]}={}){
+function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[];members?:unknown[]}={}){
  const criteria={version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'};
  const state={entries,extra,revision:2,cursor:1,events:[] as any[],posted:[] as {path:string;body:any}[],answer:200};
  const works=()=>state.entries.flatMap(e=>e.work?[e.work]:[]);
  const mission=()=>({id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:works().map(w=>({id:w.workId,title:w.title,missionVersion:1,criteria,execution:w.execution,acceptance:w.acceptance,tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0}})),memories:[],growth:[],relations:[]});
  const view=()=>{const messages:any[]=[],turns:any[]=[];state.entries.forEach((e,i)=>{const id=String(i+1).repeat(32),turn='assistant-turn:m:'+id;messages.push({id:'m:'+id,role:'owner',turnId:null,text:e.text},{id:'r:'+turn,role:'representative',turnId:turn,text:'Okay.'});
   const w=e.work;turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',...(e.at?{at:e.at}:{}),...(w||e.outcome?{proposal:{title:w?.title??'Lost one'}}:{}),
-   ...(w?{outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,startedAt:w.startedAt??null,unknown:!!w.unknown,steps:w.steps??{done:0,total:2}}}:e.outcome?{outcome:{work:{status:e.outcome,diagnostics:[]},run:{status:'off',diagnostics:[]}}}:{})});});
+   ...(w?{outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,startedAt:w.startedAt??null,unknown:!!w.unknown,steps:w.steps??{done:0,total:2},...(w.progress?{progress:w.progress}:{})}}:e.outcome?{outcome:{work:{status:e.outcome,diagnostics:[]},run:{status:'off',diagnostics:[]}}}:{})});});
   return {feedId:'feed:a',cursor:state.cursor,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns,...state.extra};};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});return reply({},state.answer);}
@@ -31,7 +31,7 @@ function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[
 }
 const turnId=(n:number)=>'assistant-turn:m:'+String(n).repeat(32);
 const byId=(app:ReturnType<typeof harness>,id:string)=>app.all().find(n=>n.id===id);
-const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Node)=>{if(n.tagName==='BUTTON'&&n.textContent===label)found.push(n);n.children.forEach(visit);};visit(node);return found[0];};
+const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Node)=>{if(n.tagName==='BUTTON'&&(n.textContent===label||n.attributes.get('aria-label')===label))found.push(n);n.children.forEach(visit);};visit(node);return found[0];};
 const shown=(app:ReturnType<typeof harness>)=>app.node('chat-log').children.filter(n=>!n.hidden);
 const posts=(app:ReturnType<typeof harness>)=>app.calls.filter(c=>c.options?.method==='POST');
 
@@ -96,9 +96,9 @@ test('a briefing is one grey card whose bullets link to Work with its current st
  const day2=T0+24*3600000;
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}},{text:'Morning',at:day2+3600000}],{briefings:[{id:'briefing:1',at:day2,title:'Morning briefing',turnIds:[turnId(1),'assistant-turn:missing']}]});await settle();
  const brief=byId(app,'chat-briefing-briefing:1')!;assert.ok(brief);
- assert.match(brief.textContent,new RegExp('^Morning briefing \\| '+'11월 6일 금요일'));
+ assert.ok(brief.textContent.startsWith('Morning briefing | 11월 6일 (금)'));
  assert.match(brief.textContent,/Churn causes 작업 중/);assert.doesNotMatch(brief.textContent,/missing/);
- const dates=shown(app).filter(n=>n.className==='chat-date').map(n=>n.textContent);assert.equal(dates.length,2);
+ const dates=shown(app).filter(n=>n.className==='chat-date').map(n=>n.textContent);assert.equal(dates.length,2);assert.equal(dates[1],'11월 6일 (금)');
  const order=shown(app);assert.ok(order.indexOf(brief)>order.findIndex(n=>n.className==='chat-date'&&n.textContent===dates[1])&&order.indexOf(brief)<order.findIndex(n=>n.textContent==='Morning'));
  await button(brief,'Churn causes')!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
 });
@@ -157,4 +157,67 @@ test('send status follows the composer and structural borders stay quiet',()=>{
   const rule=new RegExp('\\.'+selector+'\\{([^}]+)\\}').exec(workbenchPage)![1]!;
   assert.ok(!rule.includes('var(--line-strong)'),selector);
  }
+});
+
+test('reply copy uses the original text, survives rereads and reports clipboard rejection without a write',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const message=shown(app).find(n=>n.className==='chat-reply')!,copy=button(message,'복사');assert.ok(copy);
+ const copied:string[]=[];(app.context as any).navigator.clipboard={writeText:async(text:string)=>{copied.push(text);}};
+ await copy.fire('click');assert.deepEqual(copied,['Okay.']);
+ await app.node('chat-latest').fire('click');await settle();assert.equal(button(message,'복사'),copy);assert.equal(message.detaches,0);
+ (app.context as any).navigator.clipboard.writeText=async()=>{throw Error('denied');};await copy.fire('click');assert.equal(app.node('chat-status').textContent,'연결 끊김');assert.equal(posts(app).length,0);
+});
+
+test('composer grows, restores its size and exposes existing permission settings without sending',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const input=app.node('chat-input');Object.assign(input,{scrollHeight:350});input.value='many lines';await input.fire('input');assert.equal(input.style.height,'350px');
+ assert.match(chatStyle,/max-height:var\(--composer-editor-max-height\)/);
+ await app.node('chat-permission').fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('settings-permissions').hidden,false);assert.equal(posts(app).length,0);
+ assert.match(workbenchPage, /id="chat-send"[^>]*aria-label="보내기"/);
+});
+
+test('new replies while scrolled up show an unread jump control without moving the reader',async()=>{
+ const {app,state}=fixture([{text:'A question',at:T0}]);await settle();const page=app.node('chat-scroll');
+ Object.assign(page,{scrollTop:0,scrollHeight:1000,clientHeight:300});await page.fire('scroll');
+ state.entries.push({text:'Another question',at:T0+60000});await app.node('chat-latest').fire('click');await settle();
+ assert.equal((page as any).scrollTop,0);assert.equal(app.node('chat-bottom').hidden,false);assert.equal(app.node('chat-bottom-dot').hidden,false);
+ await app.node('chat-bottom').fire('click');assert.equal((page as any).scrollTop,1000);assert.equal(app.node('chat-bottom').hidden,true);assert.equal(posts(app).length,0);
+});
+
+test('failed answers offer a draft-only retry while unknown answers never do',async()=>{
+ const {app}=fixture([{text:'Original request',at:T0}]);await settle();
+ // The production renderer receives the same statuses as the host read view.
+ const {runInContext}=await import('node:vm');runInContext("chatView.turns[0].displayStatus='failed';renderChat()",app.context);
+ const state=byId(app,'chat-state:'+turnId(1))!;assert.ok(button(state,'다시 시도'));await button(state,'다시 시도')!.fire('click');assert.equal(app.node('chat-input').value,'Original request');assert.equal(posts(app).length,0);
+ runInContext("chatView.turns[0].displayStatus='unknown';renderChat()",app.context);assert.equal(button(state,'다시 시도'),undefined);
+});
+
+
+test('mention selection opens the member conversation without sending or overwriting either saved draft',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}],{members:[{id:'member-q',name:'퀼',look:{shape:'drop',color:'agent-1'}},{id:'member-j',name:'주노'}]});await settle();
+ app.storage.set('massion.workbench.chat-draft:member-q',JSON.stringify({text:'Member draft',commandId:'',target:null,delivery:'not-delivered'}));
+ const input=app.node('chat-input');input.value='@';await input.fire('input');assert.equal(app.node('chat-mentions').hidden,false);
+ const option=byId(app,'chat-mention-member-q')!;assert.ok(option);assert.equal(option.attributes.get('role'),'option');await option.fire('click');await settle();
+ assert.equal(input.value,'Member draft');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'@');assert.equal(posts(app).length,0);
+});
+
+test('Work included by the host without a message still renders once and uses the stored assignee',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ const {runInContext}=await import('node:vm');
+ runInContext("chatView.members=[{id:'member-q',name:'퀼'}];chatView.turns.push({id:'orphan',at:Date.now(),proposal:{title:'A delegated Work'},work:{missionId:'intake',workId:'delegated',title:'A delegated Work',memberId:'member-q',execution:'active',acceptance:'pending',started:true}});renderChat()",app.context);
+ const card=byId(app,'chat-card-orphan')!;assert.ok(card);assert.match(card.textContent,/A delegated Work.*퀼/);
+ await app.node('chat-bottom').fire('click');runInContext('renderChat()',app.context);assert.equal(shown(app).filter(n=>n.id===card.id).length,1);assert.equal(posts(app).length,0);
+});
+
+
+test('Work progress uses assigned make and check counts instead of inferring roles from the total',async()=>{
+ const {app}=fixture([{text:'Build',at:T0,work:{workId:'progress',title:'A result',execution:'active',acceptance:'pending',started:true,steps:{done:1,total:2},progress:{make:{done:1,total:1},check:{done:0,total:1}}}}]);await settle();
+ assert.match(byId(app,'chat-card-'+turnId(1))!.textContent,/만들기 1\/1 · 확인 0\/1/);assert.equal(posts(app).length,0);
+});
+
+test('a late clipboard refusal cannot replace the status of a newer conversation generation',async()=>{
+ const {app}=fixture([{text:'A question',at:T0}]);await settle();
+ let reject!:(error:Error)=>void;(app.context as any).navigator.clipboard={writeText:()=>new Promise<void>((_,fail)=>{reject=fail;})};
+ const message=shown(app).find(n=>n.className==='chat-reply')!,pending=button(message,'복사')!.fire('click');
+ const {runInContext}=await import('node:vm');runInContext('++chatGeneration',app.context);reject(Error('old refusal'));await pending;await settle();assert.equal(app.node('chat-status').hidden,true);assert.equal(posts(app).length,0);
 });

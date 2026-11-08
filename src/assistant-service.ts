@@ -33,6 +33,11 @@ const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
 /** The root task only contains the steps, so it is not counted (conversation-cards.md). */
 const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+/** Count only assigned child tasks; a retried assignment never counts the same task twice. */
+function progress(work:Mission['works'][number]){
+ const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>t.parentId!==null&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+ return {make:stage('executor'),check:stage('verifier')};
+}
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
 
 export type ParsedTurn={reply:string;proposal:AssistantProposal|null;steer?:string};
@@ -275,7 +280,7 @@ export class AssistantService {
    return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.ownership?{at:t.ownership.startedAt}:{}),...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),...(t.steer?{steer:{...steering.get(t.id),title:missions.get(t.steer.missionId)?.value.works.find(w=>w.id===t.steer!.workId)?.title??null}}:{}),
     ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id),starting:!work.runtimeRun&&this.#starting.has(work.id),
      // Card facts (conversation-cards.md): the durable run start, settled steps under the root task (the check is one), and an unknown effect outcome not yet answered by quarantine; a plain cancel is not that answer (ADR 0002 §8).
-     startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),steps:steps(work)}}:{})};
+     startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),steps:steps(work),progress:progress(work)}}:{})};
   });
   return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
  }

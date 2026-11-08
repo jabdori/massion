@@ -209,3 +209,108 @@ test('the owner menu stacks above the narrow-screen work pane so Settings stays 
  const menu=Number(/\.menu\{position:absolute;z-index:(\d+)/.exec(workbenchPage)?.[1]),pane=Number(/@media \(max-width:900px\)\{[^@]*\.pane\{position:fixed;z-index:(\d+)/.exec(workbenchPage)?.[1]);
  assert.ok(menu>pane,`menu z-index ${menu} must exceed the narrow pane's ${pane}`);
 });
+
+const shellMembers=[{id:'quill',name:'Quill',look:{shape:'drop',color:'agent-1'}},{id:'juno',name:'Juno',look:{shape:'clover',color:'agent-6'}}];
+function shellFixture(){
+ const data={members:shellMembers,decisions:[] as any[],exceptions:[] as any[],turns:[] as any[]};
+ const result=fixture(two.map(w=>({...w,execution:'active',acceptance:'pending'})),path=>path.startsWith('/assistant/conversation')?{feedId:'feed:a',cursor:1,head:1,...data,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]}}:undefined);
+ return {...result,data};
+}
+const find=(app:ReturnType<typeof harness>,id:string)=>app.all().find(n=>n.id===id)!;
+async function key(app:ReturnType<typeof harness>,event:Record<string,unknown>){app.context.shellTestKey={preventDefault(){},...event};runInContext('shellKeydown(shellTestKey)',app.context);await settle();}
+
+test('the header profile opens the current member settings through the existing read-only route',async()=>{
+ const {app}=shellFixture();await settle();
+ assert.ok(find(app,'header-profile'),'a named profile button is reachable');
+ await find(app,'header-profile').fire('click');await settle();
+ assert.equal(app.node('page-settings').hidden,false);assert.equal(runInContext('settingsShown',app.context),'general');
+ await app.node('rail-chat').fire('click');await find(app,'side-member-quill').fire('click');await settle();
+ assert.equal(find(app,'header-profile').attributes.get('aria-label'),'Quill');
+ await find(app,'header-profile').fire('click');await settle();
+ assert.equal(runInContext('settingsShown',app.context),'members');assert.equal(runInContext('settingsMember',app.context),'quill');assert.match(app.node('settings-members-body').textContent,/Quill/);
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('the header menu routes existing settings actions and Escape restores its trigger focus',async()=>{
+ const {app}=shellFixture();await settle();
+ assert.match(opening('header-more'),/aria-haspopup="menu"/);
+ for(const [id,section] of [['header-settings','general'],['header-members','members'],['header-permissions','permissions']]){
+  await app.node('rail-chat').fire('click');await app.node('header-more').fire('click');assert.equal(app.node('header-menu').hidden,false);
+  await app.node(id!).fire('click');await settle();assert.equal(app.node('header-menu').hidden,true);assert.equal(app.node('page-settings').hidden,false);assert.equal(runInContext('settingsShown',app.context),section);
+ }
+ await app.node('rail-chat').fire('click');await app.node('header-more').fire('click');await key(app,{key:'Escape'});
+ assert.equal(app.node('header-menu').hidden,true);assert.equal(app.context.document.activeElement,app.node('header-more'));
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('the workspace toggle retains tabs and selection across hide, reread and reopen',async()=>{
+ const {app}=fixture(two);await settle();assert.ok(opening('header-workspace'));
+ assert.equal(app.node('header-workspace').hidden,true);
+ await open(kids(app.node('side-work'))[0]!).fire('click');await settle();
+ const selected=selectedTab(app);assert.equal(app.node('header-workspace').hidden,false);assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'true');
+ await app.node('pane-widen').fire('click');await app.node('header-workspace').fire('click');
+ assert.equal(app.node('work-pane').hidden,true);assert.doesNotMatch(app.node('app').className,/\bwide\b/);
+ runInContext('renderPane()',app.context);assert.equal(app.node('work-pane').hidden,true);assert.deepEqual(selectedTab(app),selected);
+ await app.node('header-workspace').fire('click');assert.equal(app.node('work-pane').hidden,false);assert.deepEqual(selectedTab(app),selected);
+ await app.node('pane-close').fire('click');assert.equal(app.node('header-workspace').hidden,true);
+});
+
+test('opening an existing result preview reveals a workspace hidden by the header toggle',async()=>{
+ const {app}=fixture(two);await settle();await open(kids(app.node('side-work'))[0]!).fire('click');await settle();
+ await app.node('header-workspace').fire('click');assert.equal(app.node('work-pane').hidden,true);
+ await runInContext("resultOpen({missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:'a'.repeat(64),title:'Accepted result',segment:1})",app.context);await settle();
+ assert.equal(app.node('work-pane').hidden,false);assert.equal(app.node('pane-result').hidden,false);assert.deepEqual(selectedTab(app),['Accepted result']);
+});
+
+test('sidebar search filters member names and Work titles locally, preserves member rows and clears on Escape',async()=>{
+ const {app}=shellFixture();await settle();assert.ok(opening('sidebar-search'));
+ await app.node('sidebar-search').fire('click');assert.equal(app.node('sidebar-query').hidden,false);assert.equal(app.context.document.activeElement,app.node('sidebar-query'));
+ const quill=find(app,'side-member-quill'),juno=find(app,'side-member-juno');
+ assert.equal(quill.children[0]!.attributes.get('data-shape'),'drop');assert.equal(quill.children[0]!.style.background,'var(--agent-1)');
+ const calls=app.calls.length;app.node('sidebar-query').value='  qUiLl  ';await app.node('sidebar-query').fire('input');
+ assert.equal(quill.parentElement!.hidden,false);assert.equal(juno.parentElement!.hidden,true);assert.equal(app.node('side-representative').hidden,true);assert.equal(app.node('side-work').children.every(n=>n.hidden),true);
+ app.node('sidebar-query').value='Second';await app.node('sidebar-query').fire('input');assert.equal(quill.parentElement!.hidden,true);assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.replace('작업 중','')),['Second']);
+ await app.node('activity-toggle').fire('click');assert.deepEqual(titles(app.node('activity-list')),['Second']);
+ await key(app,{key:'Escape'});assert.equal(app.node('sidebar-query').value,'');assert.equal(app.node('sidebar-query').hidden,true);assert.equal(app.context.document.activeElement,app.node('sidebar-search'));
+ assert.equal(quill.parentElement!.hidden,false);assert.equal(juno.parentElement!.hidden,false);assert.equal(find(app,'side-member-quill'),quill);assert.equal(app.calls.length,calls);
+ await app.node('rail-results').fire('click');assert.equal(app.node('sidebar-search').hidden,true);await app.node('rail-chat').fire('click');assert.equal(app.node('sidebar-search').hidden,false);
+});
+
+test('the attention dot follows open decisions and exceptions and clears when they resolve',async()=>{
+ const {app,data,state}=shellFixture();await settle();assert.ok(opening('activity-attention'));
+ assert.match(opening('activity-toggle'),/role="switch"/);assert.equal(app.node('activity-attention').hidden,true);
+ data.decisions=[{id:'d1',at:1,title:'A decision',question:'Change?',action:'Change',rows:[],state:'open'}];await runInContext('readChat()',app.context);await settle();
+ assert.equal(app.node('activity-attention').hidden,false);assert.equal(app.node('activity-toggle').attributes.get('aria-label'),'활동 보기, 확인 필요');
+ data.decisions[0].state='later';await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
+ state.works=[{workId:'unknown',title:'Unknown payment',execution:'active',acceptance:'pending',started:true}];
+ runInContext("shellWorks=[{missionId:'intake',workId:'unknown',title:'Unknown payment',unknown:true,execution:'active',acceptance:'pending'}];renderShell()",app.context);
+ assert.equal(app.node('activity-attention').hidden,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ state.works=[];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
+ data.exceptions=[{id:'run:1',at:1,title:'Unknown schedule',state:'unknown',fact:'No receipt',scheduleId:'s1',runId:'r1',actions:['check']}];await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,false);
+ data.exceptions=[];await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
+});
+
+test('member shortcut hints match admission order and keyboard navigation preserves drafts and send guards',async()=>{
+ const {app}=shellFixture();await settle();
+ assert.match(opening('side-representative'),/aria-keyshortcuts="Meta\+1 Control\+1"/);
+ const quill=find(app,'side-member-quill'),juno=find(app,'side-member-juno');assert.equal(quill.children.find(c=>c.tagName==='KBD')?.attributes.get('data-shortcut'),'⌘2');assert.equal(juno.children.find(c=>c.tagName==='KBD')?.attributes.get('data-shortcut'),'⌘3');
+ app.node('chat-input').value='Private draft';await app.node('chat-input').fire('input');await key(app,{key:'2',metaKey:true});assert.equal(runInContext('chatThread',app.context),'quill');
+ await key(app,{key:'ArrowDown',altKey:true,target:app.node('sidebar')});assert.equal(runInContext('chatThread',app.context),'juno');
+ await key(app,{key:'ArrowUp',altKey:true,target:app.node('chat-input')});assert.equal(runInContext('chatThread',app.context),'juno','text editing retains Option-arrow navigation');
+ runInContext('chatSending=true',app.context);await key(app,{key:'1',ctrlKey:true});assert.equal(runInContext('chatThread',app.context),'juno');
+ runInContext('chatSending=false',app.context);await key(app,{key:'1',ctrlKey:true});assert.equal(runInContext('chatThread',app.context),'');assert.equal(app.node('chat-input').value,'Private draft');
+ await key(app,{key:'9',metaKey:true});assert.equal(runInContext('chatThread',app.context),'');
+});
+
+test('Work lines expose an expand chevron and keep the existing single-tab opening action',async()=>{
+ const {app}=fixture(two);await settle();const line=open(kids(app.node('side-work'))[0]!);
+ assert.ok(line.children.some(c=>c.className==='work-chevron'&&c.attributes.get('aria-hidden')==='true'));
+ await line.fire('click');await settle();await line.fire('click');await settle();assert.equal(kids(app.node('pane-tabs')).length,1);assert.equal(app.node('work-pane').hidden,false);
+});
+
+test('the narrow workspace toggle reopens a pane set aside by page navigation in one click',async()=>{
+ const {app}=shellFixture();await settle();runInContext('window.matchMedia=()=>({matches:true})',app.context);
+ await runInContext("shellOpenWork('assistant-turn:m:'+ '1'.repeat(32))",app.context);await settle();
+ await app.node('rail-results').fire('click');assert.equal(app.node('work-pane').className,'pane away');assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'false');
+ await app.node('header-workspace').fire('click');assert.equal(app.node('work-pane').hidden,false);assert.equal(app.node('work-pane').className,'pane');assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'true');
+});

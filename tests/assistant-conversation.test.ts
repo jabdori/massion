@@ -508,7 +508,7 @@ test('8b: the read gives each turn its start, and each Work its run start, steps
  const view=await s.read(),segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment,work=(await f.intake()).works[0]!;
  assert.equal(view.turns[0]!.at,segment.turns[0]!.ownership!.startedAt);
  assert.equal(view.turns[0]!.work!.startedAt,work.runtimeRun!.ownership!.startedAt);assert.equal(typeof view.turns[0]!.work!.startedAt,'number');
- const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.equal(view.turns[0]!.work!.unknown,false);
+ const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.deepEqual(view.turns[0]!.work!.progress,{make:{done:1,total:1},check:{done:1,total:1}});assert.equal(view.turns[0]!.work!.unknown,false);
 });
 
 test('25b: an interrupted run reads as unknown, also after a plain cancel, until the owner quarantines it (ADR 0002 §8)',async t=>{

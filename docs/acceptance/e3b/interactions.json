@@ -1,0 +1,56 @@
+[
+  {
+    "theme": "dark",
+    "grown": {
+      "background": "rgb(27, 29, 32)",
+      "focusColor": "rgb(131, 137, 147)",
+      "focusWidth": "2px",
+      "height": 200,
+      "max": "200px",
+      "overflow": "auto",
+      "radius": "20px",
+      "rootFocus": "#838993",
+      "scrollHeight": 770,
+      "width": 680
+    },
+    "shrunk": 22,
+    "checks": [
+      "editor grows to 200px then scrolls",
+      "editor shrinks to one line",
+      "token focus ring and radius",
+      "mention arrow/escape/enter",
+      "thread selection preserves source draft",
+      "sidebar filter and Escape",
+      "header menu and focus return",
+      "new reply dot and jump to bottom",
+      "narrow workspace reopens in one click after page navigation"
+    ]
+  },
+  {
+    "theme": "light",
+    "grown": {
+      "background": "rgb(243, 243, 243)",
+      "focusColor": "rgb(93, 93, 93)",
+      "focusWidth": "2px",
+      "height": 200,
+      "max": "200px",
+      "overflow": "auto",
+      "radius": "20px",
+      "rootFocus": "#5d5d5d",
+      "scrollHeight": 770,
+      "width": 680
+    },
+    "shrunk": 22,
+    "checks": [
+      "editor grows to 200px then scrolls",
+      "editor shrinks to one line",
+      "token focus ring and radius",
+      "mention arrow/escape/enter",
+      "thread selection preserves source draft",
+      "sidebar filter and Escape",
+      "header menu and focus return",
+      "new reply dot and jump to bottom",
+      "narrow workspace reopens in one click after page navigation"
+    ]
+  }
+]
