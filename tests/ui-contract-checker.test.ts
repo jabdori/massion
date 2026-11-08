@@ -52,3 +52,25 @@ test('duration placeholders require a duration and can start inside a status lab
  assert.equal((await check('- navigation:\n  - text: 실행 중 4분',expected)).status,0);
  assert.equal((await check('- navigation:\n  - text: 실행 중',expected)).status,1);
 });
+test('ancestor and descendant text aliases cannot satisfy repeated requirements',async()=>{
+ const times=(count:number)=>({...contract,regions:[{region:'rail',elements:Array.from({length:count},()=>({role:'text',text:'{time}',required:true}))}]});
+ for(const [snapshot,count,status] of [
+  ['- navigation:\n  - button "12:30"\n    - text: 12:30',2,1],
+  ['- navigation:\n  - button "12:30"\n    - generic "12:30"\n      - StaticText "12:30"',2,1],
+  ['- navigation:\n  - button "12:30"\n    - text: 12:30\n  - button "12:30"\n    - text: 12:30',2,0],
+  ['- navigation:\n  - button "12:30 13:30"\n    - text: 13:30',2,0],
+  ['- navigation:\n  - button "12:30 13:30"\n    - text: 13:30',3,1],
+  ['- navigation:\n  - button "12:30 12:30"\n    - text: 12:30\n    - text: 12:30',2,0],
+  ['- navigation:\n  - button "12:30 12:30"\n    - text: 12:30\n    - text: 12:30',3,1],
+ ] as const){
+  const result=await check(snapshot,times(count));assert.equal(result.status,status,result.stdout+result.stderr);
+ }
+});
+test('semantic and joined text matches consume the same descendant occurrences',async()=>{
+ const expected={...contract,regions:[{region:'rail',elements:[{role:'heading',text:'첫 번째',required:true},{role:'text',text:'첫 번째',required:true}]}]};
+ const snapshot='- navigation:\n  - heading "첫 번째"\n    - text: 첫\n    - text: 번째';
+ assert.equal((await check(snapshot,expected)).status,1);
+ assert.equal((await check(snapshot+'\n  - text: 첫\n  - text: 번째',expected)).status,0);
+ const repeated={...contract,regions:[{region:'rail',elements:[{role:'text',text:'12:30 12:30',required:true}]}]};
+ assert.equal((await check('- navigation:\n  - heading "12:30"\n    - text: 12:30',repeated)).status,1);
+});

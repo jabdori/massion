@@ -39,6 +39,24 @@ const root = snap.data?.tree ?? snap.tree ?? snap;
 const find = (n, role) => n.role === role ? n : (n.children || []).reduce((a, c) => a || find(c, role), null);
 const web = find(root, 'webarea') || root;
 const has = (n, pred) => pred(n) || (n.children || []).some((c) => has(c, pred));
+// Parent names and descendant text share character identities; siblings keep their own.
+let nextTextId = 0;
+(function identifyText(n) {
+  for (const child of n.children || []) identifyText(child);
+  const name = (n.name || n.value || '').trim(), desc = (n.description || '').trim();
+  const identities = text => {
+    const ids = Array.from({ length: text.length }, () => nextTextId++); let from = 0;
+    const share = child => {
+      const label = (child.name || child.value || '').trim(), start = label ? text.indexOf(label, from) : -1;
+      if (start < 0) { for (const nested of child.children || []) share(nested); return; }
+      for (let i = 0; i < label.length; i++) ids[start + i] = child.nameIds[i];
+      from = start + label.length;
+    };
+    for (const child of n.children || []) share(child);
+    return ids;
+  };
+  n.nameIds = identities(name); n.descIds = desc === name ? n.nameIds : identities(desc);
+})(web);
 const nodes = [];
 let asides = 0, seenMain = false, seenMainNext = false;
 (function walk(n, region, depth) {
@@ -49,7 +67,7 @@ let asides = 0, seenMain = false, seenMainNext = false;
   else if (r === 'main' && (seenMainNext = true)) region = /^설정/.test(n.name || '') ? 'settings' : has(n, (x) => TEXTBOX.has(x.role)) ? 'main' : 'page';
   else if (r === 'alertdialog' || r === 'dialog') region = 'dialog';
   else if (r === 'log' && region === 'main') region = 'log';
-  if (depth > 0) nodes.push({ role: r, name: (n.name || n.value || '').trim(), desc: (n.description || '').trim(), hasTextChildren: (n.children || []).some(c => has(c, x => TEXTY.has(x.role) && !!x.name)), region });
+  if (depth > 0) nodes.push({ role: r, name: (n.name || n.value || '').trim(), desc: (n.description || '').trim(), nameIds: n.nameIds, descIds: n.descIds, hasTextChildren: (n.children || []).some(c => has(c, x => TEXTY.has(x.role) && !!x.name)), region });
   for (const c of n.children || []) walk(c, region, depth + 1);
   if (seenMainNext && r === 'main') seenMain = true;
 })(web, 'header', 0); // nodes outside landmarks = window header band
@@ -96,28 +114,41 @@ function matches(el, n) {
   return (['text', 'chip', 'status'].includes(el.role) || n.role === el.role) && names.some((s) => sub.test(s));
 }
 
+function consume(text, ids, el, from, used) {
+  const rx = new RegExp(body(el.text), 'g'); rx.lastIndex = from;
+  for (let hit; (hit = rx.exec(text));) {
+    if (!hit[0].length) { rx.lastIndex++; continue; }
+    const span = ids.slice(hit.index, rx.lastIndex).filter(id => id !== null);
+    if (new Set(span).size !== span.length || span.some(id => used.has(id))) continue;
+    for (const id of span) used.add(id);
+    return hit;
+  }
+  return null;
+}
+
 // Keep the consumed text position, including the real endpoint of a split label.
-function locate(el, pool, last, offset) {
+function locate(el, pool, last, offset, used) {
   const ctrl = CONTRACT_CONTROLS.has(el.role) || el.role === 'textbox';
   for (let k = 0; k < pool.length; k++) {
     const n = pool[k];
     if (n.i < last || ctrl && n.i === last) continue;
     if (ctrl) { if (matches(el, n)) return { node: n, last: n.i, offset: 0 }; continue; }
     if (matches(el, n)) for (const name of new Set([n.name, n.desc].filter(Boolean))) {
-      const from = n.i === last ? offset : 0, hit = toSub(el.text).exec(name.slice(from));
-      if (hit?.[0].length) return { node: n, last: n.i, offset: from + hit.index + hit[0].length };
+      const from = n.i === last ? offset : 0, hit = consume(name, name === n.name ? n.nameIds : n.descIds, el, from, used);
+      if (hit) return { node: n, last: n.i, offset: hit.index + hit[0].length };
     }
     if (!['text', 'chip', 'status'].includes(el.role) || !TEXTY.has(n.role)) continue;
-    const parts = []; let joined = '';
+    const parts = []; let joined = '', ids = [];
     for (const next of pool.slice(k, k + 4)) {
       if (!TEXTY.has(next.role)) break;
       const base = next.i === last ? offset : 0, name = next.name.slice(base);
       if (!name) continue;
-      if (joined) joined += ' ';
+      if (joined) { joined += ' '; ids.push(null); }
+      ids = ids.concat(next.nameIds.slice(base));
       parts.push({ node: next, start: joined.length, base }); joined += name;
     }
     if (parts.length < 2) continue;
-    const hit = toSub(el.text).exec(joined);
+    const hit = consume(joined, ids, el, 0, used);
     if (!hit?.[0].length) continue;
     const end = hit.index + hit[0].length;
     const part = parts.find((p, index) => end <= (parts[index + 1]?.start ?? joined.length)) || parts.at(-1);
@@ -129,12 +160,12 @@ function locate(el, pool, last, offset) {
 const STATUS = [...new Set(contract.regions.flatMap((r) => r.elements.filter((e) => ['status', 'chip'].includes(e.role) && !e.text.includes('{')).map((e) => e.text)))];
 const fails = [], warns = [], rows = [];
 for (const reg of contract.regions) {
-  const pool = inRegion(reg.region);
+  const pool = inRegion(reg.region), used = new Set();
   let last = -1, offset = 0;
   for (const el of reg.elements) {
     if (!el.required) continue;
     const label = `${reg.region.padEnd(12)} ${el.role.padEnd(8)} ${JSON.stringify(el.text)}`;
-    const after = locate(el, pool, last, offset);
+    const after = locate(el, pool, last, offset, used);
     if (after) { last = after.last; offset = after.offset; rows.push(`  ok    ${label} -> ${after.node.role} ${JSON.stringify(after.node.name)}`); continue; }
     const before = pool.find((n) => matches(el, n));
     if (before) { fails.push(`order  ${label} (found earlier: ${before.role} ${JSON.stringify(before.name)})`); continue; }
