@@ -772,7 +772,7 @@ async function readEventPage() {
       reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
-    requireReconnect();
+    if(busy||loading)feedRecoveryPending=true;requireReconnect();
     $('event-state').textContent = 'Disconnected'; $('event-state').className = 'tag warn';
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
   } finally { polling = false; resumeFeedRecovery(); }
@@ -1659,7 +1659,7 @@ async function syncFeed(){
  try{do{feedAgain=false;if(feedReset){feedReset=false;protocol.invalidate();requireReconnect();await refreshReadState(connectionEpoch);feedTarget=cursor;}
    const before=cursor;await pollEvents();
    if(!reconnectRequired&&cursor<feedTarget){if(cursor===before)feedReset=true;feedAgain=true;}
- }while(feedAgain&&!feedSuspended);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired&&!busy&&!loading)retryFeed();}
+ }while(feedAgain&&!feedSuspended);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired){if(busy||loading)feedRecoveryPending=true;else retryFeed();}}
 }
 async function startFeed(){
  if(feedSuspended||feedState!=='stopped')return;

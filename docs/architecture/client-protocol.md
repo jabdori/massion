@@ -186,3 +186,18 @@ message and unchanged unsent draft; no JavaScript errors. Evidence:
 `scratchpad/ui/e2-review-pageshow.png` under the owner-provided scratchpad root.
 Actual Back navigation in this local Chrome reloaded the page, so this is event-
 lifecycle evidence, not a claim that Chrome admitted the page to bfcache.
+
+The subsequent GitHub review found two additional interleavings, reproduced
+before changing code: a Send awaiting a stale chat read could escape before the
+replacement member read, and a failed catch-up during a held read/write could
+lose its deferred recovery. Stale chat recovery now stays inside the awaited
+loop; a failed required read refuses Send while retaining the draft. Failed feed
+reads remember deferred recovery while busy/loading, and resume after settlement.
+Four regressions cover successful/unavailable member reads and held reads/writes.
+Delayed-receipt fixtures now keep reads unavailable until the test explicitly
+releases them, rather than assuming recovery makes exactly one read. Their
+original pending-marker, later-edit and no-replay assertions remain intact.
+Final follow-up candidate: 1,418 passed, 340 opt-in skipped and the same known
+macOS locale failure (1,759 total); typecheck and syntax/copy checks pass. Headless
+B2/B11 contract runs completed with zero infrastructure errors and retained the
+existing report-only prototype differences.

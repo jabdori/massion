@@ -113,3 +113,16 @@ test('a subscription created while pagehide races its handshake is closed instea
  await app.windowEvent('pageshow');await settle();assert.equal(app.streams.length,2);await app.windowEvent('pagehide');runInContext('releaseSubscribe();protocol.subscribe=originalSubscribe',app.context);await settle();assert.equal(app.streams[1].closed,true);
  await app.windowEvent('pageshow');await settle();assert.equal(app.streams.length,3);assert.equal(app.streams[2].closed,false);
 });
+
+for(const blocked of ['loading','busy'])test('failed catch-up while '+blocked+' resumes after settlement without another hint',async()=>{
+ let fail=false,revision=1,hold=false,release!:(r:any)=>void;
+ const mission={id:'mission',version:1,purpose:'Read recovery',scope:'fixture',constraints:[],criteria:{version:1,description:'Read',oracle:'manual-review/v1'},works:[],memories:[],growth:[],relations:[]};
+ const app=harness(path=>{
+  if(path.startsWith('/events')){if(fail)return reply({},503);const after=Number(new URL(path,'http://fixture').searchParams.get('after'));return reply({feedId:'feed-a',cursor:revision,events:after<revision?[{cursor:revision,aggregateId:'mission',revision,commandId:'write-'+revision,events:[]}]:[]});}
+  if(path.startsWith('/read-state'))return hold?new Promise(resolve=>release=resolve):reply({feedId:'feed-a',cursor:revision,snapshot:{revision,value:mission}});return reply({});
+ },{},undefined,{fragment:'#mission=mission'});await settle();
+ hold=blocked==='loading';const pending=hold?app.submit('load-form'):Promise.resolve();if(blocked==='busy')runInContext('busy=true',app.context);await settle();fail=true;revision=2;
+ await app.push({reason:'revision',feedId:'feed-a',cursor:2});assert.equal(runInContext('reconnectRequired',app.context),true);
+ fail=false;hold=false;if(blocked==='loading')release(reply({feedId:'feed-a',cursor:1,snapshot:{revision:1,value:mission}}));else runInContext('busy=false;controls()',app.context);
+ await pending;await settle();assert.equal(runInContext('reconnectRequired',app.context),false);assert.equal(runInContext('cursor',app.context),2);assert.equal(runInContext('snapshot.revision',app.context),2);
+});
