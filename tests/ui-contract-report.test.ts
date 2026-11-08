@@ -31,3 +31,11 @@ test('only structured missing-control failures are setup gaps; IPC and process f
  assert.equal(isInteractionGap({code:1,stdout:'not JSON'}),false);
  assert.equal(isInteractionGap({code:'ETIMEDOUT',stdout:JSON.stringify({success:false,error:'Element not found: #missing'})}),false);
 });
+test('browser interactions wait for initial synchronization and release of busy/loading guards',async()=>{
+ const {workbenchReady}=await import('../scripts/ui-contracts/report.ts');
+ const {runInNewContext}=await import('node:vm');
+ const ready={chatView:{},busy:false,loading:false,reconnectRequired:false};
+ assert.equal(runInNewContext(workbenchReady,ready),true);
+ for(const flag of ['busy','loading','reconnectRequired'])assert.equal(runInNewContext(workbenchReady,{...ready,[flag]:true}),false,flag);
+ assert.equal(runInNewContext(workbenchReady,{...ready,chatView:null}),false);
+});

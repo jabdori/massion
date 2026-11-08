@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {startFixtureHost,loadFixture} from './fixture-host.ts';
-import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap} from './report.ts';
+import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady} from './report.ts';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../',import.meta.url));
 const specs=join(root,'docs/product/screens'),out=resolve(root,process.env.UI_CONTRACTS_OUTPUT||'.runtime/ui-contracts');
@@ -36,10 +36,12 @@ for(const screen of (requested.length?requested:screens)){
   await browser('open','--init-script',clock);
   await browser('set','viewport',String(contract.viewport.width),String(contract.viewport.height));
   await browser('open',host.url);
-  await browser('wait','--fn',"typeof chatView !== 'undefined' && chatView !== null");
+  await browser('wait','--fn',workbenchReady);
   await browser('wait',fixture.readySelector);
+  await browser('eval','-b',Buffer.from('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))))').toString('base64'));
   for(const step of fixture.steps){
    try{
+    await browser('wait','--fn',workbenchReady);
     if(step.action==='fill')await browser('fill',step.selector,step.value);
     else await browser('click',step.selector);
     if(step.readySelector)await browser('wait',step.readySelector);

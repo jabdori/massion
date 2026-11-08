@@ -33,3 +33,5 @@ export function isInteractionGap(error:unknown):boolean{
  if(!error||typeof error!=='object'||!('code' in error)||error.code!==1||!('stdout' in error)||typeof error.stdout!=='string')return false;
  try{const reply=JSON.parse(error.stdout);return reply.success===false&&typeof reply.error==='string'&&/^(Element not found:|Timeout waiting for selector[: ]|Element is not visible:|Wait timed out after \d+ms$)/.test(reply.error);}catch{return false;}
 }
+// Work cards ignore clicks while busy/loading, even after the conversation has rendered.
+export const workbenchReady="typeof chatView !== 'undefined' && chatView !== null && !busy && !loading && !reconnectRequired";
