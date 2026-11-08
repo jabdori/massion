@@ -1,0 +1,54 @@
+import {Application} from './application.ts';
+import {hash} from './domain.ts';
+import type {Mission,Work} from './domain.ts';
+import type {Store} from './storage.ts';
+import {withAdmissionFeed} from './storage.ts';
+import {DISCRIMINATOR_ACTOR,boundedModeration,buildQuestion,failedModeration,moderationFallback,questionId,requireModeration,shadowProposal,validateAnswer,validDiscriminatorModel,discriminatorPolicy,workDiscriminatorPolicy} from './discriminator.ts';
+import type {ModerationCommand,ModerationEntry,ModerationInput,ModerationResult} from './discriminator.ts';
+import type {DiscriminatorAdapter,DiscriminatorReply} from './discriminator-adapters.ts';
+export type DiscriminatorResolution={adapter:DiscriminatorAdapter;release:()=>void}|null;
+export type DiscriminatorOutcome={status:'recorded';record:ModerationEntry&{result:ModerationResult}}|{status:'fixed-rules';reason:string};
+/** Trusted host integration only. Pass the drain-aware ownerStore; there is no public moderation route. */
+export class DiscriminatorService {
+ readonly #store:Store<Mission>;readonly #app:Application;readonly #resolve:(groupId:string)=>Promise<DiscriminatorResolution>;readonly #clock:()=>number;readonly #queues=new Map<string,Promise<unknown>>();readonly #uncertain=new Set<string>();
+ constructor(store:Store<Mission>,resolve:(groupId:string)=>Promise<DiscriminatorResolution>,clock=Date.now){this.#store=store;this.#app=new Application(store,[{id:DISCRIMINATOR_ACTOR,roles:['representative']}]);this.#resolve=resolve;this.#clock=clock;}
+ async replay(missionId:string,input:ModerationInput):Promise<DiscriminatorOutcome>{buildQuestion(input);const snapshot=await this.#store.load(missionId),entry=snapshot?.value.works.find(w=>w.id===input.workId)?.moderation?.find(e=>e.questionId===questionId(input));if(entry){requireModeration(entry.inputHash===hash(input),'input changed for question identity');if(entry.result)return {status:'recorded',record:{...structuredClone(entry),result:structuredClone(entry.result)}};}return {status:'fixed-rules',reason:'unrecorded'};}
+ ask(missionId:string,groupId:string,input:ModerationInput):Promise<DiscriminatorOutcome>{buildQuestion(input);input=structuredClone(input);const key=JSON.stringify([missionId,input.workId]),previous=this.#queues.get(key)??Promise.resolve(),next=previous.catch(()=>{}).then(async()=>{const {feedId}=await this.#store.readState();return withAdmissionFeed(feedId,()=>this.#ask(missionId,groupId,input,feedId));});this.#queues.set(key,next);void next.finally(()=>{if(this.#queues.get(key)===next)this.#queues.delete(key);}).catch(()=>{});return next;}
+ async #commit(missionId:string,command:ModerationCommand,feedId:string):Promise<boolean>{command={...command,hostVersion:2};try{for(let attempt=0;attempt<4;attempt++){const state=await this.#store.readState(missionId);if(state.feedId!==feedId)return false;const snapshot=state.snapshot;requireModeration(snapshot,'Mission required');const entry=snapshot.value.works.find(w=>w.id===command.workId)?.moderation?.find(e=>e.questionId===(command.type==='reserve-moderation'?command.entry.questionId:command.questionId));if(command.type==='record-moderation'&&entry?.result||command.type==='reserve-moderation'&&entry)return true;
+ const result=await this.#app.dispatch({missionId,expectedRevision:snapshot.revision,actorId:DISCRIMINATOR_ACTOR,commandId:'moderation:'+hash([missionId,command.type,command.type==='reserve-moderation'?command.entry.questionId:command.questionId,snapshot.revision]),command});if(result.status==='committed'||result.status==='replayed')return true;}return false;}catch{return false;}}
+ async #terminal(missionId:string,work:Work,entry:ModerationEntry,decision:'timeout'|'invalid',feedId:string):Promise<boolean>{
+  const hostTime=Math.max(entry.startedAt,this.#clock()),policy=discriminatorPolicy(entry.thresholdVersion),result:ModerationResult={rawOutput:null,output:null,model:entry.model.model,usage:null,latencyMs:hostTime-entry.startedAt,hostTime,decision,applied:false,disabled:(work.moderation??[]).filter(e=>failedModeration(e.result)).length+1>=policy.maxFailures};
+  if(!await this.#commit(missionId,{type:'record-moderation',workId:work.id,questionId:entry.questionId,result},feedId))return false;
+  this.#uncertain.delete(JSON.stringify([missionId,entry.questionId]));return true;
+ }
+ async #ask(missionId:string,groupId:string,input:ModerationInput,feedId:string):Promise<DiscriminatorOutcome>{
+ const prior=await this.replay(missionId,input),uncertainKey=JSON.stringify([missionId,questionId(input)]);if(prior.status==='recorded'){this.#uncertain.delete(uncertainKey);return prior;}
+ let snapshot=await this.#store.load(missionId),work=snapshot?.value.works.find(w=>w.id===input.workId);requireModeration(work,'Work required');
+ const pending=work.moderation?.find(e=>e.result===null);
+ if(pending){const expired=this.#clock()-pending.startedAt>=discriminatorPolicy(pending.thresholdVersion).timeoutMs,closed=moderationFallback(work,this.#clock())==='closed';
+  if(expired||closed||this.#uncertain.has(JSON.stringify([missionId,pending.questionId]))){
+   if(!await this.#terminal(missionId,work,pending,expired?'timeout':'invalid',feedId))return {status:'fixed-rules',reason:'unconfirmed'};
+   if(pending.questionId===questionId(input))return this.replay(missionId,input);
+   const current=await this.#store.readState(missionId);if(current.feedId!==feedId)return {status:'fixed-rules',reason:'unconfirmed'};snapshot=current.snapshot;work=snapshot?.value.works.find(w=>w.id===input.workId);requireModeration(work,'Work required');
+  }else if(pending.questionId!==questionId(input))return {status:'fixed-rules',reason:'pending'};
+ }
+ if(this.#uncertain.has(uncertainKey))return {status:'fixed-rules',reason:'unconfirmed'};
+ let entry=work.moderation?.find(e=>e.questionId===questionId(input));const fallback=moderationFallback(work,this.#clock());if(fallback&&!(entry&&!entry.result&&['call-cap','budget'].includes(fallback)))return {status:'fixed-rules',reason:fallback};
+ const resolved=await this.#resolve(groupId);
+ if(!resolved){if(entry){if(!await this.#terminal(missionId,work,entry,'invalid',feedId))return {status:'fixed-rules',reason:'unconfirmed'};return this.replay(missionId,input);}return {status:'fixed-rules',reason:'unavailable'};}
+ try {const adapter=resolved.adapter;
+ if(entry&&hash(entry.model)!==hash(adapter.pin)){if(!await this.#terminal(missionId,work,entry,'invalid',feedId))return {status:'fixed-rules',reason:'unconfirmed'};return this.replay(missionId,input);}
+ if(!entry){entry={questionId:questionId(input),input,inputHash:hash(input),model:structuredClone(adapter.pin),thresholdVersion:workDiscriminatorPolicy(work).version,startedAt:this.#clock(),result:null};if(!await this.#commit(missionId,{type:'reserve-moderation',workId:input.workId,entry},feedId)){this.#uncertain.add(uncertainKey);return {status:'fixed-rules',reason:'unconfirmed'};}}
+ // Re-read after the settings await and reservation: stop, deadline, a competing result and restored state win.
+ const current=await this.#store.readState(missionId);if(current.feedId!==feedId)return {status:'fixed-rules',reason:'unconfirmed'};snapshot=current.snapshot;work=snapshot?.value.works.find(w=>w.id===input.workId);requireModeration(work,'Work required');const stored=work.moderation?.find(e=>e.questionId===entry!.questionId);requireModeration(stored&&stored.inputHash===hash(input),'reserved input changed');if(stored.result)return this.replay(missionId,input);
+ const closed=moderationFallback(work,this.#clock()),expired=this.#clock()-stored.startedAt>=discriminatorPolicy(stored.thresholdVersion).timeoutMs;if(expired||closed==='closed'||closed==='failures'||hash(stored.model)!==hash(adapter.pin)){if(!await this.#terminal(missionId,work,stored,expired?'timeout':'invalid',feedId))return {status:'fixed-rules',reason:'unconfirmed'};return this.replay(missionId,input);}
+ const policy=discriminatorPolicy(stored.thresholdVersion),controller=new AbortController(),started=this.#clock();let timer:ReturnType<typeof setTimeout>|undefined,timedOut=false,reply:DiscriminatorReply|undefined;
+ let result:ModerationResult={rawOutput:null,output:null,model:adapter.pin.model,usage:null,latencyMs:0,hostTime:started,decision:'invalid',applied:false,disabled:false};
+ try {reply=await Promise.race([adapter.invoke(buildQuestion(input),structuredClone(input),controller.signal),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{timedOut=true;controller.abort();reject(Error('timeout'));},Math.max(1,policy.timeoutMs-(started-stored.startedAt)));})]);boundedModeration(reply.rawOutput);result.rawOutput=structuredClone(reply.rawOutput);requireModeration(validDiscriminatorModel(reply.model),'response model');result.model=reply.model;
+ requireModeration(reply.usage&&[reply.usage.inputTokens,reply.usage.outputTokens].every(n=>Number.isSafeInteger(n)&&n>=0),'response usage required');result.usage={inputTokens:reply.usage.inputTokens,outputTokens:reply.usage.outputTokens};requireModeration(reply.usage.outputTokens<=policy.outputTokenReserve,'output usage exceeds reservation');validateAnswer(buildQuestion(input),reply.output,stored.thresholdVersion);result.output=structuredClone(reply.output);result.decision=shadowProposal(input,reply.output,stored.thresholdVersion)?'shadow':'below-threshold';
+ }catch {result.decision=timedOut?'timeout':'invalid';}finally {clearTimeout(timer);controller.abort();}
+ result.hostTime=Math.max(stored.startedAt,this.#clock());result.latencyMs=Math.max(0,result.hostTime-started);result.disabled=(work.moderation??[]).filter(e=>failedModeration(e.result)).length+Number(failedModeration(result))>=policy.maxFailures;
+ if(!await this.#commit(missionId,{type:'record-moderation',workId:input.workId,questionId:stored.questionId,result},feedId)){this.#uncertain.add(JSON.stringify([missionId,questionId(input)]));return {status:'fixed-rules',reason:'unconfirmed'};}return this.replay(missionId,input);
+ }finally {resolved.release();}
+ }
+}

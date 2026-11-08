@@ -36,3 +36,8 @@ test('identical command committed between operation lookup and snapshot read rep
  a.store.lookupOperation=async identity=>{const result=await lookup(identity);if(first){first=false;entered();await held;}return result;};
  const lagging=a.dispatch(admit);await started;assert.equal((await a.dispatch(admit)).status,'committed');const before=(a.store as InMemoryStore<Mission>).inspect();release();const result=await lagging;assert.equal(result.status,'replayed');assert.equal(result.revision,2);assert.deepEqual((a.store as InMemoryStore<Mission>).inspect(),before);
 });
+
+test('an idempotency digest conflict reads back the stored command result',async()=>{
+ const a=await app(),commit=a.store.commit.bind(a.store);a.store.commit=async command=>{const result=await commit(command);return {status:'conflict',reason:'idempotency',revision:result.revision};};
+ const result=await a.dispatch(admit);assert.equal(result.status,'replayed');assert.equal(result.revision,2);assert.equal((a.store as InMemoryStore<Mission>).inspect().length,2);
+});
