@@ -1,3 +1,4 @@
+import {hash} from '../src/domain.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile,symlink} from 'node:fs/promises';
@@ -53,4 +54,18 @@ test('managed host UI displays revision/live gate, keeps declared model selectio
  const app=harness(async path=>path==='/connections'?reply(manager.list()):path==='/providers'?reply({providers:[],selection:{status:'unavailable'},runtime:manager.configuration()}):path==='/health'?reply({status:'ready'}):reply({cursor:0,events:[]}));
  const end=Date.now()+5000;while(!app.node('connection-status').textContent.includes('owner-v1')){assert.ok(Date.now()<end);await new Promise(r=>setTimeout(r,5));}
  assert.match(app.node('connection-status').textContent,/Live model calls disabled/);assert.equal(app.node('connection-fields').disabled,true);assert.equal(app.all().find(n=>n.textContent==='Explore models')!.disabled,false);const count=app.calls.length;await app.submit('connection-form');assert.equal(app.calls.length,count);
+});
+
+test('compatible discriminator credentials bind only the selected profile and exact systemone endpoint',async t=>{
+ const directory=await root(t),config=parseHostManifest(manifest()),host=compileHostBindings(config,()=> 'fixture-only-value',()=>true),connection=host.bindings.connections[0]!.input,profileId='profile:'+hash({connectionId:connection.id,configHash:hash(connection),model:'exec'}).slice(0,32),signal=new AbortController().signal;
+ const request={secretRef:connection.secretRef!,profileId,endpoint:connection.baseUrl+'systemone',signal};
+ assert.equal(await host.resolveCredential(request),'fixture-only-value');
+ for(const change of [{profileId:'unlisted'},{endpoint:'https://other.example/v1/systemone'},{endpoint:connection.baseUrl+'systemone/extra'}])await assert.rejects(host.resolveCredential({...request,...change}),/binding/);
+ let calls=0;const manager=createHostConnections(new InMemoryStore<Mission>(),new TextArtifactStore(directory),{manifest:config,allowLiveExecution:true},{readEnvironment:()=> 'fixture-only-value',transport:async(url,init)=>{calls++;assert.equal(url,request.endpoint);assert.ok(new Headers(init.headers).has('authorization'));return new Response(JSON.stringify({model:'exec',answers:{moderation:{type:'noul',noul:0.9}},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}});
+ manager.saveModelGroup({id:'d',name:'Discriminator',description:'Moderates between turns',role:'discriminator',profileIds:[profileId],expectedConfigHash:manager.list().configHash});const resolved=await manager.resolveDiscriminator('d');assert.ok(resolved);const {buildQuestion}=await import('../src/discriminator.ts');const i={workId:'w',turnOrdinal:1,moment:2 as const,questionVersion:1 as const,language:'en' as const,boardRevision:1,messageOrdinals:[],features:{candidates:[],openIssues:0,settledTasks:0,newEvidence:0,artifactChanged:false,hostChallengePassed:false,hostFlag:false,hostStall:false,exceptionCard:false},quotes:[]};await resolved.adapter.invoke(buildQuestion(i),i,signal);resolved.release();assert.equal(calls,1);assert.doesNotMatch(JSON.stringify(manager.list()),/fixture-only-value/);manager.removeModelGroup({id:'d',expectedConfigHash:manager.list().configHash});await assert.rejects(resolved.adapter.invoke(buildQuestion(i),i,signal),/binding/);assert.equal(calls,1);
+});
+
+
+test('review 8: System One credentials require a canonical v1 path and current discriminator membership',async()=>{
+ for(const baseUrl of ['https://owner.example/api/','https://owner.example/v1/']){const config=manifest();config.connections[0]!.baseUrl=baseUrl;let reads=0,member=false;const host=compileHostBindings(parseHostManifest(config),()=>{reads++;return 'fixture-only-value';},()=>member),connection=host.bindings.connections[0]!.input,profileId='profile:'+hash({connectionId:connection.id,configHash:hash(connection),model:'exec'}).slice(0,32),request={secretRef:connection.secretRef!,profileId,endpoint:baseUrl+'systemone',signal:new AbortController().signal};await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,0);member=true;if(baseUrl.endsWith('/v1/')){assert.equal(await host.resolveCredential(request),'fixture-only-value');assert.equal(reads,1);member=false;await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,1);}else {await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,0);}}
 });

@@ -78,7 +78,7 @@ export async function loadHostStartup(args:readonly string[]):Promise<HostStartu
 }
 
 /** Compile immutable identity/destination bindings; construction never calls the supplied accessor. */
-export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined) {
+export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false) {
  const snapshot=parseHostManifest(manifest),bindingHash=hash(snapshot);
  const entries:HostConnectionBindings['connections']=[];
  const permitted=new Map<string,string>();
@@ -89,11 +89,11 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
   entries.push({input,models:[...entry.models]});
   if(!entry.credential)continue;
   permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),entry.credential.environment);
-  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),entry.credential.environment);}
+  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),entry.credential.environment);if(input.providerType==='compatible'&&input.baseUrl.endsWith('/v1/'))permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),entry.credential.environment);}
  }
  const resolveCredential:CredentialResolver=async request=>{
   request.signal.throwIfAborted();const source=permitted.get(key(request.secretRef,request.profileId,request.endpoint));
-  if(!source)throw new Error('Host credential binding unavailable');
+  if(!source||request.endpoint.endsWith('/systemone')&&!isDiscriminatorProfile(request.profileId))throw new Error('Host credential binding unavailable');
   let secret:unknown;try{secret=readEnvironment(source);}catch{throw new Error('Host credential unavailable');}
   request.signal.throwIfAborted();if(typeof secret!=='string'||!secret||secret.length>8192||/[^\x21-\x7e]/.test(secret))throw new Error('Host credential unavailable');return secret;
  };
@@ -104,6 +104,6 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
 export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore}) {
  if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
- const host=compileHostBindings(manifest,options.readEnvironment);
- return new ConnectionWorkbench(store,artifacts,{transport:options.transport,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});
+ let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true);
+ manager=new ConnectionWorkbench(store,artifacts,{transport:options.transport,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }

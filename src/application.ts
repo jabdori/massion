@@ -30,14 +30,19 @@ export class Application {
     if(prior.status!=='unknown')return prior;
     const snapshot=await this.store.load(envelope.missionId);
     if(!snapshot)throw new DomainError('Unknown Mission');
+    // A duplicate may have committed while loading; replay before running the reducer.
+    const concurrent=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});
+    if(concurrent.status!=='unknown')return concurrent;
     if(snapshot.revision!==envelope.expectedRevision) {
-      // A duplicate may have committed after the initial operation lookup.
-      const concurrent=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});
-      if(concurrent.status!=='unknown')return concurrent;
       return {status:'conflict',revision:snapshot.revision,reason:'revision'};
     }
     const {value,events}=apply(snapshot.value,envelope.command,actor,endsWork(envelope.command.type)?{observedAt:this.clock(),workEndVersion:2}:requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock()}:undefined);
     const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
-    return this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
+    const result=await this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
+    if(result.status==='conflict'&&result.reason==='idempotency'){
+      const stored=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});
+      if(stored.status!=='unknown')return stored;
+    }
+    return result;
   }
 }

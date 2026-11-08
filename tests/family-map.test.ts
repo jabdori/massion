@@ -137,6 +137,8 @@ test('a same-family check is refused while the model groups hold an available di
  const written=m.preflight(snapshot,'fresh',snapshot.revision,choice);assert.ok(!written.diagnostics.some(d=>d.code==='verifier_family_available'),JSON.stringify(written.diagnostics));
  const refused=await product.preflight('mission','fresh',(await f.current()).revision,choice);assert.equal(refused!.ready,false);assert.equal(refused!.diagnostics.at(-1)!.code,'verifier_family_available');
  const run=await product.run('mission','fresh','run-refused',(await f.current()).revision,choice) as any;assert.notEqual(run.status,'settled');assert.deepEqual(f.calls,[]);
+ await m.save(()=>m.saveModelGroup({id:'g',name:'Other family',description:'Typed moderation only',role:'discriminator',profileIds:[claude],expectedConfigHash:m.list().configHash}));
+ assert.equal((await product.preflight('mission','fresh',(await f.current()).revision))!.ready,true,'a discriminator never counts as an available checking seat');
  await m.save(()=>m.removeModelGroup({id:'g',expectedConfigHash:m.list().configHash}));
  assert.equal((await product.preflight('mission','fresh',(await f.current()).revision))!.ready,true);
 });
@@ -148,4 +150,15 @@ test('the default group keeps the usable pin when the Representative still holds
  await f.route(m,'openai/gpt-test','anthropic/claude-test');assert.equal(m.list().runtime.defaultRoutes[0]!.status,'active');
  const models=m.list().modelGroups[0]!.models as any[];assert.deepEqual(models.filter(x=>x.model==='anthropic/claude-test').map(x=>x.status),['available']);
  const checked=m.chooseGroupModel('default',{outputTokenCap:4,producers:[{provider:'openrouter',model:'openai/gpt-test'}]}) as any;assert.equal(checked.model,'anthropic/claude-test');assert.equal(checked.relation,'different-family');assert.deepEqual(f.calls,[]);
+});
+
+test('discriminator role persists, resolves only compatible typed models, and holds settings until release',async t=>{
+ const f=await setup(t),m=f.host();await m.restoreSettings();const profile=f.profile(m,'executor');
+ await m.save(()=>m.saveModelGroup({id:'moderation',name:'Discriminator',description:'Moderates between turns',role:'discriminator',profileIds:[profile],expectedConfigHash:m.list().configHash}));
+ assert.equal(m.list().modelGroups[1]!.role,'discriminator');const restored=f.host();await restored.restoreSettings();assert.equal(restored.list().modelGroups[1]!.role,'discriminator');
+ const resolved=await restored.resolveDiscriminator('moderation');assert.ok(resolved);assert.equal(resolved.adapter.pin.groupId,'moderation');assert.equal(resolved.adapter.pin.profileId,profile);
+ await assert.rejects(restored.save(()=>restored.removeModelGroup({id:'moderation',expectedConfigHash:restored.list().configHash})),/pins/);resolved.release();
+ assert.equal(await restored.resolveDiscriminator('default'),null);assert.equal((await restored.resolveMember('moderation')).status,'unresolved');
+ await assert.rejects(restored.save(()=>restored.saveModelGroup({id:'bad',name:'Bad',description:'Bad',role:'verifier',profileIds:[profile],expectedConfigHash:restored.list().configHash})),/role/);
+ restored.beginDrain();assert.equal(await restored.resolveDiscriminator('moderation'),null);assert.deepEqual(f.calls,[]);
 });

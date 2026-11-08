@@ -1,3 +1,4 @@
+import {applyModeration,DISCRIMINATOR_ACTOR} from './discriminator.ts';
 import {declareMemoryExpiry,requireUnexpiredNewWork,requiresMemoryTime} from './memory-expiry.ts';
 import {declareMemoryConflict,requireUnconflictedNewWork} from './memory-conflicts.ts';
 import {clarificationInput,questionText,requireAnswered} from './work-clarification.ts';
@@ -44,6 +45,7 @@ export interface RuntimeRecovery {runId:string;actorId:string;reason:string;pend
 export interface WorkPrerequisite {workId:string;criteriaHash:string;inputHash:string;actorId:string;reason:string}
 export interface PrerequisiteRecord {workId:string;recordId:string;checksum:string;criteriaVersion:number;evidenceClass:'fixture'|'real-provider';artifact:Pick<Artifact,'id'|'version'|'sha256'|'kind'>}
 export interface Work {
+  moderation?:import('./discriminator.ts').ModerationEntry[];
   assistantSource?:AssistantSource;
   questions?:WorkQuestion[];
   conversationSource?:ConversationSource;
@@ -67,6 +69,7 @@ export interface ConversationMessage {id:string;ordinal:number;actorId:string;ro
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
 export interface Mission { memoryExpiries?:import('./memory-expiry.ts').MemoryExpiry[]; memoryTimeWatermark?:number; memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | import('./discriminator.ts').ModerationCommand
   | {type:'declare-memory-expiry';expiryId:string;memory:import('./memory-conflicts.ts').MemoryConflictReference;deadline:string;reason:string}
   | {type:'declare-memory-conflict';conflictId:string;first:import('./memory-conflicts.ts').MemoryConflictReference;second:import('./memory-conflicts.ts').MemoryConflictReference;reason:string}
   | {type:'ask-work-question'|'answer-work-question';workId:string;questionId:string;text:string}
@@ -207,6 +210,7 @@ export function freshSourceWork(w:Work):boolean {
 /** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
 export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2}): { value: Mission; events: unknown[] } {
+  if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
   text(actor.id, 'actor');ensure(requiresMemoryTime(current,command.type)||endsWork(command.type)||time===undefined,'Unexpected expiry clock context');
   if(time&&Object.hasOwn(time,'workEndVersion'))ensure(time.workEndVersion===2&&endsWork(command.type),'Invalid Work end version');
   const state = structuredClone(current);
@@ -220,6 +224,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
   if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
   if(work&&['assign','delegate','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
   switch (command.type) {
+    case 'reserve-moderation': case 'record-moderation': {applyModeration(needWork(),command,actor);break;}
     case 'ask-work-question': case 'answer-work-question': {
       role(actor,'owner');const w=needWork();ensure(freshSourceWork(w),'Clarification requires fresh unstarted Work');ensure(Object.keys(command).length===4&&Object.keys(command).every(k=>['type','workId','questionId','text'].includes(k)),'Exact clarification fields required');
       ensure(typeof command.questionId==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(command.questionId),'Invalid question identifier');questionText(command.text);clarificationInput(w);

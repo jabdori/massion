@@ -443,3 +443,8 @@ test('an unobserved confirmation outcome stays unknown and repeated confirmation
  const chat=f.chatFor(quill,ownerStore);f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');await confirmLast(chat);
  assert.equal((await chat.read()).turns[0]!.steer?.status,'unknown');await confirmLast(chat);assert.equal(writes,1);assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
 });
+
+test('member Work cannot run a group reserved for the discriminator after integration',async t=>{
+ const f=await setup(t);await f.m.save(()=>f.m.saveModelGroup({id:'decision',name:'Decision',description:'Typed decisions',role:'discriminator',profileIds:[f.profile('google/gemini-a'),f.profile('anthropic/claude-b')],expectedConfigHash:f.m.list().configHash}));await f.grant('decision-grant','google/gemini-a','anthropic/claude-b');
+ const resolved=f.m.resolveGroupWork('decision',await f.intake(),{provider:'openrouter',model:'openai/gpt-rep'});assert.equal(resolved.status,'unresolved');if(resolved.status==='unresolved')assert.equal(resolved.diagnostics[0]!.code,'model_group_role');
+});

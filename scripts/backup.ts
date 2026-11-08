@@ -3,7 +3,7 @@ import { isUtf8 } from 'node:buffer';
 import { constants } from 'node:fs';
 import { open, realpath, lstat } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
-import { createHttpRpcTransport, initializeSurrealSchema, SurrealStore, journalRestoreRpcRequestBytes } from '../src/storage.ts';
+import { createHttpRpcTransport, initializeSurrealSchema, assertStorageVersion, SurrealStore, journalRestoreRpcRequestBytes } from '../src/storage.ts';
 import type { Mission } from '../src/domain.ts';
 import { TextArtifactStore } from '../src/text-artifacts.ts';
 import { BACKUP_LIMITS, exportPortableBackup, restorePortableBackup } from '../src/portable-backup.ts';
@@ -28,6 +28,7 @@ if (await realpath(parent) !== parent || !(await lstat(parent)).isDirectory()) t
 const transport = createHttpRpcTransport({endpoint,namespace,database});
 const store = new SurrealStore<Mission>(transport);
 if (mode === 'export') {
+  await assertStorageVersion(transport);
   const serialized = await exportPortableBackup(store,new TextArtifactStore(artifactRoot));
   const file = await open(bundlePath,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
   try { await file.writeFile(serialized); await file.sync(); } finally { await file.close(); }
