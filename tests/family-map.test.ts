@@ -22,6 +22,7 @@ async function setup(t:test.TestContext,providerType:'compatible'|'openrouter'='
 }
 
 test('the host family map: first-party providers, OpenRouter vendors, and unknown counts as the same family',()=>{
+ assert.equal(modelFamily('codex-cli','zai/glm-5.3'),'zhipu');assert.equal(modelFamily('openrouter','zai/glm-5.3'),'zhipu');assert.equal(modelFamily('compatible','zai/glm-5.3'),null);assert.equal(modelFamily('codex-cli','unknown/model'),null);
  assert.equal(modelFamily('openai','gpt-test'),'openai');assert.equal(modelFamily('codex-cli','gpt-5'),'openai');assert.equal(modelFamily('anthropic','claude-test'),'anthropic');assert.equal(modelFamily('claude-code-cli','sonnet'),'anthropic');
  assert.equal(modelFamily('gemini','gemini-test'),'google');assert.equal(modelFamily('zai','glm-test'),'zhipu');assert.equal(modelFamily('openrouter','anthropic/claude-test'),'anthropic');assert.equal(modelFamily('openrouter','z-ai/glm-test'),'zhipu');
  for(const [provider,model] of [['openrouter','unknown/model'],['openrouter','claude-test'],['compatible','gpt-test'],['fixture','x'],['constructor','x'],['openrouter','constructor/x']] as const)assert.equal(modelFamily(provider,model),null,provider+' '+model);
