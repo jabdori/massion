@@ -85,6 +85,16 @@ function settingsConnectionsView(){
   const head=element('strong',g.name);if(users.length)head.append(element('span',' '+users.join(', ')));text.append(head);if(g.id!=='default'&&g.description)text.append(element('span',g.description));
   const chips=element('span',undefined,'set-chips');for(const m of g.models){const chip=element('span',m.model,'set-chip');chip.append(element('span',settingsFamily(m.family)+(m.status==='available'?'':' · Unavailable')));chips.append(chip);}text.append(chips);
   block.append(text,element('span',(n=>n+(n===1?' provider':' providers'))(new Set(g.models.map(m=>settingsFamily(m.family))).size),'set-side'));return block;});
+ const slot=(c.modelGroups||[]).find(g=>g.role==='discriminator'),pick=element('select'),feed=chatView&&chatView.feedId;
+ pick.id='settings-discriminator-model';pick.setAttribute('aria-label','Discriminator model');const none=element('option','None');none.value='';pick.append(none);
+ for(const p of c.runtime&&c.runtime.connections||[]){if(p.providerKind!=='compatible'||p.diagnostics&&p.diagnostics.length)continue;const option=element('option',p.label||p.model);option.value=p.id;pick.append(option);}
+ const selected=slot&&slot.models[0];if(selected&&!Array.from(pick.children).some(o=>o.value===selected.profileId)){const unavailable=element('option',(selected.model||selected.profileId)+' · Unavailable');unavailable.value=selected.profileId;pick.append(unavailable);}pick.value=selected?selected.profileId:'';pick.disabled=settingsBusy;
+ pick.addEventListener('change',async()=>{if(settingsBusy||settingsShown!=='connections'||settingsCatalog!==c||(chatView&&chatView.feedId)!==feed)return;const profileId=pick.value;if(!profileId&&!slot)return;settingsBusy=true;pick.disabled=true;
+  const existing=c.modelGroups||[],newId=existing.some(g=>g.id==='discriminator')?'discriminator:'+crypto.randomUUID():'discriminator';let newName='Discriminator';for(let n=2;existing.some(g=>g.name===newName);n++)newName='Discriminator '+n;
+  const body=profileId?{id:slot?slot.id:newId,name:slot?slot.name:newName,description:slot?slot.description:'Moderates between turns',role:'discriminator',profileIds:[profileId],expectedConfigHash:c.configHash}:{id:slot.id,expectedConfigHash:c.configHash};
+  try{await request(profileId?'/model-groups':'/model-groups/remove',{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(body)});}catch{}finally{settingsBusy=false;if(settingsShown==='connections')await settingsLoad('connections');}
+ });
+ groups.push(settingsRow('Discriminator',null,pick));
  const cli=(c.connections||[]).filter(x=>/-cli$/.test(x.providerType)),keys=(c.connections||[]).filter(x=>!/-cli$/.test(x.providerType));
  return [...settingsCard('Model groups',groups),...settingsCard('Subscription logins',cli.map(x=>settingsRow(x.label,'Not checked'))),...settingsCard('API keys',keys.map(x=>settingsRow(x.label,x.connectionStatus==='fixture'?'Fixture':x.credentialConfigured?'Connected':'None')))];
 }

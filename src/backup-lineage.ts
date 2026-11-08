@@ -1,3 +1,4 @@
+import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
 import {validateMemoryConflicts} from './memory-conflicts.ts';
 import {clarificationInput,requireAnswered} from './work-clarification.ts';
@@ -161,10 +162,10 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
+    ['moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption']);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
   clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
-  validateProviderDispatchClaims(value as Work);
+  validateProviderDispatchClaims(value as Work);validateModeration(value as Work);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
@@ -337,6 +338,8 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'reserve-moderation':{required:['workId','entry']},
+  'record-moderation':{required:['workId','questionId','result']},
   'ask-work-question':{required:['workId','questionId','text']},
   'answer-work-question':{required:['workId','questionId','text']},
   'append-mission-message':{required:['messageId','replyTo','text']},

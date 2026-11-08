@@ -89,7 +89,7 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
   entries.push({input,models:[...entry.models]});
   if(!entry.credential)continue;
   permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),entry.credential.environment);
-  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),entry.credential.environment);}
+  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),entry.credential.environment);if(input.providerType==='compatible')permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),entry.credential.environment);}
  }
  const resolveCredential:CredentialResolver=async request=>{
   request.signal.throwIfAborted();const source=permitted.get(key(request.secretRef,request.profileId,request.endpoint));

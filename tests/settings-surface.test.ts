@@ -101,3 +101,10 @@ test('Permissions: five kinds always asked; Add rule allows a first-kind action,
  await button(app.node('settings-permissions-body'),'Remove')!.fire('click');await settle();
  assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,/Allow without asking.*None/);
 });
+
+test('Connections picks a discriminator with a pinned config, and old picker callbacks cannot save stale state',async()=>{
+ const posted:any[]=[];let configHash='h1';const profile={id:'decision-profile',providerKind:'compatible',model:'local-decision',label:'Local decision',configHash:'p',diagnostics:[]};
+ const app=harness(async(path,options)=>{if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});return reply({});}if(path==='/connections')return reply({configHash,modelGroups:[],connections:[],runtime:{connections:[profile],defaultRoutes:[]},providerTypes:[],grants:[]});if(path.startsWith('/assistant/conversation'))return reply({feedId:'f',cursor:1,head:1,members:[],decisions:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});if(path.startsWith('/events'))return reply({feedId:'f',cursor:1,events:[]});return reply({});});
+ await settle();await open(app,'connections');const old=byId(app,'settings-discriminator-model')!;assert.ok(old);old.value=profile.id;configHash='h2';await app.node('settings-nav-connections').fire('click');await settle();await old.fire('change');assert.equal(posted.length,0);
+ const picker=byId(app,'settings-discriminator-model')!;picker.value=profile.id;await picker.fire('change');await settle();assert.equal(posted.length,1);assert.equal(posted[0].path,'/model-groups');assert.deepEqual(posted[0].body,{id:'discriminator',name:'Discriminator',description:'Moderates between turns',role:'discriminator',profileIds:[profile.id],expectedConfigHash:'h2'});
+});
