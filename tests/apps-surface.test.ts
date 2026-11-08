@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+
+const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
 // docs/architecture/apps.md, Surface: Settings > Apps (B23, B23-github), the install card (B24, B24-done), the rail and app page (B22) and the Work room tab (B22-room).
 const T0=Date.UTC(2026,10,5,10,31);
@@ -27,34 +30,34 @@ const open=async(app:ReturnType<typeof harness>)=>{await app.node('me-settings')
 
 test('Settings > Apps lists installed apps and the catalog; Install asks in the Representative conversation',async()=>{
  const {app,posted}=fixture(false);await settle();await open(app);
- const body=app.node('settings-apps-body');assert.match(body.textContent,/Installed.*None.*Recommended.*GitHub.*Pull requests.*Install/);
- await button(body,'Install')[0]!.fire('click');await settle();
+ const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.panel.installed-count',{count:0}),copy('settings.text.03'),copy('settings.heading.13'),'GitHub','Pull requests',copy('settings.link.04')));
+ await button(body,copy('settings.link.04'))[0]!.fire('click');await settle();
  assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.action,posted.at(-1)!.body.catalogId],['/assistant/apps','install','github']);
  assert.equal(app.node('page-chat').hidden,false,'the card is answered in the conversation');
 });
 
 test('an installed app opens its page: permissions, what it adds, versions with roll back, and turn off',async()=>{
  const {app,posted}=fixture();await settle();await open(app);
- const body=app.node('settings-apps-body');assert.match(body.textContent,/Installed 1.*GitHub.*1\.4\.0.*On/);assert.doesNotMatch(body.textContent,/Recommended/,'nothing left to recommend');
+ const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.panel.installed-count',{count:1}),'GitHub','1.4.0',copy('ui.panel.on')));assert.doesNotMatch(body.textContent,sequence(copy('settings.heading.13')),'nothing left to recommend');
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  const detail=app.node('settings-apps-body');
- assert.match(detail.textContent,/‹ Apps.*GitHub.*1\.4\.0 · Installed .*Open.*Turn off/);
- assert.match(detail.textContent,/Permissions.*Tools.*Repositories · Pull requests · Check results.*Network.*api\.github\.com.*Files.*Work folder · read.*Token.*GitHub token.*Events.*PR opened · PR merged/);
- assert.match(detail.textContent,/Adds.*Member templates.*Code review.*Skills.*PR summary.*Procedures.*PR review.*Tools.*gh.*Screens.*GitHub page · PR tab/);
- assert.match(detail.textContent,/Versions.*1\.4\.0.*Current version.*1\.3\.2.*Roll back to this version/);
+ assert.match(detail.textContent,sequence('‹ '+copy('ui.apps'),'GitHub','1.4.0 · ',copy('settings.link.05'),copy('settings.button.04')));
+ assert.match(detail.textContent,sequence(copy('sidebar.heading.01'),copy('ui.panel.tools'),'Repositories · Pull requests · Check results',copy('settings.text.02'),'api.github.com',copy('sidebar.button.14'),'Work folder · read',copy('settings.text.05'),'GitHub token',copy('settings.text.04'),'PR opened · PR merged'));
+ assert.match(detail.textContent,sequence(copy('settings.heading.12'),copy('ui.panel.member-templates'),'Code review',copy('settings.heading.07'),'PR summary',copy('settings.heading.09'),'PR review',copy('ui.panel.tools'),'gh',copy('ui.panel.screens'),copy('ui.panel.app-page',{title:'GitHub'})+' · '+copy('ui.panel.app-tab',{title:'PR'})));
+ assert.match(detail.textContent,sequence(copy('settings.heading.04'),'1.4.0',copy('ui.panel.current-version',{date:''}),'1.3.2',copy('settings.button.13')));
  assert.doesNotMatch(detail.textContent,/assistant|Lead|sandbox/i);
- await button(detail,'Roll back to this version')[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.body.action,posted.at(-1)!.body.appId,posted.at(-1)!.body.version],['rollback','app-github',1]);
- await button(app.node('settings-apps-body'),'Turn off')[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1)!.body.action,'disable');
+ await button(detail,copy('settings.button.13'))[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.body.action,posted.at(-1)!.body.appId,posted.at(-1)!.body.version],['rollback','app-github',1]);
+ await button(app.node('settings-apps-body'),copy('settings.button.04'))[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1)!.body.action,'disable');
 });
 
 test('the install card shows its detail line and rows; the done line offers Remove',async()=>{
  const card={id:'app-decision:1',at:T0,title:'GitHub',question:'Install GitHub app?',detail:'GitHub · 1.4.0',rows:[['Read','Repositories · Pull requests'],['Write','None']],action:'Install',state:'open'};
  const {app,posted}=fixture(false,[card]);await settle();
- const node=app.all().find(n=>n.id==='chat-decision-app-decision:1')!;assert.match(node.textContent,/Install GitHub app\?.*GitHub · 1\.4\.0.*Read.*Repositories · Pull requests.*Write.*None.*Install.*Later/);
- await button(node,'Install')[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.answer],['/assistant/decisions','act']);
+ const node=app.all().find(n=>n.id==='chat-decision-app-decision:1')!;assert.match(node.textContent,sequence('Install GitHub app?','GitHub · 1.4.0','Read','Repositories · Pull requests','Write','None',copy('settings.link.04'),copy('conversation.button.04')));
+ await button(node,copy('settings.link.04'))[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.answer],['/assistant/decisions','act']);
  const done=fixture(true,[{...card,state:'done',line:'GitHub app installed',remove:'app-github'}]);await settle();
- const line=done.app.all().find(n=>n.id==='chat-system-app-decision:1')!;assert.match(line.textContent,/GitHub app installed.*Remove/);
- await button(line,'Remove')[0]!.fire('click');await settle();assert.deepEqual([done.posted.at(-1)!.path,done.posted.at(-1)!.body.action,done.posted.at(-1)!.body.appId],['/assistant/apps','remove','app-github']);
+ const line=done.app.all().find(n=>n.id==='chat-system-app-decision:1')!;assert.match(line.textContent,sequence('GitHub app installed',copy('conversation.link.24')));
+ await button(line,copy('conversation.link.24'))[0]!.fire('click');await settle();assert.deepEqual([done.posted.at(-1)!.path,done.posted.at(-1)!.body.action,done.posted.at(-1)!.body.appId],['/assistant/apps','remove','app-github']);
 });
 
 test('an installed app adds a rail icon; its page lists the app view in the sidebar and opens an item; a matching Work gets the app tab',async()=>{
@@ -62,7 +65,7 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  const rail=app.node('rail-apps');assert.equal(rail.hidden,false);const icon=rail.children[0]!;assert.equal(icon.attributes.get('aria-label'),'GitHub');
  await icon.fire('click');await settle();
  assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(icon.attributes.get('aria-current'),'page');
- const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,/GitHub.*jabdori\/massion.*Open.*feat\(assistant\): answer the owner.*#84.*Merged.*App settings/);
+ const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,sequence('GitHub','jabdori/massion','Open','feat(assistant): answer the owner','#84','Merged',copy('sidebar.link.12')));
  await app.all().find(n=>n.id==='app-row-84')!.fire('click');await settle();
  assert.match(app.node('app-view').textContent,/answer the owner and start Representative Work #84.*Open · jabdori.*Changes.*\+769 −39.*Files 2.*src\/assistant-service\.ts.*\+206 −0/);
  // The Work room tab: a Work whose title names PR #84 gets a second tab drawn by the app.
@@ -70,13 +73,13 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
  assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/Files 2/);
- await button(side,'App settings')[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,/Permissions/);
+ await button(side,copy('sidebar.link.12'))[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,sequence(copy('sidebar.heading.01')));
 });
 
 test('self-made apps are listed apart with their maker and source Work',async()=>{
  const made={...github,id:'app-made',name:'PR list fetcher',origin:'self-made',memberId:'member-juno',version:'0.1.0',source:{missionId:'intake',workId:'w-done',title:'PR #84 review'},contributes:{templates:[],skills:[],procedures:[],tools:['pr-list']}};
  const {app}=fixture(true,[],[made],[{id:'member-juno',name:'주노',shape:'round'}]);await settle();await open(app);
- assert.match(app.node('settings-apps-body').textContent,/Installed 1.*GitHub.*Self-made apps 1.*PR list fetcher.*0\.1\.0 · Made by 주노 · PR #84 review.*On/);
+ assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.panel.installed-count',{count:1}),'GitHub',copy('ui.panel.self-made-count',{count:1}),'PR list fetcher','0.1.0 · '+copy('ui.panel.made-by',{member:'주노'})+' · PR #84 review',copy('ui.panel.on')));
 });
 
 test('a page-only app shows its page view and asks for no item; a page without rows shows its fields',async()=>{

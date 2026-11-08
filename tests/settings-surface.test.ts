@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+
+const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
 // docs/architecture/settings.md, Surface: the Settings layout (B12, B13, B13-devices, B14, B23) opened from the owner's menu.
 const T0=Date.UTC(2026,10,4,12,0);
@@ -44,11 +47,11 @@ const open=async(app:ReturnType<typeof harness>,section:string)=>{await app.node
 test('Settings opens at General with its own sidebar of sections, and the conversation sidebar comes back with the conversation',async()=>{
  const {app}=fixture();await settle();
  await app.node('me-settings').fire('click');await settle();
- assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-heading').textContent,'Settings');
+ assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-heading').textContent,copy('sidebar.link.11'));
  assert.equal(app.node('side-settings').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.equal(app.node('activity-toggle').hidden,true);
- assert.deepEqual(['general','memory','members','devices','connections','apps','improvements','permissions','advanced'].map(s=>new RegExp('id="settings-nav-'+s+'"[^>]*>(?:<svg[\\s\\S]*?</svg>)?<span>([^<]*)</span>').exec(workbenchPage)?.[1]),['General','Memory','Members','Devices','Connections','Apps','Improvements','Permissions','Advanced']);
+ assert.deepEqual(['general','memory','members','devices','connections','apps','improvements','permissions','advanced'].map(s=>new RegExp('id="settings-nav-'+s+'"[^>]*>(?:<svg[\\s\\S]*?</svg>)?<span>([^<]*)</span>').exec(workbenchPage)?.[1]),['sidebar.heading.04','page.heading.03','page.heading.02','sidebar.heading.02','conversation.button.12','ui.apps','sidebar.link.07','sidebar.heading.01','ui.panel.advanced'].map(key=>copy(key)));
  assert.equal(app.node('settings-nav-general').attributes.get('aria-current'),'page');assert.equal(app.node('settings-general').hidden,false);assert.equal(app.node('settings-advanced').hidden,true);
- assert.match(app.node('settings-general-body').textContent,/Name.*하나.*Morning briefing.*Daily 08:00/);
+ assert.match(app.node('settings-general-body').textContent,sequence(copy('page.columnheader.02'),'하나',copy('settings.combobox.01'),copy('ui.panel.daily-cycle',{time:'08:00'})));
  await app.node('settings-nav-advanced').fire('click');assert.equal(app.node('settings-advanced').hidden,false,'the earlier forms keep a home');assert.equal(app.node('settings-general').hidden,true);
  await app.node('rail-chat').fire('click');await settle();assert.equal(app.node('side-settings').hidden,true);assert.equal(app.node('side-people').hidden,false);
 });
@@ -56,50 +59,50 @@ test('Settings opens at General with its own sidebar of sections, and the conver
 test('Memory shows what you said, what was learned with its evidence, and the change history; Stop retires and Revert reverts with exact versions',async()=>{
  const {app,state}=fixture();await settle();await open(app,'memory');
  const body=app.node('settings-memory-body');
- assert.match(body.textContent,/You said.*Round each line.*version 1 · In use.*Plain tone.*version 1 · Not in use/);
- assert.match(body.textContent,/Learned.*Round the total once.*version 2 · Pending.*Evidence/);
- assert.match(body.textContent,/Change history.*Short plain tone.*Changed.*Revert/);
+ assert.match(body.textContent,sequence(copy('page.heading.04'),'Round each line',copy('ui.panel.memory-version',{version:1}),copy('ui.panel.in-use'),'Plain tone',copy('ui.panel.memory-version',{version:1}),copy('ui.panel.not-in-use')));
+ assert.match(body.textContent,sequence(copy('page.heading.06'),'Round the total once',copy('ui.panel.memory-version',{version:2}),copy('ui.waiting'),copy('page.button.08')));
+ assert.match(body.textContent,sequence(copy('page.heading.07'),'Short plain tone',copy('settings.button.08'),copy('page.button.09')));
  const evidence=byId(app,'memory-evidence-g-1')!;assert.ok(evidence);assert.match(evidence.textContent,/1 → 3.*3 orders.*Per-line tax rules change the total\./);
  const stop=byId(app,'memory-switch-rounding')!;assert.equal(stop.attributes.get('aria-checked'),'true');assert.equal(byId(app,'memory-switch-tone')!.disabled,true);
  await stop.fire('click');await settle();
  assert.deepEqual(state.posted.at(-1),{path:'/missions/intake/memory-retirement',body:{commandId:state.posted.at(-1)!.body.commandId,expectedRevision:9,memoryId:'rounding',version:1,reason:'Stopped in Settings'}});
- await button(body,'Revert')!.fire('click');await settle();
+ await button(body,copy('page.button.09'))!.fire('click');await settle();
  const revert=state.posted.at(-1)!;assert.equal(revert.path,'/missions/intake/growth');assert.deepEqual({...revert.body,commandId:''},{commandId:'',expectedRevision:9,growthId:'g-2',baseline:'tone@1',candidate:'tone@2',action:'revert'});
  assert.ok(!state.posted.some(p=>/adopt/.test(JSON.stringify(p.body))),'Settings adopts nothing');
 });
 
 test('Members lists the Representative and each member with its model group; a row opens the member page and Message opens that conversation',async()=>{
  const {app}=fixture();await settle();await open(app,'members');
- const body=app.node('settings-members-body');assert.match(body.textContent,/하나.*★.*Default.*셈.*Research/);
- await byId(app,'settings-member-member-a')!.fire('click');await settle();await button(app.node('settings-members-body'),'Message')!.fire('click');await settle();
+ const body=app.node('settings-members-body');assert.doesNotMatch(body.textContent,/★/);assert.match(body.textContent,sequence('하나',copy('settings.text.01'),'셈','Research'));
+ await byId(app,'settings-member-member-a')!.fire('click');await settle();await button(app.node('settings-members-body'),copy('settings.link.02'))!.fire('click');await settle();
  assert.equal(app.node('page-chat').hidden,false);assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
- await open(app,'devices');assert.match(app.node('settings-devices-body').textContent,/This Mac.*Ready/);
- await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,/Installed 0.*None/);
+ await open(app,'devices');assert.match(app.node('settings-devices-body').textContent,sequence(copy('ui.panel.this-mac'),copy('ui.panel.ready')));
+ await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.panel.installed-count',{count:0}),copy('settings.text.03')));
 });
 
 test('Connections lists model groups with who uses them, models and providers, then logins and API keys',async()=>{
  const {app}=fixture();await settle();await open(app,'connections');
  const groupsText=app.node('settings-groups').textContent;
- assert.match(groupsText,/Model groups.*Default.*하나.*claude-sonnet-5-5.*gpt-6\.1-terra.*2 providers.*Research.*셈.*Finds sources and summarizes them with evidence.*glm-5\.3.*2 providers/);
+ assert.match(groupsText,sequence(copy('settings.heading.03'),copy('settings.text.01'),'하나','claude-sonnet-5-5','gpt-6.1-terra',copy('ui.panel.provider-count',{count:2}),'Research','셈','Finds sources and summarizes them with evidence','glm-5.3',copy('ui.panel.provider-count',{count:2})));
  assert.doesNotMatch(groupsText,/Makes and checks work/,'the Default group carries no host sentence');
- assert.match(groupsText,/Routed.*anthropic\/claude-sonnet-5-5Anthropic.*claude-sonnet-5-5Anthropic.*local-xUnknown.*2 providers/,'chips and count follow the model family, not the route');assert.doesNotMatch(groupsText,/OpenRouter|Custom/);
- assert.match(groupsText,/Subscription logins.*Claude Code.*API keys.*Z\.ai GLM Coding Plan.*Connected.*OpenAI API.*None/);
+ assert.match(groupsText,sequence('Routed','anthropic/claude-sonnet-5-5Anthropic','claude-sonnet-5-5Anthropic','local-x'+copy('ui.panel.unknown'),copy('ui.panel.provider-count',{count:2})),'chips and count follow the model family, not the route');assert.doesNotMatch(groupsText,/OpenRouter|Custom/);
+ assert.match(groupsText,sequence(copy('settings.heading.02'),'Claude Code',copy('settings.heading.01'),'Z.ai GLM Coding Plan',copy('ui.panel.connected'),'OpenAI API',copy('settings.text.03')));
 });
 
 test('Permissions: five kinds always asked; Add rule allows a first-kind action, Remove asks again; the second kind is not offered',async()=>{
  const {app,state}=fixture();await settle();await open(app,'permissions');
  const body=app.node('settings-permissions-body');
- assert.match(body.textContent,/Always ask.*Spend money.*Send as me.*Delete.*Hand to a new member.*Change check rules.*Allow without asking.*None/);
- await button(body,'Add rule')!.fire('click');await settle();
+ assert.match(body.textContent,sequence(...['ui.panel.always-ask','ui.panel.spend-money','ui.panel.send-as-me','ui.panel.delete','ui.panel.hand-to-member','ui.panel.change-check-rules','ui.panel.allow-without-asking','settings.text.03'].map(key=>copy(key))));
+ await button(body,copy('ui.panel.add-rule'))!.fire('click');await settle();
  const kind=byId(app,'permission-kind')!;assert.deepEqual(kind.children.map(o=>o.value),['spend','send','delete','delegate'],'check rules cannot be allowed');
- await button(body,'Cancel')!.fire('click');await settle();assert.equal(byId(app,'permission-what'),undefined);assert.equal(state.posted.length,0,'Cancel sends nothing');
- await button(body,'Add rule')!.fire('click');await settle();
+ await button(body,copy('conversation.link.25'))!.fire('click');await settle();assert.equal(byId(app,'permission-what'),undefined);assert.equal(state.posted.length,0,'Cancel sends nothing');
+ await button(body,copy('ui.panel.add-rule'))!.fire('click');await settle();
  byId(app,'permission-what')!.value='Post the weekly summary to #weekly';byId(app,'permission-kind')!.value='send';
  await byId(app,'permission-form')!.fire('submit');await settle();
  const add=state.posted.at(-1)!;assert.equal(add.path,'/assistant/permissions');assert.deepEqual({...add.body,commandId:''},{commandId:'',action:'allow',what:'Post the weekly summary to #weekly',kind:'send'});
- assert.match(app.node('settings-permissions-body').textContent,/Post the weekly summary to #weekly.*Send as me · .*Remove/);
- await button(app.node('settings-permissions-body'),'Remove')!.fire('click');await settle();
- assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,/Allow without asking.*None/);
+ assert.match(app.node('settings-permissions-body').textContent,sequence('Post the weekly summary to #weekly',copy('ui.panel.send-as-me')+' · ',copy('conversation.link.24')));
+ await button(app.node('settings-permissions-body'),copy('conversation.link.24'))!.fire('click');await settle();
+ assert.deepEqual({...state.posted.at(-1)!.body,commandId:''},{commandId:'',action:'remove',ruleId:'rule-1'});assert.match(app.node('settings-permissions-body').textContent,sequence(copy('ui.panel.allow-without-asking'),copy('settings.text.03')));
 });
 
 test('review 4: Connections has no unapproved discriminator picker or generated description',async()=>{

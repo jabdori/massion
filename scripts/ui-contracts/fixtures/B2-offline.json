@@ -2,14 +2,17 @@
   "screen": "B2-offline",
   "extends": "B2",
   "description": "Disconnected conversation with retained draft.",
-  "gaps": [
-    "Disconnected has no read-only production state/failed-command identity. The runner retains a local draft; it does not disconnect all fixture reads or submit/retry a command."
-  ],
+  "gaps": [],
   "steps": [
     {
       "action": "fill",
       "selector": "#chat-input",
       "value": "이어서 할인 합계 확인해 줘."
+    },
+    {
+      "action": "offline",
+      "value": "true",
+      "readySelector": "#chat-connection:not([hidden])"
     }
   ]
 }

@@ -20,7 +20,7 @@ test('server tags command acknowledgements and rejects old feed admission before
 test('headless clients share authoritative fixture results; web commands cannot forge pass',async()=>{
  const root=await mkdtemp(join(tmpdir(),'massion-http-'));const server=createWorkbench(new InMemoryStore<Mission>(),root);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
  try{
-  const page=await fetch(base);assert.equal(page.status,200);assert.match(await page.text(),/controlled local fixture/);
+  const page=await fetch(base);assert.equal(page.status,200);assert.match(await page.text(),/실제 로컬 파일·프로세스 변경/);
   const blocked=await fetch(base+'/fixture-run',{method:'POST',headers:{Origin:'https://untrusted.example','Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,403);
   const forged=await fetch(base+'/fixture-run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"passed":true}'});assert.equal(forged.status,400);
   const result=await fetch(base+'/fixture-run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(result.status,201);const {missionId}=await result.json() as {missionId:string};

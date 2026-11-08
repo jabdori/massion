@@ -1,6 +1,7 @@
 import {hash} from '../src/domain.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {mkdtemp,rm,writeFile,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -52,8 +53,8 @@ test('host manifest schema and selected-file loader reject tampering, implicit s
 test('managed host UI displays revision/live gate, keeps declared model selection and blocks connection mutation',async t=>{
  const directory=await root(t),manager=createHostConnections(new InMemoryStore<Mission>(),new TextArtifactStore(directory),{manifest:parseHostManifest(manifest()),allowLiveExecution:false},{readEnvironment:()=>{assert.fail('Rendering must not resolve');},transport:async()=>{assert.fail('Rendering must not send');}});
  const app=harness(async path=>path==='/connections'?reply(manager.list()):path==='/providers'?reply({providers:[],selection:{status:'unavailable'},runtime:manager.configuration()}):path==='/health'?reply({status:'ready'}):reply({cursor:0,events:[]}));
- const end=Date.now()+5000;while(!app.node('connection-status').textContent.includes('owner-v1')){assert.ok(Date.now()<end);await new Promise(r=>setTimeout(r,5));}
- assert.match(app.node('connection-status').textContent,/Live model calls disabled/);assert.equal(app.node('connection-fields').disabled,true);assert.equal(app.all().find(n=>n.textContent==='Explore models')!.disabled,false);const count=app.calls.length;await app.submit('connection-form');assert.equal(app.calls.length,count);
+ const end=Date.now()+5000;while(app.node('mission-fields').disabled||!app.node('connection-status').textContent.includes('owner-v1')){assert.ok(Date.now()<end);await new Promise(r=>setTimeout(r,5));}
+ assert.match(app.node('connection-status').textContent,new RegExp(copy('legacy.live-model-calls-disabled')));assert.equal(app.node('connection-fields').disabled,true);assert.equal(app.all().find(n=>n.textContent===copy('legacy.explore-models'))!.disabled,false);const count=app.calls.length;await app.submit('connection-form');assert.equal(app.calls.length,count);
 });
 
 test('compatible discriminator credentials bind only the selected profile and exact systemone endpoint',async t=>{

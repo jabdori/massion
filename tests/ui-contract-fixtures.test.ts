@@ -23,7 +23,7 @@ test('every approved screen has its own explicit fixture and setup metadata',asy
   assert.ok(Array.isArray(fixture.steps),screen);
   assert.ok(Array.isArray(fixture.gaps)&&fixture.gaps.every((g:unknown)=>typeof g==='string'&&g.length>0),screen);
   assert.ok(fixture.readySelector,screen);
-  for(const step of fixture.steps){assert.ok(step.selector,screen);assert.ok(['click','fill'].includes(step.action),screen);if(step.action==='fill')assert.equal(typeof step.value,'string');}
+  for(const step of fixture.steps){if(step.action==='offline')assert.ok(['true','false'].includes(step.value));else{assert.ok(step.selector,screen);assert.ok(['click','fill'].includes(step.action),screen);if(step.action==='fill')assert.equal(typeof step.value,'string');}}
   assert.ok(fixture.routes['/assistant/conversation'],screen);
   const state=JSON.stringify([fixture.steps,fixture.routes]);
   assert.ok(!states.has(state)||raw.extends&&raw.gaps?.length,'Duplicate state without explicit unsupported-state gap: '+screen);states.add(state);
@@ -164,4 +164,15 @@ test('screen fixtures serve the versioned client and idle SSE without admitting 
  const appView=await post('protocol/request',{...header,kind:'command',path:'/assistant/apps/view',payload:{app:'app-github',handler:'page'}});assert.equal(appView.status,200);assert.equal((await appView.json()).payload.title,'GitHub');
  const incompatible=await post('protocol/request',{...header,version:99,kind:'query',path:'/assistant/conversation'});assert.equal(incompatible.status,426);
  const abort=new AbortController();t.after(()=>abort.abort());const stream=await fetch(host.url+'protocol/events?version=1&requestId=fixture-feed&generation=2&after=0',{signal:abort.signal});assert.equal(stream.status,200);const frame=new TextDecoder().decode((await stream.body!.getReader().read()).value);assert.match(frame,/"kind":"feed"/);assert.match(frame,/"reason":"connected"/);abort.abort();
+});
+
+test('offline fixtures use browser disconnection and failed send stays local before any product write',async()=>{
+ const {loadFixture}=await hostModule();
+ const offline=await loadFixture('B2-offline'),failed=await loadFixture('B2-offline-failed');
+ assert.equal(offline.gaps.length,0);assert.equal(failed.gaps.length,0);
+ assert.ok(offline.steps.some(step=>step.action==='offline'));
+ assert.ok(failed.steps.some(step=>step.action==='offline'));
+ assert.equal(failed.steps.at(-1)?.action,'click');
+ const host=await (await hostModule()).startFixtureHost('B2-offline-failed');
+ try{assert.equal((await fetch(host.url+'assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,405);}finally{await host.close();}
 });

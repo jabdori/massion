@@ -1,9 +1,12 @@
 import test from 'node:test';
 import {runInContext} from 'node:vm';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+
+const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
 // docs/architecture/results-and-schedules.md, Surface: Results (B10, B10-preview) and Schedules (B17, B17-empty), and schedule exceptions in the conversation.
 const T0=Date.UTC(2026,10,5,23,0),sha='a'.repeat(64);
@@ -32,9 +35,9 @@ const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Nod
 test('Results lists accepted results with name, source Work, assignee and time, switches between list and grid, and uses its own sidebar',async()=>{
  const {app}=fixture();await settle();
  await app.node('rail-results').fire('click');await settle();
- assert.equal(app.node('page-results').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,'Results');
- assert.equal(app.node('side-results').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.match(app.node('side-results').textContent,/All.*Documents.*River summary/);
- const row=byId(app,'result-row-intake/work:a')!;assert.ok(row);assert.match(row.textContent,/River summary.*River summary.*하.*[A-Z][a-z]{2} \d{1,2} \d{2}:\d{2}/);
+ assert.equal(app.node('page-results').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,copy('rail.link.01'));
+ assert.equal(app.node('side-results').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.match(app.node('side-results').textContent,sequence(copy('page.button.14'),copy('sidebar.button.06'),'River summary'));
+ const row=byId(app,'result-row-intake/work:a')!;assert.ok(row);assert.match(row.textContent,sequence('River summary','River summary','하',new Date(T0).getMonth()+1+'월',new Date(T0).getDate()+'일'));
  assert.equal(app.node('results-list').attributes.get('aria-checked'),'true');await app.node('results-grid').fire('click');await settle();
  assert.equal(app.node('results-grid').attributes.get('aria-checked'),'true');assert.equal(app.node('results-table').hidden,true);assert.equal(app.node('results-tiles').hidden,false);assert.ok(byId(app,'result-tile-intake/work:a'));
  await app.node('rail-chat').fire('click');await settle();assert.equal(app.node('side-people').hidden,false);assert.equal(app.node('side-results').hidden,true);
@@ -55,7 +58,7 @@ test('a result opens the conversation that made it with a preview tab: Preview r
 test('a preview that cannot be read says Unavailable and substitutes nothing',async()=>{
  const {app}=fixture({artifact:409});await settle();await app.node('rail-results').fire('click');await settle();
  await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
- assert.equal(app.node('result-preview').textContent,'Unavailable');assert.equal(app.node('result-original').textContent,'');
+ assert.equal(app.node('result-preview').textContent,copy('ui.panel.unavailable'));assert.equal(app.node('result-original').textContent,'');
 });
 
 test('Results with nothing accepted shows No results yet',async()=>{
@@ -67,14 +70,14 @@ test('Schedules empty state offers the morning briefing; choosing it creates it 
  const {app,state}=fixture();await settle();
  await app.node('rail-schedules').fire('click');await settle();
  assert.equal(app.node('side-schedules').hidden,false);assert.equal(app.node('schedules-empty').hidden,false);assert.equal(app.node('schedule-detail').hidden,true);
- assert.match(staticText('schedules-empty'),/Schedule a task.*Morning briefing.*Sums up yesterday's work each morning/,'B17-empty: icon, title, one example card');
+ assert.match(staticText('schedules-empty'),sequence(copy('page.heading.09'),copy('settings.combobox.01'),copy('ui.panel.briefing-description')),'B17-empty: icon, title, one example card');
  await app.node('schedule-example-briefing').fire('click');await settle();
  const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.ok(Number.isSafeInteger(sent.body.offset));
  assert.equal(app.node('schedules-empty').hidden,true);assert.equal(app.node('schedule-detail').hidden,false);
  assert.equal(app.node('schedule-title').textContent,'Morning briefing');const detail=app.node('schedule-rows').textContent+app.node('schedule-request').textContent+app.node('schedule-runs').textContent;
- for(const label of ['Assignee','하나','Next run','Cycle','Daily 08:00','Delivers to','Conversation with 하나','Budget','1 of 30 runs','Sum up yesterday','1 Work item','View in conversation'])assert.ok(detail.includes(label),label);
- assert.match(staticText('schedule-detail'),/Run now.*Request.*Past runs/);
- assert.match(app.node('side-schedules').textContent,/Active.*Morning briefing.*Daily/);
+ for(const label of [copy('page.columnheader.01'),'하나',copy('ui.panel.next-run'),copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:'08:00'}),copy('ui.panel.destination'),'Conversation with 하나',copy('ui.panel.budget'),copy('ui.panel.run-budget',{used:1,count:30}),'Sum up yesterday','1 Work item',copy('ui.panel.view-conversation')])assert.ok(detail.includes(label),label);
+ assert.match(staticText('schedule-detail'),sequence(copy('page.button.17'),copy('ui.panel.request'),copy('ui.panel.past-runs')));
+ assert.match(app.node('side-schedules').textContent,sequence(copy('sidebar.text.03'),'Morning briefing',copy('ui.panel.daily-cycle',{time:'08:00'})));
 });
 
 test('the Active switch pauses and resumes, Run now runs once, View in conversation opens the conversation',async()=>{
@@ -82,15 +85,15 @@ test('the Active switch pauses and resumes, Run now runs once, View in conversat
  assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');assert.match(workbenchPage,/id="schedule-active"[^>]*role="switch"/);
  await app.node('schedule-active').fire('click');await settle();await app.node('schedule-run').fire('click');await settle();
  assert.deepEqual(state.posted.map(p=>[p.body.action,p.body.scheduleId]),[['pause','schedule-a'],['run','schedule-a']]);
- await button(app.node('schedule-runs'),'View in conversation')!.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);
+ await button(app.node('schedule-runs'),copy('ui.panel.view-conversation'))!.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);
 });
 
 test('schedule exceptions sit in the conversation like Work exceptions: unknown offers Check and Close, failed Retry and Close',async()=>{
  const {app,state}=fixture({exceptions:[{id:'run-x',at:T0,title:'Morning briefing',state:'unknown',fact:'Not resent',actions:['check','close'],scheduleId:'schedule-a',runId:'run-x'},{id:'run-y',at:T0+1,title:'Morning briefing',state:'failed',fact:'Briefing unavailable',actions:['retry','close'],scheduleId:'schedule-a',runId:'run-y'}]});await settle();
  const unknown=byId(app,'chat-run-exception-run-x')!,failed=byId(app,'chat-run-exception-run-y')!;
- assert.match(unknown.textContent,/Morning briefing.*Result unknown.*Not resent.*Check.*Close/);assert.equal(button(unknown,'Retry'),undefined,'an unknown result is not resent');
- assert.match(failed.textContent,/Morning briefing.*Failed.*Briefing unavailable.*Retry.*Close/);
- await button(unknown,'Close')!.fire('click');await settle();await button(failed,'Retry')!.fire('click');await settle();
+ assert.match(unknown.textContent,sequence('Morning briefing',copy('conversation.text.01'),'Not resent',copy('settings.chip.02'),copy('dialog.button.03')));assert.equal(button(unknown,copy('conversation.button.07')),undefined,'an unknown result is not resent');
+ assert.match(failed.textContent,sequence('Morning briefing',copy('conversation.status.02'),'Briefing unavailable',copy('conversation.button.07'),copy('dialog.button.03')));
+ await button(unknown,copy('dialog.button.03'))!.fire('click');await settle();await button(failed,copy('conversation.button.07'))!.fire('click');await settle();
  assert.deepEqual(state.posted.map(p=>[p.path,p.body.action,p.body.runId,p.body.retryOf]),[['/assistant/schedules','close','run-x',undefined],['/assistant/schedules','run',undefined,'run-y']],'Retry names the failed run it closes');
 });
 
@@ -110,21 +113,21 @@ test('a host-run schedule rereads the Schedules page while it shows',async()=>{
  assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');
  state.schedules=[{...schedule,active:false,budget:{runs:30,used:30}}];state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:3,type:'skip-run'}];state.cursor=2;
  await app.tick();await settle();
- assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-rows').textContent,/30 of 30 runs/);
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-rows').textContent,sequence(copy('ui.panel.run-budget',{used:30,count:30})));
 });
 
 test('a schedule run still in time has the conversation read again just after its deadline, so its unknown card shows without another event',async()=>{
  const deadline=Date.now()+30000,{app,state}=fixture({runDeadlineAt:deadline});const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
  runInContext('void readChat()',app.context);await settle();const read=timers.findLast(t=>t.ms>=29000&&t.ms<=31000);assert.ok(read,'one read is due at the deadline');
  delete (state as any).runDeadlineAt;state.exceptions=[{id:'run-x',at:deadline,title:'Morning briefing',state:'unknown',fact:'Not resent',actions:['check','close'],scheduleId:'schedule-a',runId:'run-x'}];
- timers.length=0;read.fn();await settle();assert.match(byId(app,'chat-run-exception-run-x')!.textContent,/Result unknown.*Check.*Close/);assert.deepEqual(timers.map(t=>t.ms).filter(ms=>ms!==15000),[],'no read is due once the run is unknown (15 s is the request timeout)');
+ timers.length=0;read.fn();await settle();assert.match(byId(app,'chat-run-exception-run-x')!.textContent,sequence(copy('conversation.text.01'),copy('settings.chip.02'),copy('dialog.button.03')));assert.deepEqual(timers.map(t=>t.ms).filter(ms=>ms!==15000),[],'no read is due once the run is unknown (15 s is the request timeout)');
 });
 
 test('View in conversation from a past run returns to the head segment, where briefings and run exceptions show',async()=>{
  const {app}=fixture({schedules:[schedule]});await settle();await app.node('rail-results').fire('click');await settle();
  await byId(app,'result-row-intake/work:a')!.fire('click');await settle();assert.equal(runInContext('chatSegment',app.context),1,'the result opened its own earlier segment');
  await app.node('rail-schedules').fire('click');await settle();const before=app.calls.length;
- await button(app.node('schedule-runs'),'View in conversation')!.fire('click');await settle();
+ await button(app.node('schedule-runs'),copy('ui.panel.view-conversation'))!.fire('click');await settle();
  assert.equal(runInContext('chatSegment',app.context),null);assert.ok(app.calls.slice(before).some(c=>c.path==='/assistant/conversation'),'the head is read again');
 });
 
@@ -149,10 +152,10 @@ test('a running past run whose host dies turns result unknown on the Schedules p
  const deadline=Date.now()+30000,running={...schedule,runs:[{id:'run-2',at:T0,state:'running',fact:'',turnIds:[],deadlineAt:deadline},...schedule.runs]};
  const {app,state}=fixture({schedules:[running]});const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
  await settle();await app.node('rail-schedules').fire('click');await settle();
- assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),'running');
+ assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),copy('sidebar.status.02'));
  const read=timers.findLast(t=>t.ms>=29000&&t.ms<=31000);assert.ok(read,'one read is due at the deadline');
  state.schedules=[{...schedule,runs:[{id:'run-2',at:T0,state:'unknown',fact:'Not resent',turnIds:[]},...schedule.runs]}];timers.length=0;read.fn();await settle();
- assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),'unknown');assert.match(app.node('schedule-runs').textContent,/Not resent/);
+ assert.equal(app.node('schedule-runs').children[0]!.children[0]!.attributes.get('aria-label'),copy('conversation.text.01'));assert.match(app.node('schedule-runs').textContent,/Not resent/);
  assert.ok(!timers.some(t=>t.ms>=29000&&t.ms<=31000),'no Schedules read is due once no run is running');
 });
 

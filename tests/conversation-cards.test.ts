@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {chatStyle} from '../src/assistant-conversation-panel.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
@@ -38,38 +39,38 @@ test('a running Work is one card with assignee, role chips, steps and elapsed mi
  const running:Work={workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true,startedAt:Date.now()-45*60000,steps:{done:1,total:2}};
  const {app,state}=fixture([{text:'Find churn causes',at:T0,work:running},{text:'Thanks',at:T0+60000}]);await settle();
  const card=byId(app,'chat-card-'+turnId(1))!;assert.ok(card);assert.equal(card.className,'chat-card');
- for(const part of ['Churn causes','Working','하나','45 min','Write','Check','1/2'])assert.ok(card.textContent.includes(part),part);
+ for(const part of ['Churn causes','작업 중','하나','45분','작성','확인','1/2'])assert.ok(card.textContent.includes(part),part);
  const chips=card.children.flatMap(function all(n:Node):Node[]{return [n,...n.children.flatMap(all)];}).filter(n=>/\bchip\b/.test(n.className));
- assert.deepEqual(chips.map(c=>[c.textContent,/\bcheck\b/.test(c.className)]),[['Write',false],['Check',true]]);
+ assert.deepEqual(chips.map(c=>[c.textContent,/\bcheck\b/.test(c.className)]),[['작성',false],['확인',true]]);
  const slot=shown(app).indexOf(card);assert.ok(slot>0);
  state.entries[0]!.work={...running,execution:'settled',acceptance:'accepted',steps:{done:2,total:2}};await app.node('chat-latest').fire('click');await settle();
- assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-fold-'+turnId(1))!;assert.equal(line.tagName,'BUTTON');assert.equal(line.textContent,'Worked ›');assert.equal(shown(app).indexOf(line),slot,'the folded line takes the card slot');
+ assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-fold-'+turnId(1))!;assert.equal(line.tagName,'BUTTON');assert.equal(line.textContent,'작업함 ›');assert.equal(shown(app).indexOf(line),slot,'the folded line takes the card slot');
  assert.equal(app.node('work-pane').hidden,true);await line.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);
  // Work room participants (members.md): the producing seat, its role chip, and Check last.
- assert.equal(app.node('pane-people').hidden,false);assert.equal(app.node('pane-people').textContent,'하하나Check','B7: the Representative and Check, no role chip for a Work it holds alone');assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
+ assert.equal(app.node('pane-people').hidden,false);assert.equal(app.node('pane-people').textContent,'하하나확인','B7: the Representative and Check, no role chip for a Work it holds alone');assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
  assert.equal(posts(app).length,0);
 });
 
 test('a result-unknown Work shows an exception card whose Check only reads again, never resends or closes',async()=>{
  const {app}=fixture([{text:'Order toner',at:T0,work:{workId:'work:u',title:'Toner order',execution:'blocked',acceptance:'pending',started:true,unknown:true}},{text:'Where is it?',at:T0,outcome:'unknown'}]);await settle();
- const card=byId(app,'chat-exception-'+turnId(1))!;assert.ok(card);assert.match(card.textContent,/Toner order.*Result unknown.*Not resent/);
- assert.equal(button(card,'Retry'),undefined);assert.equal(button(card,'Close'),undefined);assert.ok(byId(app,'chat-fold-'+turnId(1)),'the Work itself folds');
- const lost=byId(app,'chat-exception-'+turnId(2))!;assert.match(lost.textContent,/Lost one.*Result unknown.*Unknown whether created/);assert.equal(byId(app,'chat-fold-'+turnId(2)),undefined,'no Work to open');
+ const card=byId(app,'chat-exception-'+turnId(1))!;assert.ok(card);assert.match(card.textContent,/Toner order.*결과 모름.*다시 보내지 않음/);
+ assert.equal(button(card,'다시 시도'),undefined);assert.equal(button(card,'닫기'),undefined);assert.ok(byId(app,'chat-fold-'+turnId(1)),'the Work itself folds');
+ const lost=byId(app,'chat-exception-'+turnId(2))!;assert.match(lost.textContent,/Lost one.*결과 모름.*생성 결과 모름/);assert.equal(byId(app,'chat-fold-'+turnId(2)),undefined,'no Work to open');
  const reads=app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length;
- await button(card,'Check')!.fire('click');await settle();
+ await button(card,'확인')!.fire('click');await settle();
  assert.ok(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length>reads);assert.equal(posts(app).length,0);
- assert.match(app.node('activity-list').textContent,/Toner order.*Result unknown/);assert.equal(app.node('side-work').children.length,0,'Work lines show running Work only');
+ assert.match(app.node('activity-list').textContent,/Toner order.*결과 모름/);assert.equal(app.node('side-work').children.length,0,'Work lines show running Work only');
 });
 
 test('a failed Work offers Retry, which refills the input with the original request, and Close, which records cancel once and shows a grey line',async()=>{
  const {app,state}=fixture([{text:'Find churn causes with two sources',at:T0,work:{workId:'work:f',title:'Churn causes',execution:'settled',acceptance:'failed',started:true}}]);await settle();
- const card=byId(app,'chat-exception-'+turnId(1))!;assert.match(card.textContent,/Churn causes.*Failed.*Check failed/);assert.equal(button(card,'Check'),undefined);
- await button(card,'Retry')!.fire('click');await settle();assert.equal(app.node('chat-input').value,'Find churn causes with two sources');assert.equal((app.context as any).document.activeElement.id,'chat-input');assert.equal(posts(app).length,0,'Retry sends nothing by itself');
- state.answer=500;await button(card,'Close')!.fire('click');await settle();
+ const card=byId(app,'chat-exception-'+turnId(1))!;assert.match(card.textContent,/Churn causes.*실패.*확인 실패/);assert.equal(button(card,'확인'),undefined);
+ await button(card,'다시 시도')!.fire('click');await settle();assert.equal(app.node('chat-input').value,'Find churn causes with two sources');assert.equal((app.context as any).document.activeElement.id,'chat-input');assert.equal(posts(app).length,0,'Retry sends nothing by itself');
+ state.answer=500;await button(card,'닫기')!.fire('click');await settle();
  assert.equal(posts(app).length,1,'an unknown close is not retried');const sent=state.posted[0]!;assert.equal(sent.path,'/missions/intake/commands');
  assert.deepEqual(Object.keys(sent.body).sort(),['command','commandId','expectedRevision']);assert.deepEqual(sent.body.command,{type:'cancel',workId:'work:f'});assert.equal(sent.body.expectedRevision,2);
  state.entries[0]!.work={...state.entries[0]!.work!,execution:'cancelled'};await app.node('chat-latest').fire('click');await settle();
- assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-system-closed:'+turnId(1))!;assert.equal(line.textContent,'Closed: Churn causes');assert.ok(byId(app,'chat-fold-'+turnId(1)));
+ assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-system-closed:'+turnId(1))!;assert.equal(line.textContent,'닫힘: Churn causes');assert.ok(byId(app,'chat-fold-'+turnId(1)));
 });
 
 test('decision cards are yellow with a question, time, rows, the action and Later; Later and done leave grey lines; open decisions rank first in activity',async()=>{
@@ -78,15 +79,15 @@ test('decision cards are yellow with a question, time, rows, the action and Late
  const card=byId(app,'chat-decision-decision:1')!;assert.ok(card);assert.equal(card.className,'chat-decision');assert.equal(card.attributes.get('aria-label'),'Round once on the total?');
  const time=new Date(decision.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
  for(const part of ['Round once on the total?',time,'Now','Per line · TOTAL 4 cents','After'])assert.ok(card.textContent.includes(part),part);
- assert.ok(button(card,'Change'));assert.ok(button(card,'Later'));assert.doesNotMatch(card.textContent,/next time|don.t ask/i);
+ assert.ok(button(card,'바꾸기'));assert.ok(button(card,'나중에'));assert.doesNotMatch(card.textContent,/next time|don.t ask/i);
  const order=shown(app);assert.ok(order.indexOf(card)>order.indexOf(byId(app,'chat-card-'+turnId(1))!)&&order.indexOf(card)<order.findIndex(n=>n.textContent==='Total please'),'placed at its time');
  assert.equal(byId(app,'chat-decision-bad'),undefined,'malformed decisions are ignored');
  const rows=app.node('activity-list').children;assert.match(rows[0]!.textContent,/Rounding rule.*Round once on the total\?/);
- await button(card,'Later')!.fire('click');await settle();
+ await button(card,'나중에')!.fire('click');await settle();
  assert.deepEqual(state.posted.map(p=>[p.path,Object.keys(p.body).sort(),p.body.decisionId,p.body.answer]),[['/assistant/decisions',['answer','commandId','decisionId'],'decision:1','later']]);
  state.extra.decisions=[{...decision,state:'later'}];await app.node('chat-latest').fire('click');await settle();
- assert.ok(!shown(app).includes(card),"replaced in place");const later=byId(app,'chat-system-decision:1')!;assert.match(later.textContent,/^Later: Round once on the total\?Ask again$/);
- await button(later,'Ask again')!.fire('click');await settle();assert.equal(state.posted.at(-1)!.body.answer,'ask');
+ assert.ok(!shown(app).includes(card),"replaced in place");const later=byId(app,'chat-system-decision:1')!;assert.match(later.textContent,/^나중에: Round once on the total\?다시 묻기$/);
+ await button(later,'다시 묻기')!.fire('click');await settle();assert.equal(state.posted.at(-1)!.body.answer,'ask');
  assert.doesNotMatch(app.node('activity-list').children[0]!.textContent,/Rounding rule/,'a deferred decision is not waiting');
  state.extra.decisions=[{...decision,state:'done',line:'Rounding changed'}];await app.node('chat-latest').fire('click');await settle();assert.equal(later.textContent,'Rounding changed');
 });
@@ -95,42 +96,42 @@ test('a briefing is one grey card whose bullets link to Work with its current st
  const day2=T0+24*3600000;
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}},{text:'Morning',at:day2+3600000}],{briefings:[{id:'briefing:1',at:day2,title:'Morning briefing',turnIds:[turnId(1),'assistant-turn:missing']}]});await settle();
  const brief=byId(app,'chat-briefing-briefing:1')!;assert.ok(brief);
- assert.match(brief.textContent,new RegExp('^Morning briefing \\| '+new Date(day2).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})));
- assert.match(brief.textContent,/Churn causes Working/);assert.doesNotMatch(brief.textContent,/missing/);
+ assert.match(brief.textContent,new RegExp('^Morning briefing \\| '+'11월 6일 금요일'));
+ assert.match(brief.textContent,/Churn causes 작업 중/);assert.doesNotMatch(brief.textContent,/missing/);
  const dates=shown(app).filter(n=>n.className==='chat-date').map(n=>n.textContent);assert.equal(dates.length,2);
  const order=shown(app);assert.ok(order.indexOf(brief)>order.findIndex(n=>n.className==='chat-date'&&n.textContent===dates[1])&&order.indexOf(brief)<order.findIndex(n=>n.textContent==='Morning'));
  await button(brief,'Churn causes')!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
 });
 
-test('yellow appears only in decision card rules',()=>{
- const style=workbenchPage.slice(0,workbenchPage.indexOf('</style>'));
- for(const rule of style.split('}'))if(/#f0bc4b|#231d0e|#4a3c15|#241d07/i.test(rule))assert.match(rule.trim(),/^(@media[^{]*\{)?\.chat-decision/,rule);
- assert.match(style,/\.chat-decision\{[^}]*#231d0e/);
+test('yellow role tokens are consumed only by decision card styles',()=>{
+ const style=chatStyle;
+ for(const rule of style.split('}'))if(/var\(--gate/.test(rule))assert.match(rule.trim(),/^(@media[^{]*\{)?\.chat-decision/,rule);
+ assert.match(style,/\.chat-decision\{[^}]*var\(--gate-wash\)/);
 });
 
 test('a closed Work whose outcome is still unknown keeps its exception card, and unknown Work ranks as an exception even while waiting',async()=>{
  const {app}=fixture([{text:'Order toner',at:T0,work:{workId:'work:c',title:'Toner order',execution:'cancelled',acceptance:'pending',started:true,unknown:true}},{text:'Ask the vendor',at:T0,work:{workId:'work:w',title:'Vendor question',execution:'waiting',acceptance:'pending',started:true,unknown:true}},{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}}]);await settle();
- for(const n of [1,2]){const card=byId(app,'chat-exception-'+turnId(n))!;assert.ok(card,'exception '+n);assert.match(card.textContent,/Result unknown.*Not resent/);assert.ok(button(card,'Check'));assert.equal(button(card,'Close'),undefined);}
+ for(const n of [1,2]){const card=byId(app,'chat-exception-'+turnId(n))!;assert.ok(card,'exception '+n);assert.match(card.textContent,/결과 모름.*다시 보내지 않음/);assert.ok(button(card,'확인'));assert.equal(button(card,'닫기'),undefined);}
  assert.equal(byId(app,'chat-system-closed:'+turnId(1)),undefined,'a plain cancel does not answer an unknown outcome');
- assert.deepEqual(app.node('side-work').children.map(n=>n.textContent),['Churn causesWorking'],'Work lines show running Work only');
+ assert.deepEqual(app.node('side-work').children.map(n=>n.textContent),['Churn causes작업 중'],'Work lines show running Work only');
  assert.deepEqual(app.node('activity-list').children.map(n=>n.children[0]!.children[0]!.textContent),['Vendor question','Toner order','Churn causes'],'unknown before running');
 });
 
 test('a Work stopped after starting offers Retry and Close; a refused Close is not resent and the card stays',async()=>{
  const {app,state}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:s',title:'Churn causes',execution:'blocked',acceptance:'pending',started:true}}]);await settle();
- const card=byId(app,'chat-exception-'+turnId(1))!;assert.match(card.textContent,/Churn causes.*Failed.*Stopped/);assert.ok(button(card,'Retry'));
- state.answer=409;await button(card,'Close')!.fire('click');await settle();
- assert.equal(posts(app).length,1);assert.ok(shown(app).includes(card));assert.equal(button(card,'Close')!.disabled,false);
+ const card=byId(app,'chat-exception-'+turnId(1))!;assert.match(card.textContent,/Churn causes.*실패.*중지됨/);assert.ok(button(card,'다시 시도'));
+ state.answer=409;await button(card,'닫기')!.fire('click');await settle();
+ assert.equal(posts(app).length,1);assert.ok(shown(app).includes(card));assert.equal(button(card,'닫기')!.disabled,false);
 });
 
 test('Retry keeps typed text and a draft whose result is unknown, so the unknown message replays under its own command ID',async()=>{
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:f',title:'Churn causes',execution:'settled',acceptance:'failed',started:true}}]);await settle();
  const card=byId(app,'chat-exception-'+turnId(1))!,input=app.node('chat-input'),key='massion.workbench.chat-draft';
- input.value='A new note';await input.fire('input');await button(card,'Retry')!.fire('click');await settle();
+ input.value='A new note';await input.fire('input');await button(card,'다시 시도')!.fire('click');await settle();
  assert.equal(input.value,'A new note');assert.equal((app.context as any).document.activeElement.id,'chat-input');
  const unknown=JSON.stringify({text:'Order toner',commandId:'cmd-1',target:{segment:1,expectedRevision:9}});input.value='Order toner';app.storage.set(key,unknown);
- await button(card,'Retry')!.fire('click');await settle();assert.equal(input.value,'Order toner');assert.equal(app.storage.get(key),unknown);
- input.value='';app.storage.delete(key);await button(card,'Retry')!.fire('click');await settle();assert.equal(input.value,'Find churn causes');
+ await button(card,'다시 시도')!.fire('click');await settle();assert.equal(input.value,'Order toner');assert.equal(app.storage.get(key),unknown);
+ input.value='';app.storage.delete(key);await button(card,'다시 시도')!.fire('click');await settle();assert.equal(input.value,'Find churn causes');
 });
 
 test('a slot that changes kind moves no other entry, so focus elsewhere stays and the live log does not re-announce',async()=>{

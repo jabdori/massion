@@ -54,7 +54,7 @@ test('Work lines show running Work under the Representative; the activity list o
  assert.equal(app.node('side-members').hidden,true);assert.equal(app.node('rail-apps').hidden,true);
  await app.node('activity-toggle').fire('click');assert.equal(app.node('side-activity').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-pressed'),'true');
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Running one','Done one']);
- assert.match(app.node('activity-list').textContent,/Check failed/);assert.doesNotMatch(app.node('activity-list').textContent,/Unread/,'first sight records the state without a dot');
+ assert.match(app.node('activity-list').textContent,/확인 실패/);assert.doesNotMatch(app.node('activity-list').textContent,/읽지 않음/,'first sight records the state without a dot');
  await app.node('activity-order').fire('click');assert.equal(app.node('activity-order-menu').hidden,false);await app.node('order-recent').fire('click');
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Done one','Running one']);
  assert.equal(app.node('order-recent').attributes.get('aria-checked'),'true');assert.equal(app.node('activity-order-menu').hidden,true);
@@ -62,10 +62,10 @@ test('Work lines show running Work under the Representative; the activity list o
  // A state change after first sight shows the unread dot until the Work is opened.
  state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted'},state.works[1]!,state.works[2]!];await app.node('chat-latest').fire('click');await settle();
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Done one','Running one'],'ties keep the recent order');
- const row=kids(app.node('activity-list')).find(r=>r.textContent.includes('Running one'))!;assert.match(row.textContent,/Unread/);
+ const row=kids(app.node('activity-list')).find(r=>r.textContent.includes('Running one'))!;assert.match(row.textContent,/읽지 않음/);
  assert.equal(app.node('work-pane').hidden,true);
  await row.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();
- assert.equal(app.node('work-pane').hidden,false);assert.doesNotMatch(app.node('activity-list').textContent,/Unread/);
+ assert.equal(app.node('work-pane').hidden,false);assert.doesNotMatch(app.node('activity-list').textContent,/읽지 않음/);
  const tabs=()=>kids(app.node('pane-tabs'));assert.equal(tabs().length,1);assert.match(tabs()[0]!.textContent,/Running one/);
  assert.equal((app.context as any).document.activeElement.id,'work-heading-work:b');
  assert.deepEqual(kids(app.node('work-list')).map(card=>card.id),['work-card-work:b'],'a Work tab shows that Work only');
@@ -84,7 +84,7 @@ test('tabs close one at a time, widen takes the room, the sidebar hides, and the
  await settle();
  for(const line of kids(app.node('side-work')).reverse()){await line.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();}
  const tabs=()=>kids(app.node('pane-tabs'));assert.equal(tabs().length,2);
- const close=(tab:Node)=>tab.children.find(c=>c.attributes.get('aria-label')?.startsWith('Close'))!;assert.equal(close(tabs()[1]!).attributes.get('aria-label'),'Close Second');
+ const close=(tab:Node)=>tab.children.find(c=>c.attributes.get('aria-label')?.endsWith('닫기'))!;assert.equal(close(tabs()[1]!).attributes.get('aria-label'),'Second 닫기');
  await close(tabs()[1]!).fire('click');await settle();assert.equal(tabs().length,1);assert.equal(tabs()[0]!.children[0]!.attributes.get('aria-selected'),'true');assert.equal(app.node('work-pane').hidden,false);
  await app.node('pane-widen').fire('click');assert.equal(app.node('pane-widen').attributes.get('aria-pressed'),'true');assert.match(app.node('app').className,/\bwide\b/);
  await app.node('pane-widen').fire('click');assert.doesNotMatch(app.node('app').className,/\bwide\b/);
@@ -93,8 +93,8 @@ test('tabs close one at a time, widen takes the room, the sidebar hides, and the
  await app.node('sidebar-toggle').fire('click');assert.equal(app.node('sidebar').hidden,false);
  assert.equal(app.node('page-chat').hidden,false);assert.equal(app.node('page-heading').textContent,'하하나','avatar letter, then the name');
  await app.node('rail-me').fire('click');assert.equal(app.node('me-menu').hidden,false);assert.equal(app.node('rail-me').attributes.get('aria-expanded'),'true');
- await app.node('me-settings').fire('click');assert.equal(app.node('me-menu').hidden,true);assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,'Settings');
- for(const [rail,page,name] of [['rail-results','page-results','Results'],['rail-schedules','page-schedules','Schedules'],['rail-chat','page-chat','하하나']] as const){
+ await app.node('me-settings').fire('click');assert.equal(app.node('me-menu').hidden,true);assert.equal(app.node('page-settings').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,'설정');
+ for(const [rail,page,name] of [['rail-results','page-results','결과물'],['rail-schedules','page-schedules','예약'],['rail-chat','page-chat','하하나']] as const){
   await app.node(rail).fire('click');assert.equal(app.node(page).hidden,false,page);assert.equal(app.node('page-heading').textContent,name);assert.equal(app.node(rail).attributes.get('aria-current'),'page');
   for(const other of ['page-chat','page-results','page-schedules','page-settings'])if(other!==page)assert.equal(app.node(other).hidden,true,other);
  }
@@ -186,7 +186,7 @@ test('a failed load from Settings shows its error on the page while the pane is 
  const {app}=fixture([],path=>path==='/missions/missing'?{error:'Mission not found'}:undefined);await settle();
  await app.node('rail-me').fire('click');await app.node('me-settings').fire('click');
  app.node('mission-id').value='missing';await app.submit('load-form');await settle();
- assert.equal(app.node('work-pane').hidden,true);assert.equal(app.node('page-status').hidden,false);assert.match(app.node('page-status').textContent,/Refresh failed/);
+ assert.equal(app.node('work-pane').hidden,true);assert.equal(app.node('page-status').hidden,false);assert.match(app.node('page-status').textContent,/갱신 실패/);
  app.node('mission-id').value='intake';await app.submit('load-form');await settle();
  assert.equal(app.node('work-pane').hidden,false);assert.equal(app.node('page-status').hidden,true);
 });
@@ -201,8 +201,8 @@ test('moving to another page sets the narrow-screen pane aside until a Work is o
 
 test('the narrow-screen sidebar opens below the band so its toggle stays reachable to close it',()=>{
  const narrow=/@media \(max-width:900px\)\{\.sidebar\{([^}]*)\}/.exec(workbenchPage)?.[1]??'';
- assert.match(narrow,/position:fixed/);assert.match(narrow,/top:44px/);
- assert.match(workbenchPage,/\.band\{height:44px/,'the sidebar top matches the band height');
+ assert.match(narrow,/position:fixed/);assert.match(narrow,/top:var\(--header-height\)/);
+ assert.match(workbenchPage,/\.band\{height:var\(--header-height\)/,'the sidebar top matches the band height');
 });
 
 test('the owner menu stacks above the narrow-screen work pane so Settings stays reachable',()=>{

@@ -1,0 +1,30 @@
+# E3a: Screen fidelity foundation
+
+The approved screen contracts, copy keys and visual measurements in
+`docs/product/screens/` are the source of truth for this slice. Generate one
+CSS token layer from `visual.json`, select palettes through the browser system
+preference, and reuse semantic roles throughout UI styles. Include geometry,
+typography, spacing, radii, motion and keyboard focus values without restructuring
+the Work pane, composer or cards.
+
+A small shared Korean lookup reads `copy.ko.json`; the same lookup and table are
+embedded in the self-contained browser client. Dynamic values use named
+placeholders and remain text, never markup. Convert the shell and conversation
+controls, dates and states first; remove forbidden explanatory shell notices.
+Offline/failed sends retain the original private draft and command identity,
+show a compact resend action and a disconnected status beside the name. Unknown
+external Work outcomes continue to forbid replay.
+
+Make copy lint blocking for migrated UI files, with regression coverage for
+interpolation, generated source drift, and retained-draft/unknown-outcome behavior.
+Measure all 75 screens in both system themes before and after, inspect the B2
+and B2-offline pairs, and retain remaining layout and unavailable-state gaps in
+the PR rather than weakening contracts. No provider, database or external effect
+is exercised by the fixture harness.
+
+The browser theme mechanism follows [MDN prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-color-scheme)
+and [color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/color-scheme).
+Original approved copy entries and contracts remain unchanged. New keys localize
+existing technical controls; their provenance is distinguished from prototype
+copy. The generator records the existing-style provenance of tokens whose values
+were absent from the supplied visual measurements.

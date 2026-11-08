@@ -8,13 +8,20 @@ import * as ts from 'typescript/unstable/ast';
 const dynamic='\uFFFC';
 const attributes=new Set(['title','placeholder','alt','aria-label','aria-description']);
 const properties=new Set(['textContent','innerText','title','placeholder','alt','ariaLabel','ariaDescription']);
+const keyedFiles=new Set([
+ 'surface-shell.ts','assistant-conversation-panel.ts','settings-panel.ts','apps-panel.ts','members-panel.ts','results-panel.ts','schedules-panel.ts','workbench.ts',
+ 'conversation-work-panel.ts','expired-run-panel.ts','knowledge-neighborhood-panel.ts','memory-conflict-panel.ts','memory-content-search-panel.ts','memory-expiry-panel.ts','memory-find-panel.ts','memory-usage-panel.ts',
+ 'mission-catalog-panel.ts','mission-constraints-panel.ts','reflection-trail-panel.ts','rejected-text-panel.ts','run-sequence-panel.ts','work-clarification-panel.ts','work-correction-panel.ts','work-inbox-panel.ts','work-prerequisite-panel.ts',
+ 'accepted-result-source-draft.ts','owner-file-document-draft.ts'
+].map(name=>`src/${name}`));
 const normalize=text=>text.normalize('NFC').replace(/\s+/g,' ').trim();
 const canonical=text=>normalize(text).replace(/\{[\w]+\}/g,dynamic);
 const limits=[
- 'Static advisory extraction only: dynamic data, variable aliases, lookup tables and indirect helper arguments are not resolved.',
+ 'Static extraction only: dynamic data, variable aliases, lookup tables and indirect helper arguments are not resolved.',
  'Recognizes direct DOM writes, element(tag, text), HTML-shaped literals, inline scripts and templates assigned to names ending in Client.',
  'HTML scanning is not a browser parser: hidden markup is included; CSS content, computed visibility, custom entities and cross-element text composition are not checked.',
- 'Approved entries match globally by normalized ko text, with placeholders; roles, screens and runtime interpolation values are not validated. Escaped literal columns are approximate.'
+ 'Migrated panels, shell, workbench and the two rendered source helpers require keyed copy; other panels report only and match approved normalized ko text. Symbols and numbers are not copy. Roles, screens and runtime interpolation values are not validated. Escaped literal columns are approximate.',
+ 'Direct copy calls validate static keys and object placeholder names. Dynamic keys/values and missing properties behind spreads or computed names are not resolved.'
 ];
 function decode(text){
  const entities={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '};
@@ -32,18 +39,19 @@ export async function lintCopy(root=fileURLToPath(new URL('../../',import.meta.u
  catch(error){throw new Error(`Cannot read approved copy table ${tablePath}: ${error.message}`);}
  if(!table||Array.isArray(table)||!Object.keys(table).length||Object.values(table).some(entry=>typeof entry?.ko!=='string'||!entry.ko.trim()))throw new Error(`Invalid approved copy table: ${tablePath}`);
  const approved=new Set(Object.values(table).map(entry=>canonical(entry.ko)));
- const files=(await readdir(resolve(root,'src'))).filter(name=>/panel\.ts$/.test(name)||['surface-shell.ts','workbench.ts'].includes(name)).sort().map(name=>`src/${name}`);
+ const files=(await readdir(resolve(root,'src'))).filter(name=>/panel\.ts$/.test(name)||keyedFiles.has(`src/${name}`)).sort().map(name=>`src/${name}`);
  const findings=[];
   for(const file of files){
-   const source=await readFile(resolve(root,file),'utf8'),seen=new Set();
-   function report(text,position,context){
+   const source=await readFile(resolve(root,file),'utf8'),seen=new Set(),blocking=keyedFiles.has(file);
+   function report(text,position,context,reason){
     text=normalize(text);
-    if(!/[\p{L}]/u.test(text.replaceAll(dynamic,''))||approved.has(canonical(text)))return;
-    const key=`${position}:${text}`;
+    if(!reason&&(!/[\p{L}]/u.test(text.replaceAll(dynamic,''))||!blocking&&approved.has(canonical(text))))return;
+    reason??=blocking?'unkeyed-copy':/[a-z]/i.test(text.replaceAll(dynamic,''))?'english-copy':'unapproved-copy';
+    const key=`${position}:${reason}:${text}`;
     if(seen.has(key))return;
     seen.add(key);
     const before=source.slice(0,position),line=before.split('\n').length,column=position-before.lastIndexOf('\n');
-    findings.push({file,line,column,context,reason:/[a-z]/i.test(text.replaceAll(dynamic,''))?'english-copy':'unapproved-copy',text:text.replaceAll(dynamic,'{dynamic}')});
+    findings.push({file,line,column,context,reason,blocking,text:text.replaceAll(dynamic,'{dynamic}')});
    }
    function scan(code,base=0){
     // A fresh virtual project avoids cached source bytes across embedded clients.
@@ -54,6 +62,27 @@ export async function lintCopy(root=fileURLToPath(new URL('../../',import.meta.u
      const ast=snapshot.getProject('/copy-lint/tsconfig.json').program.getSourceFile('/copy-lint/source.ts');
      const literal=node=>node&&(ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node));
      const member=node=>ts.isPropertyAccessExpression(node)?node.name.text:ts.isElementAccessExpression(node)&&literal(node.argumentExpression)?node.argumentExpression.text:'';
+     const lookup=node=>ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='copy';
+     function validateCopy(node){
+      const [key,values]=node.arguments,position=base+node.getStart();
+      if(!key){report('copy()',position,'copy-call','missing-copy-key');return;}
+      if(!literal(key))return;
+      if(!Object.hasOwn(table,key.text)){report(key.text,position,'copy-call','unknown-copy-key');return;}
+      const expected=new Set([...table[key.text].ko.matchAll(/\{(\w+)\}/g)].map(match=>match[1])),provided=new Set();
+      const absent=!values||values.kind===ts.SyntaxKind.NullKeyword||ts.isIdentifier(values)&&values.text==='undefined';
+      let complete=absent;
+      if(values&&ts.isObjectLiteralExpression(values)){
+       complete=true;
+       for(const property of values.properties){
+        let name=property.name;
+        if(name&&ts.isComputedPropertyName(name))name=literal(name.expression)?name.expression:undefined;
+        if(!name||!ts.isIdentifier(name)&&!literal(name)){complete=false;continue;}
+        provided.add(name.text);
+       }
+      }else if(!absent)return;
+      if(complete)for(const name of expected)if(!provided.has(name))report(`${key.text}: ${name}`,position,'copy-call','missing-copy-placeholder');
+      for(const name of provided)if(!expected.has(name))report(`${key.text}: ${name}`,position,'copy-call','unknown-copy-placeholder');
+     }
      function value(node){
       if(!node)return dynamic;
       if(literal(node))return node.text;
@@ -113,6 +142,7 @@ export async function lintCopy(root=fileURLToPath(new URL('../../',import.meta.u
        if(['innerHTML','outerHTML'].includes(name)&&(literal(node.right)||ts.isTemplateExpression(node.right)))markup(node.right);
       }
       if(ts.isCallExpression(node)){
+       if(lookup(node))validateCopy(node);
        const name=member(node.expression),args=node.arguments;
        if(name==='setAttribute'&&literal(args[0])&&attributes.has(args[0].text))visible(args[1],'dom-attribute');
        if(name==='createTextNode'||name==='insertAdjacentText')visible(args[name==='insertAdjacentText'?1:0],'dom-text');
@@ -121,6 +151,7 @@ export async function lintCopy(root=fileURLToPath(new URL('../../',import.meta.u
        if(ts.isIdentifier(node.expression)&&node.expression.text==='element')visible(args[1],'element-text');
       }
       if(literal(node)||ts.isTemplateExpression(node)){
+       for(let parent=node.parent;parent;parent=parent.parent)if(lookup(parent)){node.forEachChild(visit);return;}
        const first=literal(node)?node.text:node.head.text;
        const parent=ts.isTaggedTemplateExpression(node.parent)?node.parent.parent:node.parent;
        if(ts.isVariableDeclaration(parent)&&/Client$/i.test(parent.name.getText())){
@@ -142,10 +173,10 @@ export async function lintCopy(root=fileURLToPath(new URL('../../',import.meta.u
    scan(source);
   }
  findings.sort((a,b)=>a.file.localeCompare(b.file,'en')||a.line-b.line||a.column-b.column);
- return {mode:'report-only',files,findings,limits};
+ return {mode:'scoped-blocking',files,findings,limits};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
- try{console.log(JSON.stringify(await lintCopy(process.argv[2]),null,2));}
+ try{const report=await lintCopy(process.argv[2]);console.log(JSON.stringify(report,null,2));if(report.findings.some(item=>item.blocking))process.exitCode=1;}
  catch(error){console.error(`Copy lint infrastructure error: ${error.message}`);process.exitCode=1;}
 }
