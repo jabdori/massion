@@ -1,31 +1,94 @@
 {
  "tokens": {
-  "--bg-0": "rgb(11, 12, 14)",
-  "--bg-1": "rgb(21, 23, 26)",
-  "--bg-2": "rgb(27, 29, 32)",
-  "--bg-3": "rgb(32, 34, 37)",
-  "--line": "rgb(43, 45, 48)",
-  "--line-strong": "rgb(58, 60, 63)",
-  "--fg": "rgb(244, 245, 247)",
-  "--fg-2": "rgb(200, 205, 214)",
-  "--fg-3": "rgb(162, 168, 180)",
-  "--fg-4": "rgb(131, 137, 147)",
-  "--agent-0": "rgb(220, 222, 227)",
-  "--agent-1": "rgb(63, 200, 203)",
-  "--agent-2": "rgb(93, 192, 234)",
-  "--agent-3": "rgb(133, 180, 247)",
-  "--agent-4": "rgb(173, 168, 248)",
-  "--agent-5": "rgb(201, 160, 238)",
-  "--agent-6": "rgb(227, 153, 218)",
-  "--agent-7": "rgb(243, 152, 190)",
-  "--agent-provisional": "rgb(155, 168, 196)",
-  "--user": "rgb(58, 58, 64)",
-  "--gate": "rgb(240, 188, 75)",
-  "--gate-ink": "rgb(36, 29, 7)",
-  "--gate-wash": "rgb(35, 29, 14)",
-  "--gate-border": "rgb(74, 60, 21)",
-  "--halt": "rgb(245, 118, 110)",
-  "--emergency": "rgb(232, 68, 46)"
+  "--bg-0": "--palette-bg-0",
+  "--bg-1": "--palette-bg-1",
+  "--bg-2": "--palette-bg-2",
+  "--bg-3": "--palette-bg-3",
+  "--line": "--palette-line",
+  "--line-strong": "--palette-line-strong",
+  "--fg": "--palette-fg",
+  "--fg-2": "--palette-fg-2",
+  "--fg-3": "--palette-fg-3",
+  "--fg-4": "--palette-fg-4",
+  "--agent-0": "--palette-agent-0",
+  "--agent-1": "--palette-agent-1",
+  "--agent-2": "--palette-agent-2",
+  "--agent-3": "--palette-agent-3",
+  "--agent-4": "--palette-agent-4",
+  "--agent-5": "--palette-agent-5",
+  "--agent-6": "--palette-agent-6",
+  "--agent-7": "--palette-agent-7",
+  "--agent-provisional": "--palette-agent-provisional",
+  "--user": "--palette-user",
+  "--gate": "--palette-gate",
+  "--gate-ink": "--palette-gate-ink",
+  "--gate-wash": "--palette-gate-wash",
+  "--gate-border": "--palette-gate-border",
+  "--halt": "--palette-halt",
+  "--emergency": "--palette-emergency"
+ },
+ "palettes": {
+  "dark": {
+   "bg-0": "#0b0c0e",
+   "bg-1": "#15171a",
+   "bg-2": "#1b1d20",
+   "bg-3": "#202225",
+   "line": "#2b2d30",
+   "line-strong": "#3a3c3f",
+   "fg": "#f4f5f7",
+   "fg-2": "#c8cdd6",
+   "fg-3": "#a2a8b4",
+   "fg-4": "#838993",
+   "agent-0": "#dcdee3",
+   "agent-1": "#3fc8cb",
+   "agent-2": "#5dc0ea",
+   "agent-3": "#85b4f7",
+   "agent-4": "#ada8f8",
+   "agent-5": "#c9a0ee",
+   "agent-6": "#e399da",
+   "agent-7": "#f398be",
+   "agent-provisional": "#9ba8c4",
+   "user": "#3a3a40",
+   "gate": "#f0bc4b",
+   "gate-ink": "#241d07",
+   "gate-wash": "#231d0e",
+   "gate-border": "#4a3c15",
+   "halt": "#f5766e",
+   "emergency": "#e8442e"
+  },
+  "light": {
+   "bg-0": "#ffffff",
+   "bg-1": "#f9f9f9",
+   "bg-2": "#f3f3f3",
+   "bg-3": "#ededed",
+   "line": "#cdcdcd",
+   "line-strong": "#8f8f8f",
+   "fg": "#131313",
+   "fg-2": "#303030",
+   "fg-3": "#414141",
+   "fg-4": "#5d5d5d",
+   "agent-0": "#303030",
+   "agent-1": "#004f99",
+   "agent-2": "#0169cc",
+   "agent-3": "#0169cc",
+   "agent-4": "#6b3ab4",
+   "agent-5": "#8046d9",
+   "agent-6": "#ba437a",
+   "agent-7": "#963c67",
+   "agent-provisional": "#5d5d5d",
+   "user": "#ededed",
+   "gate": "#ffc300",
+   "gate-ink": "#4d3b00",
+   "gate-wash": "#fff6d9",
+   "gate-border": "#916f00",
+   "halt": "#ba2623",
+   "emergency": "#ba2623"
+  }
+ },
+ "evidence": {
+  "light": "apps/codex-desktop/evidence/bundles/tokens.css: light-dark gray-0/50/75/100/200/400/500/600/700/950; yellow-50/400/700/900; red-600; blue-500/600; purple-500/600; pink-600/700. Avatar roles preserve identity and readable contrast with existing avatar ink (--bg-0).",
+  "dark": "Original owner-approved massion-tokens.css palette, unchanged.",
+  "motion": "apps/claude-desktop/frontend.md §4: .12s/.3s; cubic-bezier(.32,.72,0,1)."
  },
  "shell": {
   "rail": {
@@ -42,11 +105,14 @@
    ],
    "width": 248,
    "x": 52,
-   "bg": "var(--bg-1)"
+   "bg": "var(--bg-1)",
+   "min_width": 248,
+   "max_width": 288,
+   "wide_viewport_min": 1600
   },
   "main": {
    "widths_seen": [
-    380,
+    480,
     500,
     540,
     1140,
@@ -63,11 +129,14 @@
    ],
    "width": 600,
    "x": 840,
-   "bg": "var(--bg-1)"
+   "bg": "var(--bg-1)",
+   "base_width": 600,
+   "wide_ratio": 0.48,
+   "conversation_min_width": 480
   },
   "composer": {
    "widths_seen": [
-    332,
+    432,
     460,
     492,
     500,
@@ -102,14 +171,21 @@
    "ff": "\"Pretendard Variable\""
   },
   "conversation.button": {
-   "fs": "12px",
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "conversation.link": {
+   "fs": "13px",
    "fw": "400",
    "lh": "20px",
    "color": "var(--fg)",
    "ff": "\"Pretendard Variable\""
   },
-  "conversation.link": {
-   "fs": "13px",
+  "conversation.radio": {
+   "fs": "14px",
    "fw": "400",
    "lh": "20px",
    "color": "var(--fg)",
@@ -165,6 +241,20 @@
    "ff": "\"Pretendard Variable\""
   },
   "header.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "header.text": {
+   "fs": "13px",
+   "fw": "600",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "other.link": {
    "fs": "13px",
    "fw": "400",
    "lh": "20px",
@@ -228,7 +318,7 @@
    "ff": "\"Pretendard Variable\""
   },
   "pane.button": {
-   "fs": "12px",
+   "fs": "13px",
    "fw": "400",
    "lh": "20px",
    "color": "var(--fg)",
@@ -311,6 +401,13 @@
    "color": "var(--fg-2)",
    "ff": "\"Pretendard Variable\""
   },
+  "settings.combobox": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "normal",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
   "settings.heading": {
    "fs": "13px",
    "fw": "600",
@@ -325,7 +422,21 @@
    "color": "var(--fg)",
    "ff": "\"Pretendard Variable\""
   },
+  "settings.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
   "settings.text": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.textbox": {
    "fs": "13px",
    "fw": "400",
    "lh": "20px",
@@ -386,8 +497,32 @@
    "pad": "0px 8px",
    "height": 20
   },
+  "bubble.user": {
+   "count": 51,
+   "bg": "var(--bg-2)",
+   "bd": null,
+   "radius": "18px",
+   "pad": "8px 14px",
+   "fs": "14px",
+   "lh": "22px",
+   "width": 416,
+   "height": 38
+  },
+  "composer": {
+   "count": 52,
+   "bg": "var(--bg-2)",
+   "bd": "1px solid var(--line)",
+   "radius": "20px",
+   "pad": "10px 10px 8px 14px",
+   "fs": "13px",
+   "lh": "20px",
+   "width": 680,
+   "height": 78,
+   "focus_ring": "2px",
+   "editor_max_height": 200
+  },
   "card.conversation": {
-   "count": 30,
+   "count": 36,
    "bg": "var(--bg-1)",
    "bd": "1px solid var(--line)",
    "radius": "12px",
@@ -397,16 +532,16 @@
    "width": 680,
    "height": 99
   },
-  "composer": {
-   "count": 35,
-   "bg": "var(--bg-2)",
-   "bd": "1px solid var(--line)",
-   "radius": "20px",
-   "pad": "10px 10px 8px 14px",
+  "card.decision": {
+   "count": 16,
+   "bg": "var(--gate-wash)",
+   "bd": "1px solid var(--gate-border)",
+   "radius": "12px",
+   "pad": "14px 16px",
    "fs": "13px",
    "lh": "20px",
    "width": 680,
-   "height": 78
+   "height": 169
   },
   "card.pane": {
    "count": 35,
@@ -416,41 +551,19 @@
    "pad": "0px",
    "fs": "13px",
    "lh": "20px",
-   "width": 474,
+   "width": 424,
    "height": 136
-  },
-  "bubble.user": {
-   "count": 37,
-   "bg": "var(--bg-2)",
-   "bd": null,
-   "radius": "18px",
-   "pad": "8px 14px",
-   "fs": "14px",
-   "lh": "22px",
-   "width": 210,
-   "height": 38
-  },
-  "card.decision": {
-   "count": 9,
-   "bg": "var(--gate-wash)",
-   "bd": "1px solid var(--gate-border)",
-   "radius": "12px",
-   "pad": "14px 16px",
-   "fs": "13px",
-   "lh": "20px",
-   "width": 680,
-   "height": 169
   }
  },
  "rhythm": {
   "conversation_gap_px_mode": 14,
   "conversation_gaps_seen": {
-   "14": 80,
-   "3": 31,
-   "4": 25,
-   "12": 12,
-   "48": 9,
-   "6": 9
+   "14": 77,
+   "4": 37,
+   "3": 37,
+   "40": 25,
+   "28": 13,
+   "6": 13
   }
  },
  "rules": [
@@ -458,6 +571,15 @@
   "--halt only for 결과 모름/실패",
   "completion is neutral, never green",
   "no banners or helper paragraphs in shell regions",
-  "icon-only controls in rail/header/sidebar head (aria-label carries the name)"
- ]
+  "icon-only controls in rail/header/sidebar head (aria-label carries the name)",
+  "system theme: use prefers-color-scheme; static artboards pin data-theme at build time",
+  "completion and budget waiting are neutral in both themes",
+  "unknown payments offer order inspection only; never retry"
+ ],
+ "motion": {
+  "fast": ".12s",
+  "slow": ".3s",
+  "ease": "cubic-bezier(.32,.72,0,1)",
+  "reduced_motion": "0s"
+ }
 }

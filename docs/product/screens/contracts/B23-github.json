@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B23-github.dc.html",
- "screenshot": "contracts/shots/B23-github.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B23-github.dc.html",
+ "screenshot": "shots/dark/B23-github.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B23-github.dc.html",
+   "screenshot": "shots/dark/B23-github.png"
+  },
+  "light": {
+   "source": "proto/render/light/B23-github.dc.html",
+   "screenshot": "shots/light/B23-github.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -40,9 +50,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -106,22 +117,28 @@
     },
     {
      "role": "link",
+     "text": "사용량",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "link",
      "text": "앱",
      "required": true,
-     "order": 7,
+     "order": 8,
      "current": true
     },
     {
      "role": "link",
      "text": "개선",
      "required": true,
-     "order": 8
+     "order": 9
     },
     {
      "role": "link",
      "text": "권한",
      "required": true,
-     "order": 9
+     "order": 10
     }
    ]
   },
@@ -142,9 +159,10 @@
     },
     {
      "role": "heading",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 1
+     "order": 1,
+     "example": "GitHub"
     },
     {
      "role": "text",
@@ -384,8 +402,8 @@
    "longest": 1
   },
   "sidebar": {
-   "chars": 18,
-   "strings": 9,
+   "chars": 21,
+   "strings": 10,
    "sentences": 0,
    "longest": 3
   },
@@ -403,6 +421,12 @@
    "shell.main"
   ],
   "regions": {
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ],
    "rail": [
     0,
     0,
@@ -413,12 +437,6 @@
     52,
     0,
     248,
-    900
-   ],
-   "main": [
-    300,
-    0,
-    1140,
     900
    ]
   }

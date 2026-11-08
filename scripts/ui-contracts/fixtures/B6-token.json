@@ -1,0 +1,8 @@
+{
+  "screen": "B6-token",
+  "extends": "B6",
+  "description": "Known token-expiry exception.",
+  "gaps": [
+    "The production exception renderer has no known token-expiry variant or identity-bound retry control; the existing failed-work state is the nearest reachable state."
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "screen": "B14-usage",
+  "extends": "B14",
+  "description": "Usage settings with unknown values.",
+  "gaps": [
+    "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+  ]
+}

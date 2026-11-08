@@ -1,161 +1,602 @@
 {
-  "B1-signin": {
-    "file": "artboards/B1-signin.png"
-  },
   "B1": {
-    "file": "artboards/B1.png"
+    "dark": {
+      "file": "artboards/dark/B1.png"
+    },
+    "light": {
+      "file": "artboards/light/B1.png"
+    }
   },
-  "B10-preview": {
-    "file": "artboards/B10-preview.png"
+  "B1-first": {
+    "dark": {
+      "file": "artboards/dark/B1-first.png"
+    },
+    "light": {
+      "file": "artboards/light/B1-first.png"
+    }
+  },
+  "B1-first-calc": {
+    "dark": {
+      "file": "artboards/dark/B1-first-calc.png"
+    },
+    "light": {
+      "file": "artboards/light/B1-first-calc.png"
+    }
+  },
+  "B1-first-later": {
+    "dark": {
+      "file": "artboards/dark/B1-first-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B1-first-later.png"
+    }
+  },
+  "B1-signin": {
+    "dark": {
+      "file": "artboards/dark/B1-signin.png"
+    },
+    "light": {
+      "file": "artboards/light/B1-signin.png"
+    }
   },
   "B10": {
-    "file": "artboards/B10.png"
+    "dark": {
+      "file": "artboards/dark/B10.png"
+    },
+    "light": {
+      "file": "artboards/light/B10.png"
+    }
   },
-  "B11-quill": {
-    "file": "artboards/B11-quill.png"
+  "B10-preview": {
+    "dark": {
+      "file": "artboards/dark/B10-preview.png"
+    },
+    "light": {
+      "file": "artboards/light/B10-preview.png"
+    }
   },
   "B11": {
-    "file": "artboards/B11.png"
+    "dark": {
+      "file": "artboards/dark/B11.png"
+    },
+    "light": {
+      "file": "artboards/light/B11.png"
+    }
+  },
+  "B11-quill": {
+    "dark": {
+      "file": "artboards/dark/B11-quill.png"
+    },
+    "light": {
+      "file": "artboards/light/B11-quill.png"
+    }
   },
   "B12": {
-    "file": "artboards/B12.png"
-  },
-  "B13-devices": {
-    "file": "artboards/B13-devices.png"
+    "dark": {
+      "file": "artboards/dark/B12.png"
+    },
+    "light": {
+      "file": "artboards/light/B12.png"
+    }
   },
   "B13": {
-    "file": "artboards/B13.png"
+    "dark": {
+      "file": "artboards/dark/B13.png"
+    },
+    "light": {
+      "file": "artboards/light/B13.png"
+    }
+  },
+  "B13-devices": {
+    "dark": {
+      "file": "artboards/dark/B13-devices.png"
+    },
+    "light": {
+      "file": "artboards/light/B13-devices.png"
+    }
+  },
+  "B13-general": {
+    "dark": {
+      "file": "artboards/dark/B13-general.png"
+    },
+    "light": {
+      "file": "artboards/light/B13-general.png"
+    }
+  },
+  "B13-general-restart": {
+    "dark": {
+      "file": "artboards/dark/B13-general-restart.png"
+    },
+    "light": {
+      "file": "artboards/light/B13-general-restart.png"
+    }
   },
   "B14": {
-    "file": "artboards/B14.png"
+    "dark": {
+      "file": "artboards/dark/B14.png"
+    },
+    "light": {
+      "file": "artboards/light/B14.png"
+    }
+  },
+  "B14-expired": {
+    "dark": {
+      "file": "artboards/dark/B14-expired.png"
+    },
+    "light": {
+      "file": "artboards/light/B14-expired.png"
+    }
+  },
+  "B14-restart": {
+    "dark": {
+      "file": "artboards/dark/B14-restart.png"
+    },
+    "light": {
+      "file": "artboards/light/B14-restart.png"
+    }
+  },
+  "B14-update": {
+    "dark": {
+      "file": "artboards/dark/B14-update.png"
+    },
+    "light": {
+      "file": "artboards/light/B14-update.png"
+    }
+  },
+  "B14-usage": {
+    "dark": {
+      "file": "artboards/dark/B14-usage.png"
+    },
+    "light": {
+      "file": "artboards/light/B14-usage.png"
+    }
   },
   "B15": {
-    "file": "artboards/B15.png"
-  },
-  "B16-later": {
-    "file": "artboards/B16-later.png"
-  },
-  "B16-sent": {
-    "file": "artboards/B16-sent.png"
+    "dark": {
+      "file": "artboards/dark/B15.png"
+    },
+    "light": {
+      "file": "artboards/light/B15.png"
+    }
   },
   "B16": {
-    "file": "artboards/B16.png"
+    "dark": {
+      "file": "artboards/dark/B16.png"
+    },
+    "light": {
+      "file": "artboards/light/B16.png"
+    }
   },
-  "B17-empty": {
-    "file": "artboards/B17-empty.png"
+  "B16-later": {
+    "dark": {
+      "file": "artboards/dark/B16-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B16-later.png"
+    }
+  },
+  "B16-sent": {
+    "dark": {
+      "file": "artboards/dark/B16-sent.png"
+    },
+    "light": {
+      "file": "artboards/light/B16-sent.png"
+    }
   },
   "B17": {
-    "file": "artboards/B17.png"
+    "dark": {
+      "file": "artboards/dark/B17.png"
+    },
+    "light": {
+      "file": "artboards/light/B17.png"
+    }
   },
-  "B18-room-b": {
-    "file": "artboards/B18-room-b.png"
+  "B17-empty": {
+    "dark": {
+      "file": "artboards/dark/B17-empty.png"
+    },
+    "light": {
+      "file": "artboards/light/B17-empty.png"
+    }
   },
   "B18": {
-    "file": "artboards/B18.png"
+    "dark": {
+      "file": "artboards/dark/B18.png"
+    },
+    "light": {
+      "file": "artboards/light/B18.png"
+    }
   },
-  "B19-juno": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+  "B18-room-b": {
+    "dark": {
+      "file": "artboards/dark/B18-room-b.png"
+    },
+    "light": {
+      "file": "artboards/light/B18-room-b.png"
+    }
   },
   "B19": {
-    "file": "artboards/B19.png"
+    "dark": {
+      "file": "artboards/dark/B19.png"
+    },
+    "light": {
+      "file": "artboards/light/B19.png"
+    }
+  },
+  "B19-juno": {
+    "dark": {
+      "file": "artboards/dark/B19-juno.png"
+    },
+    "light": {
+      "file": "artboards/light/B19-juno.png"
+    }
   },
   "B2": {
-    "file": "artboards/B2.png"
+    "dark": {
+      "file": "artboards/dark/B2.png"
+    },
+    "light": {
+      "file": "artboards/light/B2.png"
+    }
   },
-  "B20-coding": {
-    "file": "artboards/B20-coding.png"
+  "B2-offline": {
+    "dark": {
+      "file": "artboards/dark/B2-offline.png"
+    },
+    "light": {
+      "file": "artboards/light/B2-offline.png"
+    }
+  },
+  "B2-offline-failed": {
+    "dark": {
+      "file": "artboards/dark/B2-offline-failed.png"
+    },
+    "light": {
+      "file": "artboards/light/B2-offline-failed.png"
+    }
   },
   "B20": {
-    "file": "artboards/B20.png"
+    "dark": {
+      "file": "artboards/dark/B20.png"
+    },
+    "light": {
+      "file": "artboards/light/B20.png"
+    }
   },
-  "B21-name": {
-    "file": "artboards/B21-name.png"
+  "B20-coding": {
+    "dark": {
+      "file": "artboards/dark/B20-coding.png"
+    },
+    "light": {
+      "file": "artboards/light/B20-coding.png"
+    }
   },
   "B21": {
-    "file": "artboards/B21.png"
+    "dark": {
+      "file": "artboards/dark/B21.png"
+    },
+    "light": {
+      "file": "artboards/light/B21.png"
+    }
   },
-  "B22-room-steps": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+  "B21-done": {
+    "dark": {
+      "file": "artboards/dark/B21-done.png"
+    },
+    "light": {
+      "file": "artboards/light/B21-done.png"
+    }
   },
-  "B22-room": {
-    "file": "artboards/B22-room.png"
+  "B21-done-hana": {
+    "dark": {
+      "file": "artboards/dark/B21-done-hana.png"
+    },
+    "light": {
+      "file": "artboards/light/B21-done-hana.png"
+    }
+  },
+  "B21-name": {
+    "dark": {
+      "file": "artboards/dark/B21-name.png"
+    },
+    "light": {
+      "file": "artboards/light/B21-name.png"
+    }
   },
   "B22": {
-    "file": "artboards/B22.png"
+    "dark": {
+      "file": "artboards/dark/B22.png"
+    },
+    "light": {
+      "file": "artboards/light/B22.png"
+    }
   },
-  "B23-github": {
-    "file": "artboards/B23-github.png"
+  "B22-room": {
+    "dark": {
+      "file": "artboards/dark/B22-room.png"
+    },
+    "light": {
+      "file": "artboards/light/B22-room.png"
+    }
+  },
+  "B22-room-steps": {
+    "dark": {
+      "file": "artboards/dark/B22-room-steps.png"
+    },
+    "light": {
+      "file": "artboards/light/B22-room-steps.png"
+    }
   },
   "B23": {
-    "file": "artboards/B23.png"
+    "dark": {
+      "file": "artboards/dark/B23.png"
+    },
+    "light": {
+      "file": "artboards/light/B23.png"
+    }
   },
-  "B24-done": {
-    "file": "artboards/B24-done.png"
+  "B23-github": {
+    "dark": {
+      "file": "artboards/dark/B23-github.png"
+    },
+    "light": {
+      "file": "artboards/light/B23-github.png"
+    }
   },
-  "B24-later": {
-    "file": "artboards/B24-later.png"
+  "B23-github-expired": {
+    "dark": {
+      "file": "artboards/dark/B23-github-expired.png"
+    },
+    "light": {
+      "file": "artboards/light/B23-github-expired.png"
+    }
   },
   "B24": {
-    "file": "artboards/B24.png"
+    "dark": {
+      "file": "artboards/dark/B24.png"
+    },
+    "light": {
+      "file": "artboards/light/B24.png"
+    }
   },
-  "B25-done": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+  "B24-connect": {
+    "dark": {
+      "file": "artboards/dark/B24-connect.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-connect.png"
+    }
   },
-  "B25-later": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+  "B24-connect-connected": {
+    "dark": {
+      "file": "artboards/dark/B24-connect-connected.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-connect-connected.png"
+    }
+  },
+  "B24-connect-later": {
+    "dark": {
+      "file": "artboards/dark/B24-connect-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-connect-later.png"
+    }
+  },
+  "B24-connect-mail": {
+    "dark": {
+      "file": "artboards/dark/B24-connect-mail.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-connect-mail.png"
+    }
+  },
+  "B24-connect-token": {
+    "dark": {
+      "file": "artboards/dark/B24-connect-token.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-connect-token.png"
+    }
+  },
+  "B24-done": {
+    "dark": {
+      "file": "artboards/dark/B24-done.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-done.png"
+    }
+  },
+  "B24-later": {
+    "dark": {
+      "file": "artboards/dark/B24-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B24-later.png"
+    }
   },
   "B25": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+    "dark": {
+      "file": "artboards/dark/B25.png"
+    },
+    "light": {
+      "file": "artboards/light/B25.png"
+    }
   },
-  "B3-run": {
-    "file": null,
-    "reason": "Exact PNG absent from the supplied final/ directory."
+  "B25-done": {
+    "dark": {
+      "file": "artboards/dark/B25-done.png"
+    },
+    "light": {
+      "file": "artboards/light/B25-done.png"
+    }
+  },
+  "B25-later": {
+    "dark": {
+      "file": "artboards/dark/B25-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B25-later.png"
+    }
+  },
+  "B26": {
+    "dark": {
+      "file": "artboards/dark/B26.png"
+    },
+    "light": {
+      "file": "artboards/light/B26.png"
+    }
+  },
+  "B26-later": {
+    "dark": {
+      "file": "artboards/dark/B26-later.png"
+    },
+    "light": {
+      "file": "artboards/light/B26-later.png"
+    }
   },
   "B3": {
-    "file": "artboards/B3.png"
+    "dark": {
+      "file": "artboards/dark/B3.png"
+    },
+    "light": {
+      "file": "artboards/light/B3.png"
+    }
+  },
+  "B3-run": {
+    "dark": {
+      "file": "artboards/dark/B3-run.png"
+    },
+    "light": {
+      "file": "artboards/light/B3-run.png"
+    }
   },
   "B4": {
-    "file": "artboards/B4.png"
+    "dark": {
+      "file": "artboards/dark/B4.png"
+    },
+    "light": {
+      "file": "artboards/light/B4.png"
+    }
   },
   "B5": {
-    "file": "artboards/B5.png"
+    "dark": {
+      "file": "artboards/dark/B5.png"
+    },
+    "light": {
+      "file": "artboards/light/B5.png"
+    }
   },
   "B6": {
-    "file": "artboards/B6.png"
+    "dark": {
+      "file": "artboards/dark/B6.png"
+    },
+    "light": {
+      "file": "artboards/light/B6.png"
+    }
   },
-  "B7-churn": {
-    "file": "artboards/B7-churn.png"
-  },
-  "B7-done": {
-    "file": "artboards/B7-done.png"
-  },
-  "B7-fail": {
-    "file": "artboards/B7-fail.png"
-  },
-  "B7-unknown": {
-    "file": "artboards/B7-unknown.png"
+  "B6-token": {
+    "dark": {
+      "file": "artboards/dark/B6-token.png"
+    },
+    "light": {
+      "file": "artboards/light/B6-token.png"
+    }
   },
   "B7": {
-    "file": "artboards/B7.png"
+    "dark": {
+      "file": "artboards/dark/B7.png"
+    },
+    "light": {
+      "file": "artboards/light/B7.png"
+    }
   },
-  "B8-done": {
-    "file": "artboards/B8-done.png"
+  "B7-churn": {
+    "dark": {
+      "file": "artboards/dark/B7-churn.png"
+    },
+    "light": {
+      "file": "artboards/light/B7-churn.png"
+    }
   },
-  "B8-fail": {
-    "file": "artboards/B8-fail.png"
+  "B7-done": {
+    "dark": {
+      "file": "artboards/dark/B7-done.png"
+    },
+    "light": {
+      "file": "artboards/light/B7-done.png"
+    }
   },
-  "B8-unknown": {
-    "file": "artboards/B8-unknown.png"
+  "B7-fail": {
+    "dark": {
+      "file": "artboards/dark/B7-fail.png"
+    },
+    "light": {
+      "file": "artboards/light/B7-fail.png"
+    }
+  },
+  "B7-unknown": {
+    "dark": {
+      "file": "artboards/dark/B7-unknown.png"
+    },
+    "light": {
+      "file": "artboards/light/B7-unknown.png"
+    }
   },
   "B8": {
-    "file": "artboards/B8.png"
+    "dark": {
+      "file": "artboards/dark/B8.png"
+    },
+    "light": {
+      "file": "artboards/light/B8.png"
+    }
+  },
+  "B8-done": {
+    "dark": {
+      "file": "artboards/dark/B8-done.png"
+    },
+    "light": {
+      "file": "artboards/light/B8-done.png"
+    }
+  },
+  "B8-fail": {
+    "dark": {
+      "file": "artboards/dark/B8-fail.png"
+    },
+    "light": {
+      "file": "artboards/light/B8-fail.png"
+    }
+  },
+  "B8-unknown": {
+    "dark": {
+      "file": "artboards/dark/B8-unknown.png"
+    },
+    "light": {
+      "file": "artboards/light/B8-unknown.png"
+    }
   },
   "B9": {
-    "file": "artboards/B9.png"
+    "dark": {
+      "file": "artboards/dark/B9.png"
+    },
+    "light": {
+      "file": "artboards/light/B9.png"
+    }
+  },
+  "B9-restart": {
+    "dark": {
+      "file": "artboards/dark/B9-restart.png"
+    },
+    "light": {
+      "file": "artboards/light/B9-restart.png"
+    }
+  },
+  "B9-update": {
+    "dark": {
+      "file": "artboards/dark/B9-update.png"
+    },
+    "light": {
+      "file": "artboards/light/B9-update.png"
+    }
   }
 }

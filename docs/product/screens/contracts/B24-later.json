@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B24-later.dc.html",
- "screenshot": "contracts/shots/B24-later.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B24-later.dc.html",
+ "screenshot": "shots/dark/B24-later.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B24-later.dc.html",
+   "screenshot": "shots/dark/B24-later.png"
+  },
+  "light": {
+   "source": "proto/render/light/B24-later.dc.html",
+   "screenshot": "shots/light/B24-later.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -195,6 +205,12 @@
      "required": false,
      "order": 4,
      "example": "알겠어요. PR 링크를 붙여 주면 그 페이지만 읽을게요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 5
     }
    ]
   },
@@ -277,6 +293,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -288,18 +316,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
-   ],
-   "composer": [
-    530,
-    808,
-    680,
-    78
    ]
   }
  },

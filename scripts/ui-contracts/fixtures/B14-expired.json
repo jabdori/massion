@@ -1,0 +1,9 @@
+{
+  "screen": "B14-expired",
+  "extends": "B14",
+  "description": "Known API token expiry.",
+  "gaps": [
+    "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "The production connection summary has no credential-expiry field or reconnect control."
+  ]
+}

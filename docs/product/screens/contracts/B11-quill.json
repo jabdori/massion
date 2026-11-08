@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B11-quill.dc.html",
- "screenshot": "contracts/shots/B11-quill.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B11-quill.dc.html",
+ "screenshot": "shots/dark/B11-quill.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B11-quill.dc.html",
+   "screenshot": "shots/dark/B11-quill.png"
+  },
+  "light": {
+   "source": "proto/render/light/B11-quill.dc.html",
+   "screenshot": "shots/light/B11-quill.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -83,14 +93,6 @@
      "text": "{member}",
      "required": true,
      "order": 3,
-     "example": "퀼",
-     "visible_text": "퀼"
-    },
-    {
-     "role": "link",
-     "text": "{member}",
-     "required": true,
-     "order": 4,
      "example": "주노",
      "visible_text": "주노"
     }
@@ -153,32 +155,44 @@
      "example": "TOTAL: 4 cents"
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 3
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 3,
+     "order": 4,
      "example": "@퀼 줄마다 반올림하면 합계가 달라져?"
     },
     {
      "role": "text",
      "text": "{member}",
      "required": false,
-     "order": 4,
+     "order": 5,
      "example": "퀼"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 5,
+     "order": 6,
      "example": "21:31"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 6,
+     "order": 7,
      "example": "네. 줄마다 반올림하면 4센트, 합계에서 한 번 반올림하면 3센트예요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 8
     }
    ]
   },
@@ -226,8 +240,8 @@
    "longest": 1
   },
   "sidebar": {
-   "chars": 5,
-   "strings": 3,
+   "chars": 4,
+   "strings": 2,
    "sentences": 0,
    "longest": 2
   },
@@ -237,17 +251,17 @@
    "sentences": 0,
    "longest": 2
   },
-  "composer": {
-   "chars": 5,
-   "strings": 1,
-   "sentences": 0,
-   "longest": 5
-  },
   "conversation": {
    "chars": 139,
    "strings": 9,
    "sentences": 3,
    "longest": 45
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
   }
  },
  "visual": {
@@ -261,6 +275,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -272,18 +298,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
-   ],
-   "composer": [
-    530,
-    808,
-    680,
-    78
    ]
   }
  },

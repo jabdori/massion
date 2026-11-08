@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B4.dc.html",
- "screenshot": "contracts/shots/B4.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B4.dc.html",
+ "screenshot": "shots/dark/B4.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B4.dc.html",
+   "screenshot": "shots/dark/B4.png"
+  },
+  "light": {
+   "source": "proto/render/light/B4.dc.html",
+   "screenshot": "shots/light/B4.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -41,9 +51,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -65,7 +76,7 @@
    "elements": [
     {
      "role": "switch",
-     "text": "활동 보기",
+     "text": "활동 보기, 확인 필요",
      "required": true,
      "order": 0
     },
@@ -222,100 +233,106 @@
      "example": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 4
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 4,
+     "order": 5,
      "example": "34,000원 결제할까요?"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 5,
+     "order": 6,
      "example": "14:11"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 6,
+     "order": 7,
      "example": "상품"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 7,
+     "order": 8,
      "example": "레이저 토너 검정 1개 · 지난 주문과 같은 상품"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 8,
+     "order": 9,
      "example": "판매처"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 9,
+     "order": 10,
      "example": "오피스몰 · shop.example.com"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 10,
+     "order": 11,
      "example": "금액"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 11,
+     "order": 12,
      "example": "34,000원 · 배송비 포함 · 카드 끝자리 0000"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 12,
+     "order": 13,
      "example": "결제 기한"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 13,
+     "order": 14,
      "example": "14:30까지"
     },
     {
      "role": "text",
      "text": "취소",
      "required": false,
-     "order": 14
+     "order": 15
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 15,
+     "order": 16,
      "example": "결제 후 취소 신청 가능"
     },
     {
      "role": "button",
      "text": "{amount} 결제",
      "required": false,
-     "order": 16,
+     "order": 17,
      "example": "34,000원 결제"
     },
     {
      "role": "button",
      "text": "나중에",
      "required": true,
-     "order": 17
+     "order": 18
     }
    ]
   },
@@ -559,6 +576,18 @@
    "chip"
   ],
   "regions": {
+   "composer": [
+    324,
+    808,
+    492,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -570,18 +599,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    540,
-    856
-   ],
-   "composer": [
-    324,
-    808,
-    492,
-    78
    ]
   }
  },

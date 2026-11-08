@@ -1,0 +1,293 @@
+{
+ "artboard": "B13-general",
+ "title": "B13 일반 · 일반",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/dark/B13-general.dc.html",
+ "screenshot": "shots/dark/B13-general.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B13-general.dc.html",
+   "screenshot": "shots/dark/B13-general.png"
+  },
+  "light": {
+   "source": "proto/render/light/B13-general.dc.html",
+   "screenshot": "shots/light/B13-general.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 3,
+     "example": "GitHub"
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "설정",
+     "required": true,
+     "order": 0,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "일반",
+     "required": true,
+     "order": 1,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "link",
+     "text": "기기",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "link",
+     "text": "사용량",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "link",
+     "text": "개선",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "settings",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "일반",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "text",
+     "text": "이름",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "textbox",
+     "text": "이름",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "아침 브리핑"
+    },
+    {
+     "role": "combobox",
+     "text": "아침 브리핑",
+     "required": true,
+     "order": 4,
+     "visible_text": "— 끔 적게 많이"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "알림"
+    },
+    {
+     "role": "combobox",
+     "text": "알림",
+     "required": true,
+     "order": 6,
+     "visible_text": "— 정할 것과 예외만 끔"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "버전"
+    },
+    {
+     "role": "text",
+     "text": "—",
+     "required": true,
+     "order": 8
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 21,
+   "strings": 10,
+   "sentences": 0,
+   "longest": 3
+  },
+  "settings": {
+   "chars": 32,
+   "strings": 13,
+   "sentences": 0,
+   "longest": 9
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

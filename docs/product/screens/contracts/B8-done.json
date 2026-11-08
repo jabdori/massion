@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B8-done.dc.html",
- "screenshot": "contracts/shots/B8-done.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B8-done.dc.html",
+ "screenshot": "shots/dark/B8-done.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B8-done.dc.html",
+   "screenshot": "shots/dark/B8-done.png"
+  },
+  "light": {
+   "source": "proto/render/light/B8-done.dc.html",
+   "screenshot": "shots/light/B8-done.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -41,9 +51,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -91,7 +102,7 @@
    "rect": [
     52,
     44,
-    380,
+    480,
     856
    ],
    "elements": [
@@ -125,32 +136,44 @@
      "example": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
     },
     {
-     "role": "text",
-     "text": "{content}",
-     "required": false,
-     "order": 4,
-     "example": "레이저 토너 검정 · 34,000원 결제함 14:12"
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 4
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
      "order": 5,
+     "example": "레이저 토너 검정 · 34,000원 결제함 14:12"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 6,
      "example": "결제함"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 6,
+     "order": 7,
      "example": "14:12"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 7,
+     "order": 8,
      "example": "주문했어요. 주문 내역에서 1건 들어간 걸 확인했어요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 9
     }
    ]
   },
@@ -179,10 +202,9 @@
     },
     {
      "role": "text",
-     "text": "{content}",
-     "required": false,
-     "order": 3,
-     "example": "완료"
+     "text": "완료",
+     "required": true,
+     "order": 3
     },
     {
      "role": "text",
@@ -544,7 +566,7 @@
    "rect": [
     76,
     808,
-    332,
+    432,
     78
    ],
    "elements": [
@@ -618,23 +640,23 @@
    "card.pane"
   ],
   "regions": {
+   "composer": [
+    76,
+    808,
+    432,
+    78
+   ],
+   "main": [
+    52,
+    44,
+    480,
+    856
+   ],
    "rail": [
     0,
     0,
     52,
     900
-   ],
-   "main": [
-    52,
-    44,
-    380,
-    856
-   ],
-   "composer": [
-    76,
-    808,
-    332,
-    78
    ]
   }
  },

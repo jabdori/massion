@@ -9,7 +9,7 @@ permissions:
 jobs:
   ui-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       UI_CONTRACTS_BLOCKING: '0'
     steps:
@@ -29,7 +29,7 @@ jobs:
         run: |
           node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts
           node scripts/check.mjs
-      - name: Capture all screen contracts
+      - name: Capture all 75 screen contracts in dark and light
         run: node scripts/ui-contracts/run.mjs
       - name: Publish report summary
         if: always()

@@ -1,0 +1,8 @@
+{
+  "screen": "B23-github-expired",
+  "extends": "B23-github",
+  "description": "Known GitHub token expiry.",
+  "gaps": [
+    "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+  ]
+}

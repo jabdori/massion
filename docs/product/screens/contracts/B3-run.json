@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B3-run.dc.html",
- "screenshot": "contracts/shots/B3-run.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B3-run.dc.html",
+ "screenshot": "shots/dark/B3-run.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B3-run.dc.html",
+   "screenshot": "shots/dark/B3-run.png"
+  },
+  "light": {
+   "source": "proto/render/light/B3-run.dc.html",
+   "screenshot": "shots/light/B3-run.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -158,10 +168,10 @@
     },
     {
      "role": "text",
-     "text": "아침 브리핑 | {date} {time}",
+     "text": "{content}",
      "required": false,
      "order": 1,
-     "example": "아침 브리핑 | 11월 5일 (목) 오전 8:00"
+     "example": "아침 브리핑 · 11월 5일 (목) 오전 8:00"
     },
     {
      "role": "text",
@@ -193,7 +203,7 @@
     {
      "role": "link",
      "text": "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중",
-     "required": false,
+     "required": true,
      "order": 6,
      "example": "이탈 원인 조사 실행 중 퀼 45분 조사 분류 요약 확인 3/5 · 나누기 완료 · 원인 정리 중"
     },
@@ -285,6 +295,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -296,18 +318,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
-   ],
-   "composer": [
-    530,
-    808,
-    680,
-    78
    ]
   }
  },

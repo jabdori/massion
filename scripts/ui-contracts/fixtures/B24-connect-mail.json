@@ -1,0 +1,73 @@
+{
+  "screen": "B24-connect-mail",
+  "extends": "B1",
+  "description": "Missing-mail connector decision.",
+  "gaps": [
+    "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture."
+  ],
+  "steps": [],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "mail-connect",
+            "at": 1793855520000,
+            "title": "Gmail",
+            "question": "Gmail을 연결할까요?",
+            "rows": [],
+            "action": "연결",
+            "state": "open"
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "mail-connect",
+            "at": 1793855520000,
+            "title": "Gmail",
+            "question": "Gmail을 연결할까요?",
+            "rows": [],
+            "action": "연결",
+            "state": "open"
+          }
+        ],
+        "briefings": []
+      }
+    }
+  }
+}

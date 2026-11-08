@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B7.dc.html",
- "screenshot": "contracts/shots/B7.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B7.dc.html",
+ "screenshot": "shots/dark/B7.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B7.dc.html",
+   "screenshot": "shots/dark/B7.png"
+  },
+  "light": {
+   "source": "proto/render/light/B7.dc.html",
+   "screenshot": "shots/light/B7.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -41,9 +51,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -470,17 +481,11 @@
    "chip"
   ],
   "regions": {
-   "rail": [
-    0,
-    0,
-    52,
-    900
-   ],
-   "sidebar": [
-    52,
-    0,
-    248,
-    900
+   "composer": [
+    324,
+    808,
+    492,
+    78
    ],
    "main": [
     300,
@@ -494,11 +499,17 @@
     600,
     856
    ],
-   "composer": [
-    324,
-    808,
-    492,
-    78
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
    ]
   }
  },

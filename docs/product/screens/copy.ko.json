@@ -5,6 +5,9 @@
    "button"
   ],
   "used_in": [
+   "B1-first-calc:composer",
+   "B1-first-later:composer",
+   "B1-first:composer",
    "B10-preview:composer",
    "B11-quill:composer",
    "B11:page",
@@ -15,21 +18,33 @@
    "B18-room-b:composer",
    "B18:composer",
    "B1:composer",
+   "B2-offline-failed:composer",
+   "B2-offline:composer",
+   "B21-done-hana:composer",
+   "B21-done:composer",
    "B21-name:composer",
    "B21:composer",
    "B22-room-steps:composer",
    "B22-room:composer",
+   "B24-connect-connected:composer",
+   "B24-connect-later:composer",
+   "B24-connect-mail:composer",
+   "B24-connect-token:composer",
+   "B24-connect:composer",
    "B24-done:composer",
    "B24-later:composer",
    "B24:composer",
    "B25-done:composer",
    "B25-later:composer",
    "B25:composer",
+   "B26-later:composer",
+   "B26:composer",
    "B2:composer",
    "B3-run:composer",
    "B3:composer",
    "B4:composer",
    "B5:composer",
+   "B6-token:composer",
    "B6:composer",
    "B7-churn:composer",
    "B7-done:composer",
@@ -40,7 +55,18 @@
    "B8-fail:composer",
    "B8-unknown:composer",
    "B8:composer",
+   "B9-restart:composer",
+   "B9-update:composer",
    "B9:composer"
+  ]
+ },
+ "composer.button.02": {
+  "ko": "다시 보내기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B2-offline-failed:composer"
   ]
  },
  "composer.textbox.01": {
@@ -52,12 +78,15 @@
    "B1:composer"
   ]
  },
- "composer.button.02": {
+ "composer.button.03": {
   "ko": "보내기",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B1-first-calc:composer",
+   "B1-first-later:composer",
+   "B1-first:composer",
    "B10-preview:composer",
    "B11-quill:composer",
    "B11:page",
@@ -68,21 +97,33 @@
    "B18-room-b:composer",
    "B18:composer",
    "B1:composer",
+   "B2-offline-failed:composer",
+   "B2-offline:composer",
+   "B21-done-hana:composer",
+   "B21-done:composer",
    "B21-name:composer",
    "B21:composer",
    "B22-room-steps:composer",
    "B22-room:composer",
+   "B24-connect-connected:composer",
+   "B24-connect-later:composer",
+   "B24-connect-mail:composer",
+   "B24-connect-token:composer",
+   "B24-connect:composer",
    "B24-done:composer",
    "B24-later:composer",
    "B24:composer",
    "B25-done:composer",
    "B25-later:composer",
    "B25:composer",
+   "B26-later:composer",
+   "B26:composer",
    "B2:composer",
    "B3-run:composer",
    "B3:composer",
    "B4:composer",
    "B5:composer",
+   "B6-token:composer",
    "B6:composer",
    "B7-churn:composer",
    "B7-done:composer",
@@ -93,10 +134,30 @@
    "B8-fail:composer",
    "B8-unknown:composer",
    "B8:composer",
+   "B9-restart:composer",
+   "B9-update:composer",
    "B9:composer"
   ]
  },
+ "composer.status.01": {
+  "ko": "보내지 못함 · 다시 보내기",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B2-offline-failed:composer"
+  ]
+ },
  "composer.textbox.02": {
+  "ko": "셈에게 메시지 보내기",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B21-done:composer"
+  ]
+ },
+ "composer.textbox.03": {
   "ko": "주노에게 메시지 보내기",
   "roles": [
    "textbox"
@@ -109,7 +170,7 @@
    "B25:composer"
   ]
  },
- "composer.textbox.03": {
+ "composer.textbox.04": {
   "ko": "퀼에게 메시지 보내기",
   "roles": [
    "textbox"
@@ -124,12 +185,15 @@
    "B8-fail:composer"
   ]
  },
- "composer.button.03": {
+ "composer.button.04": {
   "ko": "파일 추가",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B1-first-calc:composer",
+   "B1-first-later:composer",
+   "B1-first:composer",
    "B10-preview:composer",
    "B11-quill:composer",
    "B11:page",
@@ -140,21 +204,33 @@
    "B18-room-b:composer",
    "B18:composer",
    "B1:composer",
+   "B2-offline-failed:composer",
+   "B2-offline:composer",
+   "B21-done-hana:composer",
+   "B21-done:composer",
    "B21-name:composer",
    "B21:composer",
    "B22-room-steps:composer",
    "B22-room:composer",
+   "B24-connect-connected:composer",
+   "B24-connect-later:composer",
+   "B24-connect-mail:composer",
+   "B24-connect-token:composer",
+   "B24-connect:composer",
    "B24-done:composer",
    "B24-later:composer",
    "B24:composer",
    "B25-done:composer",
    "B25-later:composer",
    "B25:composer",
+   "B26-later:composer",
+   "B26:composer",
    "B2:composer",
    "B3-run:composer",
    "B3:composer",
    "B4:composer",
    "B5:composer",
+   "B6-token:composer",
    "B6:composer",
    "B7-churn:composer",
    "B7-done:composer",
@@ -165,36 +241,54 @@
    "B8-fail:composer",
    "B8-unknown:composer",
    "B8:composer",
+   "B9-restart:composer",
+   "B9-update:composer",
    "B9:composer"
   ]
  },
- "composer.textbox.04": {
+ "composer.textbox.05": {
   "ko": "하나에게 메시지 보내기",
   "roles": [
    "textbox"
   ],
   "used_in": [
+   "B1-first-calc:composer",
+   "B1-first-later:composer",
+   "B1-first:composer",
    "B11-quill:composer",
    "B15:composer",
    "B16-later:composer",
    "B16-sent:composer",
    "B16:composer",
+   "B2-offline-failed:composer",
+   "B2-offline:composer",
+   "B21-done-hana:composer",
    "B21-name:composer",
    "B21:composer",
+   "B24-connect-connected:composer",
+   "B24-connect-later:composer",
+   "B24-connect-mail:composer",
+   "B24-connect-token:composer",
+   "B24-connect:composer",
    "B24-done:composer",
    "B24-later:composer",
    "B24:composer",
+   "B26-later:composer",
+   "B26:composer",
    "B2:composer",
    "B3-run:composer",
    "B3:composer",
    "B4:composer",
    "B5:composer",
+   "B6-token:composer",
    "B7-done:composer",
    "B7-unknown:composer",
    "B7:composer",
    "B8-done:composer",
    "B8-unknown:composer",
    "B8:composer",
+   "B9-restart:composer",
+   "B9-update:composer",
    "B9:composer"
   ]
  },
@@ -310,7 +404,11 @@
    "link"
   ],
   "used_in": [
-   "B3-run:conversation"
+   "B2:conversation",
+   "B3-run:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
+   "B9:conversation"
   ]
  },
  "conversation.link.10": {
@@ -320,6 +418,15 @@
   ],
   "used_in": [
    "B3:conversation"
+  ]
+ },
+ "conversation.status.01": {
+  "ko": "{work_title} 앱 연결됨 제거",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B24-connect-connected:conversation"
   ]
  },
  "conversation.link.11": {
@@ -343,7 +450,7 @@
   ]
  },
  "conversation.link.13": {
-  "ko": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 1 개 · 확인 대기",
+  "ko": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기",
   "roles": [
    "link"
   ],
@@ -387,34 +494,41 @@
    "B16:conversation"
   ]
  },
- "conversation.button.04": {
+ "conversation.link.16": {
   "ko": "기타",
   "roles": [
-   "button"
+   "link"
   ],
   "used_in": [
    "B1:conversation"
   ]
  },
- "conversation.button.05": {
+ "conversation.button.04": {
   "ko": "나중에",
   "roles": [
    "button",
    "link"
   ],
   "used_in": [
+   "B1-first:conversation",
    "B15:conversation",
    "B16:conversation",
    "B21-name:conversation",
    "B21:conversation",
+   "B24-connect-mail:conversation",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation",
+   "B26:conversation",
    "B2:conversation",
    "B4:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
- "conversation.button.06": {
+ "conversation.button.05": {
   "ko": "남기기",
   "roles": [
    "button"
@@ -427,64 +541,79 @@
    "B7-fail:conversation"
   ]
  },
- "conversation.button.07": {
+ "conversation.button.06": {
   "ko": "다시 묻기",
   "roles": [
    "button",
    "link"
   ],
   "used_in": [
+   "B1-first-later:conversation",
    "B16-later:conversation",
+   "B24-connect-later:conversation",
    "B24-later:conversation",
-   "B25-later:conversation"
+   "B25-later:conversation",
+   "B26-later:conversation"
   ]
  },
- "conversation.button.08": {
+ "conversation.button.07": {
   "ko": "다시 시도",
   "roles": [
-   "button"
+   "button",
+   "link"
   ],
   "used_in": [
    "B2:conversation",
+   "B6-token:conversation",
    "B6:conversation",
    "B7-fail:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
- "conversation.button.09": {
+ "conversation.button.08": {
   "ko": "맡기기",
   "roles": [
-   "button"
+   "button",
+   "link"
   ],
   "used_in": [
+   "B1-first-later:conversation",
+   "B1-first:conversation",
    "B16:conversation"
   ]
  },
- "conversation.button.10": {
+ "conversation.link.17": {
   "ko": "매일 아침 어제 일 알려 주기",
   "roles": [
-   "button"
+   "link",
+   "radio"
   ],
   "used_in": [
+   "B1-first-later:conversation",
+   "B1-first:conversation",
    "B1:conversation"
   ]
  },
- "conversation.button.11": {
+ "conversation.link.18": {
   "ko": "문단 세 줄 요약",
   "roles": [
-   "button"
+   "link"
   ],
   "used_in": [
    "B1:conversation"
   ]
  },
- "conversation.button.12": {
+ "conversation.button.09": {
   "ko": "바꾸기",
   "roles": [
    "button"
   ],
   "used_in": [
    "B2:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
@@ -497,10 +626,12 @@
    "B2:conversation",
    "B3-run:conversation",
    "B3:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
- "conversation.link.16": {
+ "conversation.link.19": {
   "ko": "방향 바꿈: {work_title} · {time}",
   "roles": [
    "link"
@@ -513,17 +644,64 @@
    "B7-fail:conversation"
   ]
  },
- "conversation.link.17": {
+ "conversation.button.10": {
+  "ko": "복사",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1-first-calc:conversation",
+   "B10-preview:pane",
+   "B11-quill:conversation",
+   "B11:page",
+   "B15:conversation",
+   "B16-later:conversation",
+   "B16-sent:conversation",
+   "B16:conversation",
+   "B17:page",
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B1:conversation",
+   "B2-offline-failed:conversation",
+   "B2-offline:conversation",
+   "B21-done:conversation",
+   "B22-room-steps:conversation",
+   "B22-room:conversation",
+   "B24-done:conversation",
+   "B24-later:conversation",
+   "B25-done:conversation",
+   "B25-later:conversation",
+   "B25:conversation",
+   "B2:conversation",
+   "B4:conversation",
+   "B5:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-churn:pane",
+   "B7-done:conversation",
+   "B7-fail:conversation",
+   "B7-fail:pane",
+   "B7-unknown:conversation",
+   "B8-done:conversation",
+   "B8-unknown:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.link.20": {
   "ko": "사례 보기",
   "roles": [
    "link"
   ],
   "used_in": [
    "B2:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
- "conversation.button.13": {
+ "conversation.button.11": {
   "ko": "신청서 제출",
   "roles": [
    "button"
@@ -532,7 +710,7 @@
    "B15:conversation"
   ]
  },
- "conversation.status.01": {
+ "conversation.status.02": {
   "ko": "실패",
   "roles": [
    "status",
@@ -546,19 +724,60 @@
    "B8-fail:pane"
   ]
  },
- "conversation.text.03": {
-  "ko": "아침 브리핑 | {date} {time}",
+ "conversation.button.12": {
+  "ko": "연결",
   "roles": [
+   "button",
+   "heading",
+   "link",
    "text"
   ],
   "used_in": [
-   "B2:conversation",
-   "B3-run:conversation",
-   "B3:conversation",
-   "B9:conversation"
+   "B1-first:conversation",
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
+   "B13:sidebar",
+   "B14-expired:settings",
+   "B14-expired:sidebar",
+   "B14-restart:settings",
+   "B14-restart:sidebar",
+   "B14-update:settings",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
+   "B14:settings",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:page",
+   "B20-coding:sidebar",
+   "B20:page",
+   "B20:sidebar",
+   "B23-github-expired:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar",
+   "B24-connect-mail:conversation",
+   "B24-connect-token:conversation",
+   "B24-connect-token:pane",
+   "B24-connect:conversation",
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
   ]
  },
- "conversation.link.18": {
+ "conversation.status.03": {
+  "ko": "예산 대기",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B26-later:conversation",
+   "B26:conversation"
+  ]
+ },
+ "conversation.link.21": {
   "ko": "요일별 할인 합계 표 결과물 보기",
   "roles": [
    "link"
@@ -568,7 +787,7 @@
    "B21:conversation"
   ]
  },
- "conversation.link.19": {
+ "conversation.link.22": {
   "ko": "작업 중 · 페이지 {count} 읽음",
   "roles": [
    "link"
@@ -577,7 +796,7 @@
    "B8:conversation"
   ]
  },
- "conversation.link.20": {
+ "conversation.link.23": {
   "ko": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · {time}",
   "roles": [
    "link"
@@ -587,17 +806,18 @@
    "B22-room:conversation"
   ]
  },
- "conversation.link.21": {
+ "conversation.link.24": {
   "ko": "제거",
   "roles": [
    "link"
   ],
   "used_in": [
+   "B24-connect-connected:conversation",
    "B24-done:conversation",
    "B25-done:conversation"
   ]
  },
- "conversation.status.02": {
+ "conversation.status.04": {
   "ko": "주노 작업 중",
   "roles": [
    "status"
@@ -607,7 +827,7 @@
    "B22-room:conversation"
   ]
  },
- "conversation.button.14": {
+ "conversation.button.13": {
   "ko": "주문 내역 확인",
   "roles": [
    "button"
@@ -617,7 +837,7 @@
    "B7-unknown:conversation"
   ]
  },
- "conversation.text.04": {
+ "conversation.text.03": {
   "ko": "주의",
   "roles": [
    "text"
@@ -625,10 +845,25 @@
   "used_in": [
    "B16:conversation",
    "B2:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
- "conversation.button.15": {
+ "conversation.text.04": {
+  "ko": "지금",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B2:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.button.14": {
   "ko": "지우기",
   "roles": [
    "button"
@@ -636,12 +871,13 @@
   "used_in": [
    "B18-room-b:conversation",
    "B18:conversation",
+   "B19:settings",
    "B6:conversation",
    "B7-churn:conversation",
    "B7-fail:conversation"
   ]
  },
- "conversation.link.22": {
+ "conversation.link.25": {
   "ko": "취소",
   "roles": [
    "link",
@@ -650,7 +886,17 @@
   "used_in": [
    "B15:conversation",
    "B21-name:dialog:새 구성원 만들기",
+   "B24-connect-token:pane",
    "B4:conversation"
+  ]
+ },
+ "conversation.status.05": {
+  "ko": "토큰 만료",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B6-token:conversation"
   ]
  },
  "conversation.text.05": {
@@ -667,20 +913,27 @@
    "B25-done:conversation",
    "B25-later:conversation",
    "B25:conversation",
+   "B2:conversation",
    "B3-run:conversation",
    "B3:conversation",
    "B6:conversation",
    "B7-churn:conversation",
    "B7-fail:conversation",
-   "B8-fail:conversation"
+   "B8-fail:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
+   "B9:conversation"
   ]
  },
- "conversation.button.16": {
+ "conversation.link.26": {
   "ko": "할인 후 합계 계산",
   "roles": [
-   "button"
+   "link",
+   "radio"
   ],
   "used_in": [
+   "B1-first-later:conversation",
+   "B1-first:conversation",
    "B1:conversation"
   ]
  },
@@ -711,6 +964,7 @@
   "used_in": [
    "B21-name:dialog:새 구성원 만들기",
    "B5:conversation",
+   "B6-token:conversation",
    "B6:conversation",
    "B7-fail:conversation",
    "B7-unknown:conversation"
@@ -786,6 +1040,9 @@
    "link"
   ],
   "used_in": [
+   "B1-first-calc:header",
+   "B1-first-later:header",
+   "B1-first:header",
    "B10-preview:header",
    "B11-quill:header",
    "B11:header",
@@ -796,21 +1053,31 @@
    "B17:page",
    "B18-room-b:header",
    "B18:header",
+   "B2-offline-failed:header",
+   "B21-done-hana:header",
    "B21-name:header",
    "B21:header",
    "B22-room-steps:header",
    "B22-room:header",
+   "B24-connect-connected:header",
+   "B24-connect-later:header",
+   "B24-connect-mail:header",
+   "B24-connect-token:header",
+   "B24-connect:header",
    "B24-done:header",
    "B24-later:header",
    "B24:header",
    "B25-done:header",
    "B25-later:header",
    "B25:header",
+   "B26-later:header",
+   "B26:header",
    "B2:header",
    "B3-run:header",
    "B3:header",
    "B4:header",
    "B5:header",
+   "B6-token:header",
    "B6:header",
    "B7-churn:header",
    "B7-done:header",
@@ -821,6 +1088,10 @@
    "B8-fail:header",
    "B8-unknown:header",
    "B8:header",
+   "B9-restart:dialog:하나",
+   "B9-restart:header",
+   "B9-update:dialog:하나",
+   "B9-update:header",
    "B9:dialog:하나",
    "B9:header"
   ]
@@ -831,6 +1102,9 @@
    "link"
   ],
   "used_in": [
+   "B1-first-calc:header",
+   "B1-first-later:header",
+   "B1-first:header",
    "B1:header",
    "B5:header",
    "B8-done:header",
@@ -854,27 +1128,50 @@
    "B16:header",
    "B18-room-b:header",
    "B18:header",
+   "B2-offline-failed:header",
+   "B2-offline:header",
+   "B21-done-hana:header",
+   "B21-done:header",
    "B21-name:header",
    "B21:header",
    "B22-room-steps:header",
    "B22-room:header",
+   "B24-connect-connected:header",
+   "B24-connect-later:header",
+   "B24-connect-mail:header",
+   "B24-connect-token:header",
+   "B24-connect:header",
    "B24-done:header",
    "B24-later:header",
    "B24:header",
    "B25-done:header",
    "B25-later:header",
    "B25:header",
+   "B26-later:header",
+   "B26:header",
    "B2:header",
    "B3-run:header",
    "B3:header",
    "B4:header",
+   "B6-token:header",
    "B6:header",
    "B7-churn:header",
    "B7-done:header",
    "B7-fail:header",
    "B7-unknown:header",
    "B7:header",
+   "B9-restart:header",
+   "B9-update:header",
    "B9:header"
+  ]
+ },
+ "header.status.01": {
+  "ko": "연결 끊김",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B2-offline:header"
   ]
  },
  "header.link.03": {
@@ -892,8 +1189,11 @@
    "B25-done:header",
    "B25-later:header",
    "B25:header",
+   "B26-later:header",
+   "B26:header",
    "B4:header",
    "B5:header",
+   "B6-token:header",
    "B6:header",
    "B7-churn:header",
    "B7-done:header",
@@ -924,13 +1224,13 @@
    "B1-signin:page"
   ]
  },
- "page.link.01": {
-  "ko": "GitHub에서 열기",
+ "page.option.01": {
+  "ko": "Enter",
   "roles": [
-   "link"
+   "option"
   ],
   "used_in": [
-   "B22:page"
+   "B11:page"
   ]
  },
  "page.heading.01": {
@@ -970,7 +1270,7 @@
    "B20-coding:page"
   ]
  },
- "page.link.02": {
+ "page.link.01": {
   "ko": "{date} {time} 어제 맡긴 일 {count} 대화에서 보기",
   "roles": [
    "link"
@@ -979,8 +1279,17 @@
    "B17:page"
   ]
  },
- "page.link.03": {
+ "page.link.02": {
   "ko": "{work_title} 주노 · 실행 중 읽기 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ]
+ },
+ "page.link.03": {
+  "ko": "{work_title}에서 열기",
   "roles": [
    "link"
   ],
@@ -1027,8 +1336,15 @@
    "B11:page",
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:settings",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:settings",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:settings",
    "B19-juno:sidebar",
@@ -1036,8 +1352,11 @@
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar",
+   "B9-restart:dialog:하나",
+   "B9-update:dialog:하나",
    "B9:dialog:하나"
   ]
  },
@@ -1089,14 +1408,24 @@
    "B12:page",
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
+   "B19:settings",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar",
+   "B9-restart:dialog:하나",
+   "B9-update:dialog:하나",
    "B9:dialog:하나"
   ]
  },
@@ -1121,12 +1450,14 @@
  "page.button.09": {
   "ko": "되돌리기",
   "roles": [
-   "button"
+   "button",
+   "link"
   ],
   "used_in": [
    "B12:page",
    "B19-juno:settings",
-   "B19:settings"
+   "B19:settings",
+   "B21-done-hana:conversation"
   ]
  },
  "page.columnheader.01": {
@@ -1181,6 +1512,8 @@
    "B2:conversation",
    "B3-run:conversation",
    "B3:conversation",
+   "B9-restart:conversation",
+   "B9-update:conversation",
    "B9:conversation"
   ]
  },
@@ -1231,15 +1564,6 @@
    "B20:page"
   ]
  },
- "page.heading.09": {
-  "ko": "아침 브리핑",
-  "roles": [
-   "heading"
-  ],
-  "used_in": [
-   "B17:page"
-  ]
- },
  "page.button.12": {
   "ko": "아침 브리핑 어제 맡긴 일을 아침마다 정리",
   "roles": [
@@ -1267,13 +1591,15 @@
   ],
   "used_in": [
    "B10:page",
+   "B13-general-restart:settings",
+   "B13-general:settings",
    "B15:pane",
    "B20-coding:page",
    "B20:page",
    "B21-name:dialog:새 구성원 만들기"
   ]
  },
- "page.heading.10": {
+ "page.heading.09": {
   "ko": "작업 예약하기",
   "roles": [
    "heading"
@@ -1338,22 +1664,13 @@
    "B17:page"
   ]
  },
- "page.heading.11": {
+ "page.heading.10": {
   "ko": "코딩",
   "roles": [
    "heading"
   ],
   "used_in": [
    "B20-coding:page"
-  ]
- },
- "page.option.01": {
-  "ko": "퀼 Enter",
-  "roles": [
-   "option"
-  ],
-  "used_in": [
-   "B11:page"
   ]
  },
  "page.button.18": {
@@ -1363,6 +1680,15 @@
   ],
   "used_in": [
    "B17-empty:page"
+  ]
+ },
+ "pane.textbox.01": {
+  "ko": "{work_title} 토큰",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B24-connect-token:pane"
   ]
  },
  "pane.chip.01": {
@@ -1395,15 +1721,6 @@
    "B7-fail:pane",
    "B7-unknown:pane",
    "B7:pane"
-  ]
- },
- "pane.button.01": {
-  "ko": "복사",
-  "roles": [
-   "button"
-  ],
-  "used_in": [
-   "B10-preview:pane"
   ]
  },
  "pane.chip.02": {
@@ -1448,6 +1765,7 @@
    "B18-room-b:pane",
    "B22-room-steps:pane",
    "B22-room:pane",
+   "B24-connect-token:pane",
    "B4:pane",
    "B7-churn:pane",
    "B7-done:pane",
@@ -1488,7 +1806,7 @@
    "B8:pane"
   ]
  },
- "pane.button.02": {
+ "pane.button.01": {
   "ko": "중지",
   "roles": [
    "button"
@@ -1513,7 +1831,7 @@
    "B7-fail:pane"
   ]
  },
- "pane.button.03": {
+ "pane.button.02": {
   "ko": "확인 대기 원인 정리 후 시작",
   "roles": [
    "button"
@@ -1522,7 +1840,7 @@
    "B7-churn:pane"
   ]
  },
- "pane.button.04": {
+ "pane.button.03": {
   "ko": "확인 대기 주문 내역 {count}",
   "roles": [
    "button"
@@ -1531,7 +1849,7 @@
    "B7:pane"
   ]
  },
- "pane.button.05": {
+ "pane.button.04": {
   "ko": "확인 실패 근거 {count} 이상",
   "roles": [
    "button"
@@ -1540,7 +1858,7 @@
    "B7-fail:pane"
   ]
  },
- "pane.button.06": {
+ "pane.button.05": {
   "ko": "확인 안 함 결제 응답 없음",
   "roles": [
    "button"
@@ -1549,61 +1867,13 @@
    "B7-unknown:pane"
   ]
  },
- "pane.button.07": {
+ "pane.button.06": {
   "ko": "확인 완료 주문 내역 {count}",
   "roles": [
    "button"
   ],
   "used_in": [
    "B7-done:pane"
-  ]
- },
- "rail.heading.01": {
-  "ko": "GitHub",
-  "roles": [
-   "heading",
-   "link",
-   "text"
-  ],
-  "used_in": [
-   "B10-preview:rail",
-   "B10:rail",
-   "B12:rail",
-   "B13-devices:rail",
-   "B13:rail",
-   "B14:rail",
-   "B17-empty:rail",
-   "B17:rail",
-   "B18-room-b:rail",
-   "B18:rail",
-   "B19-juno:rail",
-   "B19:rail",
-   "B20-coding:rail",
-   "B20:rail",
-   "B22-room-steps:rail",
-   "B22-room:pane",
-   "B22-room:rail",
-   "B22:rail",
-   "B22:sidebar",
-   "B23-github:rail",
-   "B23-github:settings",
-   "B23:rail",
-   "B24-done:rail",
-   "B25-done:rail",
-   "B25-later:rail",
-   "B25:rail",
-   "B4:rail",
-   "B5:rail",
-   "B6:rail",
-   "B7-churn:rail",
-   "B7-done:rail",
-   "B7-fail:rail",
-   "B7-unknown:rail",
-   "B7:rail",
-   "B8-done:rail",
-   "B8-fail:rail",
-   "B8-unknown:rail",
-   "B8:rail"
   ]
  },
  "rail.link.01": {
@@ -1614,6 +1884,9 @@
    "text"
   ],
   "used_in": [
+   "B1-first-calc:rail",
+   "B1-first-later:rail",
+   "B1-first:rail",
    "B10-preview:rail",
    "B10:page",
    "B10:rail",
@@ -1622,7 +1895,13 @@
    "B11:rail",
    "B12:rail",
    "B13-devices:rail",
+   "B13-general-restart:rail",
+   "B13-general:rail",
    "B13:rail",
+   "B14-expired:rail",
+   "B14-restart:rail",
+   "B14-update:rail",
+   "B14-usage:rail",
    "B14:rail",
    "B15:rail",
    "B16-later:rail",
@@ -1635,26 +1914,39 @@
    "B19-juno:rail",
    "B19:rail",
    "B1:rail",
+   "B2-offline-failed:rail",
+   "B2-offline:rail",
    "B20-coding:rail",
    "B20:rail",
+   "B21-done-hana:rail",
+   "B21-done:rail",
    "B21-name:rail",
    "B21:rail",
    "B22-room-steps:rail",
    "B22-room:rail",
    "B22:rail",
+   "B23-github-expired:rail",
    "B23-github:rail",
    "B23:rail",
+   "B24-connect-connected:rail",
+   "B24-connect-later:rail",
+   "B24-connect-mail:rail",
+   "B24-connect-token:rail",
+   "B24-connect:rail",
    "B24-done:rail",
    "B24-later:rail",
    "B24:rail",
    "B25-done:rail",
    "B25-later:rail",
    "B25:rail",
+   "B26-later:rail",
+   "B26:rail",
    "B2:rail",
    "B3-run:rail",
    "B3:rail",
    "B4:rail",
    "B5:rail",
+   "B6-token:rail",
    "B6:rail",
    "B7-churn:rail",
    "B7-done:rail",
@@ -1665,6 +1957,8 @@
    "B8-fail:rail",
    "B8-unknown:rail",
    "B8:rail",
+   "B9-restart:rail",
+   "B9-update:rail",
    "B9:rail"
   ]
  },
@@ -1674,13 +1968,22 @@
    "button"
   ],
   "used_in": [
+   "B1-first-calc:rail",
+   "B1-first-later:rail",
+   "B1-first:rail",
    "B10-preview:rail",
    "B10:rail",
    "B11-quill:rail",
    "B11:rail",
    "B12:rail",
    "B13-devices:rail",
+   "B13-general-restart:rail",
+   "B13-general:rail",
    "B13:rail",
+   "B14-expired:rail",
+   "B14-restart:rail",
+   "B14-update:rail",
+   "B14-usage:rail",
    "B14:rail",
    "B15:rail",
    "B16-later:rail",
@@ -1693,26 +1996,39 @@
    "B19-juno:rail",
    "B19:rail",
    "B1:rail",
+   "B2-offline-failed:rail",
+   "B2-offline:rail",
    "B20-coding:rail",
    "B20:rail",
+   "B21-done-hana:rail",
+   "B21-done:rail",
    "B21-name:rail",
    "B21:rail",
    "B22-room-steps:rail",
    "B22-room:rail",
    "B22:rail",
+   "B23-github-expired:rail",
    "B23-github:rail",
    "B23:rail",
+   "B24-connect-connected:rail",
+   "B24-connect-later:rail",
+   "B24-connect-mail:rail",
+   "B24-connect-token:rail",
+   "B24-connect:rail",
    "B24-done:rail",
    "B24-later:rail",
    "B24:rail",
    "B25-done:rail",
    "B25-later:rail",
    "B25:rail",
+   "B26-later:rail",
+   "B26:rail",
    "B2:rail",
    "B3-run:rail",
    "B3:rail",
    "B4:rail",
    "B5:rail",
+   "B6-token:rail",
    "B6:rail",
    "B7-churn:rail",
    "B7-done:rail",
@@ -1723,10 +2039,12 @@
    "B8-fail:rail",
    "B8-unknown:rail",
    "B8:rail",
+   "B9-restart:rail",
+   "B9-update:rail",
    "B9:rail"
   ]
  },
- "rail.heading.02": {
+ "rail.heading.01": {
   "ko": "예약",
   "roles": [
    "heading",
@@ -1734,13 +2052,22 @@
    "text"
   ],
   "used_in": [
+   "B1-first-calc:rail",
+   "B1-first-later:rail",
+   "B1-first:rail",
    "B10-preview:rail",
    "B10:rail",
    "B11-quill:rail",
    "B11:rail",
    "B12:rail",
    "B13-devices:rail",
+   "B13-general-restart:rail",
+   "B13-general:rail",
    "B13:rail",
+   "B14-expired:rail",
+   "B14-restart:rail",
+   "B14-update:rail",
+   "B14-usage:rail",
    "B14:rail",
    "B15:rail",
    "B16-later:rail",
@@ -1756,26 +2083,39 @@
    "B19:rail",
    "B19:settings",
    "B1:rail",
+   "B2-offline-failed:rail",
+   "B2-offline:rail",
    "B20-coding:rail",
    "B20:rail",
+   "B21-done-hana:rail",
+   "B21-done:rail",
    "B21-name:rail",
    "B21:rail",
    "B22-room-steps:rail",
    "B22-room:rail",
    "B22:rail",
+   "B23-github-expired:rail",
    "B23-github:rail",
    "B23:rail",
+   "B24-connect-connected:rail",
+   "B24-connect-later:rail",
+   "B24-connect-mail:rail",
+   "B24-connect-token:rail",
+   "B24-connect:rail",
    "B24-done:rail",
    "B24-later:rail",
    "B24:rail",
    "B25-done:rail",
    "B25-later:rail",
    "B25:rail",
+   "B26-later:rail",
+   "B26:rail",
    "B2:rail",
    "B3-run:rail",
    "B3:rail",
    "B4:rail",
    "B5:rail",
+   "B6-token:rail",
    "B6:rail",
    "B7-churn:rail",
    "B7-done:rail",
@@ -1786,6 +2126,8 @@
    "B8-fail:rail",
    "B8-unknown:rail",
    "B8:rail",
+   "B9-restart:rail",
+   "B9-update:rail",
    "B9:rail"
   ]
  },
@@ -1795,6 +2137,9 @@
    "heading"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
@@ -1804,6 +2149,9 @@
    "button"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
@@ -1813,16 +2161,28 @@
    "button"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
  "settings.link.01": {
-  "ko": "GitHub 1.4.0 · 주노, 퀼 켜짐",
+  "ko": "{work_title} 1.4.0 · 주노, 퀼 켜짐",
   "roles": [
    "link"
   ],
   "used_in": [
    "B23:settings"
+  ]
+ },
+ "settings.switch.01": {
+  "ko": "{work_title} 다시 보기",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B19:settings"
   ]
  },
  "settings.heading.02": {
@@ -1831,6 +2191,9 @@
    "heading"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
@@ -1849,6 +2212,9 @@
    "text"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings",
    "B18-room-b:pane",
    "B19-juno:settings",
@@ -1861,6 +2227,7 @@
    "button"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings"
   ]
  },
@@ -1870,26 +2237,55 @@
    "text"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation"
   ]
  },
  "settings.button.05": {
+  "ko": "다시 시작",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B13-general-restart:settings",
+   "B14-restart:settings"
+  ]
+ },
+ "settings.status.01": {
+  "ko": "다시 시작 필요",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B13-general-restart:settings",
+   "B14-restart:settings",
+   "B9-restart:dialog:하나"
+  ]
+ },
+ "settings.button.06": {
   "ko": "다시 연결",
   "roles": [
    "button"
   ],
   "used_in": [
-   "B13-devices:settings"
+   "B13-devices:settings",
+   "B14-expired:settings",
+   "B23-github-expired:settings"
   ]
  },
- "settings.button.06": {
+ "settings.button.07": {
   "ko": "다시 확인",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
@@ -1910,6 +2306,9 @@
    "text"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings",
    "B19-juno:settings",
    "B19:settings",
@@ -1923,10 +2322,30 @@
    "heading"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings"
   ]
  },
- "settings.button.07": {
+ "settings.button.08": {
+  "ko": "변경",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "settings.button.09": {
+  "ko": "보관",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.button.10": {
   "ko": "보관 해제",
   "roles": [
    "button"
@@ -1942,6 +2361,15 @@
   ],
   "used_in": [
    "B13:settings"
+  ]
+ },
+ "settings.button.11": {
+  "ko": "새로고침",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14-usage:settings"
   ]
  },
  "settings.link.03": {
@@ -1966,7 +2394,7 @@
   ]
  },
  "settings.heading.06": {
-  "ko": "설치됨 1",
+  "ko": "설치됨1",
   "roles": [
    "heading"
   ],
@@ -1984,6 +2412,28 @@
    "B19:settings"
   ]
  },
+ "settings.combobox.01": {
+  "ko": "아침 브리핑",
+  "roles": [
+   "combobox",
+   "heading"
+  ],
+  "used_in": [
+   "B13-general-restart:settings",
+   "B13-general:settings",
+   "B17:page"
+  ]
+ },
+ "settings.combobox.02": {
+  "ko": "알림",
+  "roles": [
+   "combobox"
+  ],
+  "used_in": [
+   "B13-general-restart:settings",
+   "B13-general:settings"
+  ]
+ },
  "settings.textbox.01": {
   "ko": "앱 검색",
   "roles": [
@@ -1999,7 +2449,12 @@
    "text"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation",
    "B8-fail:pane",
@@ -2007,7 +2462,7 @@
    "B8:pane"
   ]
  },
- "settings.button.08": {
+ "settings.button.12": {
   "ko": "연결 끊기",
   "roles": [
    "button"
@@ -2022,6 +2477,7 @@
    "link"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings"
   ]
  },
@@ -2035,13 +2491,32 @@
    "B19:settings"
   ]
  },
- "settings.button.09": {
+ "settings.button.13": {
   "ko": "이 버전으로 되돌리기",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings"
+  ]
+ },
+ "settings.heading.08": {
+  "ko": "이번 주기",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "settings.status.02": {
+  "ko": "이번 주기 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
   ]
  },
  "settings.text.04": {
@@ -2050,7 +2525,10 @@
    "text"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation"
   ]
@@ -2064,11 +2542,13 @@
   "used_in": [
    "B19-juno:settings",
    "B22-room-steps:pane",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation"
   ]
  },
- "settings.button.10": {
+ "settings.button.14": {
   "ko": "자세히",
   "roles": [
    "button"
@@ -2077,7 +2557,7 @@
    "B19-juno:settings"
   ]
  },
- "settings.heading.08": {
+ "settings.heading.09": {
   "ko": "절차",
   "roles": [
    "heading",
@@ -2086,6 +2566,7 @@
   "used_in": [
    "B19-juno:settings",
    "B19:settings",
+   "B23-github-expired:settings",
    "B23-github:settings",
    "B7-churn:pane",
    "B7-done:pane",
@@ -2100,7 +2581,19 @@
    "link"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
+  ]
+ },
+ "settings.status.03": {
+  "ko": "주노 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
   ]
  },
  "settings.link.08": {
@@ -2112,8 +2605,8 @@
    "B13:settings"
   ]
  },
- "settings.heading.09": {
-  "ko": "직접 만든 앱 1",
+ "settings.heading.10": {
+  "ko": "직접 만든 앱1",
   "roles": [
    "heading"
   ],
@@ -2121,7 +2614,7 @@
    "B23:settings"
   ]
  },
- "settings.heading.10": {
+ "settings.heading.11": {
   "ko": "최근 개선",
   "roles": [
    "heading"
@@ -2131,16 +2624,17 @@
    "B19:settings"
   ]
  },
- "settings.heading.11": {
+ "settings.heading.12": {
   "ko": "추가하는 것",
   "roles": [
    "heading"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings"
   ]
  },
- "settings.heading.12": {
+ "settings.heading.13": {
   "ko": "추천",
   "roles": [
    "heading"
@@ -2155,7 +2649,19 @@
    "link"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
+  ]
+ },
+ "settings.status.04": {
+  "ko": "퀼 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
   ]
  },
  "settings.link.10": {
@@ -2167,21 +2673,35 @@
    "B13:settings"
   ]
  },
- "settings.button.11": {
+ "settings.link.11": {
+  "ko": "퀼과의 대화 ›",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B19:settings"
+  ]
+ },
+ "settings.button.15": {
   "ko": "키 변경",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
- "settings.button.12": {
+ "settings.button.16": {
   "ko": "키 추가",
   "roles": [
    "button"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings"
   ]
  },
@@ -2191,18 +2711,39 @@
    "text"
   ],
   "used_in": [
+   "B23-github-expired:settings",
    "B23-github:settings",
+   "B24-connect-token:conversation",
+   "B24-connect:conversation",
    "B24:conversation",
    "B25:conversation"
   ]
  },
- "settings.link.11": {
+ "settings.link.12": {
   "ko": "하나 마지막 활성 {time} 기본",
   "roles": [
    "link"
   ],
   "used_in": [
    "B13:settings"
+  ]
+ },
+ "settings.status.05": {
+  "ko": "하나 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "settings.switch.02": {
+  "ko": "해지 사유 모아 보기",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B19:settings"
   ]
  },
  "settings.chip.02": {
@@ -2213,6 +2754,9 @@
    "text"
   ],
   "used_in": [
+   "B14-expired:settings",
+   "B14-restart:settings",
+   "B14-update:settings",
    "B14:settings",
    "B18-room-b:pane",
    "B19-juno:settings",
@@ -2240,7 +2784,7 @@
   ]
  },
  "sidebar.button.02": {
-  "ko": "{work_title} # 84 오늘 {time}",
+  "ko": "{work_title} #84 오늘 {time}",
   "roles": [
    "button"
   ],
@@ -2314,6 +2858,8 @@
   "used_in": [
    "B7-done:sidebar",
    "B7-unknown:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
@@ -2325,12 +2871,19 @@
   "used_in": [
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar"
   ]
@@ -2353,27 +2906,41 @@
    "B17:sidebar",
    "B18-room-b:sidebar",
    "B18:sidebar",
+   "B2-offline-failed:sidebar",
+   "B2-offline:sidebar",
+   "B21-done-hana:sidebar",
+   "B21-done:sidebar",
    "B21-name:sidebar",
    "B21:sidebar",
    "B22-room-steps:sidebar",
    "B22-room:sidebar",
    "B22:sidebar",
+   "B24-connect-connected:sidebar",
+   "B24-connect-later:sidebar",
+   "B24-connect-mail:sidebar",
+   "B24-connect-token:sidebar",
+   "B24-connect:sidebar",
    "B24-done:sidebar",
    "B24-later:sidebar",
    "B24:sidebar",
    "B25-done:sidebar",
    "B25-later:sidebar",
    "B25:sidebar",
+   "B26-later:sidebar",
+   "B26:sidebar",
    "B2:sidebar",
    "B3-run:sidebar",
    "B3:sidebar",
    "B4:sidebar",
+   "B6-token:sidebar",
    "B6:sidebar",
    "B7-churn:sidebar",
    "B7-done:sidebar",
    "B7-fail:sidebar",
    "B7-unknown:sidebar",
    "B7:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
@@ -2396,12 +2963,20 @@
   "used_in": [
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:settings",
+   "B23-github-expired:sidebar",
    "B23-github:settings",
    "B23-github:sidebar",
    "B23:sidebar"
@@ -2417,12 +2992,19 @@
    "B12:sidebar",
    "B13-devices:settings",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar"
   ]
@@ -2475,6 +3057,8 @@
    "B7-done:sidebar",
    "B7-fail:sidebar",
    "B7-unknown:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
@@ -2487,6 +3071,33 @@
    "B22:sidebar"
   ]
  },
+ "sidebar.heading.03": {
+  "ko": "사용량",
+  "roles": [
+   "heading",
+   "link"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
+   "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:settings",
+   "B14-usage:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github-expired:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
  "sidebar.button.08": {
   "ko": "새 작업",
   "roles": [
@@ -2497,20 +3108,28 @@
    "B17:sidebar"
   ]
  },
- "sidebar.text.01": {
+ "sidebar.link.11": {
   "ko": "설정",
   "roles": [
+   "link",
    "text"
   ],
   "used_in": [
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:sidebar",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar"
   ]
@@ -2524,11 +3143,15 @@
    "B12:sidebar",
    "B13-devices:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar"
   ]
@@ -2544,6 +3167,10 @@
    "B15:sidebar",
    "B18-room-b:sidebar",
    "B18:sidebar",
+   "B2-offline-failed:sidebar",
+   "B2-offline:sidebar",
+   "B21-done-hana:sidebar",
+   "B21-done:sidebar",
    "B21-name:sidebar",
    "B21:sidebar",
    "B22-room-steps:conversation",
@@ -2551,16 +3178,24 @@
    "B22-room-steps:sidebar",
    "B22-room:conversation",
    "B22-room:sidebar",
+   "B24-connect-connected:sidebar",
+   "B24-connect-later:sidebar",
+   "B24-connect-mail:sidebar",
+   "B24-connect-token:sidebar",
+   "B24-connect:sidebar",
    "B24-done:sidebar",
    "B24-later:sidebar",
    "B24:sidebar",
    "B25-done:sidebar",
    "B25-later:sidebar",
    "B25:sidebar",
+   "B26-later:sidebar",
+   "B26:sidebar",
    "B2:sidebar",
    "B3-run:sidebar",
    "B3:sidebar",
    "B4:sidebar",
+   "B6-token:sidebar",
    "B7-churn:pane",
    "B7-churn:sidebar",
    "B7:pane",
@@ -2577,7 +3212,7 @@
    "B17:sidebar"
   ]
  },
- "sidebar.link.11": {
+ "sidebar.link.12": {
   "ko": "앱 설정",
   "roles": [
    "link"
@@ -2586,34 +3221,7 @@
    "B22:sidebar"
   ]
  },
- "sidebar.heading.03": {
-  "ko": "연결",
-  "roles": [
-   "heading",
-   "link",
-   "text"
-  ],
-  "used_in": [
-   "B12:sidebar",
-   "B13-devices:sidebar",
-   "B13:sidebar",
-   "B14:settings",
-   "B14:sidebar",
-   "B19-juno:sidebar",
-   "B19:sidebar",
-   "B20-coding:page",
-   "B20-coding:sidebar",
-   "B20:page",
-   "B20:sidebar",
-   "B23-github:sidebar",
-   "B23:sidebar",
-   "B8-done:pane",
-   "B8-fail:pane",
-   "B8-unknown:pane",
-   "B8:pane"
-  ]
- },
- "sidebar.text.02": {
+ "sidebar.text.01": {
   "ko": "열림",
   "roles": [
    "text"
@@ -2622,7 +3230,20 @@
    "B22:sidebar"
   ]
  },
- "sidebar.link.12": {
+ "sidebar.status.03": {
+  "ko": "완료",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B26-later:sidebar",
+   "B26:sidebar",
+   "B7-done:pane",
+   "B8-done:pane"
+  ]
+ },
+ "sidebar.link.13": {
   "ko": "요일별 할인 합계",
   "roles": [
    "link"
@@ -2643,6 +3264,8 @@
    "B7-done:sidebar",
    "B7-fail:sidebar",
    "B7-unknown:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
@@ -2655,20 +3278,31 @@
    "B10:sidebar"
   ]
  },
- "sidebar.text.03": {
+ "sidebar.heading.04": {
   "ko": "일반",
   "roles": [
+   "heading",
+   "link",
    "text"
   ],
   "used_in": [
    "B12:sidebar",
    "B13-devices:sidebar",
+   "B13-general-restart:settings",
+   "B13-general-restart:sidebar",
+   "B13-general:settings",
+   "B13-general:sidebar",
    "B13:sidebar",
+   "B14-expired:sidebar",
+   "B14-restart:sidebar",
+   "B14-update:sidebar",
+   "B14-usage:sidebar",
    "B14:sidebar",
    "B19-juno:sidebar",
    "B19:sidebar",
    "B20-coding:sidebar",
    "B20:sidebar",
+   "B23-github-expired:sidebar",
    "B23-github:sidebar",
    "B23:sidebar"
   ]
@@ -2682,7 +3316,7 @@
    "B17:sidebar"
   ]
  },
- "sidebar.status.03": {
+ "sidebar.status.04": {
   "ko": "읽지 않음",
   "roles": [
    "status"
@@ -2691,16 +3325,20 @@
    "B16-later:sidebar",
    "B16-sent:sidebar",
    "B16:sidebar",
+   "B26-later:sidebar",
+   "B26:sidebar",
    "B4:sidebar",
    "B6:sidebar",
    "B7-done:sidebar",
    "B7-fail:sidebar",
    "B7-unknown:sidebar",
    "B7:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
- "sidebar.status.04": {
+ "sidebar.status.05": {
   "ko": "작업 중",
   "roles": [
    "status"
@@ -2710,24 +3348,37 @@
    "B15:sidebar",
    "B18-room-b:sidebar",
    "B18:sidebar",
+   "B2-offline-failed:sidebar",
+   "B2-offline:sidebar",
    "B20:page",
+   "B21-done-hana:sidebar",
+   "B21-done:sidebar",
    "B21-name:sidebar",
    "B21:sidebar",
    "B22-room-steps:sidebar",
    "B22-room:sidebar",
    "B22:page",
+   "B24-connect-connected:sidebar",
+   "B24-connect-later:sidebar",
+   "B24-connect-mail:sidebar",
+   "B24-connect-token:sidebar",
+   "B24-connect:sidebar",
    "B24-done:sidebar",
    "B24-later:sidebar",
    "B24:sidebar",
    "B25-done:sidebar",
    "B25-later:sidebar",
    "B25:sidebar",
+   "B26-later:sidebar",
+   "B26:sidebar",
+   "B2:conversation",
    "B2:sidebar",
    "B3-run:conversation",
    "B3-run:sidebar",
    "B3:conversation",
    "B3:sidebar",
    "B4:sidebar",
+   "B6-token:sidebar",
    "B6:sidebar",
    "B7-churn:header",
    "B7-churn:sidebar",
@@ -2737,6 +3388,11 @@
    "B7-unknown:sidebar",
    "B7:sidebar",
    "B8-fail:header",
+   "B9-restart:conversation",
+   "B9-restart:sidebar",
+   "B9-update:conversation",
+   "B9-update:sidebar",
+   "B9:conversation",
    "B9:sidebar"
   ]
  },
@@ -2749,7 +3405,7 @@
    "B17:sidebar"
   ]
  },
- "sidebar.status.05": {
+ "sidebar.status.06": {
   "ko": "주노가 보는 중",
   "roles": [
    "status"
@@ -2758,7 +3414,7 @@
    "B22:sidebar"
   ]
  },
- "sidebar.text.04": {
+ "sidebar.text.02": {
   "ko": "최근 파일",
   "roles": [
    "text"
@@ -2775,11 +3431,12 @@
   ],
   "used_in": [
    "B10:sidebar",
+   "B23-github-expired:settings",
    "B23-github:settings",
    "B25:conversation"
   ]
  },
- "sidebar.status.06": {
+ "sidebar.status.07": {
   "ko": "확인 대기",
   "roles": [
    "status",
@@ -2794,6 +3451,8 @@
    "B25-done:sidebar",
    "B25-later:sidebar",
    "B25:sidebar",
+   "B26-later:sidebar",
+   "B26:sidebar",
    "B4:sidebar",
    "B6:sidebar",
    "B7-churn:sidebar",
@@ -2809,36 +3468,58 @@
    "B10-preview:sidebar",
    "B11-quill:sidebar",
    "B11:sidebar",
-   "B15:sidebar",
    "B16-later:sidebar",
    "B16-sent:sidebar",
-   "B16:sidebar",
    "B18-room-b:sidebar",
    "B18:sidebar",
-   "B21-name:sidebar",
-   "B21:sidebar",
+   "B2-offline-failed:sidebar",
+   "B2-offline:sidebar",
+   "B21-done-hana:sidebar",
+   "B21-done:sidebar",
    "B22-room-steps:sidebar",
    "B22-room:sidebar",
+   "B24-connect-connected:sidebar",
+   "B24-connect-later:sidebar",
    "B24-done:sidebar",
    "B24-later:sidebar",
-   "B24:sidebar",
    "B25-done:sidebar",
    "B25-later:sidebar",
-   "B25:sidebar",
-   "B2:sidebar",
+   "B26-later:sidebar",
    "B3-run:sidebar",
    "B3:sidebar",
-   "B4:sidebar",
+   "B6-token:sidebar",
    "B6:sidebar",
    "B7-churn:sidebar",
    "B7-done:sidebar",
    "B7-fail:sidebar",
    "B7-unknown:sidebar",
-   "B7:sidebar",
+   "B7:sidebar"
+  ]
+ },
+ "sidebar.switch.02": {
+  "ko": "활동 보기, 확인 필요",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B15:sidebar",
+   "B16:sidebar",
+   "B21-name:sidebar",
+   "B21:sidebar",
+   "B24-connect-mail:sidebar",
+   "B24-connect-token:sidebar",
+   "B24-connect:sidebar",
+   "B24:sidebar",
+   "B25:sidebar",
+   "B26:sidebar",
+   "B2:sidebar",
+   "B4:sidebar",
+   "B9-restart:sidebar",
+   "B9-update:sidebar",
    "B9:sidebar"
   ]
  },
- "sidebar.text.05": {
+ "sidebar.text.03": {
   "ko": "활성",
   "roles": [
    "text"
@@ -2847,7 +3528,7 @@
    "B17:sidebar"
   ]
  },
- "sidebar.link.13": {
+ "sidebar.link.14": {
   "ko": "회의 메모 정리.pdf",
   "roles": [
    "link"

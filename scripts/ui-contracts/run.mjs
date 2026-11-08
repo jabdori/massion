@@ -6,14 +6,14 @@ import {fileURLToPath} from 'node:url';
 import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {startFixtureHost,loadFixture} from './fixture-host.ts';
-import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady} from './report.ts';
+import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady,visualTokens} from './report.ts';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../',import.meta.url));
 const specs=join(root,'docs/product/screens'),out=resolve(root,process.env.UI_CONTRACTS_OUTPUT||'.runtime/ui-contracts');
 const blocking=process.env.UI_CONTRACTS_BLOCKING==='1';
 const requested=process.argv.slice(2),screens=(await readdir(join(specs,'contracts'))).filter(name=>name.endsWith('.json')).map(name=>name.slice(0,-5)).sort((a,b)=>a.localeCompare(b,'en',{numeric:true}));
 if(requested.some(screen=>!screens.includes(screen)))throw Error('Unknown screen: '+requested.filter(screen=>!screens.includes(screen)).join(', '));
-for(const dir of ['snapshots','screenshots','checks','pairs','visual'])await mkdir(join(out,dir),{recursive:true});
+for(const theme of ['dark','light'])for(const dir of ['snapshots','screenshots','checks','pairs','visual'])await mkdir(join(out,dir,theme),{recursive:true});
 const json=async path=>JSON.parse(await readFile(path,'utf8'));
 const visual=await json(join(specs,'visual.json')),artboards=await json(join(specs,'artboards.json'));
 // An explicit config and a clean agent-browser environment prevent inheriting a signed-in browser.
@@ -22,12 +22,12 @@ const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.st
 Object.assign(env,{AGENT_BROWSER_DEFAULT_TIMEOUT:'5000',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000',AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',TZ:'Asia/Seoul'});
 const run=async(command,args,options={})=>exec(command,args,{cwd:root,env,timeout:45000,maxBuffer:8*1024*1024,...options});
 const rows=[],runId=randomUUID().slice(0,8);
-for(const screen of (requested.length?requested:screens)){
+for(const theme of ['dark','light'])for(const screen of (requested.length?requested:screens)){
  const contract=await json(join(specs,'contracts',screen+'.json'));
- const row={screen,passed:0,failed:0,warnings:0,required:contract.regions.reduce((sum,r)=>sum+r.elements.filter(e=>e.required).length,0),visualFailures:[],gaps:[],errors:[],pair:null};
+ const row={screen,theme,passed:0,failed:0,warnings:0,required:contract.regions.reduce((sum,r)=>sum+r.elements.filter(e=>e.required).length,0),visualFailures:[],gaps:[],errors:[],pair:null};
  rows.push(row);let host;
- const session=`massion-contract-${runId}-${screen.toLowerCase()}`;
- const browser=async(...args)=>{const {stdout}=await run('agent-browser',['--config',config,'--session',session,'--allowed-domains','127.0.0.1','--json',...args]);const result=JSON.parse(stdout);if(!result.success)throw Error(result.error||stdout);return result.data;};
+ const session=`massion-contract-${runId}-${screen.toLowerCase()}-${theme}`;
+ const browser=async(...args)=>{const {stdout}=await run('agent-browser',['--config',config,'--session',session,'--color-scheme',theme,'--allowed-domains','127.0.0.1','--json',...args]);const result=JSON.parse(stdout);if(!result.success)throw Error(result.error||stdout);return result.data;};
  try{
   const fixture=await loadFixture(screen);row.gaps.push(...fixture.gaps);
   host=await startFixtureHost(screen);
@@ -48,33 +48,37 @@ for(const screen of (requested.length?requested:screens)){
    }catch(error){if(!isInteractionGap(error))throw error;row.gaps.push(`Interaction ${step.action} ${step.selector}: ${error.message}`);break;}
   }
   await browser('eval','-b',Buffer.from('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))))').toString('base64'));
+  const preference=(await browser('eval','-b',Buffer.from(`matchMedia('(prefers-color-scheme: ${theme})').matches`).toString('base64'))).result;
+  if(preference!==true)throw Error('Browser did not apply system color preference: '+theme);
   const snapshot=await browser('snapshot');
   if(typeof snapshot.snapshot!=='string'||!snapshot.snapshot.trim())throw Error('Empty browser snapshot');
-  const snapPath=join(out,'snapshots',screen+'.txt');await writeFile(snapPath,snapshot.snapshot);
-  await browser('screenshot',join(out,'screenshots',screen+'.png'));
+  const snapPath=join(out,'snapshots',theme,screen+'.txt');await writeFile(snapPath,snapshot.snapshot);
+  await browser('screenshot',join(out,'screenshots',theme,screen+'.png'));
   let output;
   try{output=(await run(process.execPath,[join(root,'scripts/ui-contracts/contract-check.mjs'),snapPath,join(specs,'contracts',screen+'.json')])).stdout;}
   catch(error){if(error.code!==1)throw error;output=error.stdout;}
-  await writeFile(join(out,'checks',screen+'.txt'),output);Object.assign(row,parseCheck(output));
+  await writeFile(join(out,'checks',theme,screen+'.txt'),output);Object.assign(row,parseCheck(output));
   const expression=`(()=>{const selectors={rail:'.rail',sidebar:'#sidebar',main:'.page-body:not([hidden])',pane:'#work-pane',composer:'.chat-form',header:'.band'};return {tokens:Object.fromEntries(${JSON.stringify(Object.keys(visual.tokens))}.map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])),regions:Object.fromEntries(Object.entries(selectors).map(([key,selector])=>{const el=document.querySelector(selector),r=el?.getBoundingClientRect();return [key,r&&r.width&&r.height?[r.x,r.y,r.width,r.height]:null]}))}})()`;
   const measured=(await browser('eval','-b',Buffer.from(expression).toString('base64'))).result;
+  const expected=visualTokens(visual,theme);
   // Resolve CSS colour syntax through the browser before comparison (hex and rgb are equivalent).
-  const normalized=(await browser('eval','-b',Buffer.from(`(()=>{const el=document.createElement('span');document.body.append(el);const tokens=Object.fromEntries(Object.entries(${JSON.stringify(measured.tokens)}).map(([key,value])=>{el.style.color='';el.style.color=value;return [key,value?getComputedStyle(el).color:'']}));el.remove();return tokens})()`).toString('base64'))).result;
-  measured.tokens=normalized;
-  row.visualFailures=checkVisual(contract,visual,measured);
-  await writeFile(join(out,'visual',screen+'.json'),JSON.stringify({measured,failures:row.visualFailures},null,2)+'\n');
-  const artboard=artboards[screen];
+  const normalized=(await browser('eval','-b',Buffer.from(`(()=>{const el=document.createElement('span');document.body.append(el);const normalize=tokens=>Object.fromEntries(Object.entries(tokens).map(([key,value])=>{el.style.color='';el.style.color=value;return [key,value&&el.style.color?getComputedStyle(el).color:'']}));const result={actual:normalize(${JSON.stringify(measured.tokens)}),expected:normalize(${JSON.stringify(expected)})};el.remove();return result})()`).toString('base64'))).result;
+  measured.tokens=normalized.actual;
+  row.visualFailures=checkVisual(contract,{tokens:normalized.expected},measured);
+  measured.systemPreference=theme;
+  await writeFile(join(out,'visual',theme,screen+'.json'),JSON.stringify({measured,failures:row.visualFailures},null,2)+'\n');
+  const artboard=artboards[screen]?.[theme];
   if(artboard?.file){
-   const pair=join(out,'pairs',screen+'.png');const args=[join(specs,artboard.file),join(out,'screenshots',screen+'.png'),'-thumbnail',`${contract.viewport.width}x${contract.viewport.height}`,'-tile','2x1','-geometry','+8+8','-background','#15171a',pair];
+   const pair=join(out,'pairs',theme,screen+'.png');const args=[join(specs,artboard.file),join(out,'screenshots',theme,screen+'.png'),'-thumbnail',`${contract.viewport.width}x${contract.viewport.height}`,'-tile','2x1','-geometry','+8+8','-background','#15171a',pair];
    try{await run('magick',['montage',...args]);}catch(error){if(error.code!=='ENOENT')throw error;await run('montage',args);}
-   row.pair=`pairs/${screen}.png`;
+   row.pair=`pairs/${theme}/${screen}.png`;
   }else row.gaps.push(artboard?.reason||'Prototype artboard is not mapped.');
  }catch(error){row.errors.push(error.message+(error.stdout?"\n"+error.stdout:""));}
  finally{
   try{await browser('close');}catch(error){row.errors.push('Browser cleanup: '+error.message);}
   if(host)try{await host.close();}catch(error){row.errors.push('Fixture cleanup: '+error.message);}
  }
- console.log(`${screen}: ${row.passed}/${row.required} required, ${row.failed} failures, ${row.visualFailures.length} visual, ${row.gaps.length} gaps, ${row.errors.length} errors`);
+ console.log(`${screen} (${theme}): ${row.passed}/${row.required} required, ${row.failed} failures, ${row.visualFailures.length} visual, ${row.gaps.length} gaps, ${row.errors.length} errors`);
  await writeFile(join(out,'report.json'),JSON.stringify({blocking,rows},null,2)+'\n');
  await writeFile(join(out,'report.md'),reportMarkdown(rows,blocking));
 }

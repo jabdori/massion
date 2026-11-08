@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B22-room.dc.html",
- "screenshot": "contracts/shots/B22-room.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B22-room.dc.html",
+ "screenshot": "shots/dark/B22-room.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B22-room.dc.html",
+   "screenshot": "shots/dark/B22-room.png"
+  },
+  "light": {
+   "source": "proto/render/light/B22-room.dc.html",
+   "screenshot": "shots/light/B22-room.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -41,9 +51,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -228,72 +239,84 @@
      "example": "맡았어요. 테스트가 빠진 곳 위주로 볼게요. 파일 11개, 테스트 파일은 1개예요."
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 5
+    },
+    {
      "role": "status",
      "text": "주노 작업 중",
      "required": false,
-     "order": 5
+     "order": 6
     },
     {
      "role": "text",
      "text": "{work_title}",
      "required": false,
-     "order": 6,
+     "order": 7,
      "example": "PR #84 검토"
     },
     {
      "role": "text",
      "text": "실행 중",
      "required": false,
-     "order": 7
-    },
-    {
-     "role": "text",
-     "text": "{content}",
-     "required": false,
-     "order": 8,
-     "example": "읽기 4/11"
+     "order": 8
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
      "order": 9,
-     "example": "확인 0/1"
+     "example": "읽기 4/11"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
      "order": 10,
+     "example": "확인 0/1"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
      "example": "이번에도 테스트부터 돌려 줘."
     },
     {
      "role": "link",
      "text": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · {time}",
      "required": false,
-     "order": 11,
+     "order": 12,
      "example": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · 10:44"
     },
     {
      "role": "text",
      "text": "{member}",
      "required": false,
-     "order": 12,
+     "order": 13,
      "example": "주노"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 13,
+     "order": 14,
      "example": "10:44"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 14,
+     "order": 15,
      "example": "읽던 파일까지 보고 테스트부터 돌릴게요. 절차에도 넣어 둘게요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 16
     }
    ]
   },
@@ -343,9 +366,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 6
+     "order": 6,
+     "example": "GitHub"
     },
     {
      "role": "heading",
@@ -724,6 +748,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    320,
+    808,
+    500,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    540,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -735,18 +771,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    540,
-    856
-   ],
-   "composer": [
-    320,
-    808,
-    500,
-    78
    ]
   }
  },
