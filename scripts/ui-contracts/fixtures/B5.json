@@ -13,7 +13,8 @@
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3b completion: existing B3/B18/B22-room/B8-done domain fixture Work reused; no commands or external effects"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -42,7 +43,15 @@
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -102,6 +111,16 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }
@@ -641,7 +660,15 @@
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -701,6 +728,16 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }

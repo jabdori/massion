@@ -1,9 +1,24 @@
 {
   "screen": "B26-later",
-  "extends": "B2",
+  "extends": "B26",
   "description": "Deferred budget decision with neutral waiting status.",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#activity-toggle",
+      "readySelector": "#activity-head:not([hidden])"
+    },
+    {
+      "action": "click",
+      "selector": "[id=\"activity-row-decision:rounding\"]",
+      "readySelector": "#activity-toggle:has(#activity-attention[hidden])"
+    },
+    {
+      "action": "click",
+      "selector": "#activity-toggle"
+    }
+  ],
   "gaps": [
-    "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
-    "The production UI has no budget-waiting/deferred-budget state or corresponding read-only API; no decision is submitted."
+    "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
   ]
 }

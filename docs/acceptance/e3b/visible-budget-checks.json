@@ -1,0 +1,22 @@
+[
+  {
+    "theme": "dark",
+    "composer": [
+      "＋",
+      "기본 권한"
+    ],
+    "duplicateVisibleSentences": 2,
+    "hiddenSentences": 0,
+    "approvedAccessiblePromptExcluded": true
+  },
+  {
+    "theme": "light",
+    "composer": [
+      "＋",
+      "기본 권한"
+    ],
+    "duplicateVisibleSentences": 2,
+    "hiddenSentences": 0,
+    "approvedAccessiblePromptExcluded": true
+  }
+]

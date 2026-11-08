@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {startFixtureHost,loadFixture} from './fixture-host.ts';
-import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady,visualTokens} from './report.ts';
+import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady,visualTokens,visibleTextBudgetExpression,visibleBudgets} from './report.ts';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../',import.meta.url));
 const specs=join(root,'docs/product/screens'),out=resolve(root,process.env.UI_CONTRACTS_OUTPUT||'.runtime/ui-contracts');
@@ -55,9 +55,12 @@ for(const theme of ['dark','light'])for(const screen of (requested.length?reques
   const snapshot=await browser('snapshot');
   if(typeof snapshot.snapshot!=='string'||!snapshot.snapshot.trim())throw Error('Empty browser snapshot');
   const snapPath=join(out,'snapshots',theme,screen+'.txt');await writeFile(snapPath,snapshot.snapshot);
+  const rendered=(await browser('eval','-b',Buffer.from(visibleTextBudgetExpression).toString('base64'))).result;
+  const visibleTextBudget=visibleBudgets(rendered,Object.keys(contract.text_budget||{}));
+  const checkSnapshot=join(out,'snapshots',theme,screen+'.json');await writeFile(checkSnapshot,JSON.stringify({data:{snapshot:snapshot.snapshot},visibleTextBudget},null,2)+'\n');
   await browser('screenshot',join(out,'screenshots',theme,screen+'.png'));
   let output;
-  try{output=(await run(process.execPath,[join(root,'scripts/ui-contracts/contract-check.mjs'),snapPath,join(specs,'contracts',screen+'.json')])).stdout;}
+  try{output=(await run(process.execPath,[join(root,'scripts/ui-contracts/contract-check.mjs'),checkSnapshot,join(specs,'contracts',screen+'.json')])).stdout;}
   catch(error){if(error.code!==1)throw error;output=error.stdout;}
   await writeFile(join(out,'checks',theme,screen+'.txt'),output);Object.assign(row,parseCheck(output));
   const expression=`(()=>{const selectors={rail:'.rail',sidebar:'#sidebar',main:'.page-body:not([hidden])',pane:'#work-pane',composer:'.chat-form',header:'.band'};return {tokens:Object.fromEntries(${JSON.stringify(Object.keys(visual.tokens))}.map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])),regions:Object.fromEntries(Object.entries(selectors).map(([key,selector])=>{const el=document.querySelector(selector),r=el?.getBoundingClientRect();return [key,r&&r.width&&r.height?[r.x,r.y,r.width,r.height]:null]}))}})()`;

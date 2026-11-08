@@ -1,5 +1,5 @@
 {
-  "dark/B1": {
+  "B1/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -61,7 +61,7 @@
     },
     "failures": []
   },
-  "dark/B2": {
+  "B2/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -128,7 +128,7 @@
     },
     "failures": []
   },
-  "dark/B2-offline": {
+  "B2-offline/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -195,7 +195,7 @@
     },
     "failures": []
   },
-  "dark/B2-offline-failed": {
+  "B2-offline-failed/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -262,7 +262,7 @@
     },
     "failures": []
   },
-  "dark/B3": {
+  "B3/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -329,7 +329,7 @@
     },
     "failures": []
   },
-  "dark/B3-run": {
+  "B3-run/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -396,7 +396,7 @@
     },
     "failures": []
   },
-  "dark/B4": {
+  "B4/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -468,7 +468,7 @@
     },
     "failures": []
   },
-  "dark/B5": {
+  "B5/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -530,7 +530,7 @@
     },
     "failures": []
   },
-  "dark/B6": {
+  "B6/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -597,7 +597,7 @@
     },
     "failures": []
   },
-  "dark/B6-token": {
+  "B6-token/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -664,7 +664,7 @@
     },
     "failures": []
   },
-  "dark/B11": {
+  "B11/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -731,7 +731,7 @@
     },
     "failures": []
   },
-  "dark/B11-quill": {
+  "B11-quill/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -798,7 +798,7 @@
     },
     "failures": []
   },
-  "dark/B16": {
+  "B16/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -865,7 +865,7 @@
     },
     "failures": []
   },
-  "dark/B16-later": {
+  "B16-later/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -932,7 +932,7 @@
     },
     "failures": []
   },
-  "dark/B16-sent": {
+  "B16-sent/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -999,7 +999,7 @@
     },
     "failures": []
   },
-  "dark/B18": {
+  "B18/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1066,7 +1066,7 @@
     },
     "failures": []
   },
-  "dark/B21": {
+  "B21/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1133,7 +1133,7 @@
     },
     "failures": []
   },
-  "dark/B21-name": {
+  "B21-name/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1200,7 +1200,7 @@
     },
     "failures": []
   },
-  "dark/B21-done": {
+  "B21-done/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1267,7 +1267,7 @@
     },
     "failures": []
   },
-  "dark/B21-done-hana": {
+  "B21-done-hana/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1334,7 +1334,7 @@
     },
     "failures": []
   },
-  "dark/B26": {
+  "B26/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1401,7 +1401,7 @@
     },
     "failures": []
   },
-  "dark/B26-later": {
+  "B26-later/dark": {
     "measured": {
       "regions": {
         "composer": [
@@ -1468,7 +1468,7 @@
     },
     "failures": []
   },
-  "light/B1": {
+  "B1/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1530,7 +1530,7 @@
     },
     "failures": []
   },
-  "light/B2": {
+  "B2/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1597,7 +1597,7 @@
     },
     "failures": []
   },
-  "light/B2-offline": {
+  "B2-offline/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1664,7 +1664,7 @@
     },
     "failures": []
   },
-  "light/B2-offline-failed": {
+  "B2-offline-failed/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1731,7 +1731,7 @@
     },
     "failures": []
   },
-  "light/B3": {
+  "B3/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1798,7 +1798,7 @@
     },
     "failures": []
   },
-  "light/B3-run": {
+  "B3-run/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1865,7 +1865,7 @@
     },
     "failures": []
   },
-  "light/B4": {
+  "B4/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1937,7 +1937,7 @@
     },
     "failures": []
   },
-  "light/B5": {
+  "B5/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -1999,7 +1999,7 @@
     },
     "failures": []
   },
-  "light/B6": {
+  "B6/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2066,7 +2066,7 @@
     },
     "failures": []
   },
-  "light/B6-token": {
+  "B6-token/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2133,7 +2133,7 @@
     },
     "failures": []
   },
-  "light/B11": {
+  "B11/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2200,7 +2200,7 @@
     },
     "failures": []
   },
-  "light/B11-quill": {
+  "B11-quill/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2267,7 +2267,7 @@
     },
     "failures": []
   },
-  "light/B16": {
+  "B16/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2334,7 +2334,7 @@
     },
     "failures": []
   },
-  "light/B16-later": {
+  "B16-later/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2401,7 +2401,7 @@
     },
     "failures": []
   },
-  "light/B16-sent": {
+  "B16-sent/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2468,7 +2468,7 @@
     },
     "failures": []
   },
-  "light/B18": {
+  "B18/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2535,7 +2535,7 @@
     },
     "failures": []
   },
-  "light/B21": {
+  "B21/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2602,7 +2602,7 @@
     },
     "failures": []
   },
-  "light/B21-name": {
+  "B21-name/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2669,7 +2669,7 @@
     },
     "failures": []
   },
-  "light/B21-done": {
+  "B21-done/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2736,7 +2736,7 @@
     },
     "failures": []
   },
-  "light/B21-done-hana": {
+  "B21-done-hana/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2803,7 +2803,7 @@
     },
     "failures": []
   },
-  "light/B26": {
+  "B26/light": {
     "measured": {
       "regions": {
         "composer": [
@@ -2870,7 +2870,7 @@
     },
     "failures": []
   },
-  "light/B26-later": {
+  "B26-later/light": {
     "measured": {
       "regions": {
         "composer": [

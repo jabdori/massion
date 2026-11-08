@@ -39,9 +39,10 @@ test('a running Work is one card with assignee, role chips, steps and elapsed mi
  const running:Work={workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true,startedAt:Date.now()-45*60000,steps:{done:1,total:2}};
  const {app,state}=fixture([{text:'Find churn causes',at:T0,work:running},{text:'Thanks',at:T0+60000}]);await settle();
  const card=byId(app,'chat-card-'+turnId(1))!;assert.ok(card);assert.equal(card.className,'chat-card');
- for(const part of ['Churn causes','작업 중','하나','45분','작성','확인','1/2'])assert.ok(card.textContent.includes(part),part);
+ for(const part of ['Churn causes','실행 중','하나','45분','작성','확인','1/2'])assert.ok(card.textContent.includes(part),part);
  const chips=card.children.flatMap(function all(n:Node):Node[]{return [n,...n.children.flatMap(all)];}).filter(n=>/\bchip\b/.test(n.className));
  assert.deepEqual(chips.map(c=>[c.textContent,/\bcheck\b/.test(c.className)]),[['작성',false],['확인',true]]);
+ assert.ok(card.textContent.indexOf('하나')<card.textContent.indexOf('작성'),'assignee precedes role chips in the card heading');
  const slot=shown(app).indexOf(card);assert.ok(slot>0);
  state.entries[0]!.work={...running,execution:'settled',acceptance:'accepted',steps:{done:2,total:2}};await app.node('chat-latest').fire('click');await settle();
  assert.ok(!shown(app).includes(card),"replaced in place");const line=byId(app,'chat-fold-'+turnId(1))!;assert.equal(line.tagName,'BUTTON');assert.equal(line.textContent,'작업함 ›');assert.equal(shown(app).indexOf(line),slot,'the folded line takes the card slot');
@@ -59,7 +60,7 @@ test('a result-unknown Work shows an exception card whose Check only reads again
  const reads=app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length;
  await button(card,'확인')!.fire('click');await settle();
  assert.ok(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length>reads);assert.equal(posts(app).length,0);
- assert.match(app.node('activity-list').textContent,/Toner order.*결과 모름/);assert.equal(app.node('side-work').children.length,0,'Work lines show running Work only');
+ assert.match(app.node('activity-list').textContent,/Toner order.*결과 모름/);assert.equal(app.node('side-work').children.length,1,'the unresolved Work remains inspectable in the sidebar');
 });
 
 test('a failed Work offers Retry, which refills the input with the original request, and Close, which records cancel once and shows a grey line',async()=>{
@@ -97,7 +98,7 @@ test('a briefing is one grey card whose bullets link to Work with its current st
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}},{text:'Morning',at:day2+3600000}],{briefings:[{id:'briefing:1',at:day2,title:'Morning briefing',turnIds:[turnId(1),'assistant-turn:missing']}]});await settle();
  const brief=byId(app,'chat-briefing-briefing:1')!;assert.ok(brief);
  assert.ok(brief.textContent.startsWith('Morning briefing | 11월 6일 (금)'));
- assert.match(brief.textContent,/Churn causes 작업 중/);assert.doesNotMatch(brief.textContent,/missing/);
+ assert.match(brief.textContent,/Churn causes 실행 중/);assert.doesNotMatch(brief.textContent,/missing/);
  const dates=shown(app).filter(n=>n.className==='chat-date').map(n=>n.textContent);assert.equal(dates.length,2);assert.equal(dates[1],'11월 6일 (금)');
  const order=shown(app);assert.ok(order.indexOf(brief)>order.findIndex(n=>n.className==='chat-date'&&n.textContent===dates[1])&&order.indexOf(brief)<order.findIndex(n=>n.textContent==='Morning'));
  await button(brief,'Churn causes')!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:a');
@@ -113,7 +114,7 @@ test('a closed Work whose outcome is still unknown keeps its exception card, and
  const {app}=fixture([{text:'Order toner',at:T0,work:{workId:'work:c',title:'Toner order',execution:'cancelled',acceptance:'pending',started:true,unknown:true}},{text:'Ask the vendor',at:T0,work:{workId:'work:w',title:'Vendor question',execution:'waiting',acceptance:'pending',started:true,unknown:true}},{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}}]);await settle();
  for(const n of [1,2]){const card=byId(app,'chat-exception-'+turnId(n))!;assert.ok(card,'exception '+n);assert.match(card.textContent,/결과 모름.*다시 보내지 않음/);assert.ok(button(card,'확인'));assert.equal(button(card,'닫기'),undefined);}
  assert.equal(byId(app,'chat-system-closed:'+turnId(1)),undefined,'a plain cancel does not answer an unknown outcome');
- assert.deepEqual(app.node('side-work').children.map(n=>n.textContent),['Churn causes작업 중'],'Work lines show running Work only');
+ assert.deepEqual(app.node('side-work').children.map(n=>n.textContent),['Churn causes실행 중','Vendor question결과 모름','Toner order결과 모름'],'running and unresolved Work remain inspectable');
  assert.deepEqual(app.node('activity-list').children.map(n=>n.children[0]!.children[0]!.textContent),['Vendor question','Toner order','Churn causes'],'unknown before running');
 });
 
@@ -220,4 +221,38 @@ test('a late clipboard refusal cannot replace the status of a newer conversation
  let reject!:(error:Error)=>void;(app.context as any).navigator.clipboard={writeText:()=>new Promise<void>((_,fail)=>{reject=fail;})};
  const message=shown(app).find(n=>n.className==='chat-reply')!,pending=button(message,'복사')!.fire('click');
  const {runInContext}=await import('node:vm');runInContext('++chatGeneration',app.context);reject(Error('old refusal'));await pending;await settle();assert.equal(app.node('chat-status').hidden,true);assert.equal(posts(app).length,0);
+});
+
+test('the composer exposes one accessible name and a draft copy action after mention selection controls',async()=>{
+ assert.doesNotMatch(workbenchPage,/<label[^>]*for="chat-input"/);
+ assert.match(workbenchPage,/<textarea[^>]*id="chat-input"[^>]*aria-label="하나에게 메시지 보내기"/);
+ const {app}=fixture([{text:'A question',at:T0}],{members:[{id:'member-q',name:'퀼'}]});await settle();const copied:string[]=[];
+ (app.context as any).navigator.clipboard={writeText:async(text:string)=>{copied.push(text);}};
+ app.node('chat-input').value='@';await app.node('chat-input').fire('input');assert.equal(app.node('chat-draft-copy').hidden,false);await app.node('chat-draft-copy').fire('click');await settle();assert.deepEqual(copied,['@']);assert.equal(posts(app).length,0);
+ app.node('chat-input').value='plain';await app.node('chat-input').fire('input');assert.equal(app.node('chat-draft-copy').hidden,true);
+});
+
+test('an empty owner history uses the approved first-screen composer prompt',async()=>{
+ const {app}=fixture([]);await settle();assert.equal(app.node('chat-input').attributes.get('aria-label'),'답변을 입력하거나 다른 이야기를 하세요');
+});
+
+test('a member Work card precedes its member reply and retains one keyed slot',async()=>{
+ const {app}=fixture([{text:'A delegated request',at:T0,work:{workId:'delegated',title:'A result',execution:'active',acceptance:'pending',started:true}}],{members:[{id:'member-q',name:'퀼'}]});await settle();
+ const {runInContext}=await import('node:vm');runInContext("chatThread='member-q';renderChat()",app.context);
+ const nodes=shown(app),card=byId(app,'chat-card-'+turnId(1))!;assert.ok(nodes.indexOf(card)<nodes.findIndex(n=>n.className==='chat-reply'));assert.equal(nodes.filter(n=>n===card).length,1);
+});
+
+test('a simple answer includes its stored time in the date separator',async()=>{
+ const {app}=fixture([{text:'Calculate',at:T0}]);await settle();assert.ok(shown(app).some(n=>n.className==='chat-date'&&n.textContent.endsWith(new Date(T0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}))));
+});
+
+test('recorded steering opens its exact Work from a timed grey link without issuing a command',async()=>{
+ const {app}=fixture([{text:'Build',at:T0,work:{workId:'steered',title:'A result',execution:'active',acceptance:'pending',started:true}}]);await settle();
+ const {runInContext}=await import('node:vm');runInContext("chatView.turns[0].steer={status:'recorded',title:'A result',missionId:'intake',workId:'steered'};renderChat()",app.context);
+ const line=byId(app,'chat-system-steer-'+turnId(1))!;assert.ok(line.children.some(n=>n.tagName==='BUTTON'));await line.children[0]!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.equal(posts(app).length,0);
+});
+
+test('a failed Work keeps its inspection card and places recovery actions after the latest reply',async()=>{
+ const {app}=fixture([{text:'Find causes',at:T0,work:{workId:'failed-slot',title:'A result',execution:'settled',acceptance:'failed',started:true}},{text:'A later note',at:T0+60000}]);await settle();
+ const card=byId(app,'chat-card-'+turnId(1))!,exception=byId(app,'chat-exception-'+turnId(1))!,nodes=shown(app);assert.ok(card);assert.ok(nodes.indexOf(card)<nodes.findIndex(n=>n.textContent==='A later note'));assert.equal(nodes.at(-1),exception);assert.ok(button(exception,'다시 시도'));assert.equal(posts(app).length,0);
 });

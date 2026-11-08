@@ -24,14 +24,14 @@ test('the skeleton has a rail, a sidebar, a page area and a work pane, with no e
  const style=workbenchPage.slice(0,workbenchPage.indexOf('</style>'));for(const yellow of ['#fcf3df','#e7dbbd','#855019','#77531d'])assert.ok(!style.includes(yellow),yellow);
 });
 
-type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean};
+type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;memberId?:string|null;unknown?:boolean;startedAt?:number|null;endedAt?:number|null;segment?:number;stored?:Record<string,unknown>};
 function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[];revision:number},mission:()=>unknown)=>unknown){
  const criteria={version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'};
- const missionWork=(w:Work)=>({id:w.workId,title:w.title,missionVersion:1,criteria,execution:w.execution,acceptance:w.acceptance,tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0}});
+ const missionWork=(w:Work)=>({id:w.workId,title:w.title,missionVersion:1,criteria,execution:w.execution,acceptance:w.acceptance,tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0},...w.stored});
  const state={works,revision:2,missions:0,cursor:1,events:[] as any[]};
  const mission=()=>({id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:state.works.map(missionWork),memories:[],growth:[],relations:[]});
  const view=()=>{const messages:any[]=[],turns:any[]=[];state.works.forEach((w,i)=>{const id=String(i+1).repeat(32),turn='assistant-turn:m:'+id;messages.push({id:'m:'+id,role:'owner',turnId:null,text:'Do '+w.title},{id:'r:'+turn,role:'representative',turnId:turn,text:'Okay.'});
-  turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',proposal:{title:w.title},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started}});});
+  turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',proposal:{title:w.title},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,memberId:w.memberId??null,unknown:w.unknown??false,startedAt:w.startedAt??null,endedAt:w.endedAt??null,segment:w.segment??1}});});
   return {feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns};};
  const app=harness(async(path,options)=>{
   const handled=extra?.(path,options,state,mission);if(handled)return reply(handled);
@@ -47,14 +47,14 @@ function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[
 const kids=(node:Node)=>node.children.filter(child=>!child.hidden);
 const titles=(list:Node)=>kids(list).map(row=>row.children.find(c=>c.tagName==='BUTTON')!.children.find(c=>c.tagName==='STRONG')!.textContent);
 
-test('Work lines show running Work under the Representative; the activity list orders by priority or recency, marks unread changes and every entry opens the same tab',async()=>{
+test('Work lines retain stored Work; the activity list orders by priority or recency, marks unread changes and every entry opens the same tab',async()=>{
  const {app,state}=fixture([{workId:'work:b',title:'Running one',execution:'active',acceptance:'pending',started:true},{workId:'work:a',title:'Done one',execution:'settled',acceptance:'accepted',started:true},{workId:'work:c',title:'Failed one',execution:'settled',acceptance:'failed',started:true}]);
  await settle();
- const lines=kids(app.node('side-work')).map(n=>n.textContent);assert.equal(lines.length,1,'exceptions and finished Work live in the conversation');assert.ok(lines[0]!.startsWith('Running one'));
+ const lines=kids(app.node('side-work')).map(n=>n.textContent);assert.equal(lines.length,3,'stored failed and accepted Work remain reachable');assert.ok(lines.some(line=>line.startsWith('Running one')));
  assert.equal(app.node('side-members').hidden,true);assert.equal(app.node('rail-apps').hidden,true);
- await app.node('activity-toggle').fire('click');assert.equal(app.node('side-activity').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-pressed'),'true');
+ await app.node('activity-toggle').fire('click');assert.equal(app.node('side-activity').hidden,false);assert.equal(app.node('side-people').hidden,false);assert.equal(app.node('side-work').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-pressed'),'true');
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Running one','Done one']);
- assert.match(app.node('activity-list').textContent,/확인 실패/);assert.doesNotMatch(app.node('activity-list').textContent,/읽지 않음/,'first sight records the state without a dot');
+ assert.match(app.node('activity-list').textContent,/실패/);assert.match(app.node('activity-list').textContent,/읽지 않음/,'first discovery does not acknowledge Work');
  await app.node('activity-order').fire('click');assert.equal(app.node('activity-order-menu').hidden,false);await app.node('order-recent').fire('click');
  assert.deepEqual(titles(app.node('activity-list')),['Failed one','Done one','Running one']);
  assert.equal(app.node('order-recent').attributes.get('aria-checked'),'true');assert.equal(app.node('activity-order-menu').hidden,true);
@@ -65,12 +65,12 @@ test('Work lines show running Work under the Representative; the activity list o
  const row=kids(app.node('activity-list')).find(r=>r.textContent.includes('Running one'))!;assert.match(row.textContent,/읽지 않음/);
  assert.equal(app.node('work-pane').hidden,true);
  await row.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();
- assert.equal(app.node('work-pane').hidden,false);assert.doesNotMatch(app.node('activity-list').textContent,/읽지 않음/);
+ assert.equal(app.node('work-pane').hidden,false);assert.doesNotMatch(kids(app.node('activity-list')).find(r=>r.textContent.includes('Running one'))!.textContent,/읽지 않음/);assert.match(app.node('activity-list').textContent,/읽지 않음/,'opening one Work does not acknowledge the others');
  const tabs=()=>kids(app.node('pane-tabs'));assert.equal(tabs().length,1);assert.match(tabs()[0]!.textContent,/Running one/);
  assert.equal((app.context as any).document.activeElement.id,'work-heading-work:b');
  assert.deepEqual(kids(app.node('work-list')).map(card=>card.id),['work-card-work:b'],'a Work tab shows that Work only');
  // A Work line and a card open the same tab instead of a second one; another Work adds a tab and selects it.
- await app.all().find(n=>n.id==='chat-fold-assistant-turn:m:'+'3'.repeat(32))!.fire('click');await settle();
+ await openTurn(app,2).fire('click');await settle();
  assert.equal(tabs().length,2);const selected=()=>tabs().filter(t=>t.children[0]!.attributes.get('aria-selected')==='true').map(t=>t.children[0]!.textContent);assert.deepEqual(selected(),['Failed one']);
  await kids(app.node('activity-list')).find(r=>r.textContent.includes('Failed one'))!.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();assert.equal(tabs().length,2);
  await tabs()[0]!.children[0]!.fire('click');await settle();assert.deepEqual(selected(),['Running one']);assert.equal((app.context as any).document.activeElement.id,'work-heading-work:b');
@@ -108,7 +108,7 @@ test('loading a Mission from Settings opens one pane tab named after its purpose
 });
 
 const open=(row:Node)=>row.children.find(c=>c.tagName==='BUTTON')!;
-// Running Work opens from its card, settled Work from its fold: the sidebar lists running Work only.
+// A Work opens through its current card or folded line.
 const openTurn=(app:ReturnType<typeof harness>,index:number)=>{const turn='assistant-turn:m:'+String(index+1).repeat(32),node=app.all().find(n=>n.id==='chat-card-'+turn||n.id==='chat-fold-'+turn)!;return node.tagName==='BUTTON'?node:node.children.find(c=>c.className==='chat-card-open')!;};
 const shown=(app:ReturnType<typeof harness>)=>kids(app.node('work-list')).map(card=>card.id);
 const selectedTab=(app:ReturnType<typeof harness>)=>kids(app.node('pane-tabs')).filter(t=>t.children[0]!.attributes.get('aria-selected')==='true').map(t=>t.children[0]!.textContent);
@@ -121,7 +121,7 @@ test('an explicit open shows the pane and its target even when the same Mission 
  const catalogItem={missionId:'intake',purpose:'Owner requests',scope:'local',revision:2,version:1,workCount:2};
  const {app}=fixture(two,path=>ready(path)??(path.startsWith('/work-inbox')?{feedId:'feed:a',cursor:1,limit:20,items:[inboxItem],nextAfter:null}:path.startsWith('/mission-catalog')?{feedId:'feed:a',cursor:1,limit:20,items:[catalogItem],nextAfter:null}:undefined));
  await settle();
- await open(kids(app.node('side-work'))[0]!).fire('click');await settle();assert.deepEqual(shown(app),['work-card-work:a']);
+ await find(app,'side-line-intake/work:a').fire('click');await settle();assert.deepEqual(shown(app),['work-card-work:a']);
  // The inbox names another Work of the Mission already shown: it gets its own tab and is not filtered away.
  await app.node('work-inbox-refresh').fire('click');await settle();
  await app.all().find(n=>n.attributes.get('data-inbox-work')==='work:b')!.fire('click');await settle();
@@ -154,7 +154,7 @@ for(const [form,slot] of [['correction',10],['saved owner message',12]] as const
 
 test('selecting a tab while a read or write is in flight leaves the tabs and the shown cards as they were',async()=>{
  const {app}=fixture(two);await settle();
- for(const id of ['chat-card-assistant-turn:m:'+'1'.repeat(32),'chat-fold-assistant-turn:m:'+'2'.repeat(32)]){const node=app.all().find(n=>n.id===id)!;await (node.tagName==='BUTTON'?node:node.children.find(c=>c.className==='chat-card-open')!).fire('click');await settle();}
+ for(const index of [0,1]){await openTurn(app,index).fire('click');await settle();}
  const before=selectedTab(app);runInContext('loading=true',app.context);
  await kids(app.node('pane-tabs'))[0]!.children[0]!.fire('click');assert.deepEqual(selectedTab(app),before);assert.deepEqual(shown(app),['work-card-work:b']);
 });
@@ -245,14 +245,14 @@ test('the header menu routes existing settings actions and Escape restores its t
 
 test('the workspace toggle retains tabs and selection across hide, reread and reopen',async()=>{
  const {app}=fixture(two);await settle();assert.ok(opening('header-workspace'));
- assert.equal(app.node('header-workspace').hidden,true);
+ assert.equal(app.node('header-workspace').hidden,false);
  await open(kids(app.node('side-work'))[0]!).fire('click');await settle();
  const selected=selectedTab(app);assert.equal(app.node('header-workspace').hidden,false);assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'true');
  await app.node('pane-widen').fire('click');await app.node('header-workspace').fire('click');
  assert.equal(app.node('work-pane').hidden,true);assert.doesNotMatch(app.node('app').className,/\bwide\b/);
  runInContext('renderPane()',app.context);assert.equal(app.node('work-pane').hidden,true);assert.deepEqual(selectedTab(app),selected);
  await app.node('header-workspace').fire('click');assert.equal(app.node('work-pane').hidden,false);assert.deepEqual(selectedTab(app),selected);
- await app.node('pane-close').fire('click');assert.equal(app.node('header-workspace').hidden,true);
+ await app.node('pane-close').fire('click');assert.equal(app.node('header-workspace').hidden,false);
 });
 
 test('opening an existing result preview reveals a workspace hidden by the header toggle',async()=>{
@@ -269,14 +269,14 @@ test('sidebar search filters member names and Work titles locally, preserves mem
  assert.equal(quill.children[0]!.attributes.get('data-shape'),'drop');assert.equal(quill.children[0]!.style.background,'var(--agent-1)');
  const calls=app.calls.length;app.node('sidebar-query').value='  qUiLl  ';await app.node('sidebar-query').fire('input');
  assert.equal(quill.parentElement!.hidden,false);assert.equal(juno.parentElement!.hidden,true);assert.equal(app.node('side-representative').hidden,true);assert.equal(app.node('side-work').children.every(n=>n.hidden),true);
- app.node('sidebar-query').value='Second';await app.node('sidebar-query').fire('input');assert.equal(quill.parentElement!.hidden,true);assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.replace('작업 중','')),['Second']);
+ app.node('sidebar-query').value='Second';await app.node('sidebar-query').fire('input');assert.equal(quill.parentElement!.hidden,true);assert.deepEqual(kids(app.node('side-work')).map(n=>open(n).children[0]!.textContent),['Second']);
  await app.node('activity-toggle').fire('click');assert.deepEqual(titles(app.node('activity-list')),['Second']);
  await key(app,{key:'Escape'});assert.equal(app.node('sidebar-query').value,'');assert.equal(app.node('sidebar-query').hidden,true);assert.equal(app.context.document.activeElement,app.node('sidebar-search'));
  assert.equal(quill.parentElement!.hidden,false);assert.equal(juno.parentElement!.hidden,false);assert.equal(find(app,'side-member-quill'),quill);assert.equal(app.calls.length,calls);
  await app.node('rail-results').fire('click');assert.equal(app.node('sidebar-search').hidden,true);await app.node('rail-chat').fire('click');assert.equal(app.node('sidebar-search').hidden,false);
 });
 
-test('the attention dot follows open decisions and exceptions and clears when they resolve',async()=>{
+test('the attention dot follows open owner decisions and stays clear for unknown Work and schedule exceptions',async()=>{
  const {app,data,state}=shellFixture();await settle();assert.ok(opening('activity-attention'));
  assert.match(opening('activity-toggle'),/role="switch"/);assert.equal(app.node('activity-attention').hidden,true);
  data.decisions=[{id:'d1',at:1,title:'A decision',question:'Change?',action:'Change',rows:[],state:'open'}];await runInContext('readChat()',app.context);await settle();
@@ -284,9 +284,9 @@ test('the attention dot follows open decisions and exceptions and clears when th
  data.decisions[0].state='later';await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
  state.works=[{workId:'unknown',title:'Unknown payment',execution:'active',acceptance:'pending',started:true}];
  runInContext("shellWorks=[{missionId:'intake',workId:'unknown',title:'Unknown payment',unknown:true,execution:'active',acceptance:'pending'}];renderShell()",app.context);
- assert.equal(app.node('activity-attention').hidden,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ assert.equal(app.node('activity-attention').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-label'),'활동 보기');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
  state.works=[];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
- data.exceptions=[{id:'run:1',at:1,title:'Unknown schedule',state:'unknown',fact:'No receipt',scheduleId:'s1',runId:'r1',actions:['check']}];await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,false);
+ data.exceptions=[{id:'run:1',at:1,title:'Unknown schedule',state:'unknown',fact:'No receipt',scheduleId:'s1',runId:'r1',actions:['check']}];await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
  data.exceptions=[];await runInContext('readChat()',app.context);await settle();assert.equal(app.node('activity-attention').hidden,true);
 });
 
@@ -313,4 +313,87 @@ test('the narrow workspace toggle reopens a pane set aside by page navigation in
  await runInContext("shellOpenWork('assistant-turn:m:'+ '1'.repeat(32))",app.context);await settle();
  await app.node('rail-results').fire('click');assert.equal(app.node('work-pane').className,'pane away');assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'false');
  await app.node('header-workspace').fire('click');assert.equal(app.node('work-pane').hidden,false);assert.equal(app.node('work-pane').className,'pane');assert.equal(app.node('header-workspace').attributes.get('aria-pressed'),'true');
+});
+
+test('sidebar Work states stay separate from member status and only current unanswered questions imply a decision',async()=>{
+ const {app}=fixture([
+  {workId:'run',title:'Running',execution:'active',acceptance:'pending',started:true},
+  {workId:'wait',title:'Waiting',execution:'waiting',acceptance:'pending',started:true},
+  {workId:'question',title:'Question',execution:'waiting',acceptance:'pending',started:true,stored:{questions:[{id:'q1',actorId:'owner',text:'Choose?',answer:null}]}},
+  {workId:'check',title:'Review',execution:'waiting',acceptance:'pending',started:true,stored:{artifact:{id:'a1',version:1,sha256:'a'.repeat(64),kind:'text'}}},
+  {workId:'failed',title:'Failed',execution:'settled',acceptance:'failed',started:true},
+  {workId:'done',title:'Accepted',execution:'settled',acceptance:'accepted',started:true,endedAt:1},
+  {workId:'unknown',title:'Unknown',execution:'blocked',acceptance:'pending',started:true,unknown:true}
+ ]);await settle();app.node('mission-id').value='intake';await app.submit('load-form');await runInContext('shellWorksLoad()',app.context);await settle();
+ const labels=()=>kids(app.node('side-work')).map(li=>open(li).children.find(n=>n.attributes.get('role')==='status')?.textContent);
+ assert.deepEqual(labels(),['결과 모름','완료','실패','확인 대기','결정 대기','확인 대기','실행 중']);
+ assert.equal(app.node('side-representative-busy').hidden,false);
+ const neutral=open(kids(app.node('side-work')).find(li=>li.textContent.startsWith('Review'))!).children.find(n=>n.attributes.get('role')==='status')!;assert.doesNotMatch(neutral.className,/exception/);
+ runInContext('snapshot.revision=1;renderShell()',app.context);assert.deepEqual(labels().slice(3,6),['확인 대기','확인 대기','확인 대기'],'old questions cannot imply a current owner decision');
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('member busy and unread marks follow actual Work and clear after the stored change is read',async()=>{
+ const {app,state}=shellFixture();await settle();state.works=[{workId:'member-work',title:'Member work',memberId:'quill',execution:'active',acceptance:'pending',started:true}];await runInContext('shellWorksLoad()',app.context);await settle();
+ const member=find(app,'side-member-quill'),busy=member.children.find(n=>n.className==='busy-avatar')!,unread=member.children.find(n=>n.className==='unread')!;
+ assert.ok(busy);assert.equal(busy.hidden,false);assert.equal(busy.attributes.get('aria-label'),'작업 중');assert.equal(member.children[0]!.hidden,true);assert.equal(unread.hidden,true);
+ assert.ok(member.children.indexOf(busy)>member.children.findIndex(n=>n.textContent==='Quill'),'the member name precedes its status in reading order');
+ state.works=[{...state.works[0]!,execution:'waiting'}];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(busy.hidden,false,'a member still holds its pending check');assert.equal(runInContext('chatPendingTimer',app.context),0,'waiting does not enable minute polling');
+ state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted'}];await runInContext('shellWorksLoad()',app.context);await settle();
+ assert.equal(busy.hidden,true);assert.equal(member.children[0]!.hidden,false);assert.equal(member.children[0]!.attributes.get('data-shape'),'drop');assert.equal(unread.hidden,false);assert.equal(unread.attributes.get('aria-label'),'읽지 않음');assert.equal(app.node('activity-attention').hidden,true);
+ await find(app,'side-line-intake/member-work').fire('click');await settle();assert.equal(unread.hidden,true);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('sidebar toggle name describes its action after normal, wide and narrow visibility changes',async()=>{
+ const {app}=fixture(two);await settle();const toggle=app.node('sidebar-toggle');
+ await toggle.fire('click');assert.equal(toggle.attributes.get('aria-label'),'사이드바 보기');
+ await toggle.fire('click');assert.equal(toggle.attributes.get('aria-label'),'사이드바 숨기기');
+ await open(kids(app.node('side-work'))[0]!).fire('click');await settle();await app.node('pane-widen').fire('click');assert.equal(toggle.attributes.get('aria-label'),'사이드바 보기');
+ await toggle.fire('click');assert.equal(toggle.attributes.get('aria-label'),'사이드바 숨기기');
+ runInContext('shellSide(false)',app.context);assert.equal(toggle.attributes.get('aria-label'),'사이드바 보기');assert.equal(toggle.attributes.get('aria-expanded'),'false');
+});
+
+test('workspace opens a stored Work before any tab exists, stays read-only and disappears when its feed is cleared',async()=>{
+ const {app}=fixture([{workId:'known',title:'Stored Work',execution:'blocked',acceptance:'pending',started:true,unknown:true}]);await settle();
+ assert.equal(kids(app.node('pane-tabs')).length,0);assert.equal(app.node('header-workspace').hidden,false);
+ await app.node('header-workspace').fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.deepEqual(selectedTab(app),['Stored Work']);
+ assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ runInContext('shellWorks=[];paneTabs=[];renderShell();renderPane()',app.context);assert.equal(app.node('header-workspace').hidden,true);
+});
+
+test('the priority label is an operable menu button and decision summaries use the question without expanding detail rows',async()=>{
+ const {app,data}=shellFixture();await settle();data.decisions=[{id:'rounding',at:1,title:'Rounding',question:'Change the rule?',action:'Change',state:'open',rows:[['Current','1/3'],['Proposed','3/3']]}];await runInContext('readChat()',app.context);await settle();
+ assert.match(opening('activity-order-label'),/^<button\b/);await app.node('activity-toggle').fire('click');await app.node('activity-order-label').fire('click');assert.equal(app.node('activity-order-menu').hidden,false);
+ await app.node('order-recent').fire('click');assert.equal(app.node('activity-order-label').textContent,'최근');assert.equal(app.node('activity-order-label').attributes.get('aria-expanded'),'false');assert.equal(app.context.document.activeElement,app.node('activity-order-label'));
+ await app.node('activity-order-label').fire('click');await key(app,{key:'Escape'});assert.equal(app.context.document.activeElement,app.node('activity-order-label'));
+ const decision=find(app,'activity-row-decision:rounding');assert.match(decision.textContent,/Rounding.*Change the rule\?/);assert.doesNotMatch(decision.textContent,/Current|Proposed|1\/3|3\/3/);
+ await decision.fire('click');await settle();assert.equal(runInContext('chatThread',app.context),'');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('activity keeps member navigation before its list and restores Work lines when switched off',async()=>{
+ const {app}=shellFixture();await settle();const member=find(app,'side-member-quill'),works=member.parentElement!.children.find(n=>n.tagName==='UL')!;
+ await app.node('activity-toggle').fire('click');assert.equal(app.node('side-people').hidden,false);assert.equal(app.node('side-work').hidden,true);assert.equal(works.hidden,true);assert.equal(app.node('side-activity').hidden,false);
+ await app.node('rail-results').fire('click');assert.equal(app.node('side-people').hidden,true);await app.node('rail-chat').fire('click');assert.equal(app.node('side-people').hidden,false);assert.equal(find(app,'side-member-quill'),member);
+ await app.node('activity-toggle').fire('click');assert.equal(app.node('side-work').hidden,false);assert.equal(works.hidden,false);assert.equal(app.node('side-activity').hidden,true);
+});
+
+test('new decisions stay unread through rereads until explicitly opened, then a changed question becomes unread again',async()=>{
+ const {app,data}=shellFixture();await settle();data.decisions=[{id:'new',at:1,title:'New decision',question:'Choose?',action:'Change',state:'open',rows:[]}];await runInContext('readChat()',app.context);await settle();
+ const unread=()=>find(app,'activity-row-decision:new').children.some(n=>n.className==='marks'&&n.children.some(c=>c.className==='unread'));
+ const row=find(app,'activity-row-decision:new');assert.ok(row.children.findIndex(n=>n.className==='summary')<row.children.findIndex(n=>n.className==='marks'),'the decision summary precedes its unread status in reading order');
+ assert.equal(row.attributes.get('aria-label'),'New decision Choose?','the link name and unread status are separate accessible occurrences');
+ assert.equal(unread(),true);await runInContext('readChat()',app.context);await settle();assert.equal(unread(),true);
+ assert.equal(app.node('activity-attention').hidden,false);await find(app,'activity-row-decision:new').fire('click');await settle();assert.equal(unread(),false);assert.equal(app.node('activity-attention').hidden,true);assert.equal(app.node('activity-toggle').attributes.get('aria-label'),'활동 보기');await runInContext('readChat()',app.context);await settle();assert.equal(unread(),false);assert.equal(app.node('activity-attention').hidden,true);
+ assert.ok([...app.storage.keys()].includes('massion.workbench.seen'));
+ data.decisions[0].question='A different choice?';await runInContext('readChat()',app.context);await settle();assert.equal(unread(),true);assert.equal(app.node('activity-attention').hidden,false);await row.fire('click');await settle();assert.equal(unread(),true,'a detached old row cannot acknowledge changed decision details');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('first-seen accepted Work stays unread until opened and busy members suppress only the member unread dot',async()=>{
+ const {app,state}=shellFixture();await settle();state.works=[{workId:'accepted',title:'Accepted review',memberId:'juno',execution:'settled',acceptance:'accepted',started:true}];await runInContext('shellWorksLoad()',app.context);await settle();
+ const member=find(app,'side-member-juno'),dot=member.children.find(n=>n.className==='unread')!;
+ assert.equal(dot.hidden,false);assert.equal(JSON.parse(app.storage.get('massion.workbench.seen')!)['intake/accepted'],'');
+ await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(dot.hidden,false);assert.equal(app.node('activity-attention').hidden,true);
+ state.works=[{...state.works[0]!,execution:'active',acceptance:'pending'}];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(dot.hidden,true);assert.equal(JSON.parse(app.storage.get('massion.workbench.seen')!)['intake/accepted'],'','busy rendering does not acknowledge Work');
+ state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted'}];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(dot.hidden,false);
+ await find(app,'side-line-intake/accepted').fire('click');await settle();assert.equal(dot.hidden,true);assert.equal(JSON.parse(app.storage.get('massion.workbench.seen')!)['intake/accepted'],'완료');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
 });

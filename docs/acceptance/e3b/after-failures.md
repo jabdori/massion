@@ -1,633 +1,171 @@
-## B1 (dark)
+# Final residual diagnostics
 
-```text
-  FAIL  missing header       link     "사이드바 보기"
-  FAIL  missing composer     textbox  "답변을 입력하거나 다른 이야기를 하세요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 3 failures, 0 warnings, 11 required elements
-```
+Every occurrence below is classified in [remaining.json](remaining.json). There are no retained UI, fixture or checker exemptions.
 
 ## B2 (dark)
 
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "사례 보기"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  order  conversation text     "{date}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 9 failures, 0 warnings, 31 required elements
-```
-
-## B2-offline (dark)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-FAIL: 4 failures, 2 warnings, 20 required elements
-```
-
-## B2-offline-failed (dark)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing composer     status   "보내지 못함 · 다시 보내기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-FAIL: 5 failures, 2 warnings, 22 required elements
-```
-
-## B3 (dark)
-
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "반올림 규칙"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 4 failures, 1 warnings, 22 required elements
-```
+- **R001 — unsupported product capability**: `FAIL  missing conversation link     "사례 보기"`
+  A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.
+- **R002 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
 
 ## B3-run (dark)
 
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "반올림 규칙"
-  FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 23 required elements
-```
+- **R003 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
 
 ## B4 (dark)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "결정 대기"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
-  FAIL  missing pane         link     "작업 공간 닫기"
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-  FAIL  budget pane         sentences 2 > 0: "기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다"
-  FAIL  budget pane         longest string 33 > 24 chars
-  FAIL  budget pane         chars 730 > 203
-FAIL: 19 failures, 0 warnings, 35 required elements
-```
+- **R004 — unsupported product capability**: `FAIL  missing sidebar      status   "결정 대기"`
+  The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title.
+- **R005 — unsupported product capability**: `FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"`
+  There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.
+- **R006 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R007 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R008 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R009 — later B7 pane**: `FAIL  budget pane         sentences 1 > 0: "기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다"`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R010 — later B7 pane**: `FAIL  budget pane         longest string 33 > 24 chars`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R011 — later B7 pane**: `FAIL  budget pane         chars 685 > 203`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
 
 ## B5 (dark)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing header       link     "사이드바 보기"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
-  FAIL  missing conversation button   "주문 내역 확인"
-  FAIL  missing conversation button   "닫기"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 7 failures, 0 warnings, 17 required elements
-```
+- **R012 — unsupported product capability**: `FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"`
+  There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.
+- **R013 — unsupported product capability**: `FAIL  missing conversation button   "주문 내역 확인"`
+  No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.
+- **R014 — unsupported product capability**: `FAIL  missing conversation button   "닫기"`
+  The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.
 
 ## B6 (dark)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  region sidebar      status   "실패" (found in conversation)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"
-  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
-  FAIL  missing conversation button   "남기기"
-  FAIL  missing conversation button   "지우기"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  missing composer     textbox  "퀼에게 메시지 보내기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 19 failures, 1 warnings, 34 required elements
-```
-
-## B6-token (dark)
-
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 13 failures, 3 warnings, 28 required elements
-```
-
-## B11 (dark)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  order  page         option   "Enter" (occurrence already consumed or found earlier)
-  FAIL  order  page         option   "{member}" (occurrence already consumed or found earlier)
-  FAIL  order  page         link     "구성원 관리" (occurrence already consumed or found earlier)
-  FAIL  order  page         button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget sidebar      chars 31 > 25
-FAIL: 7 failures, 2 warnings, 22 required elements
-```
-
-## B11-quill (dark)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget sidebar      chars 31 > 25
-  FAIL  budget composer     chars 37 > 27
-FAIL: 4 failures, 2 warnings, 17 required elements
-```
-
-## B16 (dark)
-
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 0 warnings, 22 required elements
-```
+- **R015 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R016 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R017 — unsupported product capability**: `FAIL  missing conversation button   "남기기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
+- **R018 — unsupported product capability**: `FAIL  missing conversation button   "지우기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
 
 ## B16-later (dark)
 
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 0 warnings, 21 required elements
-```
+- **R019 — unsupported product capability**: `FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)`
+  The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.
 
 ## B16-sent (dark)
 
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing sidebar      link     "깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요."
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 37 > 27
-FAIL: 6 failures, 1 warnings, 21 required elements
-```
+- **R020 — unsupported product capability**: `FAIL  missing sidebar      link     "깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요."`
+  Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record.
+- **R021 — unsupported product capability**: `FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)`
+  The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.
 
 ## B18 (dark)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"
-  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
-  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
-  FAIL  missing conversation button   "남기기"
-  FAIL  missing conversation button   "지우기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 36 > 27
-FAIL: 17 failures, 2 warnings, 34 required elements
-```
-
-## B21 (dark)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 21 required elements
-```
-
-## B21-name (dark)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  role   dialog:새 구성원 만들기 button   "동그라미" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "네모" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "물방울" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "육각" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "마름모" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "구름" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "세 잎" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "세모" (text exists without the required role)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 13 failures, 2 warnings, 33 required elements
-```
-
-## B21-done (dark)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 36 > 27
-FAIL: 4 failures, 1 warnings, 20 required elements
-```
+- **R022 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R023 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R024 — unsupported product capability**: `FAIL  missing conversation button   "남기기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
+- **R025 — unsupported product capability**: `FAIL  missing conversation button   "지우기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
 
 ## B21-done-hana (dark)
 
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "되돌리기"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 22 required elements
-```
-
-## B26 (dark)
-
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "완료"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 12 failures, 3 warnings, 27 required elements
-```
+- **R026 — unsupported product capability**: `FAIL  missing conversation link     "되돌리기"`
+  MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled.
 
 ## B26-later (dark)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "완료"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation button   "다시 묻기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 14 failures, 3 warnings, 27 required elements
-```
-
-## B1 (light)
-
-```text
-  FAIL  missing header       link     "사이드바 보기"
-  FAIL  missing composer     textbox  "답변을 입력하거나 다른 이야기를 하세요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 3 failures, 0 warnings, 11 required elements
-```
+- **R027 — unsupported product capability**: `FAIL  missing conversation button   "다시 묻기"`
+  Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action.
 
 ## B2 (light)
 
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "사례 보기"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  order  conversation text     "{date}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 9 failures, 0 warnings, 31 required elements
-```
-
-## B2-offline (light)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-FAIL: 4 failures, 2 warnings, 20 required elements
-```
-
-## B2-offline-failed (light)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing composer     status   "보내지 못함 · 다시 보내기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-FAIL: 5 failures, 2 warnings, 22 required elements
-```
-
-## B3 (light)
-
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "반올림 규칙"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 4 failures, 1 warnings, 22 required elements
-```
+- **R028 — unsupported product capability**: `FAIL  missing conversation link     "사례 보기"`
+  A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.
+- **R029 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
 
 ## B3-run (light)
 
-```text
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "반올림 규칙"
-  FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 23 required elements
-```
+- **R030 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
 
 ## B4 (light)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "결정 대기"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
-  FAIL  missing pane         link     "작업 공간 닫기"
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  region pane         text     "{amount}" (found in conversation)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-  FAIL  budget pane         sentences 2 > 0: "기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다"
-  FAIL  budget pane         longest string 33 > 24 chars
-  FAIL  budget pane         chars 730 > 203
-FAIL: 19 failures, 0 warnings, 35 required elements
-```
+- **R031 — unsupported product capability**: `FAIL  missing sidebar      status   "결정 대기"`
+  The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title.
+- **R032 — unsupported product capability**: `FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"`
+  There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.
+- **R033 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R034 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R035 — later B7 pane**: `FAIL  region pane         text     "{amount}" (found in conversation)`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R036 — later B7 pane**: `FAIL  budget pane         sentences 1 > 0: "기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다"`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R037 — later B7 pane**: `FAIL  budget pane         longest string 33 > 24 chars`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
+- **R038 — later B7 pane**: `FAIL  budget pane         chars 685 > 203`
+  The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.
 
 ## B5 (light)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing header       link     "사이드바 보기"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
-  FAIL  missing conversation button   "주문 내역 확인"
-  FAIL  missing conversation button   "닫기"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 7 failures, 0 warnings, 17 required elements
-```
+- **R039 — unsupported product capability**: `FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"`
+  There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.
+- **R040 — unsupported product capability**: `FAIL  missing conversation button   "주문 내역 확인"`
+  No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.
+- **R041 — unsupported product capability**: `FAIL  missing conversation button   "닫기"`
+  The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.
 
 ## B6 (light)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  region sidebar      status   "실패" (found in conversation)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"
-  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
-  FAIL  missing conversation button   "남기기"
-  FAIL  missing conversation button   "지우기"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  missing composer     textbox  "퀼에게 메시지 보내기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 19 failures, 1 warnings, 34 required elements
-```
-
-## B6-token (light)
-
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 13 failures, 3 warnings, 28 required elements
-```
-
-## B11 (light)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  order  page         option   "Enter" (occurrence already consumed or found earlier)
-  FAIL  order  page         option   "{member}" (occurrence already consumed or found earlier)
-  FAIL  order  page         link     "구성원 관리" (occurrence already consumed or found earlier)
-  FAIL  order  page         button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget sidebar      chars 31 > 25
-FAIL: 7 failures, 2 warnings, 22 required elements
-```
-
-## B11-quill (light)
-
-```text
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget sidebar      chars 31 > 25
-  FAIL  budget composer     chars 37 > 27
-FAIL: 4 failures, 2 warnings, 17 required elements
-```
-
-## B16 (light)
-
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 0 warnings, 22 required elements
-```
+- **R042 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R043 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R044 — unsupported product capability**: `FAIL  missing conversation button   "남기기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
+- **R045 — unsupported product capability**: `FAIL  missing conversation button   "지우기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
 
 ## B16-later (light)
 
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 0 warnings, 21 required elements
-```
+- **R046 — unsupported product capability**: `FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)`
+  The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.
 
 ## B16-sent (light)
 
-```text
-  FAIL  missing sidebar      button   "우선순위"
-  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing sidebar      link     "깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요."
-  FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 37 > 27
-FAIL: 6 failures, 1 warnings, 21 required elements
-```
+- **R047 — unsupported product capability**: `FAIL  missing sidebar      link     "깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요."`
+  Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record.
+- **R048 — unsupported product capability**: `FAIL  order  conversation button   "복사" (occurrence already consumed or found earlier)`
+  The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.
 
 ## B18 (light)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"
-  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
-  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
-  FAIL  missing conversation button   "남기기"
-  FAIL  missing conversation button   "지우기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 36 > 27
-FAIL: 17 failures, 2 warnings, 34 required elements
-```
-
-## B21 (light)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 21 required elements
-```
-
-## B21-name (light)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  role   dialog:새 구성원 만들기 button   "동그라미" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "네모" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "물방울" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "육각" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "마름모" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "구름" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "세 잎" (text exists without the required role)
-  FAIL  role   dialog:새 구성원 만들기 button   "세모" (text exists without the required role)
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 13 failures, 2 warnings, 33 required elements
-```
-
-## B21-done (light)
-
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  budget composer     chars 36 > 27
-FAIL: 4 failures, 1 warnings, 20 required elements
-```
+- **R049 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R050 — unsupported product capability**: `FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"`
+  The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.
+- **R051 — unsupported product capability**: `FAIL  missing conversation button   "남기기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
+- **R052 — unsupported product capability**: `FAIL  missing conversation button   "지우기"`
+  The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.
 
 ## B21-done-hana (light)
 
-```text
-  FAIL  missing sidebar      status   "작업 중"
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing conversation link     "되돌리기"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 5 failures, 1 warnings, 22 required elements
-```
-
-## B26 (light)
-
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "완료"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 12 failures, 3 warnings, 27 required elements
-```
+- **R053 — unsupported product capability**: `FAIL  missing conversation link     "되돌리기"`
+  MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled.
 
 ## B26-later (light)
 
-```text
-  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
-  FAIL  role   sidebar      switch   "활동 보기" (text exists without the required role)
-  FAIL  missing sidebar      status   "완료"
-  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "실행 중"
-  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "확인 대기"
-  FAIL  order  sidebar      link     "{member}" (occurrence already consumed or found earlier)
-  FAIL  missing sidebar      status   "읽지 않음"
-  FAIL  missing header       link     "작업 공간"
-  FAIL  missing conversation button   "다시 묻기"
-  FAIL  budget sidebar      sentences 1 > 0: "활동 보기, 확인 필요"
-  FAIL  budget composer     chars 37 > 27
-FAIL: 14 failures, 3 warnings, 27 required elements
-```
+- **R054 — unsupported product capability**: `FAIL  missing conversation button   "다시 묻기"`
+  Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action.

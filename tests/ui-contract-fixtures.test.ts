@@ -187,3 +187,15 @@ test('approved example members keep their artboard identity hues as palette role
   assert.equal(view.members.find(m=>m.id==='member-quill')!.look.color,'agent-1',screen);
  }
 });
+
+test('conversation fixtures keep the supported histories and navigation of their approved states',async()=>{
+ const {loadFixture}=await hostModule();
+ const picker=await loadFixture('B11'),view=picker.routes['/assistant/conversation']!.body as any;
+ assert.equal(view.segment.messages.length,2,'B11 is one calculation before the picker, not the unrelated B2 backlog');assert.deepEqual(view.decisions,[]);
+ const member=await loadFixture('B6');assert.ok(member.steps.some(step=>step.action==='click'&&step.selector==='#side-member-member-quill'));
+ const activity=await loadFixture('B16');assert.ok(activity.steps.some(step=>step.action==='click'&&step.selector==='#activity-toggle'));
+ for(const screen of ['B4','B5','B6','B6-token','B18','B26','B26-later']){
+  const state=await loadFixture(screen),body=state.routes['/assistant/conversation']!.body as any;
+  assert.ok(body.apps.some((app:any)=>app.id==='github'&&app.page),screen+' installed rail app is real fixture data');
+ }
+});

@@ -1,0 +1,44 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e8]\n  - complementary \"구성원과 작업\"\n    - switch \"활동 보기\" [checked=false, ref=e6]\n    - button \"검색\" [expanded=false, ref=e7]\n    - generic\n      - list\n        - listitem [level=1]\n          - button \"하나 작업 중\" [ref=e15]\n            - StaticText \"하나\"\n            - status \"작업 중\"\n          - list \"하나의 작업\"\n            - listitem [level=2]\n              - button \"반올림 규칙\" [ref=e22]\n                - StaticText \"반올림 규칙\"\n                - status\n                  - StaticText \"확인 대기\"\n      - list \"구성원\"\n        - listitem [level=1]\n          - button \"퀼\" [ref=e16]\n            - StaticText \"퀼\"\n            - status \"작업 중\"\n          - list \"퀼의 작업\"\n            - listitem [level=2]\n              - button \"이탈 원인 조사\" [ref=e23]\n                - StaticText \"이탈 원인 조사\"\n                - status\n                  - StaticText \"실행 중\"\n        - listitem [level=1]\n          - button \"주노\" [ref=e17]\n            - StaticText \"주노\"\n          - list \"주노의 작업\"\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 숨기기\" [expanded=true, ref=e9]\n      - heading \"하나\" [level=1, ref=e10]\n        - button \"하나\" [ref=e14]\n      - button \"작업 공간\" [ref=e11]\n      - button \"더 보기\" [expanded=false, ref=e12]\n    - region \"대화\" [ref=e13]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 5일 (목)\"\n          - generic\n            - paragraph\n              - strong\n                - StaticText \"아침 브리핑\"\n              - StaticText \" | 11월 5일 (목) 08:00\"\n            - list\n              - listitem [level=1]\n                - ListMarker \"• \"\n                - button \"반올림 규칙\" [ref=e26]\n                - StaticText \" 확인 대기\"\n          - paragraph\n            - StaticText \"지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\"\n          - generic\n            - paragraph\n              - StaticText \"지난 90일 해지 건부터 볼게요.\"\n            - button \"복사\" [ref=e24]\n          - paragraph\n            - StaticText \"하나가 넘김: 이탈 원인 조사 · 14:08\"\n          - button \"이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 1/5\" [ref=e25]\n            - strong\n              - StaticText \"이탈 원인 조사\"\n            - StaticText \"실행 중\"\n            - status \"작업 중\"\n              - StaticText \"퀼\"\n            - StaticText \"퀼\"\n            - StaticText \"4분\"\n            - StaticText \"작성\"\n            - StaticText \"확인\"\n            - StaticText \"1/5\"\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e18]\n          - button \"파일 추가\" [disabled, ref=e19]\n          - button \"기본 권한\" [ref=e20]\n          - button \"보내기\" [ref=e21]"
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "sidebar": [
+      "하나",
+      "반올림 규칙",
+      "퀼",
+      "이탈 원인 조사",
+      "주",
+      "주노"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "11월 5일 (목)",
+      "아침 브리핑",
+      "| 11월 5일 (목) 08:00",
+      "반올림 규칙",
+      "확인 대기",
+      "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.",
+      "지난 90일 해지 건부터 볼게요.",
+      "하나가 넘김: 이탈 원인 조사 · 14:08",
+      "이탈 원인 조사",
+      "실행 중",
+      "퀼",
+      "4분",
+      "작성",
+      "확인",
+      "1/5"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ]
+  }
+}

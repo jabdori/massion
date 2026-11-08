@@ -1,0 +1,84 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - switch "활동 보기" [checked=false, ref=e6]
+    - button "검색" [expanded=false, ref=e7]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나 작업 중" [ref=e15]
+            - StaticText "하나"
+            - status "작업 중"
+          - list "하나의 작업"
+            - listitem [level=2]
+              - button "반올림 규칙" [ref=e22]
+                - StaticText "반올림 규칙"
+                - status
+                  - StaticText "확인 대기"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e16]
+            - StaticText "퀼"
+            - status "작업 중"
+          - list "퀼의 작업"
+            - listitem [level=2]
+              - button "이탈 원인 조사" [ref=e23]
+                - StaticText "이탈 원인 조사"
+                - status
+                  - StaticText "실행 중"
+        - listitem [level=1]
+          - button "주노" [ref=e17]
+            - StaticText "주노"
+          - list "주노의 작업"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e9]
+      - heading "하나" [level=1, ref=e10]
+        - button "하나" [ref=e14]
+      - button "작업 공간" [ref=e11]
+      - button "더 보기" [expanded=false, ref=e12]
+    - region "대화" [ref=e13]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - generic
+            - paragraph
+              - strong
+                - StaticText "아침 브리핑"
+              - StaticText " | 11월 5일 (목) 08:00"
+            - list
+              - listitem [level=1]
+                - ListMarker "• "
+                - button "반올림 규칙" [ref=e26]
+                - StaticText " 확인 대기"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e24]
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 1/5" [ref=e25]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실행 중"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "퀼"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "1/5"
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e18]
+          - button "파일 추가" [disabled, ref=e19]
+          - button "기본 권한" [ref=e20]
+          - button "보내기" [ref=e21]

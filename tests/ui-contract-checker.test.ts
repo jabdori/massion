@@ -155,3 +155,110 @@ for(const [description,label,passed,failed] of [
  assert.match(result.stdout,new RegExp(`(?:PASS|FAIL): ${failed} failures,`));
  assert.match(result.stdout,/app {"chars":3,"strings":1,"sentences":0,"longest":3}/);
 });
+
+for(const [label,sentences] of [
+ ['활동 보기, 확인 필요',0],
+ ['이 작업에는 확인이 필요해요',1],
+ ['이 작업에는 확인이 필요합니다',1],
+ ['This control explains what happens.',1],
+] as const)test('sentence budgets distinguish noun endings: '+label,async()=>{
+ const result=await check('- complementary:\n  - switch "'+label+'"',{...contract,regions:[],forbidden:[],text_budget:{sidebar:{chars:100,sentences:0,longest:100}}});
+ assert.equal(result.status,sentences,result.stdout+result.stderr);
+ assert.match(result.stdout,new RegExp('"sentences":'+sentences));
+});
+
+const mentionTitle='    - text: 구성원';
+const mentionFirst='    - option "퀼 Enter":\n      - text: 퀼\n      - text: Enter';
+const mentionSecond='    - option "주노":\n      - text: 주노';
+const mentionManage='    - button "구성원 관리"';
+const mentionElements=[['listbox','구성원'],['text','구성원'],['option','Enter'],['option','{member}'],['link','구성원 관리']];
+for(const {name,parts,failed} of [
+ {name:'container precedes its title and controls',parts:[mentionTitle,mentionFirst,mentionSecond,mentionManage],failed:0},
+ {name:'reversed options remain invalid',parts:[mentionTitle,mentionSecond,mentionFirst,mentionManage],failed:1},
+ {name:'management before options remains invalid',parts:[mentionTitle,mentionManage,mentionFirst,mentionSecond],failed:1},
+ {name:'a late title cannot move options later',parts:[mentionFirst,mentionSecond,mentionTitle,mentionManage],failed:2},
+])test('listbox anchors: '+name,async()=>{
+ const result=await check('- main:\n  - listbox "구성원":\n'+parts.join('\n'),{...contract,forbidden:[],regions:[{region:'page',elements:mentionElements.map(([role,text])=>({role,text,required:true}))}]});
+ assert.match(result.stdout,new RegExp(`(?:PASS|FAIL): ${failed} failures,`));
+ assert.equal(result.status,failed?1:0,result.stdout+result.stderr);
+});
+test('one listbox cannot satisfy two container requirements',async()=>{
+ const result=await check('- main:\n  - listbox "구성원":\n'+mentionTitle,{...contract,forbidden:[],regions:[{region:'page',elements:[0,1].map(()=>({role:'listbox',text:'구성원',required:true}))}]});
+ assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  order/);
+});
+
+const failedStatus='보내지 못함 · 다시 보내기';
+for(const {name,snapshot,failed} of [
+ {name:'unnamed status preserves the separator and nested action',snapshot:'- status:\n  - text: 보내지 못함 ·\n  - button "다시 보내기"',failed:0},
+ {name:'named status aliases its rendered content',snapshot:'- status "'+failedStatus+'":\n  - text: 보내지 못함 ·\n  - button "다시 보내기"',failed:0},
+ {name:'nested action text is not consumed',snapshot:'- status:\n  - generic:\n    - text: 보내지 못함 ·\n  - button "다시 보내기":\n    - text: 다시 보내기',failed:0},
+ {name:'missing separator remains invalid',snapshot:'- status:\n  - text: 보내지 못함\n  - button "다시 보내기"',failed:1},
+ {name:'reversed content remains invalid',snapshot:'- status:\n  - button "다시 보내기"\n  - text: 보내지 못함 ·',failed:1},
+ {name:'a reordered accessible name cannot repair content order',snapshot:'- status "'+failedStatus+'":\n  - button "다시 보내기"\n  - text: 보내지 못함 ·',failed:1},
+ {name:'an outside action cannot complete the status',snapshot:'- status:\n  - text: 보내지 못함 ·\n- button "다시 보내기"',failed:1},
+ {name:'plain siblings cannot manufacture a semantic status',snapshot:'- text: 보내지 못함 ·\n- button "다시 보내기"',failed:1},
+])test('compound status: '+name,async()=>{
+ const result=await check('- main:\n  - textbox "입력"\n'+snapshot.split('\n').map(line=>'  '+line).join('\n'),{...contract,forbidden:[],regions:[{region:'composer',elements:[{role:'status',text:failedStatus,required:true},{role:'button',text:'다시 보내기',required:true}]}]});
+ assert.match(result.stdout,new RegExp(`(?:PASS|FAIL): ${failed} failures,`));
+ assert.equal(result.status,failed?1:0,result.stdout+result.stderr);
+});
+for(const repeatedRole of ['status','button'])test('compound status cannot reuse its '+repeatedRole,async()=>{
+ const elements=[{role:'status',text:failedStatus,required:true},{role:'button',text:'다시 보내기',required:true}];
+ elements.splice(repeatedRole==='status'?1:2,0,{...elements[repeatedRole==='status'?0:1]!});
+ const result=await check('- main:\n  - textbox "입력"\n  - status:\n    - text: 보내지 못함 ·\n    - button "다시 보내기"',{...contract,forbidden:[],regions:[{region:'composer',elements}]});
+ assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  order/);
+});
+test('a status match without action text still consumes its text',async()=>{
+ const result=await check('- main:\n  - textbox "입력"\n  - status:\n    - text: 오류 ·\n    - text: 보내지 못함\n    - button "다시 보내기"',{...contract,forbidden:[],regions:[{region:'composer',elements:[{role:'status',text:'오류 · 보내지 못함',required:true},{role:'text',text:'오류',required:true},{role:'button',text:'다시 보내기',required:true}]}]});
+ assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  order/);
+});
+test('a compound status consumes its label but leaves its action separate',async()=>{
+ const result=await check('- main:\n  - textbox "입력"\n  - status:\n    - text: 보내지 못함 ·\n    - button "다시 보내기"',{...contract,forbidden:[],regions:[{region:'composer',elements:[{role:'status',text:failedStatus,required:true},{role:'text',text:'보내지 못함',required:true},{role:'button',text:'다시 보내기',required:true}]}]});
+ assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  order/);
+});
+
+test('visible budget evidence excludes accessible-only composer names without changing requirements',async()=>{
+ const snapshot='- main:\n  - textbox "답변을 입력하거나 다른 이야기를 하세요"\n  - button "파일 추가"\n  - button "기본 권한"\n  - button "보내기"';
+ const expected={...contract,forbidden:[],regions:[{region:'composer',elements:[['textbox','답변을 입력하거나 다른 이야기를 하세요'],['button','파일 추가'],['button','기본 권한'],['button','보내기']].map(([role,text])=>({role,text,required:true}))}],text_budget:{composer:{chars:5,strings:1,sentences:0,longest:5}}};
+ const tree={role:'webarea',children:[{role:'main',children:[{role:'textbox',name:'답변을 입력하거나 다른 이야기를 하세요'},...['파일 추가','기본 권한','보내기'].map(name=>({role:'button',name}))]}]};
+ for(const input of [{data:{snapshot}},{tree}]){
+  const result=await check(JSON.stringify({...input,visibleTextBudget:{composer:['기본 권한']}}),expected);
+  assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/4 required elements/);
+  assert.match(result.stdout,/app {"chars":5,"strings":1,"sentences":0,"longest":5}/);
+  assert.doesNotMatch(result.stdout,/accessible-label fallbacks/);
+ }
+ for(const input of [snapshot,JSON.stringify({data:{snapshot}})]){
+  const result=await check(input,expected);assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  budget composer/);
+ }
+});
+test('visible explanatory text still fails its sentence budget',async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- main:\n  - textbox "입력"'},visibleTextBudget:{composer:['이 문구는 화면에 표시되는 설명입니다.']}}),{...contract,regions:[],forbidden:[],text_budget:{composer:{chars:100,sentences:0,longest:100}}});
+ assert.equal(result.status,1,result.stdout+result.stderr);assert.match(result.stdout,/FAIL  budget composer\s+sentences 1 > 0/);
+});
+test('visible budget evidence counts identical sibling text separately',async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- navigation'},visibleTextBudget:{rail:[repeatedSentence,repeatedSentence]}}),{...contract,regions:[],forbidden:[],text_budget:{rail:{chars:43,sentences:1,longest:44}}});
+ assert.equal(result.status,1,result.stdout+result.stderr);
+ assert.match(result.stdout,/app {"chars":88,"strings":2,"sentences":2,"longest":44}/);
+ assert.match(result.stdout,/FAIL: 2 failures/);
+});
+test('visible budget evidence cannot supply missing elements or hide forbidden AX text',async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- navigation:\n  - button "Results"'},visibleTextBudget:{rail:['예약']}}),{...contract,regions:[{region:'rail',elements:[{role:'link',text:'예약',required:true}]}],text_budget:{rail:{chars:100,sentences:0,longest:100}}});
+ assert.equal(result.status,1,result.stdout+result.stderr);
+ assert.match(result.stdout,/FAIL  missing rail\s+link\s+"예약"/);assert.match(result.stdout,/FAIL  forbidden \/\^Results\$\//);
+ assert.match(result.stdout,/FAIL: 2 failures/);
+});
+for(const [name,evidence] of [
+ ['null',null],['array',[]],['string',''],['missing region',{}],['unknown region',{rail:[],raill:[]}],
+ ['region is not an array',{rail:'예약'}],['non-string text',{rail:[3]}],['empty text',{rail:['']}],['blank text',{rail:['  ']}],
+] as const)test('invalid visible budget evidence fails closed: '+name,async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- navigation'},visibleTextBudget:evidence}),{...contract,regions:[],forbidden:[],text_budget:{rail:{chars:100,sentences:0,longest:100}}});
+ assert.equal(result.status,2,result.stdout+result.stderr);assert.match(result.stderr,/invalid visibleTextBudget/);
+});
+test('visible budget evidence permits empty and additional known regions',async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- navigation:\n  - button "This is accessible-only explanatory copy."'},visibleTextBudget:{rail:[],composer:['기본 권한']}}),{...contract,regions:[],forbidden:[],text_budget:{rail:{chars:0,sentences:0,longest:0}}});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/app {"chars":0,"strings":0,"sentences":0,"longest":0}/);
+});
+test('visible budget evidence accepts contract dialog regions',async()=>{
+ const result=await check(JSON.stringify({data:{snapshot:'- dialog "새 구성원 만들기"'},visibleTextBudget:{'dialog:새 구성원 만들기':['이름']}}),{...contract,regions:[{region:'dialog:새 구성원 만들기',elements:[]}],forbidden:[],text_budget:{'dialog:새 구성원 만들기':{chars:2,sentences:0,longest:2}}});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/app {"chars":2,"strings":1,"sentences":0,"longest":2}/);
+});

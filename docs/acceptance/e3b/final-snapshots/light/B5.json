@@ -1,0 +1,30 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e6]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e7]\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 보기\" [expanded=false, ref=e8]\n      - heading \"하나\" [level=1, ref=e9]\n        - button \"하나\" [ref=e13]\n      - button \"작업 공간\" [ref=e10]\n      - button \"더 보기\" [expanded=false, ref=e11]\n    - region \"대화\" [ref=e12]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 5일 (목)\"\n          - paragraph\n            - StaticText \"프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.\"\n          - generic\n            - paragraph\n              - StaticText \"지난 주문과 같은 토너를 찾았어요.\"\n            - button \"복사\" [ref=e19]\n          - button \"작업함 ›\" [ref=e14]\n          - generic\n            - paragraph\n              - strong\n                - StaticText \"프린터 토너 주문\"\n              - StaticText \"결과 모름\"\n            - paragraph\n              - StaticText \"다시 보내지 않음\"\n            - button \"확인\" [ref=e20]\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e15]\n          - button \"파일 추가\" [disabled, ref=e16]\n          - button \"기본 권한\" [ref=e17]\n          - button \"보내기\" [ref=e18]"
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "G",
+      "나"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "11월 5일 (목)",
+      "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.",
+      "지난 주문과 같은 토너를 찾았어요.",
+      "작업함 ›",
+      "프린터 토너 주문",
+      "결과 모름",
+      "다시 보내지 않음",
+      "확인"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ]
+  }
+}

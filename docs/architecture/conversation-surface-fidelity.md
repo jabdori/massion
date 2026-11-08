@@ -13,3 +13,7 @@ Change the existing conversation panel and shell: composer, messages and their c
 3. Implement through existing DOM nodes, keyed cards and handlers. Keep unknown outcomes read-only: no retry or resend. Grow the editor to the approved 200px cap, then scroll; retain drafts and send-failure recovery.
 4. Run focused tests, typecheck, source checks and the full test suite. Repeat the same screen runner after changes and inspect B2/B5/B11/B18 side-by-side pairs in both themes. Record remaining contract gaps honestly, including unavailable product behavior; never relax contracts to hide drift.
 5. Commit, push and open an English PR with measurements and checked-in evidence pairs; do not merge.
+
+## PR 106 completion pass
+
+The initial 370 remaining diagnostics are an unfinished task, not an acceptance baseline. Classify each occurrence against saved snapshots, contracts, real host read shapes and approved artboard evidence before editing. Fix UI causes throughout the conversation/composer/cards/header/sidebar, repair fixture gaps that represent already-supported states, and regression-test demonstrated checker defects without weakening order, occurrence or budget rules. Approved wording absent from the copy table may be imported with the artboard ID as provenance. Only later Work-pane/page structure or a capability with no producing host path may remain, each with an explicit reason. Retain the original 44-run evidence and compare the final candidate in both themes; update PR 106 and request `@codex review` after pushing.

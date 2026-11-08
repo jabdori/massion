@@ -72,3 +72,28 @@ Implementation/verification sequence:
    and all 150 browser captures. Inspect representative pairs in both themes.
 4. Commit and deliver a PR with all per-screen/theme counts, known gaps, test
    limitations and evidence locations. No merge, release or deployment.
+
+## Visible text budgets and accessibility evidence
+
+The prototype `text_budget` is measured from rendered DOM text. Accessible names
+on icon buttons and textboxes are still mandatory, but are not extra rendered
+paragraphs. The headless runner now records both the unchanged raw AX snapshot
+and JSON containing that snapshot plus `visibleTextBudget`. It collects actual
+visible text nodes, preserves equal siblings as separate occurrences, excludes
+hidden/clipped text, and aggregates the same page/settings/dialog region aliases
+as the checker. Required names, roles, order and forbidden-copy checks always
+use the AX snapshot, independent of budget evidence. No threshold changes.
+
+The checker rejects malformed or incomplete budget evidence. Old text/JSON
+snapshots retain the original AX-based budget fallback. Regression cases keep
+real visible explanatory sentences and duplicate siblings failing their budgets;
+real-browser negative checks confirm that two test-only visible paragraphs count
+twice and hidden paragraphs count zero. This separates visible-copy fidelity
+from accessible-only labeling without removing the accessibility requirements.
+
+The E3b baseline also exposed three AX matching defects: the noun `필요` was
+misread as a sentence ending; a listbox name consumed its child heading before
+its options were checked; a compound status could not include its retry button.
+The fixes preserve actual option order, distinct-control reuse limits and status
+delimiters. Rechecking the same 44 old snapshots changes 370 failures to 336,
+with exactly the 34 diagnosed checker errors removed and no new failures.

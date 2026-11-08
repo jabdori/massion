@@ -1,0 +1,14 @@
+{
+  "base": ".runtime/e3b-delivery",
+  "rerun": ".runtime/e3b-delivery-rerun",
+  "rerunStates": [
+    "B4/dark",
+    "B21-done-hana/dark",
+    "B26/dark",
+    "B26-later/dark",
+    "B4/light",
+    "B21-done-hana/light",
+    "B26/light",
+    "B26-later/light"
+  ]
+}

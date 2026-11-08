@@ -2,8 +2,9 @@
   "screen": "B21-done-hana",
   "extends": "B21",
   "description": "Independent post-admission record in Hana conversation.",
+  "readySelector": "#chat-system-member-admission",
   "gaps": [
-    "Production completed member decisions have no member result chip or undo control; this fixture performs no admission."
+    "Undo of an admitted member is not implemented; the stored member conversation link is available."
   ],
   "routes": {
     "/assistant/conversation": {
@@ -90,7 +91,18 @@
               "steps": {
                 "done": 2,
                 "total": 5
-              }
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
+              },
+              "evidenceCount": 1
             }
           }
         ],
@@ -117,7 +129,8 @@
             "action": "구성원 추가",
             "form": "member",
             "state": "done",
-            "line": "구성원 추가됨: 셈"
+            "line": "구성원 추가됨: 셈",
+            "memberId": "member-sem"
           }
         ],
         "briefings": []
@@ -207,7 +220,18 @@
               "steps": {
                 "done": 2,
                 "total": 5
-              }
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
+              },
+              "evidenceCount": 1
             }
           }
         ],
@@ -234,12 +258,12 @@
             "action": "구성원 추가",
             "form": "member",
             "state": "done",
-            "line": "구성원 추가됨: 셈"
+            "line": "구성원 추가됨: 셈",
+            "memberId": "member-sem"
           }
         ],
         "briefings": []
       }
     }
-  },
-  "readySelector": "#chat-system-member-admission"
+  }
 }

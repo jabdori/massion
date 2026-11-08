@@ -5,6 +5,7 @@ import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,TITLE_BYTES} from './as
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import type {TimeObservation} from './memory-expiry.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+import {copy} from './ui-copy.ts';
 import {representativeName} from './surface-shell.ts';
 
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
@@ -76,8 +77,8 @@ export function replayMembers(operation:Operation<MembersState>,prior:Operation<
 
 /** The card shape of conversation-cards.md, plus `form: 'member'` so Add member asks for a name and a shape first. */
 function card(state:MembersState,d:MemberDecision){
- const titles=d.works.map(w=>w.title).join(' · ')+(d.count>d.works.length?' and '+(d.count-d.works.length)+' more':''),member=state.members.find(m=>m.id===d.memberId);
- return {id:d.id,at:d.at,title:d.topic,question:d.topic+' came up '+d.count+' times this month. Add a member for it?',rows:[['This month',titles],...(d.handoff?[['Work to hand',d.handoff]]:[]),['Model group','Default']],action:'Add member',form:'member',state:d.state,...(d.state==='done'?{line:'Added: '+(member?.name??d.topic)}:{})};
+ const named=d.works.map(w=>w.title).join(' · '),titles=d.count>d.works.length?copy('ui.member-work-more',{titles:named,count:d.count-d.works.length}):named,member=state.members.find(m=>m.id===d.memberId);
+ return {id:d.id,at:d.at,title:d.topic,question:copy('ui.member-proposal-question',{topic:d.topic,count:d.count}),rows:[[copy('ui.this-month'),titles],...(d.handoff?[[copy('ui.member-work'),d.handoff]]:[]),[copy('settings.heading.03'),copy('settings.text.01')]],action:'Add member',form:'member',state:d.state,...(d.state==='done'?{line:copy('ui.member-added',{member:member?.name??d.topic}),...(member?{memberId:member.id}:{})}:{})};
 }
 const OWNER='local-owner';
 export class MembersService {

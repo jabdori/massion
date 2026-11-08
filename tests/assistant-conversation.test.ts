@@ -301,7 +301,7 @@ test('31: the conversation is the first section, needs no setup, updates one car
  const start=()=>card.children.find(c=>c.textContent==='시작')!;assert.match(card.textContent,/Summarize the notes.*시작 전 · 작업 중/);assert.equal(start().hidden,false);
  assert.ok(log().endsWith('ThanksYou are welcome.'),'an answered turn without work has no badge');
  const count=cards().length;turns.at(-2).work={...turns.at(-2).work,execution:'active',started:true};mission={...mission,works:[work('active')]};revision=3;cursor=2;events=[{cursor:2,aggregateId:'intake',revision:3}];
- await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/작업 중/);assert.equal(start().hidden,true);
+ await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/실행 중/);assert.equal(start().hidden,true);
  await card.children.find(c=>c.className==='chat-card-open')!.fire('click');await settle();assert.equal((app.context as any).document.activeElement.id,'work-heading-'+workId);
  assert.doesNotMatch(log(),/assistant/i);
 });
@@ -508,7 +508,7 @@ test('8b: the read gives each turn its start, and each Work its run start, steps
  const view=await s.read(),segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment,work=(await f.intake()).works[0]!;
  assert.equal(view.turns[0]!.at,segment.turns[0]!.ownership!.startedAt);
  assert.equal(view.turns[0]!.work!.startedAt,work.runtimeRun!.ownership!.startedAt);assert.equal(typeof view.turns[0]!.work!.startedAt,'number');
- const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.deepEqual(view.turns[0]!.work!.progress,{make:{done:1,total:1},check:{done:1,total:1}});assert.equal(view.turns[0]!.work!.unknown,false);
+ const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.deepEqual(view.turns[0]!.work!.progress,{make:{done:1,total:1},check:{done:1,total:1}});assert.equal(view.turns[0]!.work!.evidenceCount,work.verdict?.evidence.length??null);assert.equal(view.turns[0]!.work!.unknown,false);
 });
 
 test('25b: an interrupted run reads as unknown, also after a plain cancel, until the owner quarantines it (ADR 0002 §8)',async t=>{

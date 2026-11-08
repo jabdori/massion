@@ -1,0 +1,42 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e6]
+    - generic
+      - button "내 계정" [expanded=false, ref=e7]
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 보기" [expanded=false, ref=e8]
+      - heading "하나" [level=1, ref=e9]
+        - button "하나" [ref=e13]
+      - button "작업 공간" [ref=e10]
+      - button "더 보기" [expanded=false, ref=e11]
+    - region "대화" [ref=e12]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+          - generic
+            - paragraph
+              - StaticText "지난 주문과 같은 토너를 찾았어요."
+            - button "복사" [ref=e19]
+          - button "작업함 ›" [ref=e14]
+          - generic
+            - paragraph
+              - strong
+                - StaticText "프린터 토너 주문"
+              - StaticText "결과 모름"
+            - paragraph
+              - StaticText "다시 보내지 않음"
+            - button "확인" [ref=e20]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e15]
+          - button "파일 추가" [disabled, ref=e16]
+          - button "기본 권한" [ref=e17]
+          - button "보내기" [ref=e18]

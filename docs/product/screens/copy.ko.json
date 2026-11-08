@@ -16031,5 +16031,125 @@
   "used_in": [
    "E3a:legacy-panels"
   ]
+ },
+ "ui.scroll-bottom": {
+  "ko": "맨 아래로",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B3:conversation",
+   "B5:conversation",
+   "B11:page",
+   "B18:conversation"
+  ],
+  "evidence": {
+   "artboards": [
+    "B2",
+    "B3",
+    "B5",
+    "B11",
+    "B18"
+   ],
+   "control": "Approved scroll-bottom accessible name"
+  }
+ },
+ "ui.interrupted": {
+  "ko": "응답이 끊겼어요 · {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation"
+  ],
+  "evidence": {
+   "artboard": "B2",
+   "reference": "artboards/dark/B2.png",
+   "contract": "contracts/B2.json"
+  }
+ },
+ "ui.check-evidence": {
+  "ko": "확인 실패 · 근거 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B6:conversation"
+  ],
+  "evidence": {
+   "artboard": "B6",
+   "reference": "artboards/dark/B6.png",
+   "contract": "contracts/B6.json"
+  }
+ },
+ "ui.member-added": {
+  "ko": "구성원 추가됨: {member}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21-done-hana:conversation"
+  ],
+  "evidence": {
+   "artboard": "B21-done-hana",
+   "reference": "artboards/dark/B21-done-hana.png"
+  }
+ },
+ "ui.member-proposal-question": {
+  "ko": "{topic} 일이 이번 달 {count}번 있었어요. 맡을 구성원을 추가할까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21:conversation"
+  ],
+  "evidence": {
+   "artboard": "B21",
+   "reference": "artboards/dark/B21.png",
+   "contract": "contracts/B21.json"
+  }
+ },
+ "ui.this-month": {
+  "ko": "이번 달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21:conversation"
+  ],
+  "evidence": {
+   "artboard": "B21",
+   "reference": "artboards/dark/B21.png",
+   "contract": "contracts/B21.json"
+  }
+ },
+ "ui.member-work": {
+  "ko": "맡길 일",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21:conversation"
+  ],
+  "evidence": {
+   "artboard": "B21",
+   "reference": "artboards/dark/B21.png",
+   "contract": "contracts/B21.json"
+  }
+ },
+ "ui.member-work-more": {
+  "ko": "{titles} 외 {count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21:conversation"
+  ],
+  "evidence": {
+   "artboard": "B21",
+   "reference": "artboards/dark/B21.png",
+   "contract": "contracts/B21.json"
+  }
  }
 }

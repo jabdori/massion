@@ -1,0 +1,700 @@
+[
+  {
+    "id": "R001",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"사례 보기\"",
+    "scope": "unsupported product capability",
+    "reason": "A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.",
+    "evidence": [
+      "src/server.ts:137",
+      "src/skills.ts:72",
+      "src/settings-panel.ts:76"
+    ]
+  },
+  {
+    "id": "R002",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R003",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R004",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/domain.ts",
+      "src/assistant-service.ts"
+    ]
+  },
+  {
+    "id": "R005",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "scope": "unsupported product capability",
+    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/configured-runtime.ts",
+      "src/domain.ts:29"
+    ]
+  },
+  {
+    "id": "R006",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R007",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R008",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R009",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R010",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R011",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 685 > 203",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R012",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "scope": "unsupported product capability",
+    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/configured-runtime.ts",
+      "src/domain.ts:29"
+    ]
+  },
+  {
+    "id": "R013",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "scope": "unsupported product capability",
+    "reason": "No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.",
+    "evidence": [
+      "src/server.ts",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R014",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
+    "scope": "unsupported product capability",
+    "reason": "The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.",
+    "evidence": [
+      "src/domain.ts:283",
+      "src/expired-run-panel.ts",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R015",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R016",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R017",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R018",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R019",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "scope": "unsupported product capability",
+    "reason": "The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/members.ts:102",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R020",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
+    "scope": "unsupported product capability",
+    "reason": "Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record.",
+    "evidence": [
+      "src/server.ts",
+      "src/assistant-service.ts",
+      "docs/architecture/decisions/0002-assistant-first-surface-and-independent-checks.md"
+    ]
+  },
+  {
+    "id": "R021",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "scope": "unsupported product capability",
+    "reason": "The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/members.ts:102",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R022",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R023",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R024",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R025",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R026",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
+    "scope": "unsupported product capability",
+    "reason": "MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled.",
+    "evidence": [
+      "src/members.ts:16",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R027",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",
+    "scope": "unsupported product capability",
+    "reason": "Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/schedules.ts",
+      "src/members.ts"
+    ]
+  },
+  {
+    "id": "R028",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"사례 보기\"",
+    "scope": "unsupported product capability",
+    "reason": "A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.",
+    "evidence": [
+      "src/server.ts:137",
+      "src/skills.ts:72",
+      "src/settings-panel.ts:76"
+    ]
+  },
+  {
+    "id": "R029",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R030",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R031",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/domain.ts",
+      "src/assistant-service.ts"
+    ]
+  },
+  {
+    "id": "R032",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "scope": "unsupported product capability",
+    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/configured-runtime.ts",
+      "src/domain.ts:29"
+    ]
+  },
+  {
+    "id": "R033",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R034",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R035",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R036",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R037",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R038",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 685 > 203",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
+    ]
+  },
+  {
+    "id": "R039",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "scope": "unsupported product capability",
+    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/configured-runtime.ts",
+      "src/domain.ts:29"
+    ]
+  },
+  {
+    "id": "R040",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "scope": "unsupported product capability",
+    "reason": "No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.",
+    "evidence": [
+      "src/server.ts",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R041",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
+    "scope": "unsupported product capability",
+    "reason": "The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.",
+    "evidence": [
+      "src/domain.ts:283",
+      "src/expired-run-panel.ts",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R042",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R043",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R044",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R045",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R046",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "scope": "unsupported product capability",
+    "reason": "The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/members.ts:102",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R047",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
+    "scope": "unsupported product capability",
+    "reason": "Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record.",
+    "evidence": [
+      "src/server.ts",
+      "src/assistant-service.ts",
+      "docs/architecture/decisions/0002-assistant-first-surface-and-independent-checks.md"
+    ]
+  },
+  {
+    "id": "R048",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "scope": "unsupported product capability",
+    "reason": "The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/members.ts:102",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R049",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R050",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "scope": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "evidence": [
+      "src/domain.ts:23",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:223",
+      "docs/architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md"
+    ]
+  },
+  {
+    "id": "R051",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R052",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "scope": "unsupported product capability",
+    "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
+    "evidence": [
+      "src/assistant-service.ts",
+      "src/server.ts",
+      "src/skills.ts"
+    ]
+  },
+  {
+    "id": "R053",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
+    "scope": "unsupported product capability",
+    "reason": "MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled.",
+    "evidence": [
+      "src/members.ts:16",
+      "src/assistant-conversation-panel.ts"
+    ]
+  },
+  {
+    "id": "R054",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",
+    "scope": "unsupported product capability",
+    "reason": "Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action.",
+    "evidence": [
+      "src/server.ts:147",
+      "src/schedules.ts",
+      "src/members.ts"
+    ]
+  }
+]

@@ -2,13 +2,14 @@
   "screen": "B3",
   "description": "Churn work handed to Quill. Deterministic API data; freeze browser Date to now.",
   "now": 1793855520000,
-  "readySelector": "[id=\"chat-card-assistant-turn:m:churn\"]",
+  "readySelector": "#chat-briefing-morning",
   "steps": [],
   "gaps": [],
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3b completion: existing B3/B18/B22-room/B8-done domain fixture Work reused; no commands or external effects"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -97,12 +98,62 @@
               "steps": {
                 "done": 0,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }
         ],
         "decisions": [],
-        "briefings": []
+        "briefings": [
+          {
+            "id": "morning",
+            "at": 1793833200000,
+            "title": "아침 브리핑",
+            "turnIds": [
+              "assistant-turn:m:rounding-work"
+            ],
+            "turns": [
+              {
+                "id": "assistant-turn:m:rounding-work",
+                "messageId": "m:rounding-work",
+                "at": 1793855280000,
+                "status": "answered",
+                "displayStatus": "answered",
+                "proposal": {
+                  "title": "반올림 규칙"
+                },
+                "work": {
+                  "missionId": "intake",
+                  "missionRevision": 3,
+                  "workId": "rounding-work",
+                  "title": "반올림 규칙",
+                  "memberId": null,
+                  "execution": "waiting",
+                  "acceptance": "pending",
+                  "unknown": false,
+                  "started": true,
+                  "startedAt": 1793855280000,
+                  "endedAt": null,
+                  "turnId": "assistant-turn:m:rounding-work",
+                  "segment": 1,
+                  "steps": {
+                    "done": 1,
+                    "total": 3
+                  }
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     "/assistant/works": {
@@ -127,6 +178,25 @@
             "steps": {
               "done": 0,
               "total": 5
+            }
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "rounding-work",
+            "title": "반올림 규칙",
+            "memberId": null,
+            "execution": "waiting",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:rounding-work",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 3
             }
           }
         ]
@@ -298,6 +368,99 @@
                   "reserved": 1,
                   "measured": 1
                 }
+              },
+              {
+                "id": "rounding-work",
+                "title": "반올림 규칙",
+                "missionVersion": 1,
+                "missionSnapshot": {
+                  "version": 1,
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "constraints": []
+                },
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "execution": "waiting",
+                "acceptance": "pending",
+                "tasks": [
+                  {
+                    "id": "rounding-work:root",
+                    "parentId": null,
+                    "status": "active"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "id": "rounding-work:attempt:1",
+                    "number": 1,
+                    "criteria": {
+                      "version": 1,
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1"
+                    },
+                    "status": "active",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ]
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "rounding-work:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "rounding-work:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "rounding-work:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "rounding-work:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "effects": [
+                  {
+                    "id": "rounding-work:effect",
+                    "taskId": "rounding-work:root",
+                    "status": "succeeded",
+                    "target": "반올림 규칙",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "appliedMemoryVersions": [],
+                "budget": {
+                  "limit": 8,
+                  "reserved": 1,
+                  "measured": 1
+                },
+                "instructions": [
+                  {
+                    "actorId": "owner",
+                    "text": "확인 결과를 기다리기"
+                  }
+                ]
               }
             ],
             "memories": [],
@@ -409,6 +572,99 @@
                 "reserved": 1,
                 "measured": 1
               }
+            },
+            {
+              "id": "rounding-work",
+              "title": "반올림 규칙",
+              "missionVersion": 1,
+              "missionSnapshot": {
+                "version": 1,
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "constraints": []
+              },
+              "criteria": {
+                "version": 1,
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1"
+              },
+              "execution": "waiting",
+              "acceptance": "pending",
+              "tasks": [
+                {
+                  "id": "rounding-work:root",
+                  "parentId": null,
+                  "status": "active"
+                }
+              ],
+              "attempts": [
+                {
+                  "id": "rounding-work:attempt:1",
+                  "number": 1,
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "status": "active",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ]
+                }
+              ],
+              "assignments": [
+                {
+                  "id": "rounding-work:executor",
+                  "actorId": "executor",
+                  "role": "executor",
+                  "taskId": "rounding-work:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                },
+                {
+                  "id": "rounding-work:verifier",
+                  "actorId": "verifier",
+                  "role": "verifier",
+                  "taskId": "rounding-work:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                }
+              ],
+              "effects": [
+                {
+                  "id": "rounding-work:effect",
+                  "taskId": "rounding-work:root",
+                  "status": "succeeded",
+                  "target": "반올림 규칙",
+                  "authority": "소유자가 맡긴 일",
+                  "receipt": "고정된 화면 검증 데이터"
+                }
+              ],
+              "appliedMemoryVersions": [],
+              "budget": {
+                "limit": 8,
+                "reserved": 1,
+                "measured": 1
+              },
+              "instructions": [
+                {
+                  "actorId": "owner",
+                  "text": "확인 결과를 기다리기"
+                }
+              ]
             }
           ],
           "memories": [],
@@ -503,6 +759,16 @@
               "steps": {
                 "done": 0,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }

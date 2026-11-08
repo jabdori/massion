@@ -4,8 +4,8 @@
     {
       "screen": "B1",
       "theme": "dark",
-      "passed": 9,
-      "failed": 3,
+      "passed": 11,
+      "failed": 0,
       "warnings": 0,
       "required": 11,
       "visualFailures": [],
@@ -18,13 +18,13 @@
     {
       "screen": "B2",
       "theme": "dark",
-      "passed": 24,
-      "failed": 9,
+      "passed": 29,
+      "failed": 2,
       "warnings": 0,
       "required": 31,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+        "The check-rule case-detail view is not implemented; no policy approval is simulated."
       ],
       "errors": [],
       "pair": "pairs/dark/B2.png"
@@ -32,8 +32,8 @@
     {
       "screen": "B2-offline",
       "theme": "dark",
-      "passed": 17,
-      "failed": 4,
+      "passed": 20,
+      "failed": 0,
       "warnings": 2,
       "required": 20,
       "visualFailures": [],
@@ -44,8 +44,8 @@
     {
       "screen": "B2-offline-failed",
       "theme": "dark",
-      "passed": 18,
-      "failed": 5,
+      "passed": 22,
+      "failed": 0,
       "warnings": 2,
       "required": 22,
       "visualFailures": [],
@@ -56,8 +56,8 @@
     {
       "screen": "B3",
       "theme": "dark",
-      "passed": 19,
-      "failed": 4,
+      "passed": 22,
+      "failed": 0,
       "warnings": 1,
       "required": 22,
       "visualFailures": [],
@@ -68,8 +68,8 @@
     {
       "screen": "B3-run",
       "theme": "dark",
-      "passed": 19,
-      "failed": 5,
+      "passed": 22,
+      "failed": 1,
       "warnings": 1,
       "required": 23,
       "visualFailures": [],
@@ -80,8 +80,8 @@
     {
       "screen": "B4",
       "theme": "dark",
-      "passed": 21,
-      "failed": 19,
+      "passed": 30,
+      "failed": 8,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
@@ -92,8 +92,8 @@
     {
       "screen": "B5",
       "theme": "dark",
-      "passed": 11,
-      "failed": 7,
+      "passed": 14,
+      "failed": 3,
       "warnings": 0,
       "required": 17,
       "visualFailures": [],
@@ -104,20 +104,22 @@
     {
       "screen": "B6",
       "theme": "dark",
-      "passed": 17,
-      "failed": 19,
-      "warnings": 1,
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
       "required": 34,
       "visualFailures": [],
-      "gaps": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
       "errors": [],
       "pair": "pairs/dark/B6.png"
     },
     {
       "screen": "B6-token",
       "theme": "dark",
-      "passed": 17,
-      "failed": 13,
+      "passed": 28,
+      "failed": 0,
       "warnings": 3,
       "required": 28,
       "visualFailures": [],
@@ -130,23 +132,21 @@
     {
       "screen": "B11",
       "theme": "dark",
-      "passed": 17,
-      "failed": 7,
-      "warnings": 2,
+      "passed": 22,
+      "failed": 0,
+      "warnings": 0,
       "required": 22,
       "visualFailures": [],
-      "gaps": [
-        "The composer has no mention autocomplete listbox or member selection."
-      ],
+      "gaps": [],
       "errors": [],
       "pair": "pairs/dark/B11.png"
     },
     {
       "screen": "B11-quill",
       "theme": "dark",
-      "passed": 16,
-      "failed": 4,
-      "warnings": 2,
+      "passed": 17,
+      "failed": 0,
+      "warnings": 0,
       "required": 17,
       "visualFailures": [],
       "gaps": [
@@ -158,9 +158,9 @@
     {
       "screen": "B16",
       "theme": "dark",
-      "passed": 18,
-      "failed": 5,
-      "warnings": 0,
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
       "required": 22,
       "visualFailures": [],
       "gaps": [
@@ -172,9 +172,9 @@
     {
       "screen": "B16-later",
       "theme": "dark",
-      "passed": 17,
-      "failed": 5,
-      "warnings": 0,
+      "passed": 20,
+      "failed": 1,
+      "warnings": 2,
       "required": 21,
       "visualFailures": [],
       "gaps": [
@@ -186,9 +186,9 @@
     {
       "screen": "B16-sent",
       "theme": "dark",
-      "passed": 16,
-      "failed": 6,
-      "warnings": 1,
+      "passed": 19,
+      "failed": 2,
+      "warnings": 2,
       "required": 21,
       "visualFailures": [],
       "gaps": [
@@ -200,13 +200,13 @@
     {
       "screen": "B18",
       "theme": "dark",
-      "passed": 19,
-      "failed": 17,
+      "passed": 30,
+      "failed": 4,
       "warnings": 2,
       "required": 34,
       "visualFailures": [],
       "gaps": [
-        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
       ],
       "errors": [],
       "pair": "pairs/dark/B18.png"
@@ -214,8 +214,8 @@
     {
       "screen": "B21",
       "theme": "dark",
-      "passed": 18,
-      "failed": 5,
+      "passed": 21,
+      "failed": 0,
       "warnings": 1,
       "required": 21,
       "visualFailures": [],
@@ -226,9 +226,9 @@
     {
       "screen": "B21-name",
       "theme": "dark",
-      "passed": 22,
-      "failed": 13,
-      "warnings": 2,
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
       "required": 33,
       "visualFailures": [],
       "gaps": [],
@@ -238,8 +238,8 @@
     {
       "screen": "B21-done",
       "theme": "dark",
-      "passed": 17,
-      "failed": 4,
+      "passed": 20,
+      "failed": 0,
       "warnings": 1,
       "required": 20,
       "visualFailures": [],
@@ -252,13 +252,13 @@
     {
       "screen": "B21-done-hana",
       "theme": "dark",
-      "passed": 18,
-      "failed": 5,
+      "passed": 21,
+      "failed": 1,
       "warnings": 1,
       "required": 22,
       "visualFailures": [],
       "gaps": [
-        "Production completed member decisions have no member result chip or undo control; this fixture performs no admission."
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
       ],
       "errors": [],
       "pair": "pairs/dark/B21-done-hana.png"
@@ -266,14 +266,13 @@
     {
       "screen": "B26",
       "theme": "dark",
-      "passed": 17,
-      "failed": 12,
+      "passed": 27,
+      "failed": 0,
       "warnings": 3,
       "required": 27,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
-        "The production UI has no budget-waiting state or disabled budget-increase decision; no budget values or enabled increase action are fabricated."
+        "The production host has no budget-waiting decision state or budget-increase card; existing Work is shown without fabricating a budget event."
       ],
       "errors": [],
       "pair": "pairs/dark/B26.png"
@@ -281,14 +280,13 @@
     {
       "screen": "B26-later",
       "theme": "dark",
-      "passed": 15,
-      "failed": 14,
+      "passed": 26,
+      "failed": 1,
       "warnings": 3,
       "required": 27,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
-        "The production UI has no budget-waiting/deferred-budget state or corresponding read-only API; no decision is submitted."
+        "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
       ],
       "errors": [],
       "pair": "pairs/dark/B26-later.png"
@@ -296,8 +294,8 @@
     {
       "screen": "B1",
       "theme": "light",
-      "passed": 9,
-      "failed": 3,
+      "passed": 11,
+      "failed": 0,
       "warnings": 0,
       "required": 11,
       "visualFailures": [],
@@ -310,13 +308,13 @@
     {
       "screen": "B2",
       "theme": "light",
-      "passed": 24,
-      "failed": 9,
+      "passed": 29,
+      "failed": 2,
       "warnings": 0,
       "required": 31,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+        "The check-rule case-detail view is not implemented; no policy approval is simulated."
       ],
       "errors": [],
       "pair": "pairs/light/B2.png"
@@ -324,8 +322,8 @@
     {
       "screen": "B2-offline",
       "theme": "light",
-      "passed": 17,
-      "failed": 4,
+      "passed": 20,
+      "failed": 0,
       "warnings": 2,
       "required": 20,
       "visualFailures": [],
@@ -336,8 +334,8 @@
     {
       "screen": "B2-offline-failed",
       "theme": "light",
-      "passed": 18,
-      "failed": 5,
+      "passed": 22,
+      "failed": 0,
       "warnings": 2,
       "required": 22,
       "visualFailures": [],
@@ -348,8 +346,8 @@
     {
       "screen": "B3",
       "theme": "light",
-      "passed": 19,
-      "failed": 4,
+      "passed": 22,
+      "failed": 0,
       "warnings": 1,
       "required": 22,
       "visualFailures": [],
@@ -360,8 +358,8 @@
     {
       "screen": "B3-run",
       "theme": "light",
-      "passed": 19,
-      "failed": 5,
+      "passed": 22,
+      "failed": 1,
       "warnings": 1,
       "required": 23,
       "visualFailures": [],
@@ -372,8 +370,8 @@
     {
       "screen": "B4",
       "theme": "light",
-      "passed": 21,
-      "failed": 19,
+      "passed": 30,
+      "failed": 8,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
@@ -384,8 +382,8 @@
     {
       "screen": "B5",
       "theme": "light",
-      "passed": 11,
-      "failed": 7,
+      "passed": 14,
+      "failed": 3,
       "warnings": 0,
       "required": 17,
       "visualFailures": [],
@@ -396,20 +394,22 @@
     {
       "screen": "B6",
       "theme": "light",
-      "passed": 17,
-      "failed": 19,
-      "warnings": 1,
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
       "required": 34,
       "visualFailures": [],
-      "gaps": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
       "errors": [],
       "pair": "pairs/light/B6.png"
     },
     {
       "screen": "B6-token",
       "theme": "light",
-      "passed": 17,
-      "failed": 13,
+      "passed": 28,
+      "failed": 0,
       "warnings": 3,
       "required": 28,
       "visualFailures": [],
@@ -422,23 +422,21 @@
     {
       "screen": "B11",
       "theme": "light",
-      "passed": 17,
-      "failed": 7,
-      "warnings": 2,
+      "passed": 22,
+      "failed": 0,
+      "warnings": 0,
       "required": 22,
       "visualFailures": [],
-      "gaps": [
-        "The composer has no mention autocomplete listbox or member selection."
-      ],
+      "gaps": [],
       "errors": [],
       "pair": "pairs/light/B11.png"
     },
     {
       "screen": "B11-quill",
       "theme": "light",
-      "passed": 16,
-      "failed": 4,
-      "warnings": 2,
+      "passed": 17,
+      "failed": 0,
+      "warnings": 0,
       "required": 17,
       "visualFailures": [],
       "gaps": [
@@ -450,9 +448,9 @@
     {
       "screen": "B16",
       "theme": "light",
-      "passed": 18,
-      "failed": 5,
-      "warnings": 0,
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
       "required": 22,
       "visualFailures": [],
       "gaps": [
@@ -464,9 +462,9 @@
     {
       "screen": "B16-later",
       "theme": "light",
-      "passed": 17,
-      "failed": 5,
-      "warnings": 0,
+      "passed": 20,
+      "failed": 1,
+      "warnings": 2,
       "required": 21,
       "visualFailures": [],
       "gaps": [
@@ -478,9 +476,9 @@
     {
       "screen": "B16-sent",
       "theme": "light",
-      "passed": 16,
-      "failed": 6,
-      "warnings": 1,
+      "passed": 19,
+      "failed": 2,
+      "warnings": 2,
       "required": 21,
       "visualFailures": [],
       "gaps": [
@@ -492,13 +490,13 @@
     {
       "screen": "B18",
       "theme": "light",
-      "passed": 19,
-      "failed": 17,
+      "passed": 30,
+      "failed": 4,
       "warnings": 2,
       "required": 34,
       "visualFailures": [],
       "gaps": [
-        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
       ],
       "errors": [],
       "pair": "pairs/light/B18.png"
@@ -506,8 +504,8 @@
     {
       "screen": "B21",
       "theme": "light",
-      "passed": 18,
-      "failed": 5,
+      "passed": 21,
+      "failed": 0,
       "warnings": 1,
       "required": 21,
       "visualFailures": [],
@@ -518,9 +516,9 @@
     {
       "screen": "B21-name",
       "theme": "light",
-      "passed": 22,
-      "failed": 13,
-      "warnings": 2,
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
       "required": 33,
       "visualFailures": [],
       "gaps": [],
@@ -530,8 +528,8 @@
     {
       "screen": "B21-done",
       "theme": "light",
-      "passed": 17,
-      "failed": 4,
+      "passed": 20,
+      "failed": 0,
       "warnings": 1,
       "required": 20,
       "visualFailures": [],
@@ -544,13 +542,13 @@
     {
       "screen": "B21-done-hana",
       "theme": "light",
-      "passed": 18,
-      "failed": 5,
+      "passed": 21,
+      "failed": 1,
       "warnings": 1,
       "required": 22,
       "visualFailures": [],
       "gaps": [
-        "Production completed member decisions have no member result chip or undo control; this fixture performs no admission."
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
       ],
       "errors": [],
       "pair": "pairs/light/B21-done-hana.png"
@@ -558,14 +556,13 @@
     {
       "screen": "B26",
       "theme": "light",
-      "passed": 17,
-      "failed": 12,
+      "passed": 27,
+      "failed": 0,
       "warnings": 3,
       "required": 27,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
-        "The production UI has no budget-waiting state or disabled budget-increase decision; no budget values or enabled increase action are fabricated."
+        "The production host has no budget-waiting decision state or budget-increase card; existing Work is shown without fabricating a budget event."
       ],
       "errors": [],
       "pair": "pairs/light/B26.png"
@@ -573,17 +570,27 @@
     {
       "screen": "B26-later",
       "theme": "light",
-      "passed": 15,
-      "failed": 14,
+      "passed": 26,
+      "failed": 1,
       "warnings": 3,
       "required": 27,
       "visualFailures": [],
       "gaps": [
-        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
-        "The production UI has no budget-waiting/deferred-budget state or corresponding read-only API; no decision is submitted."
+        "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
       ],
       "errors": [],
       "pair": "pairs/light/B26-later.png"
     }
-  ]
+  ],
+  "stats": {
+    "captured": 44,
+    "matched": 1012,
+    "required": 1060,
+    "failed": 54,
+    "laterB7": 12,
+    "unsupported": 42,
+    "axFallbackFailures": 78,
+    "visual": 0,
+    "infrastructure": 0
+  }
 }
