@@ -12,7 +12,8 @@ embedded in the self-contained browser client. Dynamic values use named
 placeholders and remain text, never markup. Convert the shell and conversation
 controls, dates and states first; remove forbidden explanatory shell notices.
 Offline/failed sends retain the original private draft and command identity,
-show a compact resend action and a disconnected status beside the name. Unknown
+show a compact resend action. Transport disconnection is shown beside the name
+independently of whether an earlier message failed. Unknown
 external Work outcomes continue to forbid replay.
 
 Make copy lint blocking for migrated UI files, with regression coverage for
@@ -28,3 +29,16 @@ Original approved copy entries and contracts remain unchanged. New keys localize
 existing technical controls; their provenance is distinguished from prototype
 copy. The generator records the existing-style provenance of tokens whose values
 were absent from the supplied visual measurements.
+
+## Visual-gate follow-up
+
+Use the quiet line role for structural borders; reserve strong lines for inputs
+and secondary controls. The supplied visual spec defines a 2px focus width but
+no focus color, so use its muted foreground role for a visible, lower-contrast
+ring. Hide the unsupported bare interrupted-answer label until the cards slice.
+Place the retained-draft send error immediately after the composer with a 6px
+gap. Failed-send identity and transport connection are separate: the failed
+fixture disconnects before Send and reconnects before capture, without a product
+write reaching the host. Member avatar rendering continues to honor the host's
+role token; fix example member roles in fixtures against the approved artboard
+rather than assigning colors by display name.

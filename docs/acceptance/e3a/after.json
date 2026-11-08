@@ -112,12 +112,12 @@
     {
       "screen": "B2-offline-failed",
       "theme": "dark",
-      "passed": 12,
-      "failed": 10,
+      "passed": 13,
+      "failed": 9,
       "warnings": 2,
       "required": 22,
       "visualFailures": [
-        "region composer: [534,812,672,88] != [530,754,680,106] (2px tolerance)"
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
       ],
       "gaps": [],
       "errors": [],
@@ -1270,12 +1270,12 @@
     {
       "screen": "B2-offline-failed",
       "theme": "light",
-      "passed": 12,
-      "failed": 10,
+      "passed": 13,
+      "failed": 9,
       "warnings": 2,
       "required": 22,
       "visualFailures": [
-        "region composer: [534,812,672,88] != [530,754,680,106] (2px tolerance)"
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
       ],
       "gaps": [],
       "errors": [],
@@ -2317,5 +2317,32 @@
       "errors": [],
       "pair": "pairs/light/B26-later.png"
     }
-  ]
+  ],
+  "visual_followup": {
+    "baseline_candidate": "e5263db",
+    "rerun_screens": [
+      "B2",
+      "B2-offline",
+      "B2-offline-failed",
+      "B9",
+      "B9-restart",
+      "B9-update",
+      "B12",
+      "B13",
+      "B13-devices",
+      "B13-general",
+      "B13-general-restart",
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update",
+      "B14-usage",
+      "B21-name"
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "remaining_screens": "Retain the original E3a candidate measurements; not recaptured in this visual correction."
+  }
 }

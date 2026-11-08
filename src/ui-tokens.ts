@@ -6,7 +6,7 @@
 // - src/results-panel.ts pre.result-doc supplies the existing monospace stack (also apps/settings panels).
 // - src/members-panel.ts .member-dialog and .member-box supply overlay #000a and shadow #0008, in both themes.
 // - Legacy aliases preserve src/workbench.ts role mappings; green remains neutral per visual.json.rules.
-// Focus color uses the existing foreground role (prototype styles.css --focus-ring); width is components.composer.focus_ring.
+// Visual-gate correction: focus uses visual.json muted foreground role fg-4; width remains components.composer.focus_ring.
 export const uiTokensStyle=String.raw`:root{
  color-scheme:light;
  --palette-bg-0:#ffffff;
@@ -321,7 +321,7 @@ export const uiTokensStyle=String.raw`:root{
  --motion-slow:.3s;
  --motion-ease:cubic-bezier(.32,.72,0,1);
  --focus-width:2px;
- --focus-ring:var(--fg);
+ --focus-ring:var(--fg-4);
  --focus-offset:4px;
  --font-sans:"Pretendard Variable",Pretendard,Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
  --font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;

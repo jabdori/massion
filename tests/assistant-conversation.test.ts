@@ -291,8 +291,8 @@ test('31: the conversation is the first section, needs no setup, updates one car
  });
  await settle();
  const log=()=>app.node('chat-log').textContent;
- for(const label of ['보내지 못함 · 연결 없음','결과 모름','답변 실패','만들지 못함 · 기본 연결 없음','생성 결과 모름'])assert.ok(log().includes(label),label);
- assert.doesNotMatch(log(),/assistant/i);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ for(const label of ['보내지 못함 · 연결 없음','결과 모름','만들지 못함 · 기본 연결 없음','생성 결과 모름'])assert.ok(log().includes(label),label);
+ assert.doesNotMatch(log(),/답변 실패|assistant/i);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
  const input=app.node('chat-input');input.value='Summarize the notes';await input.fire('input');
  await app.submit('chat-form');assert.equal(input.value,'Summarize the notes');assert.equal(app.node('chat-status').textContent,'답변 중');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'Summarize the notes');
  await app.submit('chat-form');assert.equal(posted.length,2);assert.equal(posted[0].commandId,posted[1].commandId);assert.deepEqual(Object.keys(posted[1]).sort(),['commandId','expectedRevision','segment','text']);

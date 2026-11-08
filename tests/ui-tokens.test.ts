@@ -44,7 +44,7 @@ test('measured geometry, typography, spacing, radii, motion and focus are availa
   '--type-pane-heading-size':'17px','--type-pane-heading-weight':'600','--type-pane-heading-line-height':'24px',
   '--conversation-gap':'14px','--space-8':'8px','--composer-padding':'10px 10px 8px 14px','--composer-radius':'20px',
   '--card-pane-radius':'10px','--motion-fast':'.12s','--motion-slow':'.3s','--motion-ease':'cubic-bezier(.32,.72,0,1)',
-  '--focus-width':'2px','--focus-offset':'4px'
+  '--focus-width':'2px','--focus-ring':'var(--fg-4)','--focus-offset':'4px'
  }))assert.equal(values[key],value,key);
  assert.match(text,/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*--motion-fast:0s;[\s\S]*--motion-slow:0s;/);
  assert.match(text,/Fallback provenance:[\s\S]*src\/workbench\.ts[\s\S]*src\/results-panel\.ts[\s\S]*src\/members-panel\.ts/);

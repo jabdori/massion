@@ -148,3 +148,13 @@ test('a briefing read from an earlier segment shows and opens the Work it carrie
  assert.match(byId(app,'chat-briefing-briefing:2')!.textContent,/Old receipts/);
  await button(byId(app,'chat-briefing-briefing:2')!,'Old receipts')!.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false,'its Work link opens the Work');
 });
+
+
+test('send status follows the composer and structural borders stay quiet',()=>{
+ assert.ok(workbenchPage.indexOf('id="chat-status"')>workbenchPage.indexOf('id="chat-form"'));
+ assert.match(chatStyle,/#chat-status\{[^}]*margin:var\(--space-6\)/);
+ for(const selector of ['sidebar','pane']){
+  const rule=new RegExp('\\.'+selector+'\\{([^}]+)\\}').exec(workbenchPage)![1]!;
+  assert.ok(!rule.includes('var(--line-strong)'),selector);
+ }
+});

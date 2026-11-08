@@ -54,7 +54,7 @@
             "name": "주노",
             "look": {
               "shape": "round",
-              "color": "agent-3"
+              "color": "agent-6"
             },
             "modelGroup": "coding"
           }
@@ -851,7 +851,7 @@
             "name": "주노",
             "look": {
               "shape": "round",
-              "color": "agent-3"
+              "color": "agent-6"
             },
             "modelGroup": "coding"
           }

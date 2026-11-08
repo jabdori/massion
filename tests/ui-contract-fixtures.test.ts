@@ -172,7 +172,18 @@ test('offline fixtures use browser disconnection and failed send stays local bef
  assert.equal(offline.gaps.length,0);assert.equal(failed.gaps.length,0);
  assert.ok(offline.steps.some(step=>step.action==='offline'));
  assert.ok(failed.steps.some(step=>step.action==='offline'));
- assert.equal(failed.steps.at(-1)?.action,'click');
+ assert.deepEqual(failed.steps.filter(step=>step.action==='offline').map(step=>step.value),['true','false']);
+ const click=failed.steps.findIndex(step=>step.action==='click');assert.ok(click>0&&click<failed.steps.length-1);
  const host=await (await hostModule()).startFixtureHost('B2-offline-failed');
  try{assert.equal((await fetch(host.url+'assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,405);}finally{await host.close();}
+});
+
+
+test('approved example members keep their artboard identity hues as palette roles',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B2','B12','B13','B14']){
+  const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation']!.body as {members:{id:string;look:{color:string}}[]};
+  assert.equal(view.members.find(m=>m.id==='member-juno')!.look.color,'agent-6',screen);
+  assert.equal(view.members.find(m=>m.id==='member-quill')!.look.color,'agent-1',screen);
+ }
 });

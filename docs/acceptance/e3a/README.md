@@ -1,6 +1,10 @@
 # E3a screen fidelity evidence
 
-This is the first E3 foundation slice, not full screen fidelity. The screen runner
+This is the first E3 foundation slice, not full screen fidelity.
+
+The latest [visual correction](visual-followup.md) recaptures 17 states in both
+themes. The other 58 states retain the original candidate measurements; the
+combined table is not a claim that they were recaptured after this correction. The screen runner
 remains report-only; keyed copy lint and generated-token drift checks block.
 
 Source baseline: `dc5a93a` (PR #103), unchanged snapshot of the baseline commit. Candidate sources
@@ -18,8 +22,8 @@ artboard or approved copy entry was weakened or replaced.
 
 | Theme | Before matches | After matches | Before failures | After failures | Before visual failures | After visual failures |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| dark | 340 | 1000 | 2749 | 1282 | 610 | 85 |
-| light | 340 | 1000 | 2749 | 1282 | 2035 | 85 |
+| dark | 340 | 1001 | 2749 | 1281 | 610 | 85 |
+| light | 340 | 1001 | 2749 | 1281 | 2035 | 85 |
 
 All 300 before/after screen/theme captures had zero infrastructure errors.
 All 26 color roles match in both candidate themes; remaining visual failures are region geometry.

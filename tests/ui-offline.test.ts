@@ -17,7 +17,8 @@ test('a lost send keeps its draft and pinned identity; explicit resend replays o
  app.node('chat-input').value='할인 합계';await app.node('chat-input').fire('input');await app.submit('chat-form');
  assert.equal(app.node('chat-input').value,'할인 합계');
  assert.equal(app.node('chat-status').textContent,copy('composer.status.01'));
- assert.equal(app.node('chat-connection').textContent,copy('header.status.01'));
+ runInContext('reconnectRequired=false;chatConnection(false)',app.context);
+ assert.equal(app.node('chat-connection').hidden,true,'a failed send does not mark a restored transport disconnected');
  const before=JSON.parse(app.storage.get('massion.workbench.chat-draft')!);assert.ok(before.target);
  await app.tick();assert.equal(bodies.length,1,'reads do not retry sends');
  fail=false;await app.node('chat-status').children.find(n=>n.tagName==='BUTTON')!.fire('click');await settle();

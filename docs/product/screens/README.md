@@ -106,5 +106,6 @@ This is bounded static extraction: hidden markup is included; dynamic data, alia
 
 Offline fixtures use agent-browser network emulation and the real offline listener.
 The failed-send fixture clicks Send only after disconnection, so no product write
-reaches the fixture host. Draft identity and explicit resend are also tested in
+reaches the fixture host, then reconnects before capture to distinguish a failed
+message from a disconnected transport. Draft identity and explicit resend are also tested in
 the client harness. The fixture host deliberately cannot execute owner decisions, provider calls, external apps, database writes or persistence/recovery flows. States not reachable through the current read-only UI are reported as gaps. Browser evidence from this harness is fixture evidence, never evidence of a real external effect.

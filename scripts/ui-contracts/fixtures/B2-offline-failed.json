@@ -1,7 +1,7 @@
 {
   "screen": "B2-offline-failed",
   "extends": "B2",
-  "description": "Failed send conversation with retained draft.",
+  "description": "Failed send with retained draft after the transport reconnects; the failed offline request never reaches the fixture host.",
   "gaps": [],
   "steps": [
     {
@@ -18,6 +18,11 @@
       "action": "click",
       "selector": "#chat-send",
       "readySelector": "#chat-status:not([hidden]) button"
+    },
+    {
+      "action": "offline",
+      "value": "false",
+      "readySelector": ".band:has(#chat-connection[hidden])"
     }
   ]
 }
