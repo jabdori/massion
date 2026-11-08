@@ -29,7 +29,7 @@ let shellWorks=[],shellWorksFeed='',shellWorksSequence=0;
 const shellWorkValid=w=>w&&chatText(w.missionId)&&chatText(w.workId)&&chatText(w.title)&&chatText(w.turnId)&&Number.isSafeInteger(w.missionRevision)&&w.missionRevision>=0&&(w.memberId===null||chatText(w.memberId))&&typeof w.started==='boolean'&&typeof w.unknown==='boolean'&&['queued','active','waiting','blocked','cancelled','settled'].includes(w.execution)&&['pending','failed','stale','accepted'].includes(w.acceptance);
 /** A whole host list, independent of the shown segment; reset and newer reads fence late replies. */
 async function shellWorksLoad(){const sequence=++shellWorksSequence,expectedFeed=shellWorksFeed||(chatView||chatRep)?.feedId;
- try{const {response,body}=await request('/assistant/works');if(sequence!==shellWorksSequence)return;
+ try{const {response,body}=await request('/assistant/works',{scope:'global-work-list'});if(sequence!==shellWorksSequence)return;
   if(!response.ok||!chatText(body.feedId)||!Array.isArray(body.works))return;
   const currentFeed=shellWorksFeed||(chatView||chatRep)?.feedId;
   if(expectedFeed&&currentFeed&&expectedFeed!==currentFeed)return;

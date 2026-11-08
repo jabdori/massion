@@ -119,3 +119,70 @@ pairs are retained in `/private/tmp/e2-ui-contracts` and
 `/private/tmp/e2-ui-contracts-baseline`. The other contract states are left to CI.
 `node scripts/check.mjs` passes; its new advisory copy lint reports 907 existing
 findings. No UI text was rewritten to satisfy a design contract.
+
+## PR 102 review follow-up: explicit query ownership and feed lifetime
+
+Queries must name their generation scope; pathname inference is removed. A scope
+belongs to the consumer whose result is replaced: per Work/Record for independent
+evidence readers, per Settings section/resource for independent settings reads,
+and one stable scope for each single visible panel. Mission navigation, reconnect
+readback and command-acknowledgement verification are separate consumers even
+though all can use `/read-state`. Commands never supersede each other; correlation
+and original receipt handling apply, including POST-only preflight and app views.
+
+Page hide/offline suspend and close the feed, invalidate in-flight subscription
+creation and clear retries. Page show, visible, online and bounded retry all ensure
+one live or connecting subscription. A transport error closes that subscription
+and schedules a new one from the last processed cursor, including terminal HTTP
+errors where EventSource cannot reconnect. Connection remains distinct from
+successful catch-up. Deferred normal Mission refreshes resume when reads/writes
+settle, just as deferred reconnect recovery does.
+
+Regression-first checks cover two accepted/rejected Work reads in flight,
+required scopes, pagehide/pageshow plus visibility/online resumption, a stale
+subscription resolving after suspension, terminal SSE errors, and a held old
+Mission snapshot followed by a newer revision hint. Run the complete fixture
+suite, typecheck, syntax checks and headless lifecycle checks before pushing.
+
+### Complete client call-site audit
+
+The inline client has 27 query sites and 17 POST command sites. Every query passes
+an explicit scope. Scopes track result ownership, not endpoint spelling or query
+parameters. A completed generation is released without making an older response
+current again.
+
+| Query consumers | Scope owner |
+| --- | --- |
+| Workbench `loadMission` | Selected Mission view across navigation |
+| `refreshReadState`, `readEventPage` | Separate reconnect boundary and catch-up stream |
+| `verifyAcknowledgementFeed` | Original command ID; separate sequence ID and fixture acknowledgement |
+| `readRecordText`, `readRejectedText`, `readReflectionTrail` | Exact Record selection or Mission/Work pair, independently for each card |
+| `resultOpen`, `resultsLoad` | Result preview slot and results list, separate from Work-card text |
+| `readChat`, `shellWorksLoad` | Selected conversation slot and independent global Work list |
+| `settingsRead` | Settings section plus requested resource, separate from host setup |
+| `refreshConnections`, `refreshProviders`, `connect` health read | Separate host connection, provider and health consumers |
+| `schedulesLoad` | Shared schedule list used by its page and general settings |
+| Impact, document search/text/usage, budget and intervention history | One scope for each independent panel's current selection |
+| Memory version search, content search and exact usage | Separate scope per search/usage panel |
+| Catalog, inbox, neighborhood, expired-run review | Separate scope per panel |
+
+All 17 POST sites remain single-send with no latest-query scope: Workbench write,
+fixture, connection write, model discovery and Work preflight; sequence preflight
+and run; chat steering/run/cancel/decision/message; member admission; app view and
+app action; schedule action; settings action. Preflight/discovery/view callers
+retain their existing choice/generation checks. No command receipt is discarded
+merely because a different command was submitted.
+
+Follow-up verification: 1,414 passed / 340 opt-in skipped / the same one known
+macOS locale failure, 1,755 total. Typecheck, syntax checks and diff whitespace
+checks pass. The two independent Work evidence tests use the actual host reads
+and controlled fixture execution; the earlier read completes last and both cards
+still verify their own bytes. Lifecycle tests also fence a subscription whose
+creation finishes after pagehide.
+
+Headless Chrome at 1440×900 verified explicit persisted pagehide/pageshow events
+on the same retained page object, a fresh live subscription, delivery of a later
+message and unchanged unsent draft; no JavaScript errors. Evidence:
+`scratchpad/ui/e2-review-pageshow.png` under the owner-provided scratchpad root.
+Actual Back navigation in this local Chrome reloaded the page, so this is event-
+lifecycle evidence, not a claim that Chrome admitted the page to bfcache.

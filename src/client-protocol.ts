@@ -1,7 +1,10 @@
 import {protocolSupport,validHeader,validRange} from './protocol.ts';
 import type {ProtocolConnection,ProtocolRange,ProtocolTransport,ProtocolRequest,ProtocolReply,ProtocolHeader,FeedHint,FeedSubscription} from './protocol.ts';
 
-export interface ClientRequestOptions { method?:string;headers?:Record<string,string>;body?:string;signal?:AbortSignal;scope?:string }
+interface ClientOptions { headers?:Record<string,string>;signal?:AbortSignal }
+export interface ClientQueryOptions extends ClientOptions { scope:string;method?:'GET' }
+export interface ClientCommandOptions extends ClientOptions { method?:'POST';body?:string;scope?:never }
+export type ClientRequestOptions=ClientQueryOptions|(ClientCommandOptions&{method:'POST'});
 export function createProtocolClient(transport:ProtocolTransport,supported:ProtocolRange=protocolSupport){
  let serial=0,epoch=0,connectionPromise:Promise<ProtocolConnection>|undefined,state:ProtocolConnection|undefined;
  const generations=new Map<string,number>();
@@ -25,8 +28,9 @@ export function createProtocolClient(transport:ProtocolTransport,supported:Proto
   await connectionPromise;return state!;
  }
  function invalidate(scope?:string){if(scope)generations.set(scope,++serial);else epoch++;}
- async function send(path:string,options:ClientRequestOptions,timeout:number,kind:'query'|'command'){
-  const scope=options.scope??path.split('?')[0]!,generation=++serial,started=epoch;
+ async function send(path:string,options:ClientQueryOptions|ClientCommandOptions,timeout:number,kind:'query'|'command'){
+  if(kind==='query'&&(typeof options?.scope!=='string'||!options.scope.trim()))throw new TypeError('Query generation scope is required');
+  const scope=options.scope!,generation=++serial,started=epoch;
   if(kind==='query')generations.set(scope,generation);
   const current=()=>kind==='command'||started===epoch&&generations.get(scope)===generation;
   const controller=new AbortController(),abort=()=>controller.abort();
@@ -37,16 +41,16 @@ export function createProtocolClient(transport:ProtocolTransport,supported:Proto
    if(info.state!=='ready'||!info.features[kind==='command'?'commands':'queries'])throw new Error('Protocol feature requires update or restart');
    if(controller.signal.aborted)throw Object.assign(new Error('Request aborted'),{name:'AbortError'});
    const feedId=options.headers?.['X-Massion-Feed']??options.headers?.['x-massion-feed'];
-   const message:ProtocolRequest={...header(),generation,kind,path,...(kind==='command'?{payload:JSON.parse(options.body??'{}')}:{}),...(feedId?{feedId}:{})};
+   const message:ProtocolRequest={...header(),generation,kind,path,...(kind==='command'?{payload:JSON.parse((options as ClientCommandOptions).body??'{}')}:{}),...(feedId?{feedId}:{})};
    const reply=await transport.request(message,controller.signal);
    if(!current())throw stale();if(controller.signal.aborted)throw Object.assign(new Error('Request aborted'),{name:'AbortError'});check(reply,message);
    if(reply.status===426&&state)state={...state,state:(reply.payload as {state?:string})?.state==='restart-needed'?'restart-needed':'update-needed'};
    return {response:{ok:reply.status>=200&&reply.status<300,status:reply.status},body:reply.payload as any};
-  }catch(error){if(!current())throw stale();throw error;}finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);}
+  }catch(error){if(!current())throw stale();throw error;}finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(kind==='query'&&generations.get(scope)===generation)generations.delete(scope);}
  }
- const query=(path:string,options:ClientRequestOptions={},timeout=15000)=>send(path,options,timeout,'query');
- const dispatch=(path:string,options:ClientRequestOptions={},timeout=15000)=>send(path,options,timeout,'command');
- const request=(path:string,options:ClientRequestOptions={},timeout=15000)=>{
+ const query=(path:string,options:ClientQueryOptions,timeout=15000)=>send(path,options,timeout,'query');
+ const dispatch=(path:string,options:ClientCommandOptions={},timeout=15000)=>send(path,options,timeout,'command');
+ const request=(path:string,options:ClientRequestOptions,timeout=15000)=>{
   if(options.method&&options.method!=='GET'&&options.method!=='POST')return Promise.reject(new Error('Unsupported protocol method'));
   return options.method==='POST'?dispatch(path,options,timeout):query(path,options,timeout);
  };

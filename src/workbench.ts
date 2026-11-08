@@ -394,7 +394,7 @@ $('impact-form').addEventListener('submit',async event => {
   const choice = {sequence:impactSequence,missionId:snapshot.value.id,revision:snapshot.revision,feedId,epoch:connectionEpoch,entity,version,versionText}, submittedFocus = document.activeElement;
   impactReading = true; impactControls(); $('impact-status').textContent = 'Reading exact-version impact in this Mission…';
   try {
-    const {response,body} = await request('/missions/' + encodeURIComponent(choice.missionId) + '/impact?entity=' + encodeURIComponent(entity) + '&version=' + version);
+    const {response,body} = await request('/missions/' + encodeURIComponent(choice.missionId) + '/impact?entity=' + encodeURIComponent(entity) + '&version=' + version,{scope:'impact-panel'});
     if (!currentImpact(choice)) return;
     if (!response.ok) throw new Error(body.error || 'Impact read failed (' + response.status + ').');
     if (body.feedId !== choice.feedId) { requireReconnect(); $('impact-status').textContent = 'The database changed. Refresh current Mission state before reading impact again; no old result is shown.'; return; }
@@ -449,7 +449,7 @@ async function loadMission(id = selectedId, announce = true) {
   loading = true; controls();
   if (announce && !unknownOperation) report('Reading authoritative Mission state…');
   try {
-    const {response, body:packet} = await request(readFeed ? '/read-state?mission=' + encodeURIComponent(id) : '/missions/' + encodeURIComponent(id));
+    const {response, body:packet} = await request(readFeed ? '/read-state?mission=' + encodeURIComponent(id) : '/missions/' + encodeURIComponent(id),{scope:'mission-view'});
     if (sequence !== readSequence || id !== selectedId) return false;
     if (epoch !== connectionEpoch || readFeed && packet.feedId !== readFeed) { requireReconnect(); throw new Error('Database or connection changed during Mission read; fresh permissions and state are required'); }
     const body = readFeed ? packet.snapshot : packet;
@@ -465,11 +465,11 @@ async function loadMission(id = selectedId, announce = true) {
     return false;
   } finally { if (sequence === readSequence) { loading = false; controls(); } }
 }
-async function verifyAcknowledgementFeed(origin, acknowledgementFeed, missionId) {
+async function verifyAcknowledgementFeed(origin, acknowledgementFeed, missionId, scope) {
   if (!origin) return null;
   if (acknowledgementFeed !== origin) { requireReconnect(); throw new Error('Command acknowledgement feed is missing or differs from its originating database'); }
   const epoch = connectionEpoch;
-  const {response,body} = await request('/read-state?mission=' + encodeURIComponent(missionId));
+  const {response,body} = await request('/read-state?mission=' + encodeURIComponent(missionId),{scope});
   if (!response.ok || epoch !== connectionEpoch || body.feedId !== origin || !validSnapshot(body.snapshot,missionId)) { requireReconnect(); throw new Error('The acknowledgement belongs to a previous or unavailable database; current-feed receipt readback is required'); }
   return body.snapshot;
 }
@@ -699,7 +699,7 @@ async function refreshReadState(epoch, expectedFeed) {
   const missionId = selectedId, sequence = ++readSequence;
   loading = true; controls();
   try {
-    const {response,body} = await request('/read-state' + (missionId ? '?mission=' + encodeURIComponent(missionId) : ''));
+    const {response,body} = await request('/read-state' + (missionId ? '?mission=' + encodeURIComponent(missionId) : ''),{scope:'feed-recovery'});
     if (epoch !== connectionEpoch || sequence !== readSequence || missionId !== selectedId) throw new Error('Connection or selected Mission changed during read recovery');
     if (!response.ok || typeof body.feedId !== 'string' || !body.feedId || !Number.isSafeInteger(body.cursor) || body.cursor < 0 || (missionId ? body.snapshot !== null && !validSnapshot(body.snapshot,missionId) : body.snapshot !== null)) throw new Error('Current snapshot and feed boundary could not be refreshed');
     if (expectedFeed && body.feedId !== expectedFeed) throw new Error('Database changed while permissions were refreshing');
@@ -731,7 +731,7 @@ async function readEventPage() {
   polling = true; let epoch = connectionEpoch;
   try {
     const after = unknownOperation ? Math.min(cursor, unknownOperation.reconcileCursor) : cursor;
-    const {response, body} = await request('/events?after=' + after,feedId ? {headers:{'X-Massion-Feed':feedId}} : {});
+    const {response, body} = await request('/events?after=' + after,{scope:'feed-catchup',...(feedId ? {headers:{'X-Massion-Feed':feedId}} : {})});
     if (response.status === 409) {
       requireReconnect(); epoch = connectionEpoch;
       if (feedId) {
@@ -814,7 +814,7 @@ async function write(path, body, missionId, successMessage, revisionSubmission =
     const {response, body:result} = await responsePromise;
     if (result.outcome === 'rejected' && result.reason === 'feed') { await clearPending(operation); requireReconnect(); report('Database changed before command admission. No command was executed or retried; refresh before a new action.','warning'); return false; }
     if (writeFeed && writeFeed !== feedId) { requireReconnect(); throw new Error('The command response belongs to the previous database. Its outcome requires current-feed receipt readback; no replay occurred.'); }
-    const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId) : null;
+    const currentAcknowledgedSnapshot = response.ok ? await verifyAcknowledgementFeed(writeFeed,result.feedId,missionId,'ack:'+body.commandId) : null;
     if((longRun || prerequisiteSubmission || correctionSubmission || expiredSubmission || conversationWorkSubmission || clarificationSubmission || constraintSubmission || conversationSubmission || memoryConflictSubmission || memoryExpirySubmission) && selectedId!==missionId){
       if((prerequisiteSubmission||correctionSubmission||expiredSubmission||conversationWorkSubmission||clarificationSubmission||constraintSubmission||conversationSubmission||memoryConflictSubmission||memoryExpirySubmission)&&response.ok&&['committed','replayed'].includes(result.status)&&validSnapshot(result,missionId)){confirmOperation(operation);await clearPending(operation);return true;}
       if(response.ok && ['settled','blocked','cancelled','already-started'].includes(result.status) && validSnapshot(result.snapshot,missionId)){confirmOperation(operation);await clearPending(operation);return result.status==='settled';}
@@ -949,7 +949,7 @@ function renderDocumentUses(body,choice){
 async function readStoredDocument(mode){
  documentReadControls();const button=$(documentReadButton(mode));if(button.disabled)return;const d=selectedDocument(),query=$('document-query').value;if(mode==='search' && (!query.trim() || query.length>200 || !query.isWellFormed())){$('document-read-status').textContent='Enter a bounded literal query. No read was sent.';return;}const focus=document.activeElement;invalidateDocumentRead();
  const choice={sequence:documentReadSequence,missionId:selectedId,revision:snapshot.revision,feed:feedId,epoch:connectionEpoch,mode,query,selection:$('document-choice').value,document:d?JSON.parse(JSON.stringify(d)):null},controller=new AbortController();documentReadController=controller;documentReadMode=mode;documentReadControls();$('document-read-status').textContent='Reading stored '+(mode==='search'?'latest source matches':mode==='usage'?'exact source Work/Record uses':'exact original source')+'…';const timer=setTimeout(()=>controller.abort(),15000);
- try{const path='/missions/'+encodeURIComponent(choice.missionId)+(mode==='search'?'/documents?query='+encodeURIComponent(query):(mode==='usage'?'/document-usage?id=':'/document?id=')+encodeURIComponent(d.id)+'&version='+d.version+'&sha256='+d.contentSha256),{response,body}=await request(path,{headers:{'X-Massion-Feed':choice.feed},signal:controller.signal,cache:'no-store'});if(!currentDocumentRead(choice))return;if(!response.ok)throw Error(body?.error || 'Document read unavailable.');if(body.missionId!==choice.missionId || body.feedId!==choice.feed || body.revision!==choice.revision || !Number.isSafeInteger(body.cursor) || body.cursor<0)throw Error('Reply does not match current Mission/feed/revision. Refresh and choose exact source.');
+ try{const path='/missions/'+encodeURIComponent(choice.missionId)+(mode==='search'?'/documents?query='+encodeURIComponent(query):(mode==='usage'?'/document-usage?id=':'/document?id=')+encodeURIComponent(d.id)+'&version='+d.version+'&sha256='+d.contentSha256),{response,body}=await request(path,{scope:'document-panel',headers:{'X-Massion-Feed':choice.feed},signal:controller.signal});if(!currentDocumentRead(choice))return;if(!response.ok)throw Error(body?.error || 'Document read unavailable.');if(body.missionId!==choice.missionId || body.feedId!==choice.feed || body.revision!==choice.revision || !Number.isSafeInteger(body.cursor) || body.cursor<0)throw Error('Reply does not match current Mission/feed/revision. Refresh and choose exact source.');
  if(mode==='search'){
   const latest=new Map();for(const entry of snapshot.value.documents || [])latest.set(entry.id,entry);if(body.query!==query || body.limit!==20 || !Number.isSafeInteger(body.totalMatches) || body.totalMatches<0 || body.totalMatches>100 || body.totalMatches!==[...latest.values()].filter(d=>d.title.includes(query)||d.content.includes(query)).length || !Array.isArray(body.matches) || body.matches.length!==Math.min(body.totalMatches,20) || new Set(body.matches.map(m=>m.id)).size!==body.matches.length || body.matches.some(m=>{const exact=latest.get(m.id);return !exact || exact.version!==m.version || exact.title!==m.title || exact.source!==m.source || exact.contentSha256!==m.contentSha256 || exact.actorId!==m.actorId || typeof m.excerpt!=='string' || m.excerpt.length>240 || !exact.content.includes(m.excerpt) || !(exact.title.includes(query)||exact.content.includes(query));}))throw Error('Latest search evidence did not match exact stored sources.');
   const area=$('document-search-results');area.append(element('p',body.totalMatches+' latest versions match; showing '+body.matches.length+' (limit 20). Earlier versions remain readable by exact selection.'));
@@ -1182,7 +1182,7 @@ async function readRecordText(choice) {
   const key=recordTextKey(choice),old=recordTextReads.get(key);old?.controller?.abort();const state={choice,sequence:(old?.sequence || 0)+1,controller:new AbortController(),busy:true,content:'',message:'Reading and checking exact accepted text…'},sequence=state.sequence,submittedFocus=document.activeElement;recordTextReads.set(key,state);renderRecordText(choice);const timer=setTimeout(()=>state.controller?.abort(),15000);
   try{
     const path='/missions/'+encodeURIComponent(choice.missionId)+'/record-artifact?work='+encodeURIComponent(choice.workId)+'&record='+encodeURIComponent(choice.recordId)+'&version='+choice.artifactVersion+'&sha256='+choice.artifactSha256;
-    const {response,body}=await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:state.controller.signal,cache:'no-store'});
+    const {response,body}=await request(path,{scope:'record-text:'+key,headers:{'X-Massion-Feed':choice.feedId},signal:state.controller.signal});
     if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
     if(!response.ok)throw new Error(body?.error || 'Exact text read unavailable.');if(!await validRecordText(body,choice))throw new Error('Text reply failed exact Record, feed, UTF-8 byte or SHA-256 checks.');
     if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
@@ -1362,7 +1362,7 @@ async function readStoredBudget(more) {
   const path = '/missions/' + encodeURIComponent(choice.missionId) + '/work-budget-history?work=' + encodeURIComponent(choice.workId) + '&limit=20&after=' + choice.cursor + (choice.through === null ? '' : '&through=' + choice.through);
   const timer = setTimeout(() => controller.abort(),15000);
   try {
-    const {response,body} = await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'});
+    const {response,body} = await request(path,{scope:'budget-history',headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal});
     if (sequence !== storedBudgetSequence || !currentStoredBudget(choice)) return;
     if (!response.ok) throw new Error('History read failed.');
     if (!validStoredBudgetPage(body,choice)) throw new Error('History reply did not match the exact Work, feed or page boundary.');
@@ -1434,7 +1434,7 @@ async function readStoredIntervention(more) {
   const path = '/missions/' + encodeURIComponent(choice.missionId) + '/work-intervention-history?work=' + encodeURIComponent(choice.workId) + '&limit=20&after=' + choice.cursor + (choice.through === null ? '' : '&through=' + choice.through);
   const timer = setTimeout(() => controller.abort(),15000);
   try {
-    const {response,body} = await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'});
+    const {response,body} = await request(path,{scope:'intervention-history',headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal});
     if (sequence !== storedInterventionSequence || !currentStoredIntervention(choice)) return;
     if (!response.ok) throw new Error('History read failed.');
     if (!validStoredInterventionPage(body,choice)) throw new Error('History reply did not match the exact Work, feed or page boundary.');
@@ -1591,7 +1591,7 @@ $('run-fixture').addEventListener('click', async () => {
     if (response.status >= 500) throw new Error(body.error || 'The fixture outcome was not confirmed.');
     if (!response.ok) { await clearFixture(); report('Fixture rejected: ' + (body.error || 'HTTP ' + response.status),'error'); return; }
     if (typeof body.missionId !== 'string') throw new Error('No fixture Mission ID was returned.');
-    await verifyAcknowledgementFeed(fixtureFeed,body.feedId,body.missionId);
+    await verifyAcknowledgementFeed(fixtureFeed,body.feedId,body.missionId,'fixture-ack');
     const loaded = await loadMission(body.missionId,false); if (!loaded) throw new Error('Current fixture Mission could not be read from its originating feed');
     await clearFixture(); report('Controlled fixture returned. Inspect its Mission and fixture-class Records.','success');
   } catch (error) {
@@ -1631,40 +1631,62 @@ function renderConnections(){
  }
  connectionControls();if(focusId)restoreControlFocus(focused,focusId);
 }
-async function refreshConnections(){try{const {response,body}=await request('/connections');if(!response.ok)throw new Error('Setup not enabled');installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?'Host model connections':'Connect a model provider';const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?'HTTPS API':'Local test fixture (not live verification)');option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?'Host manifest '+body.host.revision+' loaded. '+(body.liveExecutionEnabled?'Live capability enabled; scoped permission and explicit Run still required.':'Live model calls disabled.')+' Destinations and models are host-declared; edit the manifest and restart to change them.':'Connection setup ready. Credentials are host-owned; live model execution has not been verified.';}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent='Connection setup is unavailable. Refresh before changing model connections.';}}
+async function refreshConnections(){try{const {response,body}=await request('/connections',{scope:'host-connections'});if(!response.ok)throw new Error('Setup not enabled');installConnections(body);$('connection-form').hidden=!!body.host?.managed;$('connection-heading').textContent=body.host?.managed?'Host model connections':'Connect a model provider';const kind=$('connection-kind');kind.replaceChildren();for(const p of body.providerTypes){const option=element('option',p.label);option.value=p.id;kind.append(option);}kind.value=body.providerTypes[0]?.id||'';$('connection-base').value=body.providerTypes[0]?.baseUrl||'';const mode=$('connection-mode');mode.replaceChildren();for(const value of body.fixtureModeEnabled?['https','local-http-mock']:['https']){const option=element('option',value==='https'?'HTTPS API':'Local test fixture (not live verification)');option.value=value;mode.append(option);}mode.value='https';connectionControls();$('connection-status').textContent=body.host?.managed?'Host manifest '+body.host.revision+' loaded. '+(body.liveExecutionEnabled?'Live capability enabled; scoped permission and explicit Run still required.':'Live model calls disabled.')+' Destinations and models are host-declared; edit the manifest and restart to change them.':'Connection setup ready. Credentials are host-owned; live model execution has not been verified.';}catch{connectionCatalog=null;++connectionSequence;connectionDiscovery?.abort();renderConnections();$('connection-fields').disabled=true;$('connection-status').textContent='Connection setup is unavailable. Refresh before changing model connections.';}}
 $('connection-kind').addEventListener('change',()=>{if(connectionLocked()||connectionBusy&&!connectionReading)return;++connectionSequence;connectionDiscovery?.abort();connectionReading=false;connectionBusy=false;connectionControls();const p=connectionCatalog?.providerTypes.find(p=>p.id===$('connection-kind').value);$('connection-base').value=p?.baseUrl||'';executionDrafts.clear();if(snapshot)renderMission();renderConnections();});
 $('connection-form').addEventListener('submit',async event=>{event.preventDefault();if(connectionBusy||connectionLocked()||!connectionCatalog||connectionCatalog.host?.managed)return;++connectionSequence;connectionDiscovery?.abort();connectionBusy=true;connectionControls();$('connection-fields').disabled=true;try{const value={id:'connection:'+crypto.randomUUID(),label:$('connection-label').value,providerType:$('connection-kind').value,baseUrl:$('connection-base').value,mode:$('connection-mode').value};if($('connection-reference').value)value.secretRef=$('connection-reference').value;installConnections(await connectionWrite('/connections',value));$('connection-reference').value='';$('connection-status').textContent='Connection metadata saved. Explore models or enter a model manually. Live inference remains unverified.';}catch(error){$('connection-status').textContent=error.message;}finally{connectionBusy=false;connectionControls();}});
 
 function requireReconnect() { reconnectRequired = true; ++connectionEpoch; invalidateNeighborhood(); invalidateInbox(); invalidateCatalog(); ++connectionSequence; invalidateDocumentRead('Host connection changed. Read exact source again against refreshed Mission state.'); invalidateImpact('Host connection changed. Read impact again against refreshed Mission state.'); connectionDiscovery?.abort(); if(connectionReading){connectionReading=false;connectionBusy=false;} controls(); }
 async function refreshProviders() {
-  try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
+  try { const {response,body} = await request('/providers',{scope:'host-providers'}); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
   catch { providerKnown = false; runtimeConfiguration = null; providerNotice(); if (snapshot) renderMission(); return false; }
 }
-function resumeFeedRecovery(){if(feedRecoveryPending&&!busy&&!loading&&!polling){feedRecoveryPending=false;void Promise.resolve().then(()=>syncFeed());}}
+function resumeFeedRecovery(){
+ if(!feedSuspended&&!feedRecoveryScheduled&&(feedRecoveryPending||!reconnectRequired&&eventRefreshNeeded&&selectedId)&&!busy&&!loading&&!polling){
+  feedRecoveryScheduled=true;
+  void Promise.resolve().then(()=>{
+   feedRecoveryScheduled=false;if(feedSuspended||busy||loading||polling)return;
+   if(feedRecoveryPending){feedRecoveryPending=false;return syncFeed();}
+   if(!reconnectRequired&&eventRefreshNeeded&&selectedId){eventRefreshNeeded=false;return loadMission(selectedId,false);}
+  });
+ }
+}
 let feedStop=null,feedStarting=0,feedSyncing=false,feedAgain=false,feedTarget=0,feedReset=false,feedRetry=null;
-function retryFeed(){if(feedRetry===null)feedRetry=setTimeout(()=>{feedRetry=null;void startFeed();},1000);}
+let feedState='stopped',feedSuspended=false,feedRecoveryScheduled=false;
+function stopFeed(){clearTimeout(feedRetry);feedRetry=null;++feedStarting;feedStop?.();feedStop=null;feedState='stopped';}
+function retryFeed(){if(!feedSuspended&&feedRetry===null)feedRetry=setTimeout(()=>{stopFeed();void startFeed();},1000);}
 async function syncFeed(){
- feedAgain=true;if(feedSyncing)return;feedSyncing=true;
+ if(feedSuspended)return;feedAgain=true;if(feedSyncing)return;feedSyncing=true;
  try{do{feedAgain=false;if(feedReset){feedReset=false;protocol.invalidate();requireReconnect();await refreshReadState(connectionEpoch);feedTarget=cursor;}
    const before=cursor;await pollEvents();
    if(!reconnectRequired&&cursor<feedTarget){if(cursor===before)feedReset=true;feedAgain=true;}
- }while(feedAgain);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired&&!busy&&!loading)retryFeed();}
+ }while(feedAgain&&!feedSuspended);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired&&!busy&&!loading)retryFeed();}
 }
 async function startFeed(){
- clearTimeout(feedRetry);feedRetry=null;const generation=++feedStarting;feedStop?.();feedStop=null;
+ if(feedSuspended||feedState!=='stopped')return;
+ clearTimeout(feedRetry);feedRetry=null;const generation=++feedStarting;feedState='connecting';
+ const failed=()=>{
+  if(generation!==feedStarting)return;
+  stopFeed();requireReconnect();protocol.reconnect();const stopped=feedStarting;
+  void protocol.connection().then(state=>{if(stopped===feedStarting&&state.state==='ready'&&state.features.feedPush)retryFeed();},()=>{if(stopped===feedStarting)retryFeed();});
+ };
  try{const stop=await protocol.subscribe({after:cursor,...(feedId?{feedId}:{})},hint=>{
-   if(generation!==feedStarting)return;
+   if(generation!==feedStarting)return;feedState='live';
    if(hint.reason==='connected'){requireReconnect();feedTarget=hint.cursor;}
    else if(hint.reason==='reset'||feedId&&hint.feedId!==feedId){feedReset=true;feedTarget=hint.cursor;}
    else feedTarget=Math.max(feedTarget,hint.cursor);
    void syncFeed();
- },()=>{if(generation===feedStarting){requireReconnect();protocol.reconnect();void protocol.connection().then(state=>{if(state.state!=='ready')feedStop?.();}).catch(()=>{});}});
+ },failed);
  if(generation!==feedStarting)stop();else feedStop=stop;
- }catch{requireReconnect();if(!await protocol.connection().then(state=>state.state!=='ready'||!state.features.feedPush,()=>false))retryFeed();}
+ }catch{
+  if(generation!==feedStarting)return;stopFeed();requireReconnect();const stopped=feedStarting;
+  if(!await protocol.connection().then(state=>state.state!=='ready'||!state.features.feedPush,()=>false)&&stopped===feedStarting)retryFeed();
+ }
 }
+function resumeFeed(){feedSuspended=false;void startFeed();void syncFeed();}
+function suspendFeed(){feedSuspended=true;stopFeed();protocol.reconnect();requireReconnect();}
 async function connect() {
   if(connectionEpoch || !reconnectRequired)requireReconnect();
-  try { const {response,body} = await request('/health'); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
+  try { const {response,body} = await request('/health',{scope:'host-health'}); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
   catch { $('health').textContent = 'Host unavailable'; }
   await pollEvents();
   await startFeed();
@@ -1697,10 +1719,11 @@ ${rejectedTextClient}
 ${reflectionTrailClient}
 controls(); void connect();
 
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
-window.addEventListener('online', () => { void connect(); });
-window.addEventListener('offline', () => { clearTimeout(feedRetry);feedRetry=null;++feedStarting;feedStop?.();feedStop=null;protocol.reconnect();requireReconnect(); });
-window.addEventListener('pagehide', () => { clearTimeout(feedRetry);++feedStarting;feedStop?.(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { resumeFeed(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
+window.addEventListener('online', () => { feedSuspended=false;void connect(); });
+window.addEventListener('pageshow', resumeFeed);
+window.addEventListener('offline', suspendFeed);
+window.addEventListener('pagehide', suspendFeed);
 function restoreMissionAddress() { window.history.replaceState(null, '', snapshot ? '#mission=' + encodeURIComponent(snapshot.value.id) : window.location.pathname + window.location.search); }
 window.addEventListener('hashchange', () => {
   const reference = missionReference();

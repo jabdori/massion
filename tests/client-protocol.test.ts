@@ -12,8 +12,8 @@ function fixture(){
 }
 async function flush(){for(let n=0;n<10;n++)await Promise.resolve();}
 for(const fail of [false,true])test(`central query generation drops late ${fail?'errors':'replies'} and correlates requests`,async()=>{
- const f=fixture(),old=f.client.request('/assistant/conversation?member=old');const rejected=assert.rejects(old,{name:'StaleProtocolReplyError'});await flush();
- const current=f.client.request('/assistant/conversation?member=new');await flush();assert.notEqual(f.sent[0]!.requestId,f.sent[1]!.requestId);assert.ok(f.sent[1]!.generation>f.sent[0]!.generation);
+ const f=fixture(),old=f.client.request('/assistant/conversation?member=old',{scope:'chat'});const rejected=assert.rejects(old,{name:'StaleProtocolReplyError'});await flush();
+ const current=f.client.request('/assistant/conversation?member=new',{scope:'chat'});await flush();assert.notEqual(f.sent[0]!.requestId,f.sent[1]!.requestId);assert.ok(f.sent[1]!.generation>f.sent[0]!.generation);
  f.resolve(1,{text:'new'});assert.equal((await current).body.text,'new');
  if(fail)f.pending.get(f.sent[0]!.requestId)!.reject(Error('late outage'));else f.resolve(0,{text:'old'});await rejected;assert.equal(f.connects(),1);
 });
@@ -24,7 +24,7 @@ test('commands share one dispatch and never resend an unknown outcome',async()=>
  f.pending.get(f.sent[0]!.requestId)!.reject(Error('lost reply'));await rejected;assert.equal(f.sent.length,1);
 });
 for(const field of ['requestId','version','generation'])test('rejects mismatched reply '+field,async()=>{
- const f=fixture(),read=f.client.request('/read-state');const rejected=assert.rejects(read,/protocol|correlation/i);await flush();const m=f.sent[0]!;
+ const f=fixture(),read=f.client.request('/read-state',{scope:'state'});const rejected=assert.rejects(read,/protocol|correlation/i);await flush();const m=f.sent[0]!;
  f.pending.get(m.requestId)!.resolve({...m,kind:'reply',status:200,payload:{},[field]:field==='requestId'?'wrong':99});await rejected;
 });
 test('compatibility reports restart only for a known installed supporting core',()=>{
@@ -33,7 +33,7 @@ test('compatibility reports restart only for a known installed supporting core',
 });
 
 test('unsupported reply keeps subsequent commands closed until a new connection negotiation',async()=>{
- const f=fixture(),read=f.client.request('/read-state');const rejected=assert.rejects(read,/protocol reply version/i);await flush();const m=f.sent[0]!;
+ const f=fixture(),read=f.client.request('/read-state',{scope:'state'});const rejected=assert.rejects(read,/protocol reply version/i);await flush();const m=f.sent[0]!;
  f.pending.get(m.requestId)!.resolve({...m,version:99,kind:'reply',status:200,payload:{}});await rejected;
  assert.equal((await f.client.connection()).state,'update-needed');
  const closed=f.client.request('/assistant/messages',{method:'POST',body:'{"commandId":"not-sent"}'});
@@ -41,13 +41,20 @@ test('unsupported reply keeps subsequent commands closed until a new connection 
 });
 
 test('an aborted request cannot apply a reply from a transport that ignores cancellation',async()=>{
- const f=fixture(),controller=new AbortController(),read=f.client.request('/read-state',{signal:controller.signal});const rejected=assert.rejects(read,{name:'AbortError'});await flush();controller.abort();f.resolve(0,{stale:true});await rejected;
+ const f=fixture(),controller=new AbortController(),read=f.client.request('/read-state',{scope:'state',signal:controller.signal});const rejected=assert.rejects(read,{name:'AbortError'});await flush();controller.abort();f.resolve(0,{stale:true});await rejected;
 });
 
 test('feature gates are negotiated once and refuse commands without a fallback path',async()=>{
  let connects=0,sends=0;
  const transport:ProtocolTransport={connect:async m=>{connects++;return {...m,kind:'reply',status:200,payload:{...protocolConnection(m.supported),features:{commands:false,queries:true,feedPush:false}}};},request:async m=>{sends++;return {...m,kind:'reply',status:200,payload:{read:true}};},subscribe(){assert.fail('No unavailable push fallback');}};
- const client=createProtocolClient(transport);assert.equal((await client.query('/read-state')).body.read,true);
+ const client=createProtocolClient(transport);assert.equal((await client.query('/read-state',{scope:'state'})).body.read,true);
  await assert.rejects(client.dispatch('/missions',{body:'{}'}),/update or restart/);await assert.rejects(client.subscribe({after:0},()=>{},()=>{}),/update or restart/);
  assert.equal(connects,1);assert.equal(sends,1);
+});
+
+test('queries require an explicit nonempty scope before negotiation or delivery',async()=>{
+ let calls=0;const transport:ProtocolTransport={connect:async m=>{calls++;return {...m,kind:'reply',status:200,payload:protocolConnection(m.supported)};},request:async m=>{calls++;return {...m,kind:'reply',status:200,payload:{}};},subscribe(){return()=>{};}};
+ const client=createProtocolClient(transport);
+ for(const options of [undefined,{}, {scope:''}])await assert.rejects(Reflect.apply(client.query,client,['/read-state',options]),/scope/i);
+ assert.equal(calls,0);
 });

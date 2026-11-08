@@ -21,7 +21,7 @@ function resultIcon(){const box=element('span',undefined,'result-kind');box.setA
 /** Accepted Records live in the intake Mission, which is never a conversation aggregate, so its events reread the page while it shows. */
 function resultsEvents(events){if(!$('page-results').hidden&&events.some(event=>typeof event.aggregateId==='string'&&!event.aggregateId.startsWith('assistant-conversation:')))void resultsLoad();}
 /** Only the latest read lands, so a read sent before a database replacement or a later read never overwrites a newer one. */
-async function resultsLoad(){const seq=++resultLoadSeq;let rows=null;try{const {response,body}=await request('/assistant/results');if(response.ok&&Array.isArray(body.results))rows=body.results.filter(resultValid);}catch{}if(seq!==resultLoadSeq)return;if(rows)resultRows=rows;renderResults();}
+async function resultsLoad(){const seq=++resultLoadSeq;let rows=null;try{const {response,body}=await request('/assistant/results',{scope:'results-list'});if(response.ok&&Array.isArray(body.results))rows=body.results.filter(resultValid);}catch{}if(seq!==resultLoadSeq)return;if(rows)resultRows=rows;renderResults();}
 /** A replaced database drops the old rows, any read or preview in flight, and reads again while the page shows. */
 function resultsReset(){resultLoadSeq++;resultSeq++;resultRows=[];resultText='';renderResults();if(!$('page-results').hidden)void resultsLoad();}
 /** Rail > Results: its own sidebar (All, Documents, recent names), then a table or tiles. Every readable result is text, so Documents equals All. */
@@ -43,7 +43,7 @@ async function resultOpen(r){
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */
 async function resultLoad(r){
  const seq=++resultSeq;resultText='';resultMode('preview');$('result-preview').replaceChildren();$('result-original').textContent='';let content=null;
- try{const {response,body}=await request('/missions/'+encodeURIComponent(r.missionId)+'/record-artifact?work='+encodeURIComponent(r.workId)+'&record='+encodeURIComponent(r.recordId)+'&version='+r.version+'&sha256='+r.sha256);if(response.ok&&typeof body.content==='string')content=body.content;}catch{}
+ try{const {response,body}=await request('/missions/'+encodeURIComponent(r.missionId)+'/record-artifact?work='+encodeURIComponent(r.workId)+'&record='+encodeURIComponent(r.recordId)+'&version='+r.version+'&sha256='+r.sha256,{scope:'result-preview'});if(response.ok&&typeof body.content==='string')content=body.content;}catch{}
  if(seq!==resultSeq)return;if(content===null){$('result-preview').textContent='Unavailable';return;}
  resultText=content;$('result-original').textContent=content;
  // Lines starting '- ' or '* ' become list items, other lines paragraphs; never HTML.
