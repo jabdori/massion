@@ -1,0 +1,2859 @@
+{
+ "composer.button.01": {
+  "ko": "기본 권한",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:composer",
+   "B11-quill:composer",
+   "B11:page",
+   "B15:composer",
+   "B16-later:composer",
+   "B16-sent:composer",
+   "B16:composer",
+   "B18-room-b:composer",
+   "B18:composer",
+   "B1:composer",
+   "B21-name:composer",
+   "B21:composer",
+   "B22-room-steps:composer",
+   "B22-room:composer",
+   "B24-done:composer",
+   "B24-later:composer",
+   "B24:composer",
+   "B25-done:composer",
+   "B25-later:composer",
+   "B25:composer",
+   "B2:composer",
+   "B3-run:composer",
+   "B3:composer",
+   "B4:composer",
+   "B5:composer",
+   "B6:composer",
+   "B7-churn:composer",
+   "B7-done:composer",
+   "B7-fail:composer",
+   "B7-unknown:composer",
+   "B7:composer",
+   "B8-done:composer",
+   "B8-fail:composer",
+   "B8-unknown:composer",
+   "B8:composer",
+   "B9:composer"
+  ]
+ },
+ "composer.textbox.01": {
+  "ko": "답변을 입력하거나 다른 이야기를 하세요",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B1:composer"
+  ]
+ },
+ "composer.button.02": {
+  "ko": "보내기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:composer",
+   "B11-quill:composer",
+   "B11:page",
+   "B15:composer",
+   "B16-later:composer",
+   "B16-sent:composer",
+   "B16:composer",
+   "B18-room-b:composer",
+   "B18:composer",
+   "B1:composer",
+   "B21-name:composer",
+   "B21:composer",
+   "B22-room-steps:composer",
+   "B22-room:composer",
+   "B24-done:composer",
+   "B24-later:composer",
+   "B24:composer",
+   "B25-done:composer",
+   "B25-later:composer",
+   "B25:composer",
+   "B2:composer",
+   "B3-run:composer",
+   "B3:composer",
+   "B4:composer",
+   "B5:composer",
+   "B6:composer",
+   "B7-churn:composer",
+   "B7-done:composer",
+   "B7-fail:composer",
+   "B7-unknown:composer",
+   "B7:composer",
+   "B8-done:composer",
+   "B8-fail:composer",
+   "B8-unknown:composer",
+   "B8:composer",
+   "B9:composer"
+  ]
+ },
+ "composer.textbox.02": {
+  "ko": "주노에게 메시지 보내기",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B22-room-steps:composer",
+   "B22-room:composer",
+   "B25-done:composer",
+   "B25-later:composer",
+   "B25:composer"
+  ]
+ },
+ "composer.textbox.03": {
+  "ko": "퀼에게 메시지 보내기",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B10-preview:composer",
+   "B18-room-b:composer",
+   "B18:composer",
+   "B6:composer",
+   "B7-churn:composer",
+   "B7-fail:composer",
+   "B8-fail:composer"
+  ]
+ },
+ "composer.button.03": {
+  "ko": "파일 추가",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:composer",
+   "B11-quill:composer",
+   "B11:page",
+   "B15:composer",
+   "B16-later:composer",
+   "B16-sent:composer",
+   "B16:composer",
+   "B18-room-b:composer",
+   "B18:composer",
+   "B1:composer",
+   "B21-name:composer",
+   "B21:composer",
+   "B22-room-steps:composer",
+   "B22-room:composer",
+   "B24-done:composer",
+   "B24-later:composer",
+   "B24:composer",
+   "B25-done:composer",
+   "B25-later:composer",
+   "B25:composer",
+   "B2:composer",
+   "B3-run:composer",
+   "B3:composer",
+   "B4:composer",
+   "B5:composer",
+   "B6:composer",
+   "B7-churn:composer",
+   "B7-done:composer",
+   "B7-fail:composer",
+   "B7-unknown:composer",
+   "B7:composer",
+   "B8-done:composer",
+   "B8-fail:composer",
+   "B8-unknown:composer",
+   "B8:composer",
+   "B9:composer"
+  ]
+ },
+ "composer.textbox.04": {
+  "ko": "하나에게 메시지 보내기",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B11-quill:composer",
+   "B15:composer",
+   "B16-later:composer",
+   "B16-sent:composer",
+   "B16:composer",
+   "B21-name:composer",
+   "B21:composer",
+   "B24-done:composer",
+   "B24-later:composer",
+   "B24:composer",
+   "B2:composer",
+   "B3-run:composer",
+   "B3:composer",
+   "B4:composer",
+   "B5:composer",
+   "B7-done:composer",
+   "B7-unknown:composer",
+   "B7:composer",
+   "B8-done:composer",
+   "B8-unknown:composer",
+   "B8:composer",
+   "B9:composer"
+  ]
+ },
+ "conversation.link.01": {
+  "ko": "#82 docs(product): experience plan v3 with conversation and on-demand panes 병합됨 {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B24-done:conversation"
+  ]
+ },
+ "conversation.link.02": {
+  "ko": "#83 feat(assistant): store the continuing assistant conversation as journal segments 병합됨 {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B24-done:conversation"
+  ]
+ },
+ "conversation.link.03": {
+  "ko": "#84 {work_title} 열림 {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B24-done:conversation"
+  ]
+ },
+ "conversation.link.04": {
+  "ko": "PR 목록 가져오기 설치됨 · {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B25-done:conversation"
+  ]
+ },
+ "conversation.button.01": {
+  "ko": "{amount} 결제",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ]
+ },
+ "conversation.link.05": {
+  "ko": "{count} 모두 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B24-done:conversation"
+  ]
+ },
+ "conversation.button.02": {
+  "ko": "{duration} 동안 작업 · 페이지 {count} 읽음",
+  "roles": [
+   "button",
+   "link"
+  ],
+  "used_in": [
+   "B4:conversation",
+   "B5:conversation",
+   "B8-done:conversation",
+   "B8-unknown:conversation"
+  ]
+ },
+ "conversation.button.03": {
+  "ko": "{duration} 동안 작업 · 페이지 {count} 읽음 · 신청서 채움",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B15:conversation"
+  ]
+ },
+ "conversation.link.06": {
+  "ko": "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B6:conversation",
+   "B7-fail:conversation"
+  ]
+ },
+ "conversation.link.07": {
+  "ko": "{work_title} 실패 확인 실패 · 근거 {count}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B8-fail:conversation"
+  ]
+ },
+ "conversation.link.08": {
+  "ko": "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B7-churn:conversation"
+  ]
+ },
+ "conversation.link.09": {
+  "ko": "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B3-run:conversation"
+  ]
+ },
+ "conversation.link.10": {
+  "ko": "{work_title} 실행 중 퀼 조사 분류 요약 확인 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B3:conversation"
+  ]
+ },
+ "conversation.link.11": {
+  "ko": "{work_title} 완료 {time} 테스트 {progress} 읽기 {progress} 확인 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B25-done:conversation",
+   "B25-later:conversation",
+   "B25:conversation"
+  ]
+ },
+ "conversation.link.12": {
+  "ko": "{work_title} 확인 대기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10-preview:conversation"
+  ]
+ },
+ "conversation.link.13": {
+  "ko": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 1 개 · 확인 대기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-fail:conversation"
+  ]
+ },
+ "conversation.text.01": {
+  "ko": "결과 모름",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B5:conversation",
+   "B7-unknown:conversation",
+   "B7-unknown:pane",
+   "B8-unknown:conversation",
+   "B8-unknown:pane"
+  ]
+ },
+ "conversation.link.14": {
+  "ko": "구성원 추가",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B21-name:conversation",
+   "B21:conversation"
+  ]
+ },
+ "conversation.link.15": {
+  "ko": "기기 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ]
+ },
+ "conversation.button.04": {
+  "ko": "기타",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1:conversation"
+  ]
+ },
+ "conversation.button.05": {
+  "ko": "나중에",
+  "roles": [
+   "button",
+   "link"
+  ],
+  "used_in": [
+   "B15:conversation",
+   "B16:conversation",
+   "B21-name:conversation",
+   "B21:conversation",
+   "B24:conversation",
+   "B25:conversation",
+   "B2:conversation",
+   "B4:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.button.06": {
+  "ko": "남기기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-fail:conversation"
+  ]
+ },
+ "conversation.button.07": {
+  "ko": "다시 묻기",
+  "roles": [
+   "button",
+   "link"
+  ],
+  "used_in": [
+   "B16-later:conversation",
+   "B24-later:conversation",
+   "B25-later:conversation"
+  ]
+ },
+ "conversation.button.08": {
+  "ko": "다시 시도",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B6:conversation",
+   "B7-fail:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.button.09": {
+  "ko": "맡기기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ]
+ },
+ "conversation.button.10": {
+  "ko": "매일 아침 어제 일 알려 주기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1:conversation"
+  ]
+ },
+ "conversation.button.11": {
+  "ko": "문단 세 줄 요약",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1:conversation"
+  ]
+ },
+ "conversation.button.12": {
+  "ko": "바꾸기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.text.02": {
+  "ko": "반올림 규칙 결정 대기 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B3-run:conversation",
+   "B3:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.link.16": {
+  "ko": "방향 바꿈: {work_title} · {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-fail:conversation"
+  ]
+ },
+ "conversation.link.17": {
+  "ko": "사례 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.button.13": {
+  "ko": "신청서 제출",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B15:conversation"
+  ]
+ },
+ "conversation.status.01": {
+  "ko": "실패",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B6:conversation",
+   "B6:sidebar",
+   "B7-fail:conversation",
+   "B7-fail:pane",
+   "B8-fail:pane"
+  ]
+ },
+ "conversation.text.03": {
+  "ko": "아침 브리핑 | {date} {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B3-run:conversation",
+   "B3:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.link.18": {
+  "ko": "요일별 할인 합계 표 결과물 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B21-name:conversation",
+   "B21:conversation"
+  ]
+ },
+ "conversation.link.19": {
+  "ko": "작업 중 · 페이지 {count} 읽음",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B8:conversation"
+  ]
+ },
+ "conversation.link.20": {
+  "ko": "절차 고침: 테스트 먼저 돌리기 · 확인 대기 · {time}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22-room-steps:conversation",
+   "B22-room:conversation"
+  ]
+ },
+ "conversation.link.21": {
+  "ko": "제거",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B24-done:conversation",
+   "B25-done:conversation"
+  ]
+ },
+ "conversation.status.02": {
+  "ko": "주노 작업 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22-room-steps:conversation",
+   "B22-room:conversation"
+  ]
+ },
+ "conversation.button.14": {
+  "ko": "주문 내역 확인",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B5:conversation",
+   "B7-unknown:conversation"
+  ]
+ },
+ "conversation.text.04": {
+  "ko": "주의",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation",
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "conversation.button.15": {
+  "ko": "지우기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-fail:conversation"
+  ]
+ },
+ "conversation.link.22": {
+  "ko": "취소",
+  "roles": [
+   "link",
+   "text"
+  ],
+  "used_in": [
+   "B15:conversation",
+   "B21-name:dialog:새 구성원 만들기",
+   "B4:conversation"
+  ]
+ },
+ "conversation.text.05": {
+  "ko": "하나가 넘김: {work_title} · {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:conversation",
+   "B18-room-b:conversation",
+   "B18:conversation",
+   "B22-room-steps:conversation",
+   "B22-room:conversation",
+   "B25-done:conversation",
+   "B25-later:conversation",
+   "B25:conversation",
+   "B3-run:conversation",
+   "B3:conversation",
+   "B6:conversation",
+   "B7-churn:conversation",
+   "B7-fail:conversation",
+   "B8-fail:conversation"
+  ]
+ },
+ "conversation.button.16": {
+  "ko": "할인 후 합계 계산",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1:conversation"
+  ]
+ },
+ "dialog.button.01": {
+  "ko": "구름",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.02": {
+  "ko": "네모",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.03": {
+  "ko": "닫기",
+  "roles": [
+   "button",
+   "link"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기",
+   "B5:conversation",
+   "B6:conversation",
+   "B7-fail:conversation",
+   "B7-unknown:conversation"
+  ]
+ },
+ "dialog.button.04": {
+  "ko": "동그라미",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.05": {
+  "ko": "마름모",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.06": {
+  "ko": "만들기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.07": {
+  "ko": "물방울",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.08": {
+  "ko": "세 잎",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.09": {
+  "ko": "세모",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "dialog.button.10": {
+  "ko": "육각",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "header.button.01": {
+  "ko": "더 보기",
+  "roles": [
+   "button",
+   "link"
+  ],
+  "used_in": [
+   "B10-preview:header",
+   "B11-quill:header",
+   "B11:header",
+   "B15:header",
+   "B16-later:header",
+   "B16-sent:header",
+   "B16:header",
+   "B17:page",
+   "B18-room-b:header",
+   "B18:header",
+   "B21-name:header",
+   "B21:header",
+   "B22-room-steps:header",
+   "B22-room:header",
+   "B24-done:header",
+   "B24-later:header",
+   "B24:header",
+   "B25-done:header",
+   "B25-later:header",
+   "B25:header",
+   "B2:header",
+   "B3-run:header",
+   "B3:header",
+   "B4:header",
+   "B5:header",
+   "B6:header",
+   "B7-churn:header",
+   "B7-done:header",
+   "B7-fail:header",
+   "B7-unknown:header",
+   "B7:header",
+   "B8-done:header",
+   "B8-fail:header",
+   "B8-unknown:header",
+   "B8:header",
+   "B9:dialog:하나",
+   "B9:header"
+  ]
+ },
+ "header.link.01": {
+  "ko": "사이드바 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B1:header",
+   "B5:header",
+   "B8-done:header",
+   "B8-fail:header",
+   "B8-unknown:header",
+   "B8:header"
+  ]
+ },
+ "header.link.02": {
+  "ko": "사이드바 숨기기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10-preview:header",
+   "B11-quill:header",
+   "B11:header",
+   "B15:header",
+   "B16-later:header",
+   "B16-sent:header",
+   "B16:header",
+   "B18-room-b:header",
+   "B18:header",
+   "B21-name:header",
+   "B21:header",
+   "B22-room-steps:header",
+   "B22-room:header",
+   "B24-done:header",
+   "B24-later:header",
+   "B24:header",
+   "B25-done:header",
+   "B25-later:header",
+   "B25:header",
+   "B2:header",
+   "B3-run:header",
+   "B3:header",
+   "B4:header",
+   "B6:header",
+   "B7-churn:header",
+   "B7-done:header",
+   "B7-fail:header",
+   "B7-unknown:header",
+   "B7:header",
+   "B9:header"
+  ]
+ },
+ "header.link.03": {
+  "ko": "작업 공간",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10-preview:header",
+   "B15:header",
+   "B18-room-b:header",
+   "B18:header",
+   "B22-room-steps:header",
+   "B22-room:header",
+   "B25-done:header",
+   "B25-later:header",
+   "B25:header",
+   "B4:header",
+   "B5:header",
+   "B6:header",
+   "B7-churn:header",
+   "B7-done:header",
+   "B7-fail:header",
+   "B7-unknown:header",
+   "B7:header",
+   "B8-done:header",
+   "B8-fail:header",
+   "B8-unknown:header",
+   "B8:header"
+  ]
+ },
+ "page.button.01": {
+  "ko": "ChatGPT로 계속하기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1-signin:page"
+  ]
+ },
+ "page.button.02": {
+  "ko": "Claude로 계속하기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B1-signin:page"
+  ]
+ },
+ "page.link.01": {
+  "ko": "GitHub에서 열기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ]
+ },
+ "page.heading.01": {
+  "ko": "Massion",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B1-signin:page"
+  ]
+ },
+ "page.button.03": {
+  "ko": "claude-sonnet-5-5 빼기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.button.04": {
+  "ko": "glm-5.3 빼기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B20:page"
+  ]
+ },
+ "page.button.05": {
+  "ko": "gpt-6.1-terra 빼기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B20-coding:page"
+  ]
+ },
+ "page.link.02": {
+  "ko": "{date} {time} 어제 맡긴 일 {count} 대화에서 보기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B17:page"
+  ]
+ },
+ "page.link.03": {
+  "ko": "{work_title} 주노 · 실행 중 읽기 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ]
+ },
+ "page.button.06": {
+  "ko": "가격 보기 원하는 값 아래로 내려가면 알림",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.button.07": {
+  "ko": "격자",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10:page"
+  ]
+ },
+ "page.textbox.01": {
+  "ko": "결과물 검색",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B10:page"
+  ]
+ },
+ "page.heading.02": {
+  "ko": "구성원",
+  "roles": [
+   "heading",
+   "link",
+   "listbox",
+   "text"
+  ],
+  "used_in": [
+   "B11:page",
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:settings",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:settings",
+   "B19-juno:sidebar",
+   "B19:settings",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar",
+   "B9:dialog:하나"
+  ]
+ },
+ "page.link.04": {
+  "ko": "구성원 관리",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B11:page"
+  ]
+ },
+ "page.textbox.02": {
+  "ko": "그룹 설명",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.textbox.03": {
+  "ko": "그룹 이름",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.button.08": {
+  "ko": "근거",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.heading.03": {
+  "ko": "기억",
+  "roles": [
+   "heading",
+   "link"
+  ],
+  "used_in": [
+   "B12:page",
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar",
+   "B9:dialog:하나"
+  ]
+ },
+ "page.heading.04": {
+  "ko": "내가 말한 것",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.link.05": {
+  "ko": "다른 방법으로 계속하기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B1-signin:page"
+  ]
+ },
+ "page.button.09": {
+  "ko": "되돌리기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B12:page",
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "page.columnheader.01": {
+  "ko": "맡은 사람",
+  "roles": [
+   "columnheader",
+   "text"
+  ],
+  "used_in": [
+   "B10:page",
+   "B17:page",
+   "B8-fail:pane"
+  ]
+ },
+ "page.heading.05": {
+  "ko": "모델 2",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.button.10": {
+  "ko": "모델 추가",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.button.11": {
+  "ko": "목록",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10:page"
+  ]
+ },
+ "page.link.06": {
+  "ko": "반올림 규칙",
+  "roles": [
+   "link",
+   "text"
+  ],
+  "used_in": [
+   "B12:page",
+   "B2:conversation",
+   "B3-run:conversation",
+   "B3:conversation",
+   "B9:conversation"
+  ]
+ },
+ "page.switch.01": {
+  "ko": "반올림 규칙 쓰기",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.heading.06": {
+  "ko": "배운 것",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.heading.07": {
+  "ko": "변경 기록",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.heading.08": {
+  "ko": "사용하는 구성원",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.status.01": {
+  "ko": "순서 바꾸기",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B20-coding:page",
+   "B20:page"
+  ]
+ },
+ "page.heading.09": {
+  "ko": "아침 브리핑",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B17:page"
+  ]
+ },
+ "page.button.12": {
+  "ko": "아침 브리핑 어제 맡긴 일을 아침마다 정리",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.button.13": {
+  "ko": "월말 구독 점검 이번 달 구독 결제 목록",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.columnheader.02": {
+  "ko": "이름",
+  "roles": [
+   "columnheader",
+   "text",
+   "textbox"
+  ],
+  "used_in": [
+   "B10:page",
+   "B15:pane",
+   "B20-coding:page",
+   "B20:page",
+   "B21-name:dialog:새 구성원 만들기"
+  ]
+ },
+ "page.heading.10": {
+  "ko": "작업 예약하기",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.button.14": {
+  "ko": "전체",
+  "roles": [
+   "button",
+   "heading"
+  ],
+  "used_in": [
+   "B10:page",
+   "B10:sidebar"
+  ]
+ },
+ "page.button.15": {
+  "ko": "주간 지출 정리 지난주 지출을 항목별로 묶기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.button.16": {
+  "ko": "주말 장보기 목록 금요일마다 장보기 목록 만들기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "page.link.07": {
+  "ko": "주문 할인 합계 계산",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "page.button.17": {
+  "ko": "지금 실행",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:page"
+  ]
+ },
+ "page.switch.02": {
+  "ko": "켜기",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B17:page"
+  ]
+ },
+ "page.heading.11": {
+  "ko": "코딩",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B20-coding:page"
+  ]
+ },
+ "page.option.01": {
+  "ko": "퀼 Enter",
+  "roles": [
+   "option"
+  ],
+  "used_in": [
+   "B11:page"
+  ]
+ },
+ "page.button.18": {
+  "ko": "회의 전 자료 모으기 회의 전날 저녁에 자료 모으기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ]
+ },
+ "pane.chip.01": {
+  "ko": "기록",
+  "roles": [
+   "chip",
+   "text"
+  ],
+  "used_in": [
+   "B18-room-b:pane",
+   "B19-juno:settings",
+   "B19:settings",
+   "B22-room-steps:pane",
+   "B7-fail:pane",
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "pane.link.01": {
+  "ko": "넓히기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22-room-steps:pane",
+   "B22-room:pane",
+   "B7-done:pane",
+   "B7-fail:pane",
+   "B7-unknown:pane",
+   "B7:pane"
+  ]
+ },
+ "pane.button.01": {
+  "ko": "복사",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:pane"
+  ]
+ },
+ "pane.chip.02": {
+  "ko": "요약",
+  "roles": [
+   "chip",
+   "text"
+  ],
+  "used_in": [
+   "B18-room-b:pane",
+   "B19:settings",
+   "B7-churn:pane",
+   "B7-fail:pane"
+  ]
+ },
+ "pane.status.01": {
+  "ko": "읽는 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ]
+ },
+ "pane.status.02": {
+  "ko": "읽음",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ]
+ },
+ "pane.link.02": {
+  "ko": "작업 공간 닫기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10-preview:pane",
+   "B15:pane",
+   "B18-room-b:pane",
+   "B22-room-steps:pane",
+   "B22-room:pane",
+   "B4:pane",
+   "B7-churn:pane",
+   "B7-done:pane",
+   "B7-fail:pane",
+   "B7-unknown:pane",
+   "B7:pane",
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "pane.chip.03": {
+  "ko": "조사",
+  "roles": [
+   "chip",
+   "heading",
+   "listitem",
+   "text"
+  ],
+  "used_in": [
+   "B18-room-b:pane",
+   "B19:settings",
+   "B20:page",
+   "B7-churn:pane",
+   "B7-fail:pane"
+  ]
+ },
+ "pane.link.03": {
+  "ko": "좁히기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "pane.button.02": {
+  "ko": "중지",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B18-room-b:pane",
+   "B22-room-steps:pane",
+   "B7-churn:pane",
+   "B7:pane",
+   "B8:pane"
+  ]
+ },
+ "pane.text.01": {
+  "ko": "하나가 넘김 · {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18-room-b:pane",
+   "B22-room-steps:pane",
+   "B7-churn:pane",
+   "B7-fail:pane"
+  ]
+ },
+ "pane.button.03": {
+  "ko": "확인 대기 원인 정리 후 시작",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B7-churn:pane"
+  ]
+ },
+ "pane.button.04": {
+  "ko": "확인 대기 주문 내역 {count}",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B7:pane"
+  ]
+ },
+ "pane.button.05": {
+  "ko": "확인 실패 근거 {count} 이상",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B7-fail:pane"
+  ]
+ },
+ "pane.button.06": {
+  "ko": "확인 안 함 결제 응답 없음",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B7-unknown:pane"
+  ]
+ },
+ "pane.button.07": {
+  "ko": "확인 완료 주문 내역 {count}",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B7-done:pane"
+  ]
+ },
+ "rail.heading.01": {
+  "ko": "GitHub",
+  "roles": [
+   "heading",
+   "link",
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:rail",
+   "B10:rail",
+   "B12:rail",
+   "B13-devices:rail",
+   "B13:rail",
+   "B14:rail",
+   "B17-empty:rail",
+   "B17:rail",
+   "B18-room-b:rail",
+   "B18:rail",
+   "B19-juno:rail",
+   "B19:rail",
+   "B20-coding:rail",
+   "B20:rail",
+   "B22-room-steps:rail",
+   "B22-room:pane",
+   "B22-room:rail",
+   "B22:rail",
+   "B22:sidebar",
+   "B23-github:rail",
+   "B23-github:settings",
+   "B23:rail",
+   "B24-done:rail",
+   "B25-done:rail",
+   "B25-later:rail",
+   "B25:rail",
+   "B4:rail",
+   "B5:rail",
+   "B6:rail",
+   "B7-churn:rail",
+   "B7-done:rail",
+   "B7-fail:rail",
+   "B7-unknown:rail",
+   "B7:rail",
+   "B8-done:rail",
+   "B8-fail:rail",
+   "B8-unknown:rail",
+   "B8:rail"
+  ]
+ },
+ "rail.link.01": {
+  "ko": "결과물",
+  "roles": [
+   "link",
+   "table",
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:rail",
+   "B10:page",
+   "B10:rail",
+   "B10:sidebar",
+   "B11-quill:rail",
+   "B11:rail",
+   "B12:rail",
+   "B13-devices:rail",
+   "B13:rail",
+   "B14:rail",
+   "B15:rail",
+   "B16-later:rail",
+   "B16-sent:rail",
+   "B16:rail",
+   "B17-empty:rail",
+   "B17:rail",
+   "B18-room-b:rail",
+   "B18:rail",
+   "B19-juno:rail",
+   "B19:rail",
+   "B1:rail",
+   "B20-coding:rail",
+   "B20:rail",
+   "B21-name:rail",
+   "B21:rail",
+   "B22-room-steps:rail",
+   "B22-room:rail",
+   "B22:rail",
+   "B23-github:rail",
+   "B23:rail",
+   "B24-done:rail",
+   "B24-later:rail",
+   "B24:rail",
+   "B25-done:rail",
+   "B25-later:rail",
+   "B25:rail",
+   "B2:rail",
+   "B3-run:rail",
+   "B3:rail",
+   "B4:rail",
+   "B5:rail",
+   "B6:rail",
+   "B7-churn:rail",
+   "B7-done:rail",
+   "B7-fail:rail",
+   "B7-unknown:rail",
+   "B7:rail",
+   "B8-done:rail",
+   "B8-fail:rail",
+   "B8-unknown:rail",
+   "B8:rail",
+   "B9:rail"
+  ]
+ },
+ "rail.button.01": {
+  "ko": "내 계정",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:rail",
+   "B10:rail",
+   "B11-quill:rail",
+   "B11:rail",
+   "B12:rail",
+   "B13-devices:rail",
+   "B13:rail",
+   "B14:rail",
+   "B15:rail",
+   "B16-later:rail",
+   "B16-sent:rail",
+   "B16:rail",
+   "B17-empty:rail",
+   "B17:rail",
+   "B18-room-b:rail",
+   "B18:rail",
+   "B19-juno:rail",
+   "B19:rail",
+   "B1:rail",
+   "B20-coding:rail",
+   "B20:rail",
+   "B21-name:rail",
+   "B21:rail",
+   "B22-room-steps:rail",
+   "B22-room:rail",
+   "B22:rail",
+   "B23-github:rail",
+   "B23:rail",
+   "B24-done:rail",
+   "B24-later:rail",
+   "B24:rail",
+   "B25-done:rail",
+   "B25-later:rail",
+   "B25:rail",
+   "B2:rail",
+   "B3-run:rail",
+   "B3:rail",
+   "B4:rail",
+   "B5:rail",
+   "B6:rail",
+   "B7-churn:rail",
+   "B7-done:rail",
+   "B7-fail:rail",
+   "B7-unknown:rail",
+   "B7:rail",
+   "B8-done:rail",
+   "B8-fail:rail",
+   "B8-unknown:rail",
+   "B8:rail",
+   "B9:rail"
+  ]
+ },
+ "rail.heading.02": {
+  "ko": "예약",
+  "roles": [
+   "heading",
+   "link",
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:rail",
+   "B10:rail",
+   "B11-quill:rail",
+   "B11:rail",
+   "B12:rail",
+   "B13-devices:rail",
+   "B13:rail",
+   "B14:rail",
+   "B15:rail",
+   "B16-later:rail",
+   "B16-sent:rail",
+   "B16:rail",
+   "B17-empty:rail",
+   "B17-empty:sidebar",
+   "B17:rail",
+   "B17:sidebar",
+   "B18-room-b:rail",
+   "B18:rail",
+   "B19-juno:rail",
+   "B19:rail",
+   "B19:settings",
+   "B1:rail",
+   "B20-coding:rail",
+   "B20:rail",
+   "B21-name:rail",
+   "B21:rail",
+   "B22-room-steps:rail",
+   "B22-room:rail",
+   "B22:rail",
+   "B23-github:rail",
+   "B23:rail",
+   "B24-done:rail",
+   "B24-later:rail",
+   "B24:rail",
+   "B25-done:rail",
+   "B25-later:rail",
+   "B25:rail",
+   "B2:rail",
+   "B3-run:rail",
+   "B3:rail",
+   "B4:rail",
+   "B5:rail",
+   "B6:rail",
+   "B7-churn:rail",
+   "B7-done:rail",
+   "B7-fail:rail",
+   "B7-unknown:rail",
+   "B7:rail",
+   "B8-done:rail",
+   "B8-fail:rail",
+   "B8-unknown:rail",
+   "B8:rail",
+   "B9:rail"
+  ]
+ },
+ "settings.heading.01": {
+  "ko": "API 키",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.button.01": {
+  "ko": "Claude Code",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.button.02": {
+  "ko": "Codex",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.link.01": {
+  "ko": "GitHub 1.4.0 · 주노, 퀼 켜짐",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B23:settings"
+  ]
+ },
+ "settings.heading.02": {
+  "ko": "구독 로그인",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.button.03": {
+  "ko": "기기 연결",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B13-devices:settings"
+  ]
+ },
+ "settings.text.01": {
+  "ko": "기본",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings",
+   "B18-room-b:pane",
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.button.04": {
+  "ko": "끄기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B23-github:settings"
+  ]
+ },
+ "settings.text.02": {
+  "ko": "네트워크",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B23-github:settings",
+   "B24:conversation",
+   "B25:conversation"
+  ]
+ },
+ "settings.button.05": {
+  "ko": "다시 연결",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B13-devices:settings"
+  ]
+ },
+ "settings.button.06": {
+  "ko": "다시 확인",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.link.02": {
+  "ko": "메시지 보내기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.heading.03": {
+  "ko": "모델 그룹",
+  "roles": [
+   "heading",
+   "text"
+  ],
+  "used_in": [
+   "B14:settings",
+   "B19-juno:settings",
+   "B19:settings",
+   "B21-name:conversation",
+   "B21:conversation"
+  ]
+ },
+ "settings.heading.04": {
+  "ko": "버전",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23-github:settings"
+  ]
+ },
+ "settings.button.07": {
+  "ko": "보관 해제",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B13:settings"
+  ]
+ },
+ "settings.heading.05": {
+  "ko": "보관됨 1",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B13:settings"
+  ]
+ },
+ "settings.link.03": {
+  "ko": "설정 ›",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.link.04": {
+  "ko": "설치",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B23:settings",
+   "B24:conversation",
+   "B25:conversation"
+  ]
+ },
+ "settings.heading.06": {
+  "ko": "설치됨 1",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ]
+ },
+ "settings.heading.07": {
+  "ko": "스킬",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.textbox.01": {
+  "ko": "앱 검색",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B23:settings"
+  ]
+ },
+ "settings.text.03": {
+  "ko": "없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings",
+   "B24:conversation",
+   "B25:conversation",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "settings.button.08": {
+  "ko": "연결 끊기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B13-devices:settings"
+  ]
+ },
+ "settings.link.05": {
+  "ko": "열기",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B23-github:settings"
+  ]
+ },
+ "settings.link.06": {
+  "ko": "열기 ›",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.button.09": {
+  "ko": "이 버전으로 되돌리기",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B23-github:settings"
+  ]
+ },
+ "settings.text.04": {
+  "ko": "이벤트",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B23-github:settings",
+   "B24:conversation",
+   "B25:conversation"
+  ]
+ },
+ "settings.chip.01": {
+  "ko": "읽기",
+  "roles": [
+   "chip",
+   "text"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B22-room-steps:pane",
+   "B24:conversation",
+   "B25:conversation"
+  ]
+ },
+ "settings.button.10": {
+  "ko": "자세히",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B19-juno:settings"
+  ]
+ },
+ "settings.heading.08": {
+  "ko": "절차",
+  "roles": [
+   "heading",
+   "text"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings",
+   "B23-github:settings",
+   "B7-churn:pane",
+   "B7-done:pane",
+   "B7-fail:pane",
+   "B7-unknown:pane",
+   "B7:pane"
+  ]
+ },
+ "settings.link.07": {
+  "ko": "조사 퀼 출처를 찾아 읽고 근거와 함께 요약해요 claude-sonnet-5-5 Anthropic glm-5.3 Z.ai 제공사 {count}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.link.08": {
+  "ko": "주노 작업 중 · 일 {count} · 예약 {count} 코딩",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B13:settings"
+  ]
+ },
+ "settings.heading.09": {
+  "ko": "직접 만든 앱 1",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ]
+ },
+ "settings.heading.10": {
+  "ko": "최근 개선",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B19-juno:settings",
+   "B19:settings"
+  ]
+ },
+ "settings.heading.11": {
+  "ko": "추가하는 것",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23-github:settings"
+  ]
+ },
+ "settings.heading.12": {
+  "ko": "추천",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ]
+ },
+ "settings.link.09": {
+  "ko": "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 {count}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.link.10": {
+  "ko": "퀼 작업 중 · 일 {count} · 예약 {count} 조사",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B13:settings"
+  ]
+ },
+ "settings.button.11": {
+  "ko": "키 변경",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.button.12": {
+  "ko": "키 추가",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B14:settings"
+  ]
+ },
+ "settings.text.05": {
+  "ko": "토큰",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B23-github:settings",
+   "B24:conversation",
+   "B25:conversation"
+  ]
+ },
+ "settings.link.11": {
+  "ko": "하나 마지막 활성 {time} 기본",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B13:settings"
+  ]
+ },
+ "settings.chip.02": {
+  "ko": "확인",
+  "roles": [
+   "chip",
+   "listitem",
+   "text"
+  ],
+  "used_in": [
+   "B14:settings",
+   "B18-room-b:pane",
+   "B19-juno:settings",
+   "B19:settings",
+   "B22-room-steps:pane",
+   "B25:conversation",
+   "B7-churn:pane",
+   "B7-done:pane",
+   "B7-fail:pane",
+   "B7-unknown:pane",
+   "B7:pane",
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "sidebar.button.01": {
+  "ko": "jabdori/massion",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.button.02": {
+  "ko": "{work_title} # 84 오늘 {time}",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.link.01": {
+  "ko": "{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-unknown:sidebar"
+  ]
+ },
+ "sidebar.link.02": {
+  "ko": "{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-fail:sidebar"
+  ]
+ },
+ "sidebar.button.03": {
+  "ko": "{work_title} 다시 보기 {date} · 매주 월요일 {time}",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.link.03": {
+  "ko": "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar"
+  ]
+ },
+ "sidebar.link.04": {
+  "ko": "{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-done:sidebar"
+  ]
+ },
+ "sidebar.link.05": {
+  "ko": "{work_title} 파일 {count}를 다 읽었어요. {time} 완료.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar"
+  ]
+ },
+ "sidebar.link.06": {
+  "ko": "{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B7-done:sidebar",
+   "B7-unknown:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.link.07": {
+  "ko": "개선",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.button.04": {
+  "ko": "검색",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10-preview:sidebar",
+   "B10:sidebar",
+   "B11-quill:sidebar",
+   "B11:sidebar",
+   "B15:sidebar",
+   "B16-later:sidebar",
+   "B16-sent:sidebar",
+   "B16:sidebar",
+   "B17-empty:sidebar",
+   "B17:sidebar",
+   "B18-room-b:sidebar",
+   "B18:sidebar",
+   "B21-name:sidebar",
+   "B21:sidebar",
+   "B22-room-steps:sidebar",
+   "B22-room:sidebar",
+   "B22:sidebar",
+   "B24-done:sidebar",
+   "B24-later:sidebar",
+   "B24:sidebar",
+   "B25-done:sidebar",
+   "B25-later:sidebar",
+   "B25:sidebar",
+   "B2:sidebar",
+   "B3-run:sidebar",
+   "B3:sidebar",
+   "B4:sidebar",
+   "B6:sidebar",
+   "B7-churn:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B7:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.status.01": {
+  "ko": "결정 대기",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B15:sidebar",
+   "B4:sidebar"
+  ]
+ },
+ "sidebar.heading.01": {
+  "ko": "권한",
+  "roles": [
+   "heading",
+   "link"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:settings",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.heading.02": {
+  "ko": "기기",
+  "roles": [
+   "heading",
+   "link"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:settings",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.link.08": {
+  "ko": "깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B16-sent:sidebar"
+  ]
+ },
+ "sidebar.link.09": {
+  "ko": "깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B16:sidebar"
+  ]
+ },
+ "sidebar.button.05": {
+  "ko": "노트북 거치대 가격 보기 오늘 {time} · 매일",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.button.06": {
+  "ko": "문서",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10:sidebar"
+  ]
+ },
+ "sidebar.link.10": {
+  "ko": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B16-later:sidebar",
+   "B16-sent:sidebar",
+   "B16:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.button.07": {
+  "ko": "병합됨",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.button.08": {
+  "ko": "새 작업",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17-empty:sidebar",
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.text.01": {
+  "ko": "설정",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.textbox.01": {
+  "ko": "설정 검색",
+  "roles": [
+   "textbox"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.status.02": {
+  "ko": "실행 중",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:sidebar",
+   "B15:sidebar",
+   "B18-room-b:sidebar",
+   "B18:sidebar",
+   "B21-name:sidebar",
+   "B21:sidebar",
+   "B22-room-steps:conversation",
+   "B22-room-steps:pane",
+   "B22-room-steps:sidebar",
+   "B22-room:conversation",
+   "B22-room:sidebar",
+   "B24-done:sidebar",
+   "B24-later:sidebar",
+   "B24:sidebar",
+   "B25-done:sidebar",
+   "B25-later:sidebar",
+   "B25:sidebar",
+   "B2:sidebar",
+   "B3-run:sidebar",
+   "B3:sidebar",
+   "B4:sidebar",
+   "B7-churn:pane",
+   "B7-churn:sidebar",
+   "B7:pane",
+   "B7:sidebar",
+   "B8:pane"
+  ]
+ },
+ "sidebar.button.09": {
+  "ko": "아침 브리핑 내일 {time} · 매일",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.link.11": {
+  "ko": "앱 설정",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.heading.03": {
+  "ko": "연결",
+  "roles": [
+   "heading",
+   "link",
+   "text"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:settings",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:page",
+   "B20-coding:sidebar",
+   "B20:page",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar",
+   "B8-done:pane",
+   "B8-fail:pane",
+   "B8-unknown:pane",
+   "B8:pane"
+  ]
+ },
+ "sidebar.text.02": {
+  "ko": "열림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.link.12": {
+  "ko": "요일별 할인 합계",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10:sidebar"
+  ]
+ },
+ "sidebar.button.10": {
+  "ko": "우선순위",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B16-later:sidebar",
+   "B16-sent:sidebar",
+   "B16:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.button.11": {
+  "ko": "이미지",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B10:sidebar"
+  ]
+ },
+ "sidebar.text.03": {
+  "ko": "일반",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:sidebar",
+   "B13-devices:sidebar",
+   "B13:sidebar",
+   "B14:sidebar",
+   "B19-juno:sidebar",
+   "B19:sidebar",
+   "B20-coding:sidebar",
+   "B20:sidebar",
+   "B23-github:sidebar",
+   "B23:sidebar"
+  ]
+ },
+ "sidebar.button.12": {
+  "ko": "일시 정지됨",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.status.03": {
+  "ko": "읽지 않음",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B16-later:sidebar",
+   "B16-sent:sidebar",
+   "B16:sidebar",
+   "B4:sidebar",
+   "B6:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B7:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.status.04": {
+  "ko": "작업 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B10-preview:sidebar",
+   "B15:sidebar",
+   "B18-room-b:sidebar",
+   "B18:sidebar",
+   "B20:page",
+   "B21-name:sidebar",
+   "B21:sidebar",
+   "B22-room-steps:sidebar",
+   "B22-room:sidebar",
+   "B22:page",
+   "B24-done:sidebar",
+   "B24-later:sidebar",
+   "B24:sidebar",
+   "B25-done:sidebar",
+   "B25-later:sidebar",
+   "B25:sidebar",
+   "B2:sidebar",
+   "B3-run:conversation",
+   "B3-run:sidebar",
+   "B3:conversation",
+   "B3:sidebar",
+   "B4:sidebar",
+   "B6:sidebar",
+   "B7-churn:header",
+   "B7-churn:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:header",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B7:sidebar",
+   "B8-fail:header",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.button.13": {
+  "ko": "주간 지출 정리 {date} · 매주 월요일 {time}",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.status.05": {
+  "ko": "주노가 보는 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ]
+ },
+ "sidebar.text.04": {
+  "ko": "최근 파일",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B10:sidebar"
+  ]
+ },
+ "sidebar.button.14": {
+  "ko": "파일",
+  "roles": [
+   "button",
+   "text"
+  ],
+  "used_in": [
+   "B10:sidebar",
+   "B23-github:settings",
+   "B25:conversation"
+  ]
+ },
+ "sidebar.status.06": {
+  "ko": "확인 대기",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B10-preview:sidebar",
+   "B18-room-b:pane",
+   "B18-room-b:sidebar",
+   "B18:sidebar",
+   "B22-room-steps:pane",
+   "B25-done:sidebar",
+   "B25-later:sidebar",
+   "B25:sidebar",
+   "B4:sidebar",
+   "B6:sidebar",
+   "B7-churn:sidebar",
+   "B7:sidebar"
+  ]
+ },
+ "sidebar.switch.01": {
+  "ko": "활동 보기",
+  "roles": [
+   "switch"
+  ],
+  "used_in": [
+   "B10-preview:sidebar",
+   "B11-quill:sidebar",
+   "B11:sidebar",
+   "B15:sidebar",
+   "B16-later:sidebar",
+   "B16-sent:sidebar",
+   "B16:sidebar",
+   "B18-room-b:sidebar",
+   "B18:sidebar",
+   "B21-name:sidebar",
+   "B21:sidebar",
+   "B22-room-steps:sidebar",
+   "B22-room:sidebar",
+   "B24-done:sidebar",
+   "B24-later:sidebar",
+   "B24:sidebar",
+   "B25-done:sidebar",
+   "B25-later:sidebar",
+   "B25:sidebar",
+   "B2:sidebar",
+   "B3-run:sidebar",
+   "B3:sidebar",
+   "B4:sidebar",
+   "B6:sidebar",
+   "B7-churn:sidebar",
+   "B7-done:sidebar",
+   "B7-fail:sidebar",
+   "B7-unknown:sidebar",
+   "B7:sidebar",
+   "B9:sidebar"
+  ]
+ },
+ "sidebar.text.05": {
+  "ko": "활성",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ]
+ },
+ "sidebar.link.13": {
+  "ko": "회의 메모 정리.pdf",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B10:sidebar"
+  ]
+ }
+}

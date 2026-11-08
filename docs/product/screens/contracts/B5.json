@@ -1,0 +1,310 @@
+{
+ "artboard": "B5",
+ "title": "B5 결과 모름",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B5.dc.html",
+ "screenshot": "contracts/shots/B5.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나",
+     "visible_text": "하나"
+    },
+    {
+     "role": "link",
+     "text": "작업 공간",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "더 보기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    52,
+    44,
+    1388,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{date} {time}",
+     "required": false,
+     "order": 0,
+     "example": "11월 5일 (목) 14:08"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+    },
+    {
+     "role": "button",
+     "text": "{duration} 동안 작업 · 페이지 {count} 읽음",
+     "required": true,
+     "order": 2,
+     "example": "3분 동안 작업 · 페이지 3개 읽음"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "레이저 토너 검정 · 34,000원 결제 승인함 14:12"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 5,
+     "example": "14:12"
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": false,
+     "order": 6,
+     "example": "프린터 토너 주문"
+    },
+    {
+     "role": "text",
+     "text": "결과 모름",
+     "required": false,
+     "order": 7
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": false,
+     "order": 8,
+     "example": "14:12"
+    },
+    {
+     "role": "button",
+     "text": "주문 내역 확인",
+     "required": true,
+     "order": 9
+    },
+    {
+     "role": "button",
+     "text": "닫기",
+     "required": true,
+     "order": 10
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "결제 요청에 응답 없음 · 다시 보내지 않음"
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    406,
+    808,
+    680,
+    78
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "header": {
+   "chars": 2,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 2
+  },
+  "conversation": {
+   "chars": 183,
+   "strings": 14,
+   "sentences": 2,
+   "longest": 30
+  },
+  "composer": {
+   "chars": 5,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 5
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "bubble.user",
+   "card.conversation",
+   "composer"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "main": [
+    52,
+    44,
+    1388,
+    856
+   ],
+   "composer": [
+    406,
+    808,
+    680,
+    78
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지",
+  "^다시 시도$"
+ ]
+}

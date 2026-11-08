@@ -1,0 +1,540 @@
+{
+ "artboard": "B22",
+ "title": "B22 GitHub",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B22.dc.html",
+ "screenshot": "contracts/shots/B22.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3,
+     "current": true
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "GitHub",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "jabdori/massion",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "열림",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "{work_title} # 84 오늘 {time}",
+     "required": true,
+     "order": 4,
+     "example": "feat(assistant): answer the owner and start Representative Work # 84 오늘 10:28",
+     "visible_text": "feat(assistant): answer the owner and start Representative Work #84 오늘 10:28",
+     "current": true
+    },
+    {
+     "role": "status",
+     "text": "주노가 보는 중",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "button",
+     "text": "병합됨",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "앱 설정",
+     "required": true,
+     "order": 7
+    }
+   ]
+  },
+  {
+   "region": "page",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "{work_title} # 84",
+     "required": true,
+     "order": 0,
+     "example": "feat(assistant): answer the owner and start Representative Work # 84"
+    },
+    {
+     "role": "link",
+     "text": "GitHub에서 열기",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 2,
+     "example": "열림"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 3,
+     "example": "jabdori · 11월 5일 10:28"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "feat/assistant-conversation-turns → main"
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 주노 · 실행 중 읽기 {progress}",
+     "required": true,
+     "order": 5,
+     "example": "PR #84 검토 주노 · 실행 중 읽기 4/11"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 7,
+     "example": "+769 −39"
+    },
+    {
+     "role": "text",
+     "text": "·",
+     "required": false,
+     "order": 8,
+     "example": "·"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 9,
+     "example": "verify 통과"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 10,
+     "example": "파일 11"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 11,
+     "example": "src/assistant-service.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 12,
+     "example": "+206"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "tests/assistant-conversation.test.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "+370"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 15,
+     "example": "src/assistant-conversation-panel.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "+83"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "docs/architecture/assistant-conversation.md"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 18,
+     "example": "+31"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 19,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "src/connection-workbench.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "+30"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 22,
+     "example": "−12"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "src/configured-runtime.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 24,
+     "example": "+15"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 25,
+     "example": "−9"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 26,
+     "example": "src/product.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 27,
+     "example": "+13"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 28,
+     "example": "−7"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 29,
+     "example": "src/server.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 30,
+     "example": "+9"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 31,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 32,
+     "example": "src/workbench.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 33,
+     "example": "+7"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 34,
+     "example": "−2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 35,
+     "example": "src/selectable-runtime.ts"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 36,
+     "example": "+3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 37,
+     "example": "−3"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 38,
+     "example": "docs/architecture/default-route-and-persistent-connections.md"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 39,
+     "example": "+2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 40,
+     "example": "커밋 2"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 41,
+     "example": "cf2a4b3"
+    },
+    {
+     "role": "text",
+     "text": "{work_title}",
+     "required": true,
+     "order": 42,
+     "example": "feat(assistant): answer the owner and start Representative Work"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 43,
+     "example": "10:28"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 44,
+     "example": "0c9431d"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 45,
+     "example": "Merge remote-tracking branch 'origin/feat/assistant-conversation-storage'"
+    },
+    {
+     "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 46,
+     "example": "10:28"
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 104,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 63
+  },
+  "page": {
+   "chars": 712,
+   "strings": 69,
+   "sentences": 0,
+   "longest": 73
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

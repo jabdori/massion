@@ -1,0 +1,294 @@
+{
+  "screen": "B15",
+  "description": "Library form submission decision with an unavailable browser pane. Fixed API data; freeze browser Date to now.",
+  "now": 1793855520000,
+  "readySelector": "#chat-decision-library",
+  "steps": [],
+  "gaps": [
+    "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+  ],
+  "reuse": [
+    "tests/apps-surface.test.ts",
+    "tests/surface-shell.test.ts",
+    "tests/members-surface.test.ts",
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:library",
+              "role": "owner",
+              "turnId": null,
+              "text": "다음 주 수요일 오후 3시에 도서관 스터디룸 4명으로 신청해 줘."
+            },
+            {
+              "id": "r:library",
+              "role": "representative",
+              "turnId": null,
+              "text": "스터디룸 B가 비어 있어 신청서를 채우고 제출 직전에서 멈췄어요."
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "library",
+            "at": 1793840640000,
+            "title": "스터디룸 신청",
+            "question": "내 이름으로 신청서를 낼까요?",
+            "rows": [
+              [
+                "신청 내용",
+                "스터디룸 B · 11월 11일 (수) 15:00–17:00 · 4명"
+              ],
+              [
+                "보낼 곳",
+                "library.example.com"
+              ],
+              [
+                "보낼 정보",
+                "이름 · 연락처 010-0000-0000"
+              ],
+              [
+                "취소",
+                "이용 하루 전까지 취소 가능"
+              ]
+            ],
+            "action": "신청서 제출",
+            "state": "open"
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": []
+      }
+    },
+    "/events": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "events": []
+      }
+    },
+    "/read-state": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": null
+      }
+    },
+    "/health": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/providers": {
+      "status": 200,
+      "body": {
+        "providers": [],
+        "selection": {
+          "status": "unavailable",
+          "code": "provider_unavailable",
+          "reason": "Read-only fixture"
+        }
+      }
+    },
+    "/connections": {
+      "status": 200,
+      "body": {
+        "host": null,
+        "providerTypes": [],
+        "connections": [],
+        "runtime": {
+          "connections": [],
+          "defaultRoutes": []
+        },
+        "configHash": "fixture",
+        "grants": [],
+        "representative": {
+          "intakeMissionId": "intake"
+        },
+        "modelGroups": [],
+        "fixtureModeEnabled": false,
+        "liveExecutionEnabled": false
+      }
+    },
+    "/assistant/schedules": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "revision": 1,
+        "schedules": []
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "id": "intake",
+            "purpose": "맡긴 일",
+            "scope": "local",
+            "constraints": [],
+            "criteria": {
+              "version": 1,
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1"
+            },
+            "version": 1,
+            "works": [],
+            "memories": [],
+            "growth": [],
+            "relations": []
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "id": "intake",
+          "purpose": "맡긴 일",
+          "scope": "local",
+          "constraints": [],
+          "criteria": {
+            "version": 1,
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1"
+          },
+          "version": 1,
+          "works": [],
+          "memories": [],
+          "growth": [],
+          "relations": []
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:library",
+              "role": "owner",
+              "turnId": null,
+              "text": "다음 주 수요일 오후 3시에 도서관 스터디룸 4명으로 신청해 줘."
+            },
+            {
+              "id": "r:library",
+              "role": "representative",
+              "turnId": null,
+              "text": "스터디룸 B가 비어 있어 신청서를 채우고 제출 직전에서 멈췄어요."
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "library",
+            "at": 1793840640000,
+            "title": "스터디룸 신청",
+            "question": "내 이름으로 신청서를 낼까요?",
+            "rows": [
+              [
+                "신청 내용",
+                "스터디룸 B · 11월 11일 (수) 15:00–17:00 · 4명"
+              ],
+              [
+                "보낼 곳",
+                "library.example.com"
+              ],
+              [
+                "보낼 정보",
+                "이름 · 연락처 010-0000-0000"
+              ],
+              [
+                "취소",
+                "이용 하루 전까지 취소 가능"
+              ]
+            ],
+            "action": "신청서 제출",
+            "state": "open"
+          }
+        ],
+        "briefings": []
+      }
+    }
+  }
+}

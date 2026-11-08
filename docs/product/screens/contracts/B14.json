@@ -1,0 +1,410 @@
+{
+ "artboard": "B14",
+ "title": "B14 설정 · 연결 · 개선",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/B14.dc.html",
+ "screenshot": "contracts/shots/B14.png",
+ "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하"
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "GitHub",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 4,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "설정",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "textbox",
+     "text": "설정 검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "일반",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "link",
+     "text": "기억",
+     "required": true,
+     "order": 3
+    },
+    {
+     "role": "link",
+     "text": "구성원",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "기기",
+     "required": true,
+     "order": 5
+    },
+    {
+     "role": "link",
+     "text": "연결",
+     "required": true,
+     "order": 6,
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "앱",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "link",
+     "text": "개선",
+     "required": true,
+     "order": 8
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 9
+    }
+   ]
+  },
+  {
+   "region": "settings",
+   "rect": [
+    300,
+    0,
+    1140,
+    900
+   ],
+   "elements": [
+    {
+     "role": "heading",
+     "text": "연결",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "heading",
+     "text": "모델 그룹",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "text",
+     "text": "기본",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 3,
+     "example": "하나"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 4,
+     "example": "만들기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 5,
+     "example": "구독 · claude-sonnet-5-5"
+    },
+    {
+     "role": "button",
+     "text": "Claude Code",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "text",
+     "text": "확인",
+     "required": true,
+     "order": 7
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 8,
+     "example": "구독 · gpt-6.1-terra"
+    },
+    {
+     "role": "button",
+     "text": "Codex",
+     "required": true,
+     "order": 9
+    },
+    {
+     "role": "link",
+     "text": "조사 퀼 출처를 찾아 읽고 근거와 함께 요약해요 claude-sonnet-5-5 Anthropic glm-5.3 Z.ai 제공사 {count}",
+     "required": true,
+     "order": 10,
+     "example": "조사 퀼 출처를 찾아 읽고 근거와 함께 요약해요 claude-sonnet-5-5 Anthropic glm-5.3 Z.ai 제공사 2곳"
+    },
+    {
+     "role": "link",
+     "text": "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 {count}",
+     "required": true,
+     "order": 11,
+     "example": "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 2곳"
+    },
+    {
+     "role": "heading",
+     "text": "구독 로그인",
+     "required": true,
+     "order": 12
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 13,
+     "example": "Claude Code"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 14,
+     "example": "로그인됨 · 21:02"
+    },
+    {
+     "role": "button",
+     "text": "다시 확인",
+     "required": true,
+     "order": 15
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 16,
+     "example": "Codex"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 17,
+     "example": "로그인됨"
+    },
+    {
+     "role": "button",
+     "text": "다시 확인",
+     "required": true,
+     "order": 18
+    },
+    {
+     "role": "heading",
+     "text": "API 키",
+     "required": true,
+     "order": 19
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 20,
+     "example": "Z.ai GLM Coding Plan"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 21,
+     "example": "연결됨"
+    },
+    {
+     "role": "button",
+     "text": "키 변경",
+     "required": true,
+     "order": 22
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 23,
+     "example": "Anthropic API"
+    },
+    {
+     "role": "text",
+     "text": "없음",
+     "required": true,
+     "order": 24
+    },
+    {
+     "role": "button",
+     "text": "키 추가",
+     "required": true,
+     "order": 25
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 26,
+     "example": "OpenAI API"
+    },
+    {
+     "role": "text",
+     "text": "없음",
+     "required": true,
+     "order": 27
+    },
+    {
+     "role": "button",
+     "text": "키 추가",
+     "required": true,
+     "order": 28
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 18,
+   "strings": 9,
+   "sentences": 0,
+   "longest": 3
+  },
+  "settings": {
+   "chars": 323,
+   "strings": 47,
+   "sentences": 2,
+   "longest": 21
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.main"
+  ],
+  "regions": {
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

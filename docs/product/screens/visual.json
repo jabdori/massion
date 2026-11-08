@@ -1,0 +1,463 @@
+{
+ "tokens": {
+  "--bg-0": "rgb(11, 12, 14)",
+  "--bg-1": "rgb(21, 23, 26)",
+  "--bg-2": "rgb(27, 29, 32)",
+  "--bg-3": "rgb(32, 34, 37)",
+  "--line": "rgb(43, 45, 48)",
+  "--line-strong": "rgb(58, 60, 63)",
+  "--fg": "rgb(244, 245, 247)",
+  "--fg-2": "rgb(200, 205, 214)",
+  "--fg-3": "rgb(162, 168, 180)",
+  "--fg-4": "rgb(131, 137, 147)",
+  "--agent-0": "rgb(220, 222, 227)",
+  "--agent-1": "rgb(63, 200, 203)",
+  "--agent-2": "rgb(93, 192, 234)",
+  "--agent-3": "rgb(133, 180, 247)",
+  "--agent-4": "rgb(173, 168, 248)",
+  "--agent-5": "rgb(201, 160, 238)",
+  "--agent-6": "rgb(227, 153, 218)",
+  "--agent-7": "rgb(243, 152, 190)",
+  "--agent-provisional": "rgb(155, 168, 196)",
+  "--user": "rgb(58, 58, 64)",
+  "--gate": "rgb(240, 188, 75)",
+  "--gate-ink": "rgb(36, 29, 7)",
+  "--gate-wash": "rgb(35, 29, 14)",
+  "--gate-border": "rgb(74, 60, 21)",
+  "--halt": "rgb(245, 118, 110)",
+  "--emergency": "rgb(232, 68, 46)"
+ },
+ "shell": {
+  "rail": {
+   "widths_seen": [
+    52
+   ],
+   "width": 52,
+   "x": null,
+   "bg": "var(--bg-1)"
+  },
+  "sidebar": {
+   "widths_seen": [
+    248
+   ],
+   "width": 248,
+   "x": 52,
+   "bg": "var(--bg-1)"
+  },
+  "main": {
+   "widths_seen": [
+    380,
+    500,
+    540,
+    1140,
+    1388,
+    1440
+   ],
+   "width": 1140,
+   "x": 300,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "widths_seen": [
+    600
+   ],
+   "width": 600,
+   "x": 840,
+   "bg": "var(--bg-1)"
+  },
+  "composer": {
+   "widths_seen": [
+    332,
+    460,
+    492,
+    500,
+    680
+   ],
+   "width": 680,
+   "x": 530,
+   "bg": null
+  },
+  "header": {
+   "height": 44,
+   "note": "window header band above main/pane (main.y = 44)"
+  },
+  "conversation": {
+   "column_max_width": 680,
+   "note": "conversation column and composer share one centered column; with a pane open the column fills main minus 24px gutters"
+  }
+ },
+ "typography": {
+  "composer.button": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "composer.textbox": {
+   "fs": "14px",
+   "fw": "400",
+   "lh": "22px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "conversation.button": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "conversation.link": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "conversation.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "conversation.text": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "dialog.button": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "dialog.link": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "dialog.text": {
+   "fs": "14px",
+   "fw": "400",
+   "lh": "17px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "header.button": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "header.link": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "header.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.button": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.columnheader": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-4)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.heading": {
+   "fs": "13px",
+   "fw": "600",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.link": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.row": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.text": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "page.textbox": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.button": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.chip": {
+   "fs": "11px",
+   "fw": "400",
+   "lh": "18px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.heading": {
+   "fs": "17px",
+   "fw": "600",
+   "lh": "24px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.link": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.listitem": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.status": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.tab": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "pane.text": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-4)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "rail.button": {
+   "fs": "11px",
+   "fw": "600",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "rail.link": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.button": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.chip": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-2)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.heading": {
+   "fs": "13px",
+   "fw": "600",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.link": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "settings.text": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.button": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.link": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.status": {
+   "fs": "12px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.switch": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg-3)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.text": {
+   "fs": "14px",
+   "fw": "600",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  },
+  "sidebar.textbox": {
+   "fs": "13px",
+   "fw": "400",
+   "lh": "20px",
+   "color": "var(--fg)",
+   "ff": "\"Pretendard Variable\""
+  }
+ },
+ "components": {
+  "chip": {
+   "fs": "12px",
+   "fw": "400",
+   "color": "var(--fg-2)",
+   "bg": "var(--bg-3)",
+   "bd": null,
+   "radius": "6px",
+   "pad": "0px 8px",
+   "height": 20
+  },
+  "card.conversation": {
+   "count": 30,
+   "bg": "var(--bg-1)",
+   "bd": "1px solid var(--line)",
+   "radius": "12px",
+   "pad": "11px 14px 12px",
+   "fs": "13px",
+   "lh": "20px",
+   "width": 680,
+   "height": 99
+  },
+  "composer": {
+   "count": 35,
+   "bg": "var(--bg-2)",
+   "bd": "1px solid var(--line)",
+   "radius": "20px",
+   "pad": "10px 10px 8px 14px",
+   "fs": "13px",
+   "lh": "20px",
+   "width": 680,
+   "height": 78
+  },
+  "card.pane": {
+   "count": 35,
+   "bg": "var(--bg-0)",
+   "bd": "1px solid var(--line)",
+   "radius": "10px",
+   "pad": "0px",
+   "fs": "13px",
+   "lh": "20px",
+   "width": 474,
+   "height": 136
+  },
+  "bubble.user": {
+   "count": 37,
+   "bg": "var(--bg-2)",
+   "bd": null,
+   "radius": "18px",
+   "pad": "8px 14px",
+   "fs": "14px",
+   "lh": "22px",
+   "width": 210,
+   "height": 38
+  },
+  "card.decision": {
+   "count": 9,
+   "bg": "var(--gate-wash)",
+   "bd": "1px solid var(--gate-border)",
+   "radius": "12px",
+   "pad": "14px 16px",
+   "fs": "13px",
+   "lh": "20px",
+   "width": 680,
+   "height": 169
+  }
+ },
+ "rhythm": {
+  "conversation_gap_px_mode": 14,
+  "conversation_gaps_seen": {
+   "14": 80,
+   "3": 31,
+   "4": 25,
+   "12": 12,
+   "48": 9,
+   "6": 9
+  }
+ },
+ "rules": [
+  "yellow (--gate*) only on decision cards (card.decision)",
+  "--halt only for 결과 모름/실패",
+  "completion is neutral, never green",
+  "no banners or helper paragraphs in shell regions",
+  "icon-only controls in rail/header/sidebar head (aria-label carries the name)"
+ ]
+}
