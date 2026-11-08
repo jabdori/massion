@@ -15,11 +15,12 @@ Before this change the only checking rule between models was "the verifier is no
 
 | Provider kind | Family |
 | --- | --- |
-| `openai`, `codex-cli` | `openai` |
+| `openai`, unprefixed `codex-cli` models | `openai` |
+| vendor-prefixed `codex-cli` models | known vendor prefix, as below; unknown prefix stays unknown |
 | `anthropic`, `claude-code-cli` | `anthropic` |
 | `gemini` | `google` |
 | `zai` | `zhipu` |
-| `openrouter` | the vendor prefix of the model ID (`anthropic/…`, `openai/…`, `google/…`, `z-ai/…`, `meta-llama/…`, `mistralai/…`, `deepseek/…`, `qwen/…`, `x-ai/…`) |
+| `openrouter` | the vendor prefix of the model ID (`anthropic/…`, `openai/…`, `google/…`, `z-ai/…`, `zai/…`, `meta-llama/…`, `mistralai/…`, `deepseek/…`, `qwen/…`, `x-ai/…`) |
 | anything else (`compatible`, fixtures) | unknown |
 
 - An unknown family is `null` and counts as the same family as everything (fail closed). A custom compatible endpoint can serve any model under any name, so its model ID is not trusted.

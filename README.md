@@ -10,7 +10,7 @@ This clean rebuild has a runnable, tested **development foundation**, not a fini
 
 The authoritative store is a separate **SurrealDB 3.3.0** service. Actual integration tests cover atomic state/event/audit/outbox writes, concurrent revisions, idempotency, ambiguous commit readback, process crash/reopen, and backup/restore. The in-memory adapter is test-only; there is no file/SQLite production fallback.
 
-**Evidence boundaries:** demonstrated model execution and memory routing use deterministic fixtures or local HTTP mocks. A separately configured bounded-text provider path exists but is disabled without explicit matching configuration; no live model has been tested. They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
+**Evidence boundaries:** most automated model execution and memory-routing evidence uses deterministic fixtures or local HTTP mocks. A separately configured bounded-text provider path exists but is disabled without explicit matching configuration; live evidence is limited to the separately authorized [synthetic CLI smoke](docs/architecture/real-model-smoke.md). They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
 
 ## Install
 
@@ -271,6 +271,6 @@ destinations. HTTPS model calls still require a separate startup option, scoped
 executor/verifier permission, current preflight and explicit Run. The unconfigured
 CLI reads no provider credential. See [CLI host setup](docs/architecture/cli-host-connections.md)
 for the manifest, lazy environment binding, credential-free loopback fixture mode
-and restart/no-replay limits. No live account has been validated.
+and restart/no-replay limits. Hosted HTTP account compatibility has not been validated; the separate [real-model smoke](docs/architecture/real-model-smoke.md) records synthetic CLI evidence.
 
 Owners can now [attach an exact stored source to fresh Work](docs/architecture/work-sources.md), preserving original ID/version/SHA, provenance and decision through runtime inputs and Records. [Scoped acceptance evidence](docs/acceptance/work-sources-evidence.md) keeps fixture and live quality claims separate.
