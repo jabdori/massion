@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+
+const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
 // docs/architecture/self-made-skills.md, Surface: the member page (B19-juno) and Settings > Improvements (B14).
 const T0=Date.UTC(2026,10,5,9,0);
@@ -42,18 +45,18 @@ test('a member row opens the member page: skills, procedures as steps, model gro
  const {app,posted}=fixture();await settle();await open(app,'members');
  await byId(app,'settings-member-member-juno')!.fire('click');await settle();
  const page=app.node('settings-members-body');
- assert.match(page.textContent,/Members.*주노.*Message/);
- assert.match(page.textContent,/Skills.*Read code.*You.*PR description.*v1 · /);assert.doesNotMatch(page.textContent,/Elsewhere/,'only this member');
- assert.match(page.textContent,/Procedures.*Run tests first.*Read.*Check.*Record/);
- assert.match(page.textContent,/Model group.*Default/);
- assert.match(page.textContent,/Recent improvements.*PR review.*v1 → v2.*PR #84 review.*PR description.*v1 → v2.*Reverted to v1/);
+ assert.match(page.textContent,sequence(copy('page.heading.02'),'주노',copy('settings.link.02')));
+ assert.match(page.textContent,sequence(copy('settings.heading.07'),'Read code',copy('ui.me-initial'),'PR description',copy('ui.panel.version',{version:1})+' · '));assert.doesNotMatch(page.textContent,/Elsewhere/,'only this member');
+ assert.match(page.textContent,sequence(copy('settings.heading.09'),'Run tests first','Read','Check','Record'));
+ assert.match(page.textContent,sequence(copy('settings.heading.03'),copy('settings.text.01')));
+ assert.match(page.textContent,sequence(copy('settings.heading.11'),'PR review',copy('ui.panel.version-change',{from:1,to:2}),'PR #84 review','PR description',copy('ui.panel.version-change',{from:1,to:2}),copy('ui.panel.reverted-version',{version:1})));
  assert.doesNotMatch(page.textContent,/Explanation|assistant|Lead|Team/i);
- const details=button(page,'Details');assert.equal(details.length,2);assert.equal(details[1]!.attributes.get('aria-expanded'),'false');await details[1]!.fire('click');
- const again=app.node('settings-members-body');assert.match(again.textContent,/Source.*PR #84 review.*Result.*3 → 3 of 3.*Checked by.*Different family/);
- await button(again,'Revert')[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1),{path:'/assistant/skills',body:{commandId:posted.at(-1)!.body.commandId,action:'revert',skillId:'proc-review'}});
- const now=app.node('settings-members-body');assert.match(now.textContent,/Archived 1 unused skill.*Undo/);
- await button(now,'Undo')[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1)!.body.action,'restore');assert.equal(posted.at(-1)!.body.skillId,'skill-old');
- await button(app.node('settings-members-body'),'Message')[0]!.fire('click');await settle();
+ const details=button(page,copy('settings.button.14'));assert.equal(details.length,2);assert.equal(details[1]!.attributes.get('aria-expanded'),'false');await details[1]!.fire('click');
+ const again=app.node('settings-members-body');assert.match(again.textContent,sequence(copy('ui.panel.source'),'PR #84 review',copy('ui.panel.result'),'3 → 3 of 3',copy('ui.panel.checked-by'),'Different family'));
+ await button(again,copy('page.button.09'))[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1),{path:'/assistant/skills',body:{commandId:posted.at(-1)!.body.commandId,action:'revert',skillId:'proc-review'}});
+ const now=app.node('settings-members-body'),archived=now.children.find(n=>n.className==='set-line')!;assert.match(archived.textContent,sequence(copy('ui.panel.archived-unused',{count:1}),copy('page.button.09')));
+ await button(archived,copy('page.button.09'))[0]!.fire('click');await settle();assert.deepEqual(posted.at(-1)!.body.action,'restore');assert.equal(posted.at(-1)!.body.skillId,'skill-old');
+ await button(app.node('settings-members-body'),copy('settings.link.02'))[0]!.fire('click');await settle();
  assert.equal(app.node('page-chat').hidden,false);assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-juno'));
 });
 
@@ -61,7 +64,7 @@ test('Settings > Improvements is one card: what waits for the owner, what could 
  const {app,posted}=fixture();await settle();await open(app,'improvements');
  assert.equal(app.node('settings-nav-improvements').attributes.get('aria-current'),'page');
  const body=app.node('settings-improvements-body');
- assert.match(body.textContent,/Read code.*Skill · 1 → 3 of 3 · .+ · Decision pending.*PR number in summary.*No way to check · .+Drop.*PR review.*Applied .+ · v1 → v2.*PR description.*Applied .+ · Reverted the same day · v1 → v2/);
+ assert.match(body.textContent,sequence('Read code',copy('settings.heading.07')+' · 1 → 3 of 3 · ',copy('sidebar.status.01'),'PR number in summary','No way to check · ',copy('conversation.button.14'),'PR review',copy('ui.panel.version-change',{from:1,to:2}),'PR description',copy('ui.panel.reverted-date',{date:copy('ui.panel.same-day')}),copy('ui.panel.version-change',{from:1,to:2})));
  assert.doesNotMatch(body.textContent,/Waiting for you|Not checked|History|주노|Old notes|Fetch rules/,'no invented section titles; archives and scan rejections stay out');
- await button(body,'Drop')[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.action,posted.at(-1)!.body.candidateId],['/assistant/skills','drop','cand-same']);
+ await button(body,copy('conversation.button.14'))[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.action,posted.at(-1)!.body.candidateId],['/assistant/skills','drop','cand-same']);
 });

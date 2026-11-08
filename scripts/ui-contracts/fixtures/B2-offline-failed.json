@@ -1,15 +1,28 @@
 {
   "screen": "B2-offline-failed",
   "extends": "B2",
-  "description": "Failed send conversation with retained draft.",
-  "gaps": [
-    "Failed send has no read-only production state/failed-command identity. The runner retains a local draft; it does not disconnect all fixture reads or submit/retry a command."
-  ],
+  "description": "Failed send with retained draft after the transport reconnects; the failed offline request never reaches the fixture host.",
+  "gaps": [],
   "steps": [
     {
       "action": "fill",
       "selector": "#chat-input",
       "value": "이어서 할인 합계 확인해 줘."
+    },
+    {
+      "action": "offline",
+      "value": "true",
+      "readySelector": "#chat-connection:not([hidden])"
+    },
+    {
+      "action": "click",
+      "selector": "#chat-send",
+      "readySelector": "#chat-status:not([hidden]) button"
+    },
+    {
+      "action": "offline",
+      "value": "false",
+      "readySelector": ".band:has(#chat-connection[hidden])"
     }
   ]
 }

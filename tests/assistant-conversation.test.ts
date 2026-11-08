@@ -271,7 +271,7 @@ test('29, 30: HTTP takes exact fields only, checks the feed, refuses while drain
 test('31: the conversation is the first section, needs no setup, updates one card in place and opens the existing Work detail',async()=>{
  const {harness,reply,settle}=await import('./support/workbench-client.ts');const {workbenchPage}=await import('../src/workbench.ts');
  assert.equal(/<section[^>]*\bid="([^"]+)"/.exec(workbenchPage)![1],'conversation');
- const panel=/<section[^>]*id="conversation"[\s\S]*?<\/section>/.exec(workbenchPage)![0];assert.doesNotMatch(panel.replace(/<[^>]*>/g,' '),/assistant/i);assert.match(panel,/placeholder="Message"/);
+ const panel=/<section[^>]*id="conversation"[\s\S]*?<\/section>/.exec(workbenchPage)![0];assert.doesNotMatch(panel.replace(/<[^>]*>/g,' '),/assistant/i);assert.match(panel,/placeholder="하나에게 메시지 보내기"/);
  const criteria={version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'},workId=assistantWorkId('assistant-turn:m:'+'b'.repeat(32));
  const work=(execution:string)=>({id:workId,title:'Summarize the notes',missionVersion:1,criteria,execution,acceptance:'pending',tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0}});
  let mission={id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:[work('blocked')],memories:[],growth:[],relations:[]},revision=2,cursor=1,events:any[]=[],conflict=true,posted:any[]=[];
@@ -291,17 +291,17 @@ test('31: the conversation is the first section, needs no setup, updates one car
  });
  await settle();
  const log=()=>app.node('chat-log').textContent;
- for(const label of ['Not sent · no route','Result unknown · not resent','No answer · not retried','Not created · no default route','Unknown whether created'])assert.ok(log().includes(label),label);
- assert.doesNotMatch(log(),/assistant/i);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ for(const label of ['보내지 못함 · 연결 없음','결과 모름','만들지 못함 · 기본 연결 없음','생성 결과 모름'])assert.ok(log().includes(label),label);
+ assert.doesNotMatch(log(),/답변 실패|assistant/i);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
  const input=app.node('chat-input');input.value='Summarize the notes';await input.fire('input');
- await app.submit('chat-form');assert.equal(input.value,'Summarize the notes');assert.equal(app.node('chat-status').textContent,'Answer in progress');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'Summarize the notes');
+ await app.submit('chat-form');assert.equal(input.value,'Summarize the notes');assert.equal(app.node('chat-status').textContent,'답변 중');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'Summarize the notes');
  await app.submit('chat-form');assert.equal(posted.length,2);assert.equal(posted[0].commandId,posted[1].commandId);assert.deepEqual(Object.keys(posted[1]).sort(),['commandId','expectedRevision','segment','text']);
  assert.equal(input.value,'');assert.equal(app.storage.has('massion.workbench.chat-draft'),false);
  const cards=()=>app.all().filter(n=>n.className==='chat-card'&&n.parentElement===app.node('chat-log'));const card=app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32))!;
- const start=()=>card.children.find(c=>c.textContent==='Start')!;assert.match(card.textContent,/Summarize the notes.*Not started · host busy/);assert.equal(start().hidden,false);
+ const start=()=>card.children.find(c=>c.textContent==='시작')!;assert.match(card.textContent,/Summarize the notes.*시작 전 · 작업 중/);assert.equal(start().hidden,false);
  assert.ok(log().endsWith('ThanksYou are welcome.'),'an answered turn without work has no badge');
  const count=cards().length;turns.at(-2).work={...turns.at(-2).work,execution:'active',started:true};mission={...mission,works:[work('active')]};revision=3;cursor=2;events=[{cursor:2,aggregateId:'intake',revision:3}];
- await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/Working/);assert.equal(start().hidden,true);
+ await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/작업 중/);assert.equal(start().hidden,true);
  await card.children.find(c=>c.className==='chat-card-open')!.fire('click');await settle();assert.equal((app.context as any).document.activeElement.id,'work-heading-'+workId);
  assert.doesNotMatch(log(),/assistant/i);
 });
@@ -369,18 +369,18 @@ test('31b: lost responses read back as unknown, rereads keep nodes and focus, an
   return reply({error:'Not configured'},503);
  });
  await settle();const log=app.node('chat-log'),status=app.node('chat-status');
- const card=app.all().find(n=>n.id==='chat-card-'+turnId)!,open=card.children.find(c=>c.tagName==='BUTTON'&&c.className==='chat-card-open')!,start=card.children.find(c=>c.textContent==='Start')!;
+ const card=app.all().find(n=>n.id==='chat-card-'+turnId)!,open=card.children.find(c=>c.tagName==='BUTTON'&&c.className==='chat-card-open')!,start=card.children.find(c=>c.textContent==='시작')!;
  assert.ok(open&&start,'card body and Start are sibling buttons');assert.ok(!open.contains(start));assert.equal(card.attributes.get('role'),undefined);
  const nodes=[...log.children];open.focus();events=[{cursor:2,aggregateId:'assistant-conversation:1',revision:6,events:[{type:'settle-assistant-turn'}]}];cursor=2;await app.tick();await settle();
  assert.ok(nodes.every((n,i)=>log.children[i]===n),'a reread keeps every node in place');assert.equal((app.context as any).document.activeElement,open);
  assert.doesNotMatch(app.node('event-list').textContent,/assistant/i);
  const reads=conversationReads;void start.fire('click');await settle();assert.equal(start.hidden,true,'Start hides while its request is in flight');
- hold();await settle();assert.notEqual(status.textContent,'Not started');assert.ok(conversationReads>reads);
- const input=app.node('chat-input');input.value='x'.repeat(1400)+'한'.repeat(1000);await input.fire('input');await app.submit('chat-form');assert.equal(status.textContent,'Too long');assert.equal(posts.length,0);
+ hold();await settle();assert.notEqual(status.textContent,'시작 전');assert.ok(conversationReads>reads);
+ const input=app.node('chat-input');input.value='x'.repeat(1400)+'한'.repeat(1000);await input.fire('input');await app.submit('chat-form');assert.equal(status.textContent,'메시지가 너무 김');assert.equal(posts.length,0);
  input.value='Lost one';await input.fire('input');const before=conversationReads;await app.submit('chat-form');
- assert.equal(posts.length,1);assert.equal(status.textContent,'Result unknown');assert.ok(conversationReads>before,'a lost response reads the conversation back');assert.equal(input.value,'Lost one');
- fail=1;events=[{cursor:3,aggregateId:'assistant-conversation:1',revision:7}];cursor=3;await app.tick();await settle();assert.equal(status.textContent,'Result unknown','a later read error does not hide the send result');
- status.textContent='';fail=1;events=[{cursor:4,aggregateId:'assistant-conversation:1',revision:8}];cursor=4;await app.tick();await settle();assert.equal(status.textContent,'Unavailable');
+ assert.equal(posts.length,1);assert.equal(status.textContent,'결과 모름');assert.ok(conversationReads>before,'a lost response reads the conversation back');assert.equal(input.value,'Lost one');
+ fail=1;events=[{cursor:3,aggregateId:'assistant-conversation:1',revision:7}];cursor=3;await app.tick();await settle();assert.equal(status.textContent,'결과 모름','a later read error does not hide the send result');
+ status.textContent='';fail=1;events=[{cursor:4,aggregateId:'assistant-conversation:1',revision:8}];cursor=4;await app.tick();await settle();assert.equal(app.node('chat-connection').textContent,'연결 끊김');
  events=[{cursor:5,aggregateId:'assistant-conversation:1',revision:9}];cursor=5;await app.tick();await settle();assert.equal(status.textContent,'');
 });
 
@@ -401,13 +401,13 @@ test('31c: an edit made while sending survives the reply, a changed database is 
  const reread=()=>{for(const t of timers.splice(0))if(t.ms===10000)t.fn();return settle();};
  await app.node('chat-latest').fire('click');await settle();assert.ok(log().includes('…'));assert.ok(pendingRead(),'a shown pending turn schedules a reread');
  down=true;await reread();assert.ok(pendingRead(),'a failed reread keeps the pending turn scheduled');down=false;
- pending=false;await reread();assert.ok(log().includes('Result unknown · not resent'));assert.equal(pendingRead(),undefined,'nothing is scheduled once no turn is pending');
+ pending=false;await reread();assert.ok(log().includes('결과 모름'));assert.equal(pendingRead(),undefined,'nothing is scheduled once no turn is pending');
  // 4481357724: the reply clears only what was sent.
  const input=app.node('chat-input');input.value='First';await input.fire('input');void app.submit('chat-form');await settle();
  input.value='Second, not sent';await input.fire('input');hold();await settle();
  assert.equal(posts.length,1);assert.equal(posts[0].text,'First');assert.equal(input.value,'Second, not sent');assert.equal(JSON.parse(app.storage.get('massion.workbench.chat-draft')!).text,'Second, not sent');
  // 4481357728: a changed database is not retried; the owner's next Send goes to the new one.
- mode='feed';await app.submit('chat-form');assert.equal(posts.length,2);assert.equal(app.node('chat-status').textContent,'Not sent · database changed');assert.equal(input.value,'Second, not sent');
+ mode='feed';await app.submit('chat-form');assert.equal(posts.length,2);assert.equal(app.node('chat-status').textContent,'보내지 못함 · 다시 보내기');assert.equal(input.value,'Second, not sent');
 });
 
 test('actual SurrealDB: a work request commits the turn, the Work and its run once, and the journal passes lineage',{skip:process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME},async t=>{
@@ -447,10 +447,10 @@ test('31e: a card shown while the host starts its Work is read again, so a start
  const app=harness(async path=>path.startsWith('/assistant/conversation')?reply(view()):path.startsWith('/events')?reply({feedId:'feed:a',cursor:1,events:[]}):reply({error:'Not configured'},503));
  const timers:{fn:()=>unknown;ms:number}[]=[];(app.context as any).setTimeout=(fn:()=>unknown,ms:number)=>timers.push({fn,ms});
  await app.node('chat-latest').fire('click');await settle();
- const card=app.all().find(n=>n.id==='chat-card-'+turnId)!,start=card.children.find(c=>c.textContent==='Start')!;assert.equal(start.hidden,true);
+ const card=app.all().find(n=>n.id==='chat-card-'+turnId)!,start=card.children.find(c=>c.textContent==='시작')!;assert.equal(start.hidden,true);
  assert.ok(timers.some(t=>t.ms===10000),'a card whose Work is starting schedules a reread');
  starting=false;for(const t of timers.splice(0))if(t.ms===10000)t.fn();await settle();
- assert.equal(start.hidden,false);assert.match(card.textContent,/Not started/);
+ assert.equal(start.hidden,false);assert.match(card.textContent,/시작 전/);
 });
 
 test('24b: the read view marks a host start in flight as starting until it settles, even when it is refused before activation',async t=>{
@@ -461,7 +461,7 @@ test('24b: the read view marks a host start in flight as starting until it settl
  refuse(new Error('Mission changed before activation'));await s.idle();assert.deepEqual([(await work()).started,(await work()).starting],[false,false]);
 });
 
-test('31f: a Send whose outcome is unknown is retried at its own segment, however far another tab moved the head',async()=>{
+test('31f: a Send whose outcome is unknown stays blocked at its original segment after the head moves',async()=>{
  const {harness,reply,settle}=await import('./support/workbench-client.ts');
  let head=1,lost=true;const posts:any[]=[];
  const view=()=>({feedId:'feed:a',cursor:1,head,segment:{number:head,revision:head===1?3:2,closed:false,full:false,previous:head>1?'assistant-conversation:'+(head-1):null,messages:[]},turns:[]});
@@ -472,9 +472,9 @@ test('31f: a Send whose outcome is unknown is retried at its own segment, howeve
   return reply({error:'Not configured'},503);
  });
  await settle();const input=app.node('chat-input');input.value='Lost answer';await input.fire('input');await app.submit('chat-form');
- assert.equal(app.node('chat-status').textContent,'Result unknown');assert.deepEqual([posts[0].segment,posts[0].expectedRevision],[1,3]);
- head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');assert.equal(posts.length,2);assert.equal(posts[1].commandId,posts[0].commandId);
- assert.deepEqual([posts[1].segment,posts[1].expectedRevision],[1,3],'the retry targets the segment of the first try, not the head');assert.equal(input.value,'');
+ assert.equal(app.node('chat-status').textContent,'결과 모름');assert.deepEqual([posts[0].segment,posts[0].expectedRevision],[1,3]);
+ const saved=app.storage.get('massion.workbench.chat-draft');head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');
+ assert.equal(posts.length,1,'unknown delivery never authorizes another POST');assert.equal(app.storage.get('massion.workbench.chat-draft'),saved);assert.equal(input.value,'Lost answer');
 });
 
 test('19c: a Representative model as long as the manifest allows answers and pins its Work',async t=>{
@@ -485,21 +485,21 @@ test('19c: a Representative model as long as the manifest allows answers and pin
  assert.equal((await f.intake()).works.find(w=>w.id===assistantWorkId(turnOf('long-model')))!.assistantSource!.representative.model,model);
 });
 
-test('31g: a draining host refuses before its replay, so a Send whose outcome is unknown keeps its own segment for the next try',async()=>{
+test('31g: a definite drain refusal permits one same-ID retry; a subsequent lost response stays unknown',async()=>{
  const {harness,reply,settle}=await import('./support/workbench-client.ts');
  let head=1,answer=0;const posts:any[]=[];
  const view=()=>({feedId:'feed:a',cursor:1,head,segment:{number:head,revision:head===1?3:2,closed:false,full:false,previous:head>1?'assistant-conversation:'+(head-1):null,messages:[]},turns:[]});
  const app=harness(async(path,options)=>{
   if(path.startsWith('/assistant/conversation'))return reply(view());
-  if(path==='/assistant/messages'){posts.push(JSON.parse(options.body));answer++;if(answer===1)throw new Error('Failed to fetch');if(answer===2)return reply({error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false},503);return reply({message:{status:'replayed'},turn:{}});}
+  if(path==='/assistant/messages'){posts.push(JSON.parse(options.body));answer++;if(answer===1)return reply({error:'Local host is draining. No new mutation was admitted.',outcome:'rejected',retryable:false},503);if(answer===2)throw new Error('Failed to fetch');return reply({message:{status:'replayed'},turn:{}});}
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
   return reply({error:'Not configured'},503);
  });
  await settle();const input=app.node('chat-input');input.value='Lost answer';await input.fire('input');await app.submit('chat-form');
- assert.equal(app.node('chat-status').textContent,'Result unknown');
- await app.submit('chat-form');assert.equal(app.node('chat-status').textContent,'Not sent');
- head=3;await app.node('chat-latest').fire('click');await settle();await app.submit('chat-form');assert.equal(posts.length,3);
- assert.deepEqual(posts.map(p=>[p.commandId===posts[0].commandId,p.segment,p.expectedRevision]),[[true,1,3],[true,1,3],[true,1,3]],'the drain refusal did not prove the message absent, so the retry stays at its segment');assert.equal(input.value,'');
+ assert.equal(app.node('chat-status').textContent,'보내지 못함 · 다시 보내기');
+ head=3;await app.node('chat-latest').fire('click');await settle();await app.node('chat-status').children.find(n=>n.tagName==='BUTTON')!.fire('click');await settle();
+ assert.equal(app.node('chat-status').textContent,'결과 모름');await app.submit('chat-form');
+ assert.equal(posts.length,2);assert.deepEqual(posts.map(p=>[p.commandId===posts[0].commandId,p.segment,p.expectedRevision]),[[true,1,3],[true,1,3]],'only the proven refusal allowed retry at its original target');assert.equal(input.value,'Lost answer');
 });
 
 test('8b: the read gives each turn its start, and each Work its run start, steps and whether an outcome is unknown (conversation-cards.md)',async t=>{

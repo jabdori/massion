@@ -12,7 +12,11 @@ async function check(directory){
 }
 for(const directory of ['src','tests','scripts'])await check(new URL(`../${directory}/`,import.meta.url));
 console.log('Runtime syntax checks passed. This is not TypeScript static type checking.');
+const tokens=spawnSync(process.execPath,['scripts/generate-ui-tokens.mjs','--check'],{cwd:new URL('../',import.meta.url),encoding:'utf8'});
+if(tokens.status!==0){process.stderr.write(tokens.stderr);process.exit(1);}
 const copy=await lintCopy();
 for(const item of copy.findings)console.log(`${item.file}:${item.line}:${item.column}: ${item.reason}: ${JSON.stringify(item.text)}`);
-console.log(`Copy lint: ${copy.findings.length} findings in ${copy.files.length} files (report-only).`);
+const blocking=copy.findings.filter(item=>item.blocking).length;
+console.log(`Copy lint: ${copy.findings.length} findings in ${copy.files.length} files (${blocking} blocking, ${copy.findings.length-blocking} report-only).`);
 for(const limit of copy.limits)console.log(`Copy lint limit: ${limit}`);
+if(blocking)process.exitCode=1;

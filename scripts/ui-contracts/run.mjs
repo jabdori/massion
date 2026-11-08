@@ -39,13 +39,15 @@ for(const theme of ['dark','light'])for(const screen of (requested.length?reques
   await browser('wait','--fn',workbenchReady);
   await browser('wait',fixture.readySelector);
   await browser('eval','-b',Buffer.from('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))))').toString('base64'));
+  let offline=false;
   for(const step of fixture.steps){
    try{
-    await browser('wait','--fn',workbenchReady);
-    if(step.action==='fill')await browser('fill',step.selector,step.value);
+    if(!offline)await browser('wait','--fn',workbenchReady);
+    if(step.action==='offline'){await browser('set','offline',step.value);offline=step.value==='true';}
+    else if(step.action==='fill')await browser('fill',step.selector,step.value);
     else await browser('click',step.selector);
     if(step.readySelector)await browser('wait',step.readySelector);
-   }catch(error){if(!isInteractionGap(error))throw error;row.gaps.push(`Interaction ${step.action} ${step.selector}: ${error.message}`);break;}
+   }catch(error){if(!isInteractionGap(error))throw error;row.gaps.push(`Interaction ${step.action} ${step.selector||step.value}: ${error.message}`);break;}
   }
   await browser('eval','-b',Buffer.from('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))))').toString('base64'));
   const preference=(await browser('eval','-b',Buffer.from(`matchMedia('(prefers-color-scheme: ${theme})').matches`).toString('base64'))).result;

@@ -27,7 +27,7 @@ Results go to `.runtime/ui-contracts/` (override with `UI_CONTRACTS_OUTPUT`):
 - `snapshots/`, `checks/`, `screenshots/`, `visual/`: raw accessibility snapshots, checker output, actual UI PNGs and measured visual failures, each under `dark/` and `light/`.
 - `pairs/`: ImageMagick montage with the same-theme prototype on the left and current workbench on the right, under `dark/` and `light/`.
 
-The CI job `ui-contracts` runs all 75 states in both themes (150 runs) and uploads these files even if a step fails. It also publishes the count table in the Actions summary. Runs containing contract failures pass initially. **Set the single switch `UI_CONTRACTS_BLOCKING=1`** (the job environment, or a local shell) to fail on contract drift, visual failures or unresolved setup/artboard gaps. Infrastructure failures always fail, including missing Chrome, broken fixture responses and failed captures. Copy lint remains independently report-only.
+The CI job `ui-contracts` runs all 75 states in both themes (150 runs) and uploads these files even if a step fails. It also publishes the count table in the Actions summary. Runs containing contract failures pass initially. **Set the single switch `UI_CONTRACTS_BLOCKING=1`** (the job environment, or a local shell) to fail on contract drift, visual failures or unresolved setup/artboard gaps. Infrastructure failures always fail, including missing Chrome, broken fixture responses and failed captures. Copy lint independently blocks unkeyed copy in all migrated panels, the shell, the workbench, and the two source-draft UI helpers.
 
 A required-element match is one pass. Failure counts also include forbidden-string occurrences and hard text-budget breaches, so failures are not `required - passed`. Non-shell text-budget warnings keep the supplied checker's advisory semantics. The runner checks declared colour tokens and visible region rectangles with a two-pixel tolerance; it does not use a global pixel score. Typography, component detail, motion and composition still require reviewing the pairs. OS fonts and font rasterization can differ.
 
@@ -54,9 +54,10 @@ a fresh session. The runner checks the corresponding `matchMedia` result after
 navigation and interactions; a failed preference setup is an infrastructure
 error. It does not pin a DOM theme, write local storage or inject theme CSS.
 This exercises the app through its browser system-preference environment.
-**The current workbench fixes `color-scheme:dark` and dark colors; it has no
-system-preference theme handler.** Light mismatches remain visible product drift
-in this report-only harness. No UI implementation is included in this change.
+The workbench uses the generated `src/ui-tokens.ts` layer and follows the browser
+system preference in both themes. Regenerate with `node scripts/generate-ui-tokens.mjs`;
+`node scripts/check.mjs` rejects source drift. Geometry and later component work
+remain independently visible in this report-only harness.
 
 `artboards.json` maps each screen to `dark.file` and `light.file`, with paths
 `artboards/<theme>/<screen>.png`. Every approved screen now has both exact
@@ -96,8 +97,15 @@ notes were read as context and are not copied into the repository.
 
 ## Copy lint and limits
 
-`scripts/check.mjs` reports visible literal candidates in `src/*panel.ts`, `src/surface-shell.ts` and `src/workbench.ts` that are not in the copy table. It uses the already installed TypeScript parser, scans direct DOM text/attribute writes, `element(tag, text)` calls, HTML-shaped literals and embedded client scripts, and prints file/line locations. It does not rewrite UI strings or fail the check for copy findings.
+`scripts/check.mjs` reports visible literal candidates in `src/*panel.ts`, `src/surface-shell.ts`, `src/workbench.ts`,
+`src/accepted-result-source-draft.ts` and `src/owner-file-document-draft.ts` that are not in the copy table. It uses the already installed TypeScript parser, scans direct DOM text/attribute writes, `element(tag, text)` calls, HTML-shaped literals and embedded client scripts, and prints file/line locations. Migrated files must use `copy(key, values)` rather than visible literals, including
+otherwise approved Korean literals. The check fails for their findings, unknown
+static keys, or missing and unknown static placeholder names. The screen runner remains report-only.
 
-This is static advisory extraction: hidden markup is included; dynamic data, aliases, lookup tables and indirect helpers may be missed. Approved placeholders are matched by shape, not by runtime value. Region, role and ordering checks belong to the browser checker. Copy lint is not a substitute for running the screen.
+This is bounded static extraction: hidden markup is included; dynamic data, aliases, lookup tables and indirect helpers may be missed. Approved placeholders are matched by shape, not by runtime value. Region, role and ordering checks belong to the browser checker. Copy lint is not a substitute for running the screen.
 
-The fixture host deliberately cannot execute owner decisions, provider calls, external apps, database writes or persistence/recovery flows. States not reachable through the current read-only UI are reported as gaps. Browser evidence from this harness is fixture evidence, never evidence of a real external effect.
+Offline fixtures use agent-browser network emulation and the real offline listener.
+The failed-send fixture clicks Send only after disconnection, so no product write
+reaches the fixture host, then reconnects before capture to distinguish a failed
+message from a disconnected transport. Draft identity and explicit resend are also tested in
+the client harness. The fixture host deliberately cannot execute owner decisions, provider calls, external apps, database writes or persistence/recovery flows. States not reachable through the current read-only UI are reported as gaps. Browser evidence from this harness is fixture evidence, never evidence of a real external effect.

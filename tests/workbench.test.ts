@@ -23,16 +23,16 @@ for(const interrupted of [false,true])test(`database read recovery keeps writes 
   if(path.startsWith('/missions/'))return reply({revision:1,value:mission});
   throw new Error('Unexpected write '+path);
  };
- const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();assert.equal(app.node('sync-notice').hidden,true);
+ const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();assert.equal(app.node('chat-connection').hidden,true);
  const input=selectionField(app,'steer-work:test');input.value='Retained private direction';await input.fire('input');app.node('work-title').value='Retained Work draft';
- feedId='feed:b';hold=true;await app.tick();assert.ok(release);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('sync-notice').hidden,false);
+ feedId='feed:b';hold=true;await app.tick();assert.ok(release);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('chat-connection').hidden,false);
  await app.submit('work-form');await app.node('run-fixture').fire('click');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
  mission.purpose='Replacement at the same revision';
  if(interrupted)await app.windowEvent('offline');
  release(reply({feedId,cursor:1,snapshot:{revision:1,value:mission}}));hold=false;await settle();assert.equal(app.node('work-fields').disabled,true);
  permissionFailure=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);
- permissionFailure=false;await app.tick();if(!app.node('sync-notice').hidden)await app.tick();
- assert.equal(app.node('sync-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('snapshot-json').textContent,/Replacement at the same revision/);
+ permissionFailure=false;await app.tick();if(!app.node('chat-connection').hidden)await app.tick();
+ assert.equal(app.node('chat-connection').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('snapshot-json').textContent,/Replacement at the same revision/);
  assert.equal(selectionField(app,'steer-work:test').value,'Retained private direction');assert.equal(app.node('work-title').value,'Retained Work draft');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
 });
 
@@ -55,7 +55,7 @@ test('an old database command acknowledgement cannot replace recovered state or 
 });
 
 test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
- assert.match(workbenchPage,/Create a Mission/);assert.match(workbenchPage,/Run development fixture/);
+ assert.match(workbenchPage,/미션 만들기/);assert.match(workbenchPage,/개발 예제 실행/);
  assert.match(workbenchPage,/manual-review\/v1/);assert.match(workbenchPage,/aria-live="polite"/);
  assert.doesNotMatch(workbenchPage,/innerHTML|insertAdjacentHTML|document\.write\(/);
  new Script(workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!);
@@ -63,12 +63,11 @@ test('workbench has usable labeled forms and no dynamic HTML sinks',()=>{
 
 test('acceptance guidance describes both methods and preserves the explicit execution boundary',()=>{
  const hint=workbenchPage.match(/<p id="criteria-oracle-hint" class="hint">([^<]+)<\/p>/)![1]!;
- assert.match(hint,/Saved with the selected acceptance method/);
- assert.match(hint,/Manual review uses manual-review\/v1, which this client cannot execute/);
- assert.match(hint,/Bounded text uses bounded-text-review\/v1 with independent model review during an explicitly requested Work run/);
- assert.match(hint,/Selecting a method or creating a Mission does not start execution or mark Work accepted/);
+ assert.match(hint,/생성·방식 선택만으로 실행·결과 확정되지 않습니다/);
+ assert.match(workbenchPage,/<option value="manual-review\/v1">직접 검토<\/option>/);
+ assert.match(workbenchPage,/<option value="bounded-text-review\/v1">독립 모델 검증<\/option>/);
  assert.match(workbenchPage,/<select id="criteria-oracle" aria-describedby="criteria-oracle-hint">/);
- assert.doesNotMatch(workbenchPage,/Saved as manual-review\/v1/);
+ assert.doesNotMatch(hint,/manual-review\/v1로 저장/);
 });
 
 for(const oracle of ['manual-review/v1','bounded-text-review/v1'])test(`Mission creation preserves ${oracle} without execution or acceptance`,async()=>{
@@ -102,7 +101,7 @@ for(const oracle of ['manual-review/v1','bounded-text-review/v1'])test(`Mission 
  assert.equal((app.context as any).document.activeElement.id,'admit-work');
  const admitted=JSON.parse(app.node('snapshot-json').textContent).value.works[0];
  assert.equal(admitted.criteria.oracle,oracle);assert.equal(admitted.execution,'queued');assert.equal(admitted.acceptance,'pending');assert.equal(admitted.record,undefined);
- assert.match(app.node('work-list').textContent,/Acceptance: pending/);assert.doesNotMatch(app.node('work-list').textContent,/Acceptance: accepted/);
+ assert.match(app.node('work-list').textContent,/검증: pending/);assert.doesNotMatch(app.node('work-list').textContent,/검증: accepted/);
  assert.deepEqual(app.calls.filter(call=>call.options.method==='POST').map(call=>call.path),['/missions','/missions/'+encodeURIComponent(mission!.id)+'/work']);
 });
 
@@ -120,7 +119,7 @@ test('Mission submit has stable IDs, blocks duplicate writes and renders host te
  resolvePost(reply({status:'committed',revision:1,value:{...fixtureMission(submitted.id),purpose:submitted.purpose}},201));await first;await settle();
  assert.equal(app.node('mission-purpose').textContent,submitted.purpose);assert.equal(app.node('mission-purpose').children.length,0);
  assert.equal(app.storage.get('massion.workbench.mission'),submitted.id);assert.equal(app.node('mission-fields').disabled,false);
- assert.match(app.node('provider-notice').textContent,/unavailable/);
+ assert.match(app.node('provider-notice').textContent,/제공사 실행 불가/);
 });
 
 test('manually entered Mission survives reload and failed refresh clears stale JSON and controls',async()=>{
@@ -128,9 +127,9 @@ test('manually entered Mission survives reload and failed refresh clears stale J
  const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):fail?reply({error:'Store unavailable'},503):reply({revision:3,value:mission}));await settle();
  app.node('mission-id').value=mission.id;await app.submit('load-form');
  assert.equal(app.storage.get('massion.workbench.mission'),mission.id);assert.match(app.node('snapshot-json').textContent,/Inspect durable work/);
- assert.match(app.node('work-list').textContent,/Attempts1/);assert.match(app.node('work-list').textContent,/explicit@1/);assert.match(app.node('work-list').textContent,/Provider unavailable/);
+ assert.match(app.node('work-list').textContent,/시도1/);assert.match(app.node('work-list').textContent,/explicit@1/);assert.match(app.node('work-list').textContent,/제공사 사용 불가/);
  fail=true;await app.submit('load-form');
- assert.equal(app.node('snapshot-json').textContent,'');assert.equal(app.node('work-list').children.length,0);assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('work-fields').disabled,true);assert.match(app.node('status').textContent,/Refresh failed/);
+ assert.equal(app.node('snapshot-json').textContent,'');assert.equal(app.node('work-list').children.length,0);assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.node('work-fields').disabled,true);assert.match(app.node('status').textContent,/갱신 실패/);
 });
 
 test('Work admission uses the current revision and conflict refresh never retries the write',async()=>{
@@ -142,7 +141,7 @@ test('Work admission uses the current revision and conflict refresh never retrie
  },{'massion.workbench.mission':mission.id});await settle();
  app.node('work-title').value='Build the report';app.node('work-budget').value='12.5';await app.submit('work-form');
  assert.equal(submitted.expectedRevision,2);assert.equal(submitted.budget,12.5);assert.match(submitted.workId,/^work:uuid-\d+$/);
- assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('revision').textContent,'Revision 4');assert.match(app.node('status').textContent,/not retried/);
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('revision').textContent,'개정 4');assert.match(app.node('status').textContent,/재전송 없음/);
 });
 
 test('unknown write stays blocked until an exact durable command receipt arrives',async()=>{
@@ -153,7 +152,7 @@ test('unknown write stays blocked until an exact durable command receipt arrives
   return reply({revision:createdWork?2:1,value:createdWork?{...mission,works:[{...work(mission),id:command.workId}]}:mission});
  },{'massion.workbench.mission':mission.id});await settle();
  app.node('work-title').value='Do bounded work';await app.submit('work-form');
- assert.equal(app.node('operation-notice').hidden,false);assert.match(app.node('operation-notice').textContent,/Outcome unknown/);
+ assert.equal(app.node('operation-notice').hidden,false);assert.match(app.node('operation-notice').textContent,/결과 모름/);
  assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('mission-fields').disabled,true);
  await app.submit('work-form');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
  seen=true;await app.tick();
@@ -190,14 +189,14 @@ test('steer and cancel send only explicit commands and terminal Work loses contr
  },{'massion.workbench.mission':mission.id});await settle();
  const input=app.all().find(node=>node.id==='steer-work:test')!;input.value='Stay within the approved scope';await input.fire('input');
  await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
- assert.equal(commands[0].command.instruction,'Stay within the approved scope');assert.equal(commands[0].expectedRevision,1);assert.match(app.node('work-list').textContent,/Execution: waiting/);
- await app.all().find(node=>node.textContent==='Cancel Work')!.fire('click');await settle();
- assert.equal(commands[1].command.type,'cancel');assert.equal(commands[1].expectedRevision,2);assert.equal(app.all().filter(node=>node.hasAttribute('data-write')).length,0);assert.match(app.node('work-list').textContent,/Execution: cancelled/);
+ assert.equal(commands[0].command.instruction,'Stay within the approved scope');assert.equal(commands[0].expectedRevision,1);assert.match(app.node('work-list').textContent,/실행: waiting/);
+ await app.all().find(node=>node.textContent==='작업 취소')!.fire('click');await settle();
+ assert.equal(commands[1].command.type,'cancel');assert.equal(commands[1].expectedRevision,2);assert.equal(app.all().filter(node=>node.hasAttribute('data-write')).length,0);assert.match(app.node('work-list').textContent,/실행: cancelled/);
 });
 
 test('an unknown fixture response never becomes a success or permits a blind fixture rerun',async()=>{
  const app=harness((path,options)=>{if(options.method==='POST')throw new Error('Connection lost');return reply({events:[],cursor:0});});await settle();
- await app.node('run-fixture').fire('click');await settle();assert.match(app.node('status').textContent,/Fixture outcome unknown/);assert.equal(app.node('run-fixture').disabled,true);
+ await app.node('run-fixture').fire('click');await settle();assert.match(app.node('status').textContent,/예제 결과 미확인/);assert.equal(app.node('run-fixture').disabled,true);
  runInContext('controls()',app.context);assert.equal(app.node('run-fixture').disabled,true);
 });
 
@@ -205,7 +204,7 @@ test('known rolled-back contention is a rejected write, not an unresolved commit
  const mission=fixtureMission();
  const app=harness((path,options)=>options.method==='POST'?reply({outcome:'rejected',retryable:true,error:'Rolled back'},503):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();
  app.node('work-title').value='A bounded responsibility';await app.submit('work-form');
- assert.equal(app.node('operation-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('status').textContent,/confirmed a transaction rollback/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.match(app.node('status').textContent,/트랜잭션 되돌림 확인/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
 });
 
 test('blocked Work renders its actual gate and persisted steering without claiming it resumed',async()=>{
@@ -215,9 +214,9 @@ test('blocked Work renders its actual gate and persisted steering without claimi
   if(options.method==='POST'){const body=JSON.parse(options.body);mission.works[0]!.instructions!.push({actorId:'owner',text:body.command.instruction});return reply({status:'committed',revision:2,value:mission});}
   return reply({revision:1,value:mission});
  },{'massion.workbench.mission':mission.id});await settle();
- assert.match(app.node('work-list').textContent,/Execution: blocked/);assert.match(app.node('work-list').textContent,/No authorized adapter is configured/);assert.match(app.node('work-list').textContent,/Latest owner instruction: Keep the current budget/);
+ assert.match(app.node('work-list').textContent,/실행: blocked/);assert.match(app.node('work-list').textContent,/No authorized adapter is configured/);assert.match(app.node('work-list').textContent,/최근 지시: Keep the current budget/);
  const input=app.all().find(node=>node.id==='steer-work:test')!;input.value='Stay bounded';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();
- assert.match(app.node('work-list').textContent,/Execution: blocked/);assert.match(app.node('work-list').textContent,/Latest owner instruction: Stay bounded/);assert.doesNotMatch(app.node('status').textContent,/Work is waiting/);
+ assert.match(app.node('work-list').textContent,/실행: blocked/);assert.match(app.node('work-list').textContent,/최근 지시: Stay bounded/);assert.doesNotMatch(app.node('status').textContent,/실행 대기/);
 });
 
 test('pending identity is persisted before transmission and reload recovers read-only until an exact receipt',async()=>{
@@ -260,16 +259,16 @@ test('unreadable or corrupted recovery references lock writes without leaking st
  const invalid=[JSON.stringify({commandId:'command:test',missionId:'mission:test',reconcileCursor:-1}),JSON.stringify({commandId:'command:test',missionId:'mission:test',reconcileCursor:Number.MAX_SAFE_INTEGER+1}),'{invalid',JSON.stringify({commandId:'secret<script>',missionId:'mission:test',reconcileCursor:0})];
  for(const saved of invalid){
   const app=harness(path=>reply({events:[],cursor:0}),{'massion.workbench.pending':saved});await settle();
-  assert.equal(app.node('mission-fields').disabled,true);assert.match(app.node('operation-notice').textContent,/unreadable/);assert.doesNotMatch(app.node('operation-notice').textContent,/secret<script>/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
+  assert.equal(app.node('mission-fields').disabled,true);assert.match(app.node('operation-notice').textContent,/복구 확인 필요/);assert.doesNotMatch(app.node('operation-notice').textContent,/secret<script>/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
  }
- const unreadable=harness(()=>reply({events:[],cursor:0}),{},'read');await settle();assert.equal(unreadable.node('mission-fields').disabled,true);assert.match(unreadable.node('operation-notice').textContent,/unavailable/);
+ const unreadable=harness(()=>reply({events:[],cursor:0}),{},'read');await settle();assert.equal(unreadable.node('mission-fields').disabled,true);assert.match(unreadable.node('operation-notice').textContent,/복구 확인 필요/);
 });
 
 test('a failed pending-reference save blocks transmission while reads remain available',async()=>{
  const mission=fixtureMission();
  const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id},'write');await settle();
  app.node('work-title').value='Bounded';await app.submit('work-form');
- assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);assert.match(app.node('operation-notice').textContent,/No command was sent/);assert.equal(app.node('load-mission').disabled,false);assert.equal(app.node('mission-fields').disabled,true);
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);assert.match(app.node('operation-notice').textContent,/복구 확인 필요/);assert.equal(app.node('load-mission').disabled,false);assert.equal(app.node('mission-fields').disabled,true);
 });
 
 test('an in-flight fixture marker survives reload and never triggers automatic execution',async()=>{
@@ -277,7 +276,7 @@ test('an in-flight fixture marker survives reload and never triggers automatic e
  const first=harness((path,options)=>options.method==='POST'?new Promise<Reply>(resolve=>{resolvePost=resolve;}):reply({events:[],cursor:0}));await settle();
  const pending=first.node('run-fixture').fire('click');await settle();assert.equal(first.storage.get('massion.workbench.fixture-pending'),'pending');
  const reloaded=harness(()=>reply({events:[],cursor:0}),Object.fromEntries(first.storage));await settle();
- assert.equal(reloaded.node('run-fixture').disabled,true);assert.match(reloaded.node('operation-notice').textContent,/host logs/);assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
+ assert.equal(reloaded.node('run-fixture').disabled,true);assert.match(reloaded.node('operation-notice').textContent,/결과 모름/);assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
  await reloaded.node('run-fixture').fire('click');assert.equal(reloaded.calls.filter(call=>call.options.method==='POST').length,0);
  resolvePost(reply({error:'Ambiguous outcome'},500));await pending;assert.equal(first.storage.get('massion.workbench.fixture-pending'),'pending');
 });
@@ -286,7 +285,7 @@ test('an explicit identity conflict clears pending rejection but is not mislabel
  const mission=fixtureMission();
  const app=harness((path,options)=>options.method==='POST'?reply({status:'conflict',reason:'idempotency',revision:1},409):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id});await settle();
  app.node('work-title').value='Bounded';await app.submit('work-form');
- assert.equal(app.storage.has('massion.workbench.pending'),false);assert.match(app.node('status').textContent,/Command identity conflict/);assert.doesNotMatch(app.node('status').textContent,/Revision conflict/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
+ assert.equal(app.storage.has('massion.workbench.pending'),false);assert.match(app.node('status').textContent,/명령 식별자 충돌/);assert.doesNotMatch(app.node('status').textContent,/개정 충돌/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);
 });
 
 test('two simultaneous tabs cannot overwrite pending identities or clear a newer different-Mission command',async()=>{
@@ -306,7 +305,7 @@ test('two simultaneous tabs cannot overwrite pending identities or clear a newer
  for(const app of [first,second]){app.node('purpose').value='A separate purpose';app.node('scope').value='Scope';app.node('criteria').value='Inspect evidence';}
  // These submissions overlap before the lock callback executes; they are not sequential claims.
  const firstRequest=first.node('mission-form').fire('submit');const collision=second.node('mission-form').fire('submit');await settle();await collision;
- assert.equal(commands.length,1);assert.match(commands[0].id,/^mission:client-a-\d+$/);assert.match(second.node('status').textContent,/Another tab/);
+ assert.equal(commands.length,1);assert.match(commands[0].id,/^mission:client-a-\d+$/);assert.match(second.node('status').textContent,/다른 탭/);
  assert.equal(JSON.parse(storage.get('massion.workbench.pending')!).commandId,commands[0].commandId);
  // Once the atomic claim lock is free, the saved marker still blocks the other client.
  await second.submit('mission-form');assert.equal(commands.length,1);assert.equal(second.node('mission-fields').disabled,true);
@@ -324,7 +323,7 @@ test('two simultaneous tabs cannot overwrite pending identities or clear a newer
 test('missing Web Locks fails closed for mutations while snapshots can still be read',async()=>{
  const mission=fixtureMission();
  const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission}),{'massion.workbench.mission':mission.id},undefined,{noLocks:true});await settle();
- assert.equal(app.node('mission-panel').hidden,false);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('run-fixture').disabled,true);assert.match(app.node('operation-notice').textContent,/Web Locks unavailable/);assert.equal(app.node('load-mission').disabled,false);
+ assert.equal(app.node('mission-panel').hidden,false);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('run-fixture').disabled,true);assert.match(app.node('operation-notice').textContent,/복구 확인 필요/);assert.equal(app.node('load-mission').disabled,false);
  app.node('work-title').value='A bounded request';await app.submit('work-form');assert.equal(app.calls.filter(call=>call.options.method==='POST').length,0);
 });
 
@@ -334,7 +333,7 @@ test('owner quarantine form requires reason and explicit uncertainty acknowledge
  const form=app.all().find(node=>node.className==='quarantine-form');assert.ok(form);const reason=app.all().find(node=>node.id==='quarantine-reason-'+w.id)!;const acknowledgement=app.all().find(node=>node.id==='quarantine-ack-'+w.id)!;
  await form.fire('submit');await settle();assert.equal(submitted,undefined);reason.value='<script>Owner inspected uncertain output</script>';await form.fire('submit');await settle();assert.equal(submitted,undefined);
  (acknowledgement as Node&{checked:boolean}).checked=true;await form.fire('submit');await settle();const actual=JSON.parse(app.calls.find(call=>call.options.method==='POST')!.options.body);assert.equal(actual.expectedRevision,3);assert.deepEqual(actual.command,{type:'quarantine-runtime',workId:w.id,runId:'run-original',reason:reason.value,acknowledgeUncertainOutcome:true});
- assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.match(app.node('work-list').textContent,/Permanently quarantined/);assert.match(app.node('work-list').textContent,/<script>Owner inspected uncertain output<\/script>/);assert.equal(app.all().some(node=>node.className==='quarantine-form'),false);
+ assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.match(app.node('work-list').textContent,/영구 격리됨/);assert.match(app.node('work-list').textContent,/<script>Owner inspected uncertain output<\/script>/);assert.equal(app.all().some(node=>node.className==='quarantine-form'),false);
 });
 test('quarantine controls are absent for unconfigured and accepted Work',async()=>{
  const mission=fixtureMission();mission.works.push(work(mission),{...work(mission),id:'accepted',acceptance:'accepted',runtimeRun:{id:'run',authorizationId:'mock',criteriaHash:'a'.repeat(64),inputHash:'b'.repeat(64),mode:'mock-http',outputTokenCap:4}});
@@ -353,8 +352,8 @@ test('selected run unlocks owner controls after durable admission while HTTP com
  const find=(id:string)=>app.all().find(n=>n.id===id)!;find('executor-profile-work:test').value='a';find('verifier-profile-work:test').value='a';find('authorization-work:test').value='grant';find('output-cap-work:test').value='4';
  const form=app.all().find(n=>n.className==='execution-form')!;const pending=form.fire('submit');await settle();assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);const duplicate=form.fire('submit');await settle();await duplicate;assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
  mission.works[0]!.runtimeRun={id:command.commandId,authorizationId:'grant',criteriaHash:'a'.repeat(64),inputHash:'b'.repeat(64),mode:'mock-http',outputTokenCap:4};mission.works[0]!.execution='active';revision=3;admitted=true;await app.tick();
- assert.equal(app.all().some(n=>n.className==='execution-form'),false);const cancel=app.all().find(n=>n.textContent==='Cancel Work')!;assert.equal(cancel.disabled,false);await cancel.fire('click');await settle();assert.equal(app.calls.filter(c=>c.options.method==='POST').length,2);assert.equal(app.node('revision').textContent,'Revision 4');
- finish(reply({status:'cancelled',snapshot:{revision:3,value:{...mission,works:[{...mission.works[0]!,execution:'active'}]}}}));await pending;await settle();assert.equal(app.node('revision').textContent,'Revision 4','late run response must not overwrite cancellation');
+ assert.equal(app.all().some(n=>n.className==='execution-form'),false);const cancel=app.all().find(n=>n.textContent==='작업 취소')!;assert.equal(cancel.disabled,false);await cancel.fire('click');await settle();assert.equal(app.calls.filter(c=>c.options.method==='POST').length,2);assert.equal(app.node('revision').textContent,'개정 4');
+ finish(reply({status:'cancelled',snapshot:{revision:3,value:{...mission,works:[{...mission.works[0]!,execution:'active'}]}}}));await pending;await settle();assert.equal(app.node('revision').textContent,'개정 4','late run response must not overwrite cancellation');
 });
 
 test('late admitted run error does not steal navigation to an earlier Mission',async()=>{
@@ -384,31 +383,31 @@ async function selectExecution(app:ReturnType<typeof harness>,cap='4') {for(cons
 test('execution plan preserves explicit empty choices and explains both output reservations before submission',async()=>{
  const mission=fixtureMission();mission.works.push(work(mission));const app=harness(path=>path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();configureSelection(app);
  for(const role of ['executor-profile','verifier-profile','authorization','output-cap'])assert.equal(selectionField(app,role+'-work:test').value,'');
- assert.match(selectionField(app,'execution-plan-work:test').textContent,/available Work budget of 12 output tokens/);
- await selectExecution(app);assert.match(selectionField(app,'execution-plan-work:test').textContent,/8 needed for two calls/);assert.match(selectionField(app,'execution-plan-work:test').textContent,/not bound money/);
- await selectExecution(app,'7');assert.match(selectionField(app,'execution-plan-work:test').textContent,/Insufficient Work budget/);
+ assert.match(selectionField(app,'execution-plan-work:test').textContent,/남은 예산 12 출력 토큰/);
+ await selectExecution(app);assert.match(selectionField(app,'execution-plan-work:test').textContent,/8 두 호출분/);assert.match(selectionField(app,'execution-plan-work:test').textContent,/금액·전체 입출력 한도 아님/);
+ await selectExecution(app,'7');assert.match(selectionField(app,'execution-plan-work:test').textContent,/예산 부족/);
  assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
 });
 
 test('selection check ignores older choices, suppresses duplicates and displays only exact Work revision proof',async()=>{
  const mission=fixtureMission();mission.works.push(work(mission));const checks:((value:Reply)=>void)[]=[];
  const app=harness(path=>path.endsWith('/preflight')?new Promise<Reply>(resolve=>checks.push(resolve)):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:mission}),{'massion.workbench.mission':mission.id});await settle();configureSelection(app);await selectExecution(app);
- const check=app.all().find(node=>node.textContent==='Check selection')!;const first=check.fire('click');await settle();await check.fire('click');assert.equal(checks.length,1);
+ const check=app.all().find(node=>node.textContent==='선택 확인')!;const first=check.fire('click');await settle();await check.fire('click');assert.equal(checks.length,1);
  await selectExecution(app,'5');const second=check.fire('click');await settle();assert.equal(checks.length,2);
- checks[1]!(reply({ready:true,revision:2,workId:'work:test',diagnostics:[]}));await second;assert.match(selectionField(app,'selection-check-work:test').textContent,/Checked at revision 2/);
+ checks[1]!(reply({ready:true,revision:2,workId:'work:test',diagnostics:[]}));await second;assert.match(selectionField(app,'selection-check-work:test').textContent,/확인한 개정 2/);
  checks[0]!(reply({ready:false,revision:2,workId:'work:test',diagnostics:[{message:'Obsolete failure'}]}));await first;assert.doesNotMatch(selectionField(app,'selection-check-work:test').textContent,/Obsolete/);
- const changed=selectionField(app,'output-cap-work:test');changed.value='6';await changed.fire('input');assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
- const third=check.fire('click');await settle();checks[2]!(reply({ready:true,revision:1,workId:'work:test',diagnostics:[]}));await third;assert.match(selectionField(app,'selection-check-work:test').textContent,/did not confirm this exact Work revision/);
+ const changed=selectionField(app,'output-cap-work:test');changed.value='6';await changed.fire('input');assert.match(selectionField(app,'selection-check-work:test').textContent,/확인 전/);
+ const third=check.fire('click');await settle();checks[2]!(reply({ready:true,revision:1,workId:'work:test',diagnostics:[]}));await third;assert.match(selectionField(app,'selection-check-work:test').textContent,/작업 개정 미확인/);
  assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);assert.equal(app.storage.has('massion.workbench.pending'),false);
 });
 
 test('navigation and refreshed Work invalidate old check and detached run handlers',async()=>{
  const first=fixtureMission('first'),second=fixtureMission('second');first.works.push(work(first));second.works.push(work(second));let finish!:(value:Reply)=>void;
  const app=harness(path=>path.endsWith('/preflight')?new Promise<Reply>(resolve=>{finish=resolve;}):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:2,value:path.endsWith('first')?first:second}),{'massion.workbench.mission':'first'});await settle();configureSelection(app);await selectExecution(app);
- const oldForm=app.all().find(node=>node.className==='execution-form')!;const oldCheck=app.all().find(node=>node.textContent==='Check selection')!;const pending=oldCheck.fire('click');await settle();
+ const oldForm=app.all().find(node=>node.className==='execution-form')!;const oldCheck=app.all().find(node=>node.textContent==='선택 확인')!;const pending=oldCheck.fire('click');await settle();
  app.node('mission-id').value='second';await app.submit('load-form');const status=app.node('status').textContent;
  finish(reply({ready:true,revision:2,workId:'work:test',diagnostics:[]}));await pending;await oldForm.fire('submit');assert.equal(app.node('status').textContent,status);assert.equal(app.node('loaded-id').textContent,'second');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);
- assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
+ assert.match(selectionField(app,'selection-check-work:test').textContent,/확인 전/);
 });
 
 
@@ -422,14 +421,14 @@ test('online catalog refresh rerenders same-revision choices and invalidates che
   if(path.endsWith('/run'))return reply({status:'blocked',snapshot:{revision:2,value:mission},reason:'Synthetic blocked response'});
   return reply({revision:2,value:mission});
  },{'massion.workbench.mission':mission.id},undefined,{network:true});await settle();await selectExecution(app);
- await app.all().find(n=>n.textContent==='Check selection')!.fire('click');assert.match(selectionField(app,'selection-check-work:test').textContent,/Checked at revision 2/);
+ await app.all().find(n=>n.textContent==='선택 확인')!.fire('click');assert.match(selectionField(app,'selection-check-work:test').textContent,/확인한 개정 2/);
  const oldForm=app.all().find(n=>n.className==='execution-form')!;
  await runInContext('connect()',app.context);await settle();
- assert.equal(selectionField(app,'executor-profile-work:test').value,'a');assert.match(selectionField(app,'selection-check-work:test').textContent,/Not checked/);
+ assert.equal(selectionField(app,'executor-profile-work:test').value,'a');assert.match(selectionField(app,'selection-check-work:test').textContent,/확인 전/);
  await oldForm.fire('submit');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,0);
- await app.all().find(n=>n.textContent==='Check selection')!.fire('click');assert.equal(app.calls.filter(c=>c.path.endsWith('/preflight')).length,2);
+ await app.all().find(n=>n.textContent==='선택 확인')!.fire('click');assert.equal(app.calls.filter(c=>c.path.endsWith('/preflight')).length,2);
  await app.all().find(n=>n.className==='execution-form')!.fire('submit');assert.equal(app.calls.filter(c=>c.path.endsWith('/run')).length,1);
- providerOffline=true;await runInContext('connect()',app.context);await settle();assert.equal(app.all().some(n=>n.className==='execution-form'),false);assert.match(app.node('provider-notice').textContent,/could not be confirmed/);assert.match(app.node('work-budget-label').textContent,/host units/);assert.match(app.node('work-budget-hint').textContent,/Confirm host runtime units/);
+ providerOffline=true;await runInContext('connect()',app.context);await settle();assert.equal(app.all().some(n=>n.className==='execution-form'),false);assert.match(app.node('provider-notice').textContent,/제공사 상태 미확인/);assert.match(app.node('work-budget-label').textContent,/호스트 단위/);assert.match(app.node('work-budget-hint').textContent,/실행 전 예산 단위 확인/);
 });
 
 test('Mission links load authoritative state with fresh storage and navigation remains read-only',async()=>{
@@ -467,13 +466,13 @@ test('failed explicit Mission navigation removes the stale address with the disc
 test('connection loss blocks new writes until permissions and current Mission refresh while drafts survive',async()=>{
  const mission=fixtureMission();mission.works.push(work(mission));let revision=1,eventsDown=false,providersDown=false,missionDown=false;const submissions:any[]=[];
  const handler:Handler=(path,init)=>{if(path==='/health')return reply({status:'ready'});if(path==='/providers')return providersDown?reply({error:'Unavailable'},503):reply({providers:[],selection:{status:'unavailable',reason:'No model'},runtime:null});if(path==='/connections')return reply({},503);if(path.startsWith('/events'))return eventsDown?reply({error:'Lost connection'},503):reply({events:[],cursor:0});if(init.method==='POST'){submissions.push(JSON.parse(init.body));return reply({status:'committed',revision:++revision,value:mission},201);}return missionDown?reply({error:'Read unavailable'},503):reply({revision,value:mission});};
- const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();app.node('work-title').value='Retain my Work draft';const steer=app.all().find(n=>n.className==='steer-form')!.children.find(n=>n.tagName==='TEXTAREA')!;steer.value='Retain my direction';await steer.fire('input');eventsDown=true;await app.tick();assert.equal(app.node('sync-notice').hidden,false);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('load-mission').disabled,false);await app.submit('work-form');await app.node('run-fixture').fire('click');assert.equal(submissions.length,0);assert.equal(app.storage.has('massion.workbench.pending'),false);
- eventsDown=false;providersDown=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);providersDown=false;missionDown=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);missionDown=false;revision=2;await app.tick();assert.equal(app.node('sync-notice').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.equal(app.node('work-title').value,'Retain my Work draft');assert.equal(app.all().find(n=>n.className==='steer-form')!.children.find(n=>n.tagName==='TEXTAREA')!.value,'Retain my direction');assert.equal(JSON.parse(app.node('snapshot-json').textContent).revision,2);assert.equal(submissions.length,0);await app.submit('work-form');assert.equal(submissions.length,1);assert.equal(submissions[0].expectedRevision,2);
+ const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();app.node('work-title').value='Retain my Work draft';const steer=app.all().find(n=>n.className==='steer-form')!.children.find(n=>n.tagName==='TEXTAREA')!;steer.value='Retain my direction';await steer.fire('input');eventsDown=true;await app.tick();assert.equal(app.node('chat-connection').hidden,false);assert.equal(app.node('work-fields').disabled,true);assert.equal(app.node('mission-fields').disabled,true);assert.equal(app.node('load-mission').disabled,false);await app.submit('work-form');await app.node('run-fixture').fire('click');assert.equal(submissions.length,0);assert.equal(app.storage.has('massion.workbench.pending'),false);
+ eventsDown=false;providersDown=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);providersDown=false;missionDown=true;await app.tick();assert.equal(app.node('work-fields').disabled,true);missionDown=false;revision=2;await app.tick();assert.equal(app.node('chat-connection').hidden,true);assert.equal(app.node('work-fields').disabled,false);assert.equal(app.node('work-title').value,'Retain my Work draft');assert.equal(app.all().find(n=>n.className==='steer-form')!.children.find(n=>n.tagName==='TEXTAREA')!.value,'Retain my direction');assert.equal(JSON.parse(app.node('snapshot-json').textContent).revision,2);assert.equal(submissions.length,0);await app.submit('work-form');assert.equal(submissions.length,1);assert.equal(submissions[0].expectedRevision,2);
 });
 
 test('a later offline event fences an in-flight reconnect and successful sync cannot clear unknown receipt locks',async()=>{
  const mission=fixtureMission();let hold=false,release!:(value:Reply)=>void;const providers=()=>reply({providers:[],selection:{status:'unavailable',reason:'No model'},runtime:null});const handler:Handler=path=>path==='/health'?reply({status:'ready'}):path==='/providers'?hold?new Promise<Reply>(resolve=>release=resolve):providers():path==='/connections'?reply({},503):path.startsWith('/events')?reply({events:[],cursor:0}):reply({revision:1,value:mission});const app=harness(handler,{},undefined,{network:true,fragment:'#mission=mission%3Atest'});await settle();hold=true;await app.windowEvent('offline');await app.tick();assert.equal(typeof release,'function');await app.windowEvent('offline');hold=false;release(providers());await settle();assert.equal(app.node('mission-fields').disabled,true);await app.tick();assert.equal(app.node('mission-fields').disabled,false);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
- const marker=JSON.stringify({commandId:'unconfirmed',missionId:mission.id,reconcileCursor:0});const pending=harness(handler,{'massion.workbench.pending':marker},undefined,{network:true});await settle();await pending.windowEvent('offline');await pending.tick();assert.equal(pending.node('sync-notice').hidden,true);assert.equal(pending.node('mission-fields').disabled,true);assert.equal(pending.storage.get('massion.workbench.pending'),marker);assert.equal(pending.calls.filter(c=>c.options.method==='POST').length,0);
+ const marker=JSON.stringify({commandId:'unconfirmed',missionId:mission.id,reconcileCursor:0});const pending=harness(handler,{'massion.workbench.pending':marker},undefined,{network:true});await settle();await pending.windowEvent('offline');await pending.tick();assert.equal(pending.node('chat-connection').hidden,true);assert.equal(pending.node('mission-fields').disabled,true);assert.equal(pending.storage.get('massion.workbench.pending'),marker);assert.equal(pending.calls.filter(c=>c.options.method==='POST').length,0);
 });
 
 test('instruction drafts and conflict comparisons are scoped to Mission plus Work identities',async()=>{
@@ -493,7 +492,7 @@ test('instruction drafts and conflict comparisons are scoped to Mission plus Wor
  await app.navigateFragment('#mission=mission%3Atwo');assert.equal(selectionField(app,'steer-work:test').value,'Second Mission draft');
  await app.navigateFragment('#mission=mission%3Aone');selectionField(app,'steer-work:test').value='';await selectionField(app,'steer-work:test').fire('input');
  await app.navigateFragment('#mission=mission%3Atwo');one.works[0]!.execution='cancelled';states.set(one.id,{revision:3,value:one});await app.navigateFragment('#mission=mission%3Aone');
- const comparison=app.all().find(node=>node.className==='instruction-conflict')!;assert.equal(comparison.children.at(-1)!.tagName,'PRE');assert.equal(comparison.children.at(-1)!.textContent,'');assert.match(comparison.textContent,/Your unrecorded submissionPrivate first Mission draft/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
+ const comparison=app.all().find(node=>node.className==='instruction-conflict')!;assert.equal(comparison.children.at(-1)!.tagName,'PRE');assert.equal(comparison.children.at(-1)!.textContent,'');assert.match(comparison.textContent,/미저장 지시Private first Mission draft/);assert.equal(app.calls.filter(call=>call.options.method==='POST').length,writes);
 });
 
 test('late exact steering receipt clears conflict but preserves a draft edited after transmission',async()=>{
@@ -511,7 +510,7 @@ test('late exact steering receipt clears conflict but preserves a draft edited a
  let input=selectionField(app,'steer-work:test');input.value='Submitted direction';await input.fire('input');await form().fire('submit');await settle();assert.equal(posts,1);
  await form().fire('submit');await settle();assert.equal(posts,2);assert.equal(app.node('operation-notice').hidden,false);
  input=selectionField(app,'steer-work:test');input.value='A new unsent draft';await input.fire('input');visible=true;await app.tick();
- assert.equal(app.node('operation-notice').hidden,true);assert.equal(selectionField(app,'steer-work:test').value,'A new unsent draft');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);assert.match(app.node('work-list').textContent,/Latest owner instruction: Submitted direction/);await app.tick();assert.equal(posts,2);
+ assert.equal(app.node('operation-notice').hidden,true);assert.equal(selectionField(app,'steer-work:test').value,'A new unsent draft');assert.equal(app.all().some(node=>node.className==='instruction-conflict'),false);assert.match(app.node('work-list').textContent,/최근 지시: Submitted direction/);await app.tick();assert.equal(posts,2);
 });
 
 test('editing while recovery lock admission waits preserves the unsent instruction draft',async()=>{
@@ -524,7 +523,7 @@ test('editing while recovery lock admission waits preserves the unsent instructi
   return reply({revision,value:mission});
  },{},undefined,{fragment:'#mission=mission%3Atest',locks});await settle();
  const input=selectionField(app,'steer-work:test');input.value='Original submitted draft';await input.fire('input');await app.all().find(node=>node.className==='steer-form')!.fire('submit');await settle();assert.equal(posts,0);
- input.value='Edited while awaiting lock';await input.fire('input');release();await settle();assert.equal(posts,1);assert.equal(selectionField(app,'steer-work:test').value,'Edited while awaiting lock');assert.match(app.node('work-list').textContent,/Latest owner instruction: Original submitted draft/);
+ input.value='Edited while awaiting lock';await input.fire('input');release();await settle();assert.equal(posts,1);assert.equal(selectionField(app,'steer-work:test').value,'Edited while awaiting lock');assert.match(app.node('work-list').textContent,/최근 지시: Original submitted draft/);
 });
 
 for(const kind of ['steer','cancel','conflict'])test(`keyboard ${kind} returns focus to the same Work without stealing another target`,async()=>{
@@ -540,7 +539,7 @@ for(const kind of ['steer','cancel','conflict'])test(`keyboard ${kind} returns f
   return reply({revision,value:mission});
  },{},undefined,{fragment:'#mission=mission%3Atest'});await settle();
  const form=()=>app.all().find(node=>node.className==='steer-form')!;
- const input=selectionField(app,'steer-work:test');input.value='Keyboard draft';await input.fire('input');const button=form().children.find(node=>node.className==='row')!.children.find(node=>node.textContent===(kind==='cancel'?'Cancel Work':'Record instruction'))!;button.focus();
+ const input=selectionField(app,'steer-work:test');input.value='Keyboard draft';await input.fire('input');const button=form().children.find(node=>node.className==='row')!.children.find(node=>node.textContent===(kind==='cancel'?'작업 취소':'지시 저장'))!;button.focus();
  if(kind==='cancel')await button.fire('click');else await form().fire('submit');await settle();
  assert.equal((app.context as any).document.activeElement.id,kind==='cancel'?'work-heading-work:test':'steer-work:test');
  if(kind!=='cancel'){

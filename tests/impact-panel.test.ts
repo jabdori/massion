@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Handler,Reply} from './support/workbench-client.ts';
 import type {Mission,Relation} from '../src/domain.ts';
@@ -14,6 +15,7 @@ import {SurrealRelationImpact} from '../src/relation-impact.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
 import {verifyDisposableDatabase} from './support/owned-process.ts';
 
+const escapeRegex=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const mission=(id='mission:panel'):Mission=>({id,version:1,purpose:'Read exact relation evidence',scope:'fixture-only',constraints:[],criteria:{version:1,description:'Keep exact versions and provenance',oracle:'manual-review/v1'},works:[],memories:[],growth:[],relations:[]});
 function result(id:string,entity:string,version:number,revision=1,feedId='feed:panel'):RelationImpact {
  const relations:Relation[]=[{from:'dependent:'+entity,to:entity,type:'evidenced-by',fromVersion:3,toVersion:version,provenance:'Recorded <img src=x> source, not a verdict',inferred:true}];
@@ -37,7 +39,7 @@ async function fixture(onImpact:(id:string,entity:string,version:number)=>Reply|
   throw new Error('Unexpected route '+path);
  };
  const marker=JSON.stringify({missionId:'mission:panel',commandId:'unresolved',reconcileCursor:0});
- const app=harness(handler,pending?{'massion.workbench.pending':marker}:{},undefined,{network:true,fragment:'#mission=mission%3Apanel'});await settle();assert.equal(app.node('sync-notice').hidden,true);
+ const app=harness(handler,pending?{'massion.workbench.pending':marker}:{},undefined,{network:true,fragment:'#mission=mission%3Apanel'});await settle();assert.equal(app.node('mission-fields').disabled,pending);assert.equal(app.node('chat-connection').hidden,true);
  const choose=async(entity:string,version:string)=>{app.node('impact-entity').value=entity;app.node('impact-version').value=version;await app.node('impact-entity').fire('input');await app.node('impact-version').fire('input');};
  return {app,choose,marker,bump(){revision++;},changeFeed(){feedId='feed:replacement';},missions};
 }
@@ -45,11 +47,11 @@ test('impact panel displays exact Mission/version/provenance and distinguishes a
  let empty=false;const f=await fixture((id,entity,version)=>reply(empty?{...result(id,entity,version),affected:[],relations:[]}:result(id,entity,version)));
  const {app,choose}=f;app.node('work-title').value='Keep my private Work draft';app.node('purpose').value='Keep my private Mission draft';
  await choose('file:α/"quote"','2');app.node('impact-read').focus();await app.submit('impact-form');
- assert.match(app.node('impact-scope').textContent,/mission:panel.*fixture-only.*revision: 1/);
- assert.match(app.node('impact-results').textContent,/file:α\/"quote" · exact version 2/);assert.match(app.node('impact-results').textContent,/dependent:file:α\/"quote"@3/);assert.match(app.node('impact-results').textContent,/Provenance: Recorded <img src=x> source, not a verdict · Inferred: yes/);
+ assert.equal(app.node('impact-scope').textContent,copy('legacy.mission-scope-current-revision',{id:'mission:panel',scope:'fixture-only',revision:1}));
+ assert.match(app.node('impact-results').textContent,new RegExp(escapeRegex(copy('legacy.exact-version',{id:'file:α/"quote"',version:2}))));assert.match(app.node('impact-results').textContent,/dependent:file:α\/"quote"@3/);assert.match(app.node('impact-results').textContent,new RegExp(escapeRegex(copy('legacy.provenance-inferred',{provenance:'Recorded <img src=x> source, not a verdict',value:copy('legacy.yes')}))));
  assert.equal(app.all().some(node=>node.tagName==='IMG'),false);assert.equal(app.node('impact-results').hidden,false);assert.equal((app.context as any).document.activeElement.id,'impact-read');
  assert.equal(app.node('work-title').value,'Keep my private Work draft');assert.equal(app.node('purpose').value,'Keep my private Mission draft');
- empty=true;await choose('unlinked','1');assert.equal(app.node('impact-results').hidden,true);await app.submit('impact-form');assert.match(app.node('impact-status').textContent,/does not establish that the target exists/);assert.match(app.node('impact-results').textContent,/No stored relation/);assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+ empty=true;await choose('unlinked','1');assert.equal(app.node('impact-results').hidden,true);await app.submit('impact-form');assert.equal(app.node('impact-status').textContent,copy('legacy.impact-read-complete-no-dependent-versions-were'));assert.match(app.node('impact-results').textContent,new RegExp(escapeRegex(copy('legacy.no-stored-relation-links-a-dependent-version'))));assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
 });
 for(const field of ['entity','version'])for(const outcome of ['success','error'])test(`changed ${field} discards a late ${outcome} after a newer impact result`,async()=>{
  let calls=0,release!:(r:Reply)=>void;const f=await fixture((id,entity,version)=>++calls===1?new Promise<Reply>(resolve=>release=resolve):reply(result(id,entity,version)));
@@ -63,7 +65,7 @@ test('Mission navigation clears old impact and fences a held reply even at the s
  let hold=false,release!:(r:Reply)=>void;const {app,choose}=await fixture((id,entity,version)=>hold?new Promise<Reply>(r=>release=r):reply(result(id,entity,version)));
  await choose('target','1');await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,false);
  hold=true;const old=app.submit('impact-form');await settle();await app.navigateFragment('#mission=mission%3Aother');assert.equal(app.node('impact-results').hidden,true);assert.match(app.node('impact-scope').textContent,/mission:other/);
- hold=false;await app.submit('impact-form');const current=app.node('impact-results').textContent;release(reply(result('mission:panel','target',1)));await old;assert.equal(app.node('impact-results').textContent,current);assert.match(current,/Mission: mission:other/);
+ hold=false;await app.submit('impact-form');const current=app.node('impact-results').textContent;release(reply(result('mission:panel','target',1)));await old;assert.equal(app.node('impact-results').textContent,current);assert.match(current,new RegExp(escapeRegex(copy('legacy.mission-read-revision',{missionId:'mission:other',revision:1}))));
 });
 for(const change of ['revision','feed','disconnect'])test(`${change} change clears impact and fences its pending read without automatic requery`,async()=>{
  let hold=false,release!:(r:Reply)=>void;const f=await fixture((id,entity,version)=>hold?new Promise<Reply>(r=>release=r):reply(result(id,entity,version)));const {app,choose}=f;
@@ -74,15 +76,15 @@ for(const change of ['revision','feed','disconnect'])test(`${change} change clea
 });
 test('invalid selection and HTTP errors never leave an earlier result visible or send a mutation',async()=>{
  let failure=0;const {app,choose}=await fixture((id,entity,version)=>failure?reply({error:'Fixture error <img src=x>; no partial result'},failure):reply(result(id,entity,version)));
- for(const [entity,version] of [[' ','1'],['target','0'],['target','1.5'],['target','9007199254740992']]){await choose(entity!,version!);await app.submit('impact-form');assert.match(app.node('impact-status').textContent,/No query was sent/);}
+ for(const [entity,version] of [[' ','1'],['target','0'],['target','1.5'],['target','9007199254740992']]){await choose(entity!,version!);await app.submit('impact-form');assert.equal(app.node('impact-status').textContent,copy('legacy.enter-an-exact-entity-id-and-a'));}
  assert.equal(app.calls.filter(c=>c.path.includes('/impact?')).length,0);
- for(const status of [404,422,503,500]){failure=0;await choose('target','1');await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,false);failure=status;await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,true);assert.match(app.node('impact-status').textContent,/Impact unavailable: Fixture error <img/);assert.equal(app.all().some(n=>n.tagName==='IMG'),false);}
+ for(const status of [404,422,503,500]){failure=0;await choose('target','1');await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,false);failure=status;await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,true);assert.equal(app.node('impact-status').textContent,copy('legacy.impact-unavailable',{message:'Fixture error <img src=x>; no partial result'}));assert.equal(app.all().some(n=>n.tagName==='IMG'),false);}
  assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
 });
 test('mismatched reply identity/version/revision or malformed relation evidence is not rendered',async()=>{
  let body:any;const {app,choose}=await fixture(()=>reply(body));await choose('target','1');const valid=result('mission:panel','target',1);
  for(const malformed of [{...valid,missionId:'mission:other'},{...valid,revision:2},{...valid,changed:{id:'other',version:1}},{...valid,changed:{id:'target',version:2}},{...valid,relations:[{...valid.relations[0],inferred:'true'}]},{...valid,affected:['wrong@1']}]){
-  body=malformed;await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,true);assert.match(app.node('impact-status').textContent,/reply does not match/);
+  body=malformed;await app.submit('impact-form');assert.equal(app.node('impact-results').hidden,true);assert.equal(app.node('impact-status').textContent,copy('legacy.impact-unavailable',{message:copy('legacy.the-reply-does-not-match-the-selected')}));
  }
 });
 test('impact reads preserve an unresolved command marker and its independent write barrier',async()=>{
@@ -102,9 +104,9 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory'
  let hold=false,release!:()=>void;
  const client=harness(async(path,init)=>{if(hold&&path.includes('/impact?')){hold=false;await new Promise<void>(r=>release=r);}const response=await fetch(base+path,init);return reply(await response.json(),response.status);},{},undefined,{network:true,fragment:'#mission='+encodeURIComponent(id)});
  async function until(check:()=>boolean){const end=Date.now()+10000;while(!check()){assert.ok(Date.now()<end,'HTTP panel deadline');await new Promise(r=>setTimeout(r,10));}}
- await until(()=>client.node('sync-notice').hidden&&client.node('snapshot-json').textContent.includes('panel-http'));
+ await until(()=>!client.node('mission-fields').disabled&&client.node('snapshot-json').textContent.includes('panel-http'));
  client.node('impact-entity').value=entity;client.node('impact-version').value='1';await client.node('impact-entity').fire('input');await client.submit('impact-form');assert.equal(client.node('impact-results').hidden,false);assert.match(client.node('impact-results').textContent,/record@2/);assert.match(client.node('impact-results').textContent,/Fixture sealed artifact:α\/"origin"/);
- hold=true;const old=client.submit('impact-form');await until(()=>typeof release==='function');client.node('impact-version').value='2';await client.node('impact-version').fire('input');await client.submit('impact-form');assert.match(client.node('impact-results').textContent,/No stored relation/);const current=client.node('impact-results').textContent;release();await old;assert.equal(client.node('impact-results').textContent,current);
+ hold=true;const old=client.submit('impact-form');await until(()=>typeof release==='function');client.node('impact-version').value='2';await client.node('impact-version').fire('input');await client.submit('impact-form');assert.match(client.node('impact-results').textContent,new RegExp(escapeRegex(copy('legacy.no-stored-relation-links-a-dependent-version'))));const current=client.node('impact-results').textContent;release();await old;assert.equal(client.node('impact-results').textContent,current);
  assert.deepEqual(await store.load(id),snapshot);assert.deepEqual(await readJournal(),journal);assert.equal(client.calls.filter(c=>c.options.method==='POST').length,0);assert.equal(client.storage.has('massion.workbench.pending'),false);
  t.diagnostic(JSON.stringify({store:durable?'actual SurrealDB 3.3.0':'in-memory fixture',impactGETs:client.calls.filter(c=>c.path.includes('/impact?')).length,posts:0,unchangedSnapshotAndJournal:true,staleVersionReplyDiscarded:true,providerCalls:0}));
 });

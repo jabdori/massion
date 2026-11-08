@@ -21,5 +21,5 @@ test('all 75 v2 contracts map to bounded exact PNGs in both themes',async()=>{
  assert.deepEqual((await readdir(new URL('artboards/',root))).sort(),['dark','light']);
  for(const theme of ['dark','light'])assert.deepEqual((await readdir(new URL('artboards/'+theme+'/',root))).sort(),files.map(f=>f.replace('.json','.png')));
  const copy=JSON.parse(await readFile(new URL('copy.ko.json',root),'utf8'));
- assert.equal(Object.keys(copy).length,241);
+ assert.equal(Object.keys(copy).filter(key=>!key.startsWith('ui.')&&!key.startsWith('legacy.')).length,241);
 });

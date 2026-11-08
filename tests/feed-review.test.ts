@@ -26,7 +26,7 @@ test('old command response before any replacement poll preserves its unknown mar
 });
 test('routine explicit snapshot refresh detecting another feed cannot leave writes enabled',async()=>{
  const s=setup();await settle();s.replace();s.app.node('mission-id').value=mission.id;await s.app.submit('load-form');
- assert.equal(s.app.node('sync-notice').hidden,false);assert.equal(s.app.node('work-fields').disabled,true);assert.equal(s.app.calls.filter(c=>c.options.method==='POST').length,0);
+ assert.equal(s.app.node('chat-connection').hidden,false);assert.equal(s.app.node('work-fields').disabled,true);assert.equal(s.app.calls.filter(c=>c.options.method==='POST').length,0);
 });
 for(const polled of [false,true])test(`old fixture acknowledgement ${polled?'after':'before'} replacement polling retains its unknown fixture marker`,async()=>{
  const s=setup();await settle();const pending=s.app.node('run-fixture').fire('click');await settle();assert.equal(s.app.storage.get('massion.workbench.fixture-pending'),'pending');
@@ -59,7 +59,7 @@ for(const pending of [false,true])test(`empty replacement adopts its feed and ${
  assert.equal(app.storage.get('massion.workbench.feed'),'feed:b');
  assert.equal(app.storage.get('massion.workbench.cursor'),'0');
  assert.equal(app.node('mission-panel').hidden,true);assert.equal(app.fragment(),'');
- assert.equal(app.node('sync-notice').hidden,true);
+ assert.equal(app.node('chat-connection').hidden,true);
  assert.equal(app.node('mission-fields').disabled,pending);
  if(pending)assert.equal(app.storage.get('massion.workbench.pending'),marker);
  assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);

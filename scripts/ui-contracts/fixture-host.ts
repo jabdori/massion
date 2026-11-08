@@ -5,12 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {workbenchPage} from '../../src/workbench.ts';
 
-export interface FixtureStep {
- selector:string;
- action:'click'|'fill';
- value?:string;
- readySelector?:string;
-}
+export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
  screen:string;
  description:string;
@@ -36,7 +31,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  const fixture=base?{...base,...raw,routes:{...base.routes,...raw.routes}}:raw;
  if(fixture.screen!==screen||!text(fixture.description)||!Number.isSafeInteger(fixture.now)||!text(fixture.readySelector)||
   !Array.isArray(fixture.gaps)||!fixture.gaps.every(text)||!Array.isArray(fixture.reuse)||!fixture.reuse.every(text)||
-  !Array.isArray(fixture.steps)||!fixture.steps.every((s:FixtureStep)=>s&&text(s.selector)&&['click','fill'].includes(s.action)&&(s.action!=='fill'||typeof s.value==='string')&&(s.readySelector===undefined||text(s.readySelector)))||
+  !Array.isArray(fixture.steps)||!fixture.steps.every((s:FixtureStep)=>s&&(s.action==='offline'?['true','false'].includes(s.value):text(s.selector)&&['click','fill'].includes(s.action)&&(s.action!=='fill'||typeof s.value==='string'))&&(s.readySelector===undefined||text(s.readySelector)))||
   !fixture.routes||typeof fixture.routes!=='object'||Array.isArray(fixture.routes))throw new Error('Invalid fixture: '+screen);
  for(const [path,response] of Object.entries(fixture.routes) as [string,{status:number;body:unknown}][]){
   if(!path.startsWith('/')||path.startsWith('//')||path.includes('#')||path.includes('\\')||new URL(path,'http://fixture').pathname.includes('..')||

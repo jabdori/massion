@@ -1,0 +1,44 @@
+[
+  {
+    "border": {
+      "actual": "rgb(43, 45, 48)",
+      "expected": "rgb(43, 45, 48)"
+    },
+    "disconnected": false,
+    "draft": "이어서 할인 합계 확인해 줘.",
+    "focus": {
+      "color": "rgb(131, 137, 147)",
+      "expected": "rgb(131, 137, 147)",
+      "width": "2px"
+    },
+    "gap": 6,
+    "juno": {
+      "actual": "rgb(227, 153, 218)",
+      "expected": "rgb(227, 153, 218)",
+      "role": "var(--agent-6)"
+    },
+    "status": "보내지 못함 · 다시 보내기",
+    "theme": "dark"
+  },
+  {
+    "border": {
+      "actual": "rgb(205, 205, 205)",
+      "expected": "rgb(205, 205, 205)"
+    },
+    "disconnected": false,
+    "draft": "이어서 할인 합계 확인해 줘.",
+    "focus": {
+      "color": "rgb(93, 93, 93)",
+      "expected": "rgb(93, 93, 93)",
+      "width": "2px"
+    },
+    "gap": 6,
+    "juno": {
+      "actual": "rgb(186, 67, 122)",
+      "expected": "rgb(186, 67, 122)",
+      "role": "var(--agent-6)"
+    },
+    "status": "보내지 못함 · 다시 보내기",
+    "theme": "light"
+  }
+]

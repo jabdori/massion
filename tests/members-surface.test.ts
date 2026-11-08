@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
+
+const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*'));
 
 // docs/architecture/members.md, Surface: members in the sidebar, one 1:1 conversation each, the name-and-shape dialog behind Add member, Work room participants.
 const T0=Date.UTC(2026,10,5,1,14);
@@ -26,12 +29,12 @@ const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Nod
 
 test('Add member opens the name-and-shape dialog; Cancel sends nothing, Create sends act with the name and shape once',async()=>{
  const {app,state}=fixture();await settle();
- const card=byId(app,'chat-decision-decision:1')!;assert.ok(card);assert.match(card.textContent,/Add a member for it\?.*This month.*Work to hand.*Check totals.*Model group.*Default.*Add member.*Later/);
+ const card=byId(app,'chat-decision-decision:1')!;assert.ok(card);assert.match(card.textContent,sequence('Add a member for it?','This month','Work to hand','Check totals','Model group','Default',copy('conversation.link.14'),copy('conversation.button.04')));
  assert.equal(app.node('member-dialog').hidden,true);
- await button(card,'Add member')!.fire('click');await settle();
+ await button(card,copy('conversation.link.14'))!.fire('click');await settle();
  assert.equal(app.node('member-dialog').hidden,false);assert.equal(state.posted.length,0,'the card answer waits for a name');
  await app.node('member-cancel').fire('click');await settle();assert.equal(app.node('member-dialog').hidden,true);assert.equal(state.posted.length,0);
- await button(card,'Add member')!.fire('click');await settle();
+ await button(card,copy('conversation.link.14'))!.fire('click');await settle();
  assert.equal(app.node('member-create').disabled,true,'a name is required');
  app.node('member-name').value='셈';await app.node('member-name').fire('input');assert.equal(app.node('member-preview').textContent,'셈');
  assert.equal(workbenchPage.match(/id="member-shape-/g)!.length,8);await app.node('member-shape-drop').fire('click');
@@ -47,7 +50,7 @@ test('members appear under the Representative; selecting one opens its own conve
  assert.match(app.node('chat-log').textContent,/Added: 셈/);
  await row.fire('click');await settle();
  assert.equal(app.node('page-heading').textContent,'셈셈','avatar letter, then the name');assert.deepEqual([row.children[0]!.attributes.get('data-shape'),app.node('page-heading').children[0]!.attributes.get('data-shape')],['drop','drop'],'the chosen shape stays in the sidebar and header');assert.match(workbenchPage,/\.avatar\[data-shape=drop\]\{border-radius:0;-webkit-mask:url\("data:image\/svg\+xml,/);assert.equal(app.node('page-heading').children[0]!.style.background,'var(--agent-4)');assert.equal(row.attributes.get('aria-current'),'page');assert.equal(app.node('side-representative').attributes.get('aria-current'),'false');
- assert.equal(app.node('chat-input').attributes.get('placeholder')??(app.node('chat-input') as any).placeholder,'Message 셈');
+ assert.equal(app.node('chat-input').attributes.get('placeholder')??(app.node('chat-input') as any).placeholder,copy('ui.message',{member:'셈'}));
  assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
  assert.match(app.node('chat-log').textContent,/Use won from now on\./);assert.doesNotMatch(app.node('chat-log').textContent,/Added: 셈/,'decisions stay in the Representative conversation');
  app.node('chat-input').value='Weekday totals too';await app.node('chat-form').fire('submit');await settle();
@@ -73,7 +76,7 @@ test('a member conversation keeps the Representative Work line and the open deci
 
 test('a refused Create keeps the dialog, its name and shape, and marks the name; nothing is resent',async()=>{
  const {app,state}=fixture({decisionStatus:409});await settle();
- await button(byId(app,'chat-decision-decision:1')!,'Add member')!.fire('click');await settle();
+ await button(byId(app,'chat-decision-decision:1')!,copy('conversation.link.14'))!.fire('click');await settle();
  app.node('member-name').value='하나';await app.node('member-name').fire('input');await app.node('member-shape-drop').fire('click');
  await app.node('member-create').fire('click');await settle();
  assert.equal(state.posted.length,1);assert.equal(app.node('member-dialog').hidden,false);assert.equal(app.node('member-name').value,'하나');

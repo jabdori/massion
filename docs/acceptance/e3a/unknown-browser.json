@@ -1,0 +1,34 @@
+[
+  {
+    "theme": "dark",
+    "fixture": "Read-only fixture host rejects message writes with HTTP 405; conservatively unknown, not proof of delivery failure.",
+    "draft": {
+      "commandId": "6a6c354d-7e7a-4749-85da-2557d2152863",
+      "delivery": "unknown",
+      "target": {
+        "expectedRevision": 1,
+        "segment": 1
+      },
+      "text": "결과를 확인해 줘."
+    },
+    "resendButtons": 0,
+    "sendDisabled": true,
+    "status": "결과 모름"
+  },
+  {
+    "theme": "light",
+    "fixture": "Read-only fixture host rejects message writes with HTTP 405; conservatively unknown, not proof of delivery failure.",
+    "draft": {
+      "commandId": "f43daf18-0fa0-4e8c-84f0-28bff16b3e7b",
+      "delivery": "unknown",
+      "target": {
+        "expectedRevision": 1,
+        "segment": 1
+      },
+      "text": "결과를 확인해 줘."
+    },
+    "resendButtons": 0,
+    "sendDisabled": true,
+    "status": "결과 모름"
+  }
+]

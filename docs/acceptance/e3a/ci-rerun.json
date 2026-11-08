@@ -1,0 +1,93 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B2",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 19,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,780,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 9,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline-failed.png"
+    },
+    {
+      "screen": "B2",
+      "theme": "light",
+      "passed": 13,
+      "failed": 19,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "light",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,780,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "light",
+      "passed": 13,
+      "failed": 9,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline-failed.png"
+    }
+  ]
+}
