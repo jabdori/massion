@@ -1,3 +1,5 @@
+import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
+import type {ProtocolHeader} from '../../src/protocol.ts';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -53,36 +55,60 @@ export async function startFixtureHost(screen:string):Promise<{url:string;fixtur
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Content-Type','application/json; charset=utf-8');
-  const fail=(status:number,error:string)=>{res.statusCode=status;res.end(JSON.stringify({error}));};
-  const appView=req.method==='POST'&&req.url==='/assistant/apps/view'&&!!fixture.appViews?.length;
-  if(req.method!=='GET'&&!appView){res.setHeader('Allow','GET');fail(405,'Fixture host rejects product commands');return;}
+  let envelope:ProtocolHeader|undefined,protocolPayload:Record<string,unknown>|undefined,method=req.method;
+  const send=(status:number,payload:unknown)=>{res.statusCode=status;res.end(JSON.stringify(envelope?{...envelope,version:protocolSupport.max,kind:'reply',status,payload}:payload));};
+  const fail=(status:number,error:string)=>send(status,{error});
+  let appView=method==='POST'&&req.url==='/assistant/apps/view'&&!!fixture.appViews?.length;
+  const protocolPost=method==='POST'&&['/protocol/connect','/protocol/request'].includes(req.url??'');
+  if(method!=='GET'&&!appView&&!protocolPost){res.setHeader('Allow','GET');fail(405,'Fixture host rejects product commands');return;}
   if(req.socket.remoteAddress!=='127.0.0.1'||req.headers.host!==origin.slice('http://'.length)||req.headers.origin&&req.headers.origin!==origin){fail(403,'Fixture host allows its loopback origin only');return;}
   let url:URL;
   try{url=new URL(req.url!,origin);}catch{fail(400,'Invalid request URL');return;}
   if(url.origin!==origin){fail(403,'Fixture host allows its loopback origin only');return;}
-  const path=url.pathname+url.search;
+  let path=url.pathname+url.search;
+  if(path==='/protocol/connect'||path==='/protocol/request'){
+   if(!protocolPost||req.headers['content-type']!=='application/json'){fail(415,'Protocol requires JSON POST');return;}
+   let raw='';try{for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>49152){fail(413,'Fixture protocol body too large');return;}}}catch{fail(400,'Interrupted protocol body');return;}
+   let message:Record<string,unknown>;try{message=JSON.parse(raw);}catch{fail(400,'Invalid protocol JSON');return;}
+   if(!validHeader(message)){fail(400,'Invalid protocol header');return;}envelope=message;
+   if(path==='/protocol/connect'){if(!validRange(message.supported)){fail(400,'Invalid protocol range');return;}const info=protocolConnection(message.supported);send(info.state==='ready'?200:426,info);return;}
+   if(message.version<protocolSupport.min||message.version>protocolSupport.max){fail(426,'Unsupported protocol version');return;}
+   if(!['command','query'].includes(String(message.kind))||typeof message.path!=='string'||!/^\/(?!\/)/.test(message.path)||message.path.startsWith('/protocol')||/[\\#\r\n]/.test(message.path)){fail(400,'Invalid fixture protocol path');return;}
+   url=new URL(message.path,origin);path=url.pathname+url.search;method=message.kind==='command'?'POST':'GET';protocolPayload=message.payload as Record<string,unknown>;
+   appView=method==='POST'&&path==='/assistant/apps/view'&&!!fixture.appViews?.length;
+   if(method!=='GET'&&!appView){res.setHeader('Allow','GET');fail(405,'Fixture host rejects product commands');return;}
+  }
+  if(url.pathname==='/protocol/events'){
+   const header={version:Number(url.searchParams.get('version')),requestId:url.searchParams.get('requestId'),generation:Number(url.searchParams.get('generation'))};
+   if(!validHeader(header)||header.version!==protocolSupport.max){fail(426,'Unsupported feed protocol');return;}
+   const position=fixture.routes['/events']!.body as {feedId:string;cursor:number};
+   res.setHeader('Content-Type','text/event-stream');res.write('id: '+JSON.stringify([position.feedId,position.cursor])+'\ndata: '+JSON.stringify({...header,kind:'feed',reason:'connected',feedId:position.feedId,cursor:position.cursor})+'\n\n');return;
+  }
   if(appView){
    if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']??'')){fail(415,'App view requires JSON');return;}
+   let body:Record<string,unknown>;
+   if(envelope){body=protocolPayload!;if(body===undefined||Buffer.byteLength(JSON.stringify(body))>8192){fail(413,'App view body exceeds 8192 bytes');return;}}
+   else{
    const raw=await new Promise<Buffer|null>(resolve=>{
     let size=0;const chunks:Buffer[]=[];
     req.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>8192){chunks.length=0;resolve(null);}else chunks.push(chunk);});
     req.on('end',()=>resolve(Buffer.concat(chunks)));req.on('error',()=>resolve(null));req.on('aborted',()=>resolve(null));
    });
    if(raw===null){fail(413,'App view body exceeds 8192 bytes or was interrupted');return;}
-   let body:Record<string,unknown>;
    try{body=JSON.parse(raw.toString('utf8'));}catch{fail(400,'Invalid app view JSON');return;}
+   }
    const view=body&&typeof body==='object'&&!Array.isArray(body)&&fixture.appViews!.find(v=>{
     const expected=v.request as Record<string,unknown>,keys=Object.keys(body);
     return keys.length===Object.keys(expected).length&&keys.every(key=>Object.hasOwn(expected,key)&&body[key]===expected[key]);
    });
    if(!view){fail(404,'No fixture response for this app view');return;}
-   res.end(JSON.stringify(view.body));return;
+   send(200,view.body);return;
   }
   if(path==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(workbenchPage);return;}
-  if(path==='/__fixture'){res.end(JSON.stringify(fixture));return;}
+  if(path==='/__fixture'){send(200,fixture);return;}
   const key=/^\/events\?after=(0|[1-9]\d*)$/.test(path)&&Number.isSafeInteger(Number(url.searchParams.get('after')))?'/events':path;
   if(!Object.hasOwn(fixture.routes,key)){fail(404,'No fixture response for '+path);return;}
-  const response=fixture.routes[key]!;res.statusCode=response.status;res.end(JSON.stringify(response.body));
+  const response=fixture.routes[key]!;send(response.status,response.body);
  });
  await new Promise<void>((resolve,reject)=>{
   server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.off('error',reject);resolve();});

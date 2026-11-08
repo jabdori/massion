@@ -154,3 +154,14 @@ test('completed and deferred v2 decisions render the declared readiness node wit
    assert.ok(app.all().some(n=>n.id==='chat-system-'+d.id),screen+' completed/deferred decision must not be discarded');
  }
 });
+test('screen fixtures serve the versioned client and idle SSE without admitting product writes',async t=>{
+ const {startFixtureHost}=await hostModule(),host=await startFixtureHost('B22');t.after(()=>host.close());
+ const post=async(path:string,body:unknown)=>fetch(host.url+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const header={version:1,requestId:'fixture-protocol',generation:1};
+ const hello=await post('protocol/connect',{...header,supported:{min:1,max:1}});assert.equal(hello.status,200);assert.equal((await hello.json()).payload.state,'ready');
+ const query=await post('protocol/request',{...header,kind:'query',path:'/assistant/conversation'});assert.equal(query.status,200);assert.deepEqual((await query.json()).payload,host.fixture.routes['/assistant/conversation']!.body);
+ const command=await post('protocol/request',{...header,kind:'command',path:'/missions',payload:{}});assert.equal(command.status,405);assert.equal((await command.json()).requestId,header.requestId);
+ const appView=await post('protocol/request',{...header,kind:'command',path:'/assistant/apps/view',payload:{app:'app-github',handler:'page'}});assert.equal(appView.status,200);assert.equal((await appView.json()).payload.title,'GitHub');
+ const incompatible=await post('protocol/request',{...header,version:99,kind:'query',path:'/assistant/conversation'});assert.equal(incompatible.status,426);
+ const abort=new AbortController();t.after(()=>abort.abort());const stream=await fetch(host.url+'protocol/events?version=1&requestId=fixture-feed&generation=2&after=0',{signal:abort.signal});assert.equal(stream.status,200);const frame=new TextDecoder().decode((await stream.body!.getReader().read()).value);assert.match(frame,/"kind":"feed"/);assert.match(frame,/"reason":"connected"/);abort.abort();
+});

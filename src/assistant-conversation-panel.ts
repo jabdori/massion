@@ -106,8 +106,8 @@ function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&
 function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
 /** Opens the Representative ('') or a member conversation in the page at its head and returns true; a switch refused while a send is pending returns false and changes nothing. A switch drops the shown nodes and reads that thread, and reopening the thread shown at an earlier segment returns to the head, where briefings and exception cards are. */
 function chatOpenThread(id,name=''){
- if(id!==chatThread){if(chatSending)return false;++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
- else if(chatSegment!==null){++chatGeneration;chatSegment=null;void readChat();}
+ if(id!==chatThread){if(chatSending)return false;protocol.invalidate('chat-view');++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ else if(chatSegment!==null){protocol.invalidate('chat-view');++chatGeneration;chatSegment=null;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();return true;}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
 /** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */
@@ -154,15 +154,15 @@ function renderChat(){
 /** One read loop at a time; a caller during a read waits for the loop that will cover its thread, so a send right after a switch targets the new thread's head. */
 function readChat(){if(chatReading){chatAgain=true;return chatReadDone;}chatReading=true;return chatReadDone=chatReadLoop();}
 async function chatReadLoop(){
- try{do{chatAgain=false;const generation=chatGeneration,thread=chatThread,segment=chatSegment,query=[segment?'segment='+segment:'',thread?'member='+encodeURIComponent(thread):''].filter(Boolean).join('&'),{response,body}=await request('/assistant/conversation'+(query?'?'+query:''));
-  // A read for a thread the owner already left is dropped and the current one is read instead.
-  if(generation!==chatGeneration||thread!==chatThread||segment!==chatSegment){chatAgain=true;continue;}
+ try{do{chatAgain=false;try{const thread=chatThread,segment=chatSegment,query=[segment?'segment='+segment:'',thread?'member='+encodeURIComponent(thread):''].filter(Boolean).join('&'),{response,body}=await request('/assistant/conversation'+(query?'?'+query:''),{scope:'chat-view'});
   // A named segment that the read shows is the head is read again as the head view, where decisions, briefings and run exceptions show.
   if(segment!==null&&segment===chatSegment&&body.head===segment){chatSegment=null;chatAgain=true;continue;}
   if(!response.ok||!Number.isSafeInteger(body.head)||!Array.isArray(body.turns)||body.segment!==null&&(!body.segment||!Array.isArray(body.segment.messages)))throw new Error('Conversation unavailable');
   if([chatView&&chatView.feedId,chatRep&&chatRep.feedId,shellWorksFeed].some(feed=>feed&&feed!==body.feedId)){chatReset();continue;}
-  chatView=body;if(!thread)chatRep=body;renderChat();if($('chat-status').textContent==='Unavailable')chatShow('');}while(chatAgain);}
- catch{if(!$('chat-status').textContent)chatShow('Unavailable');}finally{chatReading=false;chatControls();void shellWorksLoad();chatScheduleRead();}
+  chatView=body;if(!thread)chatRep=body;renderChat();if($('chat-status').textContent==='Unavailable')chatShow('');
+  }catch(error){if(error.name==='StaleProtocolReplyError'){chatAgain=true;continue;}throw error;}
+ }while(chatAgain);return true;}
+ catch{if(!$('chat-status').textContent)chatShow('Unavailable');return false;}finally{chatReading=false;chatControls();void shellWorksLoad();chatScheduleRead();}
 }
 function chatScheduleRead(){
   // A host that dies mid-turn leaves it pending and emits nothing more; the read turns it unknown after its deadline, so a shown pending turn is read again, also after a failed read.
@@ -174,7 +174,7 @@ function chatScheduleRead(){
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
 // A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
-function chatReset(){++chatGeneration;++shellWorksSequence;shellWorks=[];shellWorksFeed='';paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder','Message');if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
+function chatReset(){protocol.invalidate('chat-view');++chatGeneration;++shellWorksSequence;shellWorks=[];shellWorksFeed='';paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder','Message');if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
 /** A Representative turn by ID, also one a briefing carries from an earlier segment, so its Work links open. */
 function chatWorkTurn(turnId){const listed=shellWorks.find(w=>w.turnId===turnId);if(listed)return {id:turnId,work:listed};if(!chatRep)return;return chatRep.turns.find(t=>t.id===turnId)??(Array.isArray(chatRep.briefings)?chatRep.briefings:[]).flatMap(b=>b&&Array.isArray(b.turns)?b.turns:[]).find(t=>t&&t.id===turnId);}
 async function openChatWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
@@ -206,7 +206,7 @@ async function sendChat(){
  const draft=chatDraft(),same=draft.text===text&&!!draft.commandId,commandId=same?draft.commandId:crypto.randomUUID();let pinned=same?draft.target:null;storage.set(chatDraftKey,JSON.stringify({text,commandId,target:pinned}));
  chatSending=true;chatShow('');chatControls();
  try{
-  if(chatSegment||!chatView){chatSegment=null;await readChat();}
+  if(chatSegment||!chatView){chatSegment=null;if(!await readChat()){chatShow('Unavailable');return;}}
   for(let attempt=0;attempt<2;attempt++){
    const view=chatView,segment=view&&view.segment;const target=pinned??(!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision});chatPin(commandId,target);
    const {response,body}=await request('/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json',...(view&&view.feedId?{'X-Massion-Feed':view.feedId}:{})},body:JSON.stringify({commandId,...target,text,...(chatThread?{member:chatThread}:{})})},130000);
@@ -227,7 +227,7 @@ function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='st
 $('chat-input').value=chatDraft().text;
 $('chat-input').addEventListener('input',()=>{const text=$('chat-input').value,draft=chatDraft();storage.set(chatDraftKey,JSON.stringify(draft.text===text?draft:{text,commandId:'',target:null}));});
 $('chat-form').addEventListener('submit',event=>{event.preventDefault();void sendChat();});
-$('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;++chatGeneration;chatSegment=chatView.segment.number-1;void readChat();});
-$('chat-latest').addEventListener('click',()=>{++chatGeneration;chatSegment=null;void readChat();});
+$('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;protocol.invalidate('chat-view');++chatGeneration;chatSegment=chatView.segment.number-1;void readChat();});
+$('chat-latest').addEventListener('click',()=>{protocol.invalidate('chat-view');++chatGeneration;chatSegment=null;void readChat();});
 void readChat();
 `;
