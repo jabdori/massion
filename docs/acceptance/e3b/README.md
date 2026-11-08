@@ -82,8 +82,11 @@ explained in the final residual ledger rather than represented by fake UI data.
   text does not become an extra visible paragraph. [Proof](visible-budget-checks.json).
 - Mechanical design detector: no findings on the panel/shell. `git diff --check`: passed.
 - No real provider, database, remote delegation, payment, order query, attachment
-  upload, release or deployment was exercised. No merge. Other 53 artboard states
-  were not recaptured; all 75 fixture data/inheritance checks were run.
+  upload, release or deployment was exercised. No merge. Two existing failed-pane fixtures received selector-only repairs after the shared
+  failed-card markup changed; [headless smoke results](pane-fixture-smoke.json)
+  show zero infrastructure errors in both themes. Their B7/pane contract and
+  geometry drift remains outside this slice. Other 51 artboard states were not
+  recaptured; all 75 fixture data/inheritance checks were run.
 
 ## Measurement integrity
 

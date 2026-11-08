@@ -2,10 +2,10 @@
   "screen": "B7-fail",
   "description": "Work room for B7-fail. Deterministic API data; freeze browser Date to now.",
   "now": 1793855520000,
-  "readySelector": "[id=\"chat-fold-assistant-turn:m:churn\"]",
+  "readySelector": "[id=\"chat-card-assistant-turn:m:churn\"]",
   "steps": [
     {
-      "selector": "[id=\"chat-fold-assistant-turn:m:churn\"]",
+      "selector": "[id=\"chat-card-assistant-turn:m:churn\"] .chat-card-open",
       "action": "click",
       "readySelector": "#work-heading-churn"
     }
