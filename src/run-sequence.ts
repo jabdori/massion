@@ -2,8 +2,8 @@
 import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Mission,Work} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
-import {workAdmissionPreflight,rejectedRun,hostBusyPreflight} from './configured-runtime.ts';
-import type {WorkRuntime,RuntimeResult} from './configured-runtime.ts';
+import {workAdmissionPreflight,rejectedRun,hostBusyPreflight,captureRuntimeFence,checkRuntimeFence,withRuntimeFence} from './configured-runtime.ts';
+import type {WorkRuntime,RuntimeResult,RuntimeFence} from './configured-runtime.ts';
 import type {ExecutionChoice,DefaultResolution} from './selectable-runtime.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
@@ -30,9 +30,9 @@ function plannedPrerequisites(snapshot:Snapshot<Mission>,w:Work,earlier:Set<stri
  const external=pins.filter(pin=>!earlier.has(pin.workId)),view={...w};if(external.length)view.prerequisites=external;else delete view.prerequisites;
  resolvedPrerequisites(snapshot.value,view);
 }
-export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[],entryBusy?:boolean,resolveChoice?:(mission:Mission,workId:string)=>Promise<DefaultResolution>):Promise<RunSequenceResult>{
- const input=structuredClone(submitted);bound(input);const busyAtEntry=entryBusy??runtime.hasActiveAdmission?.()??false,configuration=hash(runtime.configuration?.()??null);
- let snapshot=await store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
+export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[],entryBusy?:boolean,resolveChoice?:(mission:Mission,workId:string)=>Promise<DefaultResolution>,originalFence?:RuntimeFence):Promise<RunSequenceResult>{
+ const input=structuredClone(submitted);bound(input);const busyAtEntry=entryBusy??runtime.hasActiveAdmission?.()??false;
+ const [fence,initial]=await Promise.all([originalFence??captureRuntimeFence(store,runtime),store.load(missionId)]);if(!initial)throw new DomainError('Unknown Mission');let snapshot:Snapshot<Mission>=initial;const configuration=fence.configuration;
  const results:RunSequenceResult['results']=[],completedWorkIds:string[]=[],stop=(entry:SequenceWork,index:number,result:RuntimeResult):RunSequenceResult=>({status:'stopped',snapshot:result.snapshot,completedWorkIds,results:[...results,{workId:entry.workId,runId:sequenceRunId(input.commandId,index),status:result.status,reason:result.reason}],reason:result.reason});
  if(unresolved)return stop(input.works[0]!,0,{status:'blocked',snapshot,reason:unresolved.map(d=>d.message).join(' ')});
  const earlier=new Set<string>(),selected=new Set(input.works.map(entry=>entry.workId));
@@ -50,10 +50,11 @@ export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missi
   if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});
   let choice=input.selection;if(resolveChoice){const resolved=await resolveChoice(snapshot.value,entry.workId);if(resolved.status==='unresolved')return stop(entry,index,{status:'blocked',snapshot,reason:resolved.diagnostics.map(d=>d.message).join(' ')});choice=resolved.choice;
    if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});}
+  const changed=await checkRuntimeFence(store,runtime,fence);if(changed)return stop(entry,index,{status:'blocked',snapshot,reason:changed.message});
   const checked=runtime.preflight?.(snapshot,entry.workId,expectedRevision,choice)??{...workAdmissionPreflight(snapshot,entry.workId,expectedRevision),ready:false,diagnostics:[{code:'selection_unavailable',message:'Sequence requires the existing execution preflight.'}]};
   if(!checked.ready)return stop(entry,index,rejectedRun(checked,snapshot));
   if(hash(original(snapshot,entry))!==reviewed.get(entry.workId))return stop(entry,index,{status:'blocked',snapshot,reason:'Original reviewed unstarted Work changed during the sequence; no automatic rebase.'});
-  const runId=sequenceRunId(input.commandId,index),result=await runtime.run(missionId,entry.workId,runId,expectedRevision,choice);snapshot=result.snapshot;
+  const runId=sequenceRunId(input.commandId,index),result:RuntimeResult=await withRuntimeFence(fence,()=>runtime.run(missionId,entry.workId,runId,expectedRevision,choice));snapshot=result.snapshot;
   const w=snapshot.value.works.find(w=>w.id===entry.workId)!;if(result.status!=='settled'||w.acceptance!=='accepted'||!w.record)return stop(entry,index,{...result,reason:result.reason??'Prior Work has no independently accepted Record; remaining Work was not requested.'});
   results.push({workId:entry.workId,runId,status:result.status});completedWorkIds.push(entry.workId);
  }

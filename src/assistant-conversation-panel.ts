@@ -61,9 +61,9 @@ function chatSteerCurrent(choice){return choice.generation===chatGeneration&&cho
 /** Model output proposes only. An explicit click binds the stored message and target on the host. */
 function chatSteerLine(turn){const steer=turn.steer;if(!steer)return null;
  const choice={feed:chatView.feedId,member:chatThread,segment:chatView.segment?.number,turnId:turn.id,generation:chatGeneration,selection:chatSegment},key=chatSteerKey(choice);
- if(steer.status==='recorded'||steer.status==='not_recorded'){chatSteering.delete(key);storage.remove(chatSteerReceipt(key));}
+ if(steer.status==='recorded'||steer.status==='not_recorded'&&!chatSteering.get(key)?.recorded){chatSteering.delete(key);storage.remove(chatSteerReceipt(key));}
  if(!chatText(steer.title))return null;
- if(steer.status==='recorded')return chatSystem('steer-'+turn.id,'Steered: '+steer.title);
+ if(steer.status==='recorded'||chatSteering.get(key)?.recorded)return chatSystem('steer-'+turn.id,'Steered: '+steer.title);
  const pending=chatSteering.get(key),receipt=storage.get(chatSteerReceipt(key));
  if(steer.status==='unknown'||steer.status==='proposed'&&(!storage.readable||!pending&&receipt!==null||pending&&(!pending.busy||pending.generation!==chatGeneration)))return chatSystem('steer-'+turn.id,'Result unknown: '+steer.title,[['Check',()=>readChat()]]);
  if(steer.status!=='proposed'||!chatText(choice.feed)||!chatText(choice.member)||!Number.isSafeInteger(choice.segment)||choice.segment<1||!chatSteerCurrent(choice))return null;
@@ -74,13 +74,21 @@ async function chatApplySteer(choice,button){
  const turn=chatView.turns.find(t=>t.id===choice.turnId),key=chatSteerKey(choice);if(turn?.steer?.status!=='proposed'||chatSteering.has(key))return;
  if(storage.get(chatSteerReceipt(key))!==null||!storage.readable){renderChat();return;}
  // Persist before sending so a reload cannot turn an unseen commit back into Apply.
- if(!storage.set(chatSteerReceipt(key),'pending')){chatShow('Unavailable');return;}
- const pending={busy:true,generation:choice.generation};chatSteering.set(key,pending);renderChat();
- try{await request('/assistant/steering',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':choice.feed},body:JSON.stringify({member:choice.member,segment:choice.segment,turnId:choice.turnId})});}
+ const pending={busy:true,generation:choice.generation,receipt:crypto.randomUUID()};
+ if(!storage.set(chatSteerReceipt(key),pending.receipt)){chatShow('Unavailable');return;}
+ chatSteering.set(key,pending);renderChat();let outcome=null;
+ try{const {body}=await request('/assistant/steering',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':choice.feed},body:JSON.stringify({member:choice.member,segment:choice.segment,turnId:choice.turnId})});outcome=body;}
  catch{}finally{
-  // A lost answer, including a read that still says proposed, never authorizes another POST.
-  if(chatSteering.get(key)===pending)pending.busy=false;
-  if(chatSteerCurrent(choice)){await readChat();if(chatSteerCurrent(choice))renderChat();}
+  // Only this attempt's explicit result can resolve its receipt; HTTP codes alone prove nothing.
+  if(chatSteering.get(key)===pending){pending.busy=false;
+   if(chatSteerCurrent(choice)&&storage.get(chatSteerReceipt(key))===pending.receipt){
+    if(outcome&&typeof outcome==='object'&&!Array.isArray(outcome)&&(outcome.status==='recorded'||outcome.status==='not_recorded'||outcome.outcome==='rejected')){
+     if(outcome.status==='recorded')pending.recorded=true;else chatSteering.delete(key);storage.remove(chatSteerReceipt(key));
+     if(pending.recorded)renderChat();
+    }
+    await readChat();if(chatSteerCurrent(choice)&&(!chatSteering.has(key)||chatSteering.get(key)===pending))renderChat();
+   }
+  }
  }
 }
 /** Result unknown offers Check only: an unknown outcome is never resent (ADR 0002 §8). Failure offers Retry and Close. */

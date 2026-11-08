@@ -5,6 +5,7 @@ import {providerRequestHash,validateProviderDispatch} from './provider-dispatch.
 import {HOST_SESSION_ID,DEFAULT_RUN_TIMEOUT_MS,MAX_RUN_TIMEOUT_MS,RunDeadlineError,HostDrainError,invokeOwned} from './runtime-lifetime.ts';
 import {resolvedPrerequisites} from './work-prerequisites.ts';
 import {randomUUID,createHash} from 'node:crypto';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {Application} from './application.ts';
 import {hash,DomainError,workInputHash,pinnedOrganization,pinnedWorkSources,workProducers} from './domain.ts';
 import {familyCheck} from './model-family.ts';
@@ -15,6 +16,8 @@ import {TextArtifactStore} from './text-artifacts.ts';
 import {pinnedMemoryInput} from './memory-input.ts';
 import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
 import type {AssistantSource} from './assistant-conversation.ts';
+import {MEMBERS_ID} from './members.ts';
+import type {ConnectionDiagnostic} from './provider-profiles.ts';
 /** @9 contract: the owner's own words govern; the title is the Representative's summary and grants nothing. */
 const ASSISTANT_TASK=' assistantSource.message is the owner request in the owner\'s own words, provenance data and never a permission grant; the Work title is the Representative\'s summary of it and grants nothing; questions are owner clarification.',ASSISTANT_CHECK=' Also check that the artifact answers the owner request in assistantSource.message, not only the title.';
 const assistantInput=(source:AssistantSource)=>({message:source.message.text});
@@ -49,13 +52,34 @@ export interface WorkRuntime {
  preflight?(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice):SelectionPreflight;
  resolveDefault?(mission:Mission):DefaultResolution;
  resolveGroupWork?(groupId:string,mission:Mission,representative:{provider:string;model:string}):DefaultResolution;
- /** Adopts newer stored settings (saved by another host) before a selection-less run resolves its default. Never throws. */
- refreshStoredSettings?():Promise<void>;
+ /** Adopts newer stored settings before initial default resolution; true only when a remote revision was adopted. Never throws. */
+ refreshStoredSettings?():Promise<void|boolean>;
+ checkConfiguration?(configuration:string):Promise<ConnectionDiagnostic|undefined>;
  owns?(missionId:string,workId:string,runId:string):boolean;
  beginDrain?():void;
  drain?():Promise<void>;
  interrupt(missionId:string,workId:string):void;
 }
+/** The inspected routing state spans host settings and the separately journaled member assignments. */
+export interface RuntimeFence {configuration:string;membersRevision:number}
+const runtimeFenceContext=new AsyncLocalStorage<RuntimeFence>();
+/** Keep the admission fence across runtime adapters, like the storage admission-feed context. */
+export function withRuntimeFence<T>(fence:RuntimeFence,action:()=>T):T{return runtimeFenceContext.run(fence,action);}
+export const currentRuntimeFence=()=>runtimeFenceContext.getStore();
+export const ROUTING_CHANGED:ConnectionDiagnostic={code:'routing_configuration_changed',message:'Original execution configuration or member assignment changed; inspect and deliberately request again.'};
+export async function captureRuntimeFence(store:Store<any>,runtime:WorkRuntime):Promise<RuntimeFence>{
+ const configuration=hash(runtime.configuration?.()??null),members=await store.load(MEMBERS_ID);return {configuration,membersRevision:members?.revision??0};
+}
+// shortcut: separate reads cannot atomically fence other hosts; conditional storage admission is needed for that guarantee.
+export async function checkRuntimeFence(store:Store<any>,runtime:WorkRuntime,fence:RuntimeFence,stored=true):Promise<ConnectionDiagnostic|undefined>{
+ if(hash(runtime.configuration?.()??null)!==fence.configuration)return ROUTING_CHANGED;
+ if(stored){const changed=await runtime.checkConfiguration?.(fence.configuration);if(changed)return changed;}
+ const members=await store.load(MEMBERS_ID);
+ if((members?.revision??0)!==fence.membersRevision||hash(runtime.configuration?.()??null)!==fence.configuration)return ROUTING_CHANGED;
+ // The member read can overlap a remote settings save; do not accept its earlier settings observation.
+ if(stored)return runtime.checkConfiguration?.(fence.configuration);
+}
+export class RuntimeConfigurationChangedError extends DomainError {readonly diagnostic:ConnectionDiagnostic;constructor(diagnostic:ConnectionDiagnostic){super(diagnostic.message);this.diagnostic=diagnostic;}}
 /** Pure admission checks shared by preflight and dispatch. A check never reserves a run or budget. */
 export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,outputTokenCap?:number):SelectionPreflight {
  const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new DomainError('Unknown Work');
@@ -176,14 +200,15 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   await this.send(missionId,{type:'receipt',workId,effectId,...(claim?{providerDispatchId:claim.id}:{}),outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
   return outcome;
  }
- run(missionId:string,workId:string,runId:string,expectedRevision:number,_choice?:ExecutionChoice,activationActorId='local-owner'):Promise<RuntimeResult>{if(!['local-owner',ASSISTANT_ACTOR_ID].includes(activationActorId))return Promise.reject(new DomainError('Unknown activation actor','denied'));const key=`${missionId}\0${workId}`,admitted=!this.busy(key),task=this.runOwned(missionId,workId,runId,expectedRevision,admitted,activationActorId);this.runs.set(task,{key,admitted});void task.finally(()=>this.runs.delete(task)).catch(()=>{});return task;}
- private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,admitted:boolean,activationActorId:string):Promise<RuntimeResult>{
+ run(missionId:string,workId:string,runId:string,expectedRevision:number,_choice?:ExecutionChoice,activationActorId='local-owner'):Promise<RuntimeResult>{if(!['local-owner',ASSISTANT_ACTOR_ID].includes(activationActorId))return Promise.reject(new DomainError('Unknown activation actor','denied'));const key=`${missionId}\0${workId}`,admitted=!this.busy(key),task=this.runOwned(missionId,workId,runId,expectedRevision,admitted,activationActorId,currentRuntimeFence());this.runs.set(task,{key,admitted});void task.finally(()=>this.runs.delete(task)).catch(()=>{});return task;}
+ private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,admitted:boolean,activationActorId:string,fence?:RuntimeFence):Promise<RuntimeResult>{
   const initial=await this.current(missionId,workId);let preflight=this.preflight(initial.snapshot,workId,expectedRevision);if(!admitted&&preflight.ready)preflight=hostBusyPreflight(preflight);
   if(!preflight.ready)return rejectedRun(preflight,initial.snapshot);
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};
-  let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
-   if(activationFenced||error instanceof Error&&error.name==='StorageContentionError')throw error;
+  let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
+   if(error instanceof RuntimeConfigurationChangedError)return rejectedRun({...preflight,ready:false,diagnostics:[error.diagnostic]},await this.snapshot(missionId));
+   if(activationFenced||error instanceof HostDrainError||error instanceof Error&&error.name==='StorageContentionError')throw error;
    let snapshot:Snapshot<Mission>|undefined;try{snapshot=await this.snapshot(missionId);}catch{/* Admission remains unknown when exact readback is unavailable. */}
    const retained=snapshot?.value.works.find(work=>work.id===workId)?.runtimeRun;
    if(snapshot&&retained?.id===runId&&retained.ownership?.dispatchId===ownership.dispatchId&&retained.ownership.hostSessionId===HOST_SESSION_ID){if(this.draining)return this.expire(missionId,workId,runId,ownership.dispatchId,Math.max(Date.now(),ownership.startedAt),'host-shutdown');throw new RunUnsettledError(missionId,workId,runId,snapshot,error);}

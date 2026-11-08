@@ -295,7 +295,7 @@ test('review 2: a steering commit remains visible when its acknowledgment crosse
 test('review 2: restart reads a committed steer even if the host stops before its outcome record',async t=>{
  const f=await setup(t),quill=await f.admit(),{work}=await runningWork(f,t);
  const store=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events[0].type==='record-assistant-steer')throw new Error('Host stopped before outcome');return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
- const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('Sure.',work.id));await f.say(chat,'Annual plans');await assert.rejects(confirmLast(chat),/Host stopped/);
+ const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('Sure.',work.id));await f.say(chat,'Annual plans');assert.equal((await confirmLast(chat)).status,'recorded');
  const before=f.store.inspect().length;assert.equal((await f.chatFor(quill).read()).turns[0]!.steer?.status,'recorded');assert.equal(f.store.inspect().length,before,'restart only reads the recorded identity');
  validateMissionJournalLineage(f.store.inspect() as any);
 });
@@ -372,6 +372,7 @@ test('review 3: a later confirmed steering receipt interrupts the still-owned lo
  const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('Sure.',running.work.id));await f.say(chat,'Annual plans');await confirmLast(chat);
  assert.equal((await chat.read()).turns[0]!.steer?.status,'unknown');assert.equal(running.signal().aborted,false);
  confirmed=true;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.equal(writes,1);
+ confirmed=false;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded','a later unavailable receipt read cannot erase the confirmed outcome');
 });
 
 for(const authorized of [true,false])test(`manual Start preserves a deferred member group (${authorized?'authorized':'revoked grant'})`,async t=>{
@@ -425,7 +426,7 @@ test('only the owner can confirm a proposed target, and a finished target cannot
  const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),chat=f.chatFor(quill);f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
  const view=await chat.read(),{AssistantConversation}=await import('../src/assistant-conversation.ts'),model=new AssistantConversation(f.store,[{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],Date.now,'member:'+quill.id);
  await assert.rejects(model.dispatch({segment:1,commandId:'assistant-confirm-steer:'+view.turns[0]!.id,expectedRevision:view.segment!.revision,actorId:ASSISTANT_ACTOR_ID,command:{type:'confirm-assistant-steer',turnId:view.turns[0]!.id,workRevision:(await f.store.load('intake'))!.revision}}),/role/);
- assert.equal(running.signal().aborted,false);running.release();await f.assistant.idle();await assert.rejects(confirmLast(chat),/no longer running/);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
+ assert.equal(running.signal().aborted,false);running.release();await f.assistant.idle();assert.equal((await confirmLast(chat)).status,'not_recorded');assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
 });
 
 test('HTTP steering confirmation resuming after drain records no owner intent or instruction',async t=>{
@@ -447,4 +448,87 @@ test('an unobserved confirmation outcome stays unknown and repeated confirmation
 test('member Work cannot run a group reserved for the discriminator after integration',async t=>{
  const f=await setup(t);await f.m.save(()=>f.m.saveModelGroup({id:'decision',name:'Decision',description:'Typed decisions',role:'discriminator',profileIds:[f.profile('google/gemini-a'),f.profile('anthropic/claude-b')],expectedConfigHash:f.m.list().configHash}));await f.grant('decision-grant','google/gemini-a','anthropic/claude-b');
  const resolved=f.m.resolveGroupWork('decision',await f.intake(),{provider:'openrouter',model:'openai/gpt-rep'});assert.equal(resolved.status,'unresolved');if(resolved.status==='unresolved')assert.equal(resolved.diagnostics[0]!.code,'model_group_role');
+});
+
+function intercepted(store:Store<any>,methods:Record<string,unknown>):Store<any>{return new Proxy(store,{get(target,key){const value=Object.hasOwn(methods,key)?methods[String(key)]:Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});}
+
+test('confirmation audit: a definite conversation revision conflict releases the proposal for a fresh owner action',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),segmentId='assistant-conversation:member:'+quill.id+':1';let race=false;
+ const ownerStore=intercepted(f.store,{load:async(id:string)=>{if(race&&id===segmentId){race=false;await f.say(f.chatFor(quill),'Another message');}return f.store.load(id);}}),chat=f.chatFor(quill,ownerStore);
+ f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans'),input={segment:1,turnId:sent.turn!.id};race=true;
+ assert.equal((await chat.confirmSteer(input)).status,'not_recorded');assert.equal((await chat.read()).turns.find(t=>t.id===input.turnId)!.steer!.status,'proposed');assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
+ assert.equal((await chat.confirmSteer(input)).status,'recorded');assert.deepEqual((await f.intake()).works.at(-1)!.instructions,[{actorId:'local-owner',text:'Annual plans'}]);
+});
+
+test('confirmation audit: an idempotent intent replay never authorizes the Work write',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let intent=0,work=0;
+ const ownerStore=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type==='steer')work++;const result=await f.store.commit(input);if(input.events[0].type==='confirm-assistant-steer'){intent++;return {...result,status:'replayed'};}return result;}}),chat=f.chatFor(quill,ownerStore);
+ f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');assert.equal((await confirmLast(chat)).status,'unknown');assert.equal((await confirmLast(chat)).status,'unknown');assert.equal(intent,1);assert.equal(work,0);assert.equal(running.signal().aborted,false);
+});
+
+test('confirmation audit: the segment dispatcher reconciles a committed idempotency-conflict reply',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),chat=f.chatFor(quill);f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');const view=await chat.read();
+ const store=intercepted(f.store,{commit:async(input:any)=>{const result=await f.store.commit(input);return {status:'conflict',reason:'idempotency',revision:result.revision};}}),{AssistantConversation}=await import('../src/assistant-conversation.ts'),owner=new AssistantConversation(store,[{id:'local-owner',roles:['owner']}],Date.now,'member:'+quill.id);
+ const result=await owner.dispatch({segment:1,commandId:'assistant-confirm-steer:'+view.turns[0]!.id,expectedRevision:view.segment!.revision,actorId:'local-owner',command:{type:'confirm-assistant-steer',turnId:view.turns[0]!.id,workRevision:(await f.store.load('intake'))!.revision}});
+ assert.equal(result.status,'replayed');assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
+});
+
+for(const outcomeFails of [false,true])test(`confirmation audit: a definite Work conflict remains not recorded (${outcomeFails?'outcome write conflicts':'outcome recorded'})`,async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let interfered=false;
+ const store=intercepted(f.store,{commit:async(input:any)=>{if(outcomeFails&&input.events[0].type==='record-assistant-steer')return {status:'conflict',reason:'revision',revision:input.expectedRevision};return f.store.commit(input);}});
+ const ownerStore=intercepted(f.store,{commit:async(input:any)=>{const result=await f.store.commit(input);if(!interfered&&input.events[0].type==='confirm-assistant-steer'){interfered=true;await f.product.appendMissionMessage('intake',{commandId:'during-confirm',expectedRevision:(await f.store.load('intake'))!.revision,messageId:'during-confirm',replyTo:null,text:'Another owner note'});}return result;}});
+ const chat=new AssistantService(store,f.product,f.m,{member:quill,ownerStore});f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
+ assert.equal((await confirmLast(chat)).status,'not_recorded');assert.equal((await chat.read()).turns[0]!.steer?.status,'not_recorded');assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
+});
+
+test('confirmation audit: a replayed Work receipt is recorded without a second instruction',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let writes=0;
+ const ownerStore=intercepted(f.store,{commit:async(input:any)=>{const result=await f.store.commit(input);if(input.events[0].type==='steer'){writes++;return {...result,status:'replayed'};}return result;}}),chat=f.chatFor(quill,ownerStore);f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
+ assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(writes,1);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);assert.equal(running.signal().aborted,true);
+});
+
+test('confirmation audit: a definite reconciliation conflict is not an unknown Work outcome',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let uncertain=false;
+ const store=intercepted(f.store,{lookupOperation:async(identity:any)=>uncertain&&identity.commandId.startsWith('assistant-steer:')?{status:'conflict',reason:'idempotency',revision:1}:f.store.lookupOperation(identity)});
+ const ownerStore=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type==='steer'){uncertain=true;throw new CommitOutcomeUnknownError(input,new Error('Lost receipt'));}return f.store.commit(input);}}),chat=new AssistantService(store,f.product,f.m,{member:quill,ownerStore});f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
+ assert.equal((await confirmLast(chat)).status,'not_recorded');assert.equal((await chat.read()).turns[0]!.steer?.status,'not_recorded');assert.equal(running.signal().aborted,false);
+});
+
+for(const stage of ['confirm-assistant-steer','steer'] as const)test(`confirmation audit: an unclassified ${stage} commit error is reconciled, never called a definite refusal`,async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let writes=0;
+ const ownerStore=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type===stage){writes++;if(stage==='steer')await f.store.commit(input);throw new Error('Unclassified lost acknowledgment');}return f.store.commit(input);}}),chat=f.chatFor(quill,ownerStore);
+ f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');assert.equal((await confirmLast(chat)).status,stage==='steer'?'recorded':'unknown');await confirmLast(chat);assert.equal(writes,1);assert.equal(running.signal().aborted,stage==='steer');
+});
+
+for(const stage of ['confirm-assistant-steer','steer'] as const)test(`confirmation audit: a proven transaction rollback at ${stage} is a definite HTTP refusal`,async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),chat=f.chatFor(quill);f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans');let rolledBack=false;
+ const {StorageQueryError}=await import('../src/storage.ts'),store=intercepted(f.store,{commit:async(input:any)=>{if(!rolledBack&&input.events[0].type===stage){rolledBack=true;throw new StorageQueryError('Validated transaction rollback');}return f.store.commit(input);}});
+ const server=createWorkbench(store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
+ const post=()=>fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({member:quill.id,segment:1,turnId:sent.turn!.id})}).then(async r=>({status:r.status,body:await r.json() as any}));
+ const result=await post();if(stage==='confirm-assistant-steer'){assert.equal(result.status,409);assert.equal(result.body.outcome,'rejected');assert.equal((await chat.read()).turns[0]!.steer?.status,'proposed');assert.equal((await post()).body.status,'recorded');}
+ else{assert.equal(result.body.status,'not_recorded');assert.equal((await post()).body.status,'not_recorded');assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);assert.equal(running.signal().aborted,false);}
+});
+
+for(const uncertain of [false,true])test(`confirmation audit: outcome-record ${uncertain?'uncertainty':'rollback'} preserves the known Work result and correct drain status`,async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),{StorageQueryError}=await import('../src/storage.ts');
+ const store=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type==='record-assistant-steer')throw uncertain?new CommitOutcomeUnknownError(input,new Error('Lost outcome receipt')):new StorageQueryError('Outcome rolled back');return f.store.commit(input);}}),chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
+ assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(running.signal().aborted,true);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);
+ if(uncertain)await assert.rejects(chat.drain(),/unsettled/);else await chat.drain();
+});
+
+test('confirmation audit: a definite revision refusal survives a temporarily unavailable follow-up read',async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),segment='assistant-conversation:member:'+quill.id+':1';let race=false,failRead=false;
+ const store=intercepted(f.store,{readState:async(id?:string)=>{if(failRead&&id===segment){failRead=false;throw new Error('Snapshot temporarily unavailable');}return f.store.readState(id);}});
+ const ownerStore=intercepted(f.store,{load:async(id:string)=>{if(race&&id===segment){race=false;f.setNow(Date.now());await f.say(f.chatFor(quill),'Another message');failRead=true;}return f.store.load(id);}}),chat=new AssistantService(store,f.product,f.m,{member:quill,ownerStore});f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans');race=true;
+ assert.equal((await chat.confirmSteer({segment:1,turnId:sent.turn!.id})).status,'not_recorded');assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
+});
+
+for(const uncertain of [false,true])test(`confirmation audit: a final snapshot read failure preserves ${uncertain?'unknown':'recorded'} instead of rejecting the write`,async t=>{
+ const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let failRead=false;
+ const {StorageQueryError}=await import('../src/storage.ts');
+ const store=intercepted(f.store,{commit:async(input:any)=>{if(uncertain&&input.events[0].type==='steer')throw new CommitOutcomeUnknownError(input,new Error('Lost Work receipt'));const result=await f.store.commit(input);if(input.events[0].type==='record-assistant-steer')failRead=true;return result;},readState:async(id?:string)=>{if(failRead&&id?.startsWith('assistant-conversation:member:'))throw new StorageQueryError('Snapshot read refused');return f.store.readState(id);}});
+ const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans');
+ const server=createWorkbench(store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
+ const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({member:quill.id,segment:1,turnId:sent.turn!.id})}),body=await response.json() as any;
+ assert.equal(response.status,200);assert.equal(body.status,uncertain?'unknown':'recorded');assert.notEqual(body.outcome,'rejected');assert.equal(running.signal().aborted,!uncertain);
 });

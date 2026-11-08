@@ -140,10 +140,12 @@ export class AssistantConversation {
   const aggregate=segmentId(segment,this.thread),fingerprint=hash({actorId:actor.id,command,expectedRevision}),identity={id:aggregate,commandId,fingerprint};
   const prior=await this.store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
   const snapshot=await this.store.load(aggregate);
-  if((snapshot?.revision??0)!==expectedRevision){const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};}
+  const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;
+  if((snapshot?.revision??0)!==expectedRevision)return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};
   if(command.type==='open-assistant-segment'&&segment>1){const before=(await this.store.load(segmentId(segment-1,this.thread)))?.value;ensure(before?.closed,'Segment '+(segment-1)+' must be closed before the next opens','conflict');ensure(command.previous?.lastMessageId===before.messages.at(-1)!.id,'Open must name the previous segment last message');}
   const {value,events}=applyAssistant(snapshot?.value??null,command,actor,{observedAt:this.clock()},this.thread);
-  return this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
+  const result=await this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
+  if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}return result;
  }
 }
 /** Exponential then binary search over contiguous segments; 0 when none exists. */
