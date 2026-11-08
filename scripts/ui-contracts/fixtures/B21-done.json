@@ -1,0 +1,185 @@
+{
+  "screen": "B21-done",
+  "extends": "B1",
+  "description": "Independent post-admission fixture, opened in Sem conversation.",
+  "gaps": [
+    "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+  ],
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#side-member-member-sem",
+      "readySelector": "#chat-log"
+    }
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          },
+          {
+            "id": "member-sem",
+            "name": "셈",
+            "look": {
+              "shape": "round",
+              "color": "agent-2"
+            },
+            "modelGroup": "default"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "r:hello-sem",
+              "role": "representative",
+              "turnId": null,
+              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          },
+          {
+            "id": "member-sem",
+            "name": "셈",
+            "look": {
+              "shape": "round",
+              "color": "agent-2"
+            },
+            "modelGroup": "default"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "r:hello-sem",
+              "role": "representative",
+              "turnId": null,
+              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?member=member-sem": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-3"
+            },
+            "modelGroup": "coding"
+          },
+          {
+            "id": "member-sem",
+            "name": "셈",
+            "look": {
+              "shape": "round",
+              "color": "agent-2"
+            },
+            "modelGroup": "default"
+          }
+        ],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "r:hello-sem",
+              "role": "representative",
+              "turnId": null,
+              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    }
+  }
+}

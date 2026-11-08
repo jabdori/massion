@@ -1,0 +1,25 @@
+{
+  "screen": "B13-general-restart",
+  "extends": "B13",
+  "description": "General settings with restart required.",
+  "gaps": [
+    "Production general settings has no notification, installed-version or restart-required state/control."
+  ],
+  "steps": [
+    {
+      "selector": "#rail-me",
+      "action": "click",
+      "readySelector": "#me-menu"
+    },
+    {
+      "selector": "#me-settings",
+      "action": "click",
+      "readySelector": "#page-settings"
+    },
+    {
+      "action": "click",
+      "selector": "#settings-nav-general",
+      "readySelector": "#settings-general-body .set-row"
+    }
+  ]
+}

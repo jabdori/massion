@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B2.dc.html",
- "screenshot": "contracts/shots/B2.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B2.dc.html",
+ "screenshot": "shots/dark/B2.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B2.dc.html",
+   "screenshot": "shots/dark/B2.png"
+  },
+  "light": {
+   "source": "proto/render/light/B2.dc.html",
+   "screenshot": "shots/light/B2.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -59,7 +69,7 @@
    "elements": [
     {
      "role": "switch",
-     "text": "활동 보기",
+     "text": "활동 보기, 확인 필요",
      "required": true,
      "order": 0
     },
@@ -192,10 +202,9 @@
     },
     {
      "role": "text",
-     "text": "{content}",
+     "text": "지금",
      "required": false,
-     "order": 6,
-     "example": "지금"
+     "order": 6
     },
     {
      "role": "text",
@@ -261,7 +270,7 @@
      "text": "{content}",
      "required": false,
      "order": 16,
-     "example": "Subtotal is 3 + 3 = 6 cents. A 50 percent discount gives 3 cents, which is already a whole number, so rounding once at the aggregate level does not change it."
+     "example": "소계는 3 + 3 = 6센트예요. 50% 할인하면 3센트이고 이미 정수라서 합계에서 한 번 반올림해도 같아요."
     },
     {
      "role": "text",
@@ -271,59 +280,104 @@
      "example": "TOTAL: 3 cents"
     },
     {
-     "role": "text",
-     "text": "{content}",
-     "required": false,
-     "order": 18,
-     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 18
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
      "order": 19,
-     "example": "TOTAL: 3 cents"
+     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
      "order": 20,
+     "example": "TOTAL: 3 cents"
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 21
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 22,
      "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 21,
+     "order": 23,
      "example": "TOTAL: 4 cents"
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 24
     },
     {
      "role": "text",
      "text": "{date}",
      "required": true,
-     "order": 22,
+     "order": 25,
      "example": "11월 5일 (목)"
     },
     {
      "role": "text",
-     "text": "아침 브리핑 | {date} {time}",
+     "text": "{content}",
      "required": false,
-     "order": 23,
+     "order": 26,
      "example": "아침 브리핑 | 11월 5일 (목) 오전 8:00"
     },
     {
      "role": "text",
      "text": "반올림 규칙 결정 대기 {time}",
      "required": false,
-     "order": 24,
+     "order": 27,
      "example": "반올림 규칙 결정 대기 21:20"
     },
     {
      "role": "link",
      "text": "반올림 규칙",
      "required": true,
-     "order": 25
+     "order": 28
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 29,
+     "example": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+    },
+    {
+     "role": "text",
+     "text": "하나가 넘김: {work_title} · {time}",
+     "required": false,
+     "order": 30,
+     "example": "하나가 넘김: 이탈 원인 조사 · 09:40"
+    },
+    {
+     "role": "link",
+     "text": "{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중",
+     "required": true,
+     "order": 31,
+     "example": "이탈 원인 조사 실행 중 퀼 45분 조사 분류 요약 확인 3/5 · 나누기 완료 · 원인 정리 중"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 32
     }
    ]
   },
@@ -383,10 +437,10 @@
    "longest": 2
   },
   "conversation": {
-   "chars": 599,
-   "strings": 38,
-   "sentences": 7,
-   "longest": 158
+   "chars": 606,
+   "strings": 51,
+   "sentences": 8,
+   "longest": 61
   },
   "composer": {
    "chars": 5,
@@ -408,6 +462,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -419,18 +485,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
-   ],
-   "composer": [
-    530,
-    808,
-    680,
-    78
    ]
   }
  },

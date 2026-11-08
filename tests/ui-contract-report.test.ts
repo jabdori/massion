@@ -20,8 +20,8 @@ test('visual checks catch missing tokens, hidden regions and geometry drift with
  assert.equal(checkVisual(contract,spec,{tokens:spec.tokens,regions:{rail:[0,0,58,900]}}).length,1);
 });
 test('Markdown reports each screen with links to evidence and explicit setup gaps',()=>{
- const text=reportMarkdown([{screen:'B1',passed:2,failed:3,required:4,warnings:1,visualFailures:['rail'],gaps:['not implemented'],errors:[],pair:'pairs/B1.png'}],false);
- assert.match(text,/REPORT-ONLY/);assert.match(text,/\| B1 \|/);assert.match(text,/not implemented/);assert.match(text,/pairs\/B1.png/);
+ const text=reportMarkdown([{screen:'B1',theme:'light',passed:2,failed:3,required:4,warnings:1,visualFailures:['rail'],gaps:['not implemented'],errors:[],pair:'pairs/light/B1.png'}],false);
+ assert.match(text,/REPORT-ONLY/);assert.match(text,/\| B1 \| light \|/);assert.match(text,/not implemented/);assert.match(text,/pairs\/light\/B1.png/);
 });
 test('only structured missing-control failures are setup gaps; IPC and process failures stay errors',async()=>{
  const {isInteractionGap}=await import('../scripts/ui-contracts/report.ts');
@@ -38,4 +38,23 @@ test('browser interactions wait for initial synchronization and release of busy/
  assert.equal(runInNewContext(workbenchReady,ready),true);
  for(const flag of ['busy','loading','reconnectRequired'])assert.equal(runInNewContext(workbenchReady,{...ready,[flag]:true}),false,flag);
  assert.equal(runInNewContext(workbenchReady,{...ready,chatView:null}),false);
+});
+
+test('v2 resolves role tokens through the requested palette and catches light drift',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const spec=JSON.parse(await readFile(new URL('../docs/product/screens/visual.json',import.meta.url),'utf8'));
+ for(const theme of ['dark','light'] as const){
+  const palette=spec.palettes[theme];
+  const tokens=Object.fromEntries(Object.entries(spec.tokens).map(([role,ref])=>[role,palette[String(ref).replace('--palette-','')]]));
+  assert.deepEqual(checkVisual({},spec,{tokens,regions:{}},theme),[]);
+  assert.ok(checkVisual({},spec,{tokens:{...tokens,'--bg-0':'wrong'},regions:{}},theme).some(f=>f.includes('--bg-0')));
+ }
+});
+test('reports keep both theme rows and every evidence link distinct',()=>{
+ const rows=(['dark','light'] as const).map(theme=>({screen:'B2',theme,passed:1,failed:2,required:3,warnings:0,visualFailures:[],gaps:[],errors:[],pair:`pairs/${theme}/B2.png`}));
+ const text=reportMarkdown(rows,false);
+ for(const theme of ['dark','light']){
+  assert.ok(text.includes(`| B2 | ${theme} |`));
+  for(const [dir,ext] of [['snapshots','txt'],['checks','txt'],['screenshots','png'],['visual','json']])assert.ok(text.includes(`${dir}/${theme}/B2.${ext}`));
+ }
 });

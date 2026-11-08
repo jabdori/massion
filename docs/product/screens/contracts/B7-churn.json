@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B7-churn.dc.html",
- "screenshot": "contracts/shots/B7-churn.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B7-churn.dc.html",
+ "screenshot": "shots/dark/B7-churn.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B7-churn.dc.html",
+   "screenshot": "shots/dark/B7-churn.png"
+  },
+  "light": {
+   "source": "proto/render/light/B7-churn.dc.html",
+   "screenshot": "shots/light/B7-churn.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -41,9 +51,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -240,101 +251,118 @@
      "example": "맡았어요. 지난 90일 해지 건부터 볼게요."
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 6
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 6,
+     "order": 7,
      "example": "기업 고객은 따로 봐 줘."
     },
     {
      "role": "link",
      "text": "방향 바꿈: {work_title} · {time}",
      "required": true,
-     "order": 7,
+     "order": 8,
      "example": "방향 바꿈: 이탈 원인 조사 · 09:52"
     },
     {
      "role": "text",
      "text": "{member}",
      "required": false,
-     "order": 8,
+     "order": 9,
      "example": "퀼"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 9,
+     "order": 10,
      "example": "09:52"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 10,
+     "order": 11,
      "example": "기업 고객은 따로 나눠서 같이 정리할게요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 12
     },
     {
      "role": "text",
      "text": "하나가 넘김: {work_title} · {time}",
      "required": false,
-     "order": 11,
+     "order": 13,
      "example": "하나가 넘김: 경쟁사 가격 · 10:30"
     },
     {
      "role": "link",
-     "text": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 1 개 · 확인 대기",
+     "text": "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기",
      "required": true,
-     "order": 12,
-     "example": "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 표 1 개 · 확인 대기",
-     "visible_text": "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 표 1개 · 확인 대기"
+     "order": 14,
+     "example": "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 표 1개 · 확인 대기"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 13,
+     "order": 15,
      "example": "앞으로 표 금액은 원 단위로 써 줘."
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 14,
+     "order": 16,
      "example": "기억 후보: 표 금액은 원 단위"
     },
     {
      "role": "button",
      "text": "남기기",
      "required": true,
-     "order": 15
+     "order": 17
     },
     {
      "role": "button",
      "text": "지우기",
      "required": true,
-     "order": 16
+     "order": 18
     },
     {
      "role": "text",
      "text": "{member}",
      "required": false,
-     "order": 17,
+     "order": 19,
      "example": "퀼"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": false,
-     "order": 18,
+     "order": 20,
      "example": "10:41"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 19,
+     "order": 21,
      "example": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 22
     }
    ]
   },
@@ -583,94 +611,91 @@
      "example": "지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘."
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 35
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 35,
+     "order": 36,
      "example": "방향 바꿈: 기업 고객 따로 09:52"
     },
     {
      "role": "text",
      "text": "{member}",
      "required": true,
-     "order": 36,
+     "order": 37,
      "example": "퀼"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 37,
+     "order": 38,
      "example": "분류"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": true,
-     "order": 38,
+     "order": 39,
      "example": "09:52"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 39,
+     "order": 40,
      "example": "모은 건은 기업 고객과 그 외로 나눠 줘."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 41
     },
     {
      "role": "chip",
      "text": "조사",
      "required": true,
-     "order": 40
+     "order": 42
     },
     {
      "role": "text",
      "text": "{member}",
      "required": true,
-     "order": 41,
+     "order": 43,
      "example": "퀼"
     },
     {
      "role": "text",
      "text": "{time}",
      "required": true,
-     "order": 42,
+     "order": 44,
      "example": "10:05"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 43,
+     "order": 45,
      "example": "해지 사유 41건 모았어요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 46
     },
     {
      "role": "chip",
      "text": "{content}",
      "required": false,
-     "order": 44,
-     "example": "분류"
-    },
-    {
-     "role": "text",
-     "text": "{member}",
-     "required": true,
-     "order": 45,
-     "example": "퀼"
-    },
-    {
-     "role": "text",
-     "text": "{time}",
-     "required": true,
-     "order": 46,
-     "example": "10:24"
-    },
-    {
-     "role": "text",
-     "text": "{content}",
-     "required": false,
      "order": 47,
-     "example": "기업 9건, 그 외 32건이에요."
+     "example": "분류"
     },
     {
      "role": "text",
@@ -681,29 +706,62 @@
     },
     {
      "role": "text",
+     "text": "{time}",
+     "required": true,
+     "order": 49,
+     "example": "10:24"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 50,
+     "example": "기업 9건, 그 외 32건이에요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 51
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 52,
+     "example": "퀼"
+    },
+    {
+     "role": "text",
      "text": "요약",
      "required": true,
-     "order": 49
+     "order": 53
     },
     {
      "role": "text",
      "text": "{time}",
      "required": true,
-     "order": 50,
+     "order": 54,
      "example": "10:25"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 51,
+     "order": 55,
      "example": "두 묶음 따로 원인을 정리해 줘."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 56
     },
     {
      "role": "button",
      "text": "확인 대기 원인 정리 후 시작",
      "required": true,
-     "order": 52
+     "order": 57
     }
    ]
   },
@@ -796,17 +854,11 @@
    "chip"
   ],
   "regions": {
-   "rail": [
-    0,
-    0,
-    52,
-    900
-   ],
-   "sidebar": [
-    52,
-    0,
-    248,
-    900
+   "composer": [
+    324,
+    808,
+    492,
+    78
    ],
    "main": [
     300,
@@ -820,11 +872,17 @@
     600,
     856
    ],
-   "composer": [
-    324,
-    808,
-    492,
-    78
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
    ]
   }
  },

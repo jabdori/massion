@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B1-signin.dc.html",
- "screenshot": "contracts/shots/B1-signin.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B1-signin.dc.html",
+ "screenshot": "shots/dark/B1-signin.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B1-signin.dc.html",
+   "screenshot": "shots/dark/B1-signin.png"
+  },
+  "light": {
+   "source": "proto/render/light/B1-signin.dc.html",
+   "screenshot": "shots/light/B1-signin.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "page",

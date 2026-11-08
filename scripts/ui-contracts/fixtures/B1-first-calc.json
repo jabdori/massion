@@ -1,0 +1,76 @@
+{
+  "screen": "B1-first-calc",
+  "extends": "B1",
+  "description": "First calculation conversation; fixture answer, not a new model call.",
+  "gaps": [],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:calculation",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+            },
+            {
+              "id": "r:calculation",
+              "role": "representative",
+              "turnId": null,
+              "text": "합계: 3센트"
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:calculation",
+              "role": "owner",
+              "turnId": null,
+              "text": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+            },
+            {
+              "id": "r:calculation",
+              "role": "representative",
+              "turnId": null,
+              "text": "합계: 3센트"
+            }
+          ]
+        },
+        "turns": [],
+        "decisions": [],
+        "briefings": []
+      }
+    }
+  }
+}

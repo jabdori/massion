@@ -24,9 +24,14 @@ export interface ScreenFixture {
 const fixtureDirectory=new URL('./fixtures/',import.meta.url);
 const text=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
 
-export async function loadFixture(screen:string):Promise<ScreenFixture>{
- if(!/^B(?:[1-9]|1\d|2[0-5])(?:-[a-z]+)*$/.test(screen))throw new Error('Unknown fixture screen: '+screen);
- const fixture=JSON.parse(await readFile(new URL(screen+'.json',fixtureDirectory),'utf8'));
+export async function loadFixture(screen:string,parents:string[]=[]):Promise<ScreenFixture>{
+ if(!/^B[1-9]\d*(?:-[a-z]+)*$/.test(screen))throw new Error('Unknown fixture screen: '+screen);
+ if(parents.includes(screen))throw new Error('Fixture inheritance cycle: '+[...parents,screen].join(' -> '));
+ const raw=JSON.parse(await readFile(new URL(screen+'.json',fixtureDirectory),'utf8'));
+ if(raw.screen!==screen)throw new Error('Invalid fixture: '+screen);
+ if(raw.extends!==undefined&&!text(raw.extends))throw new Error('Invalid fixture parent: '+screen);
+ const base=raw.extends?await loadFixture(raw.extends,[...parents,screen]):null;
+ const fixture=base?{...base,...raw,routes:{...base.routes,...raw.routes}}:raw;
  if(fixture.screen!==screen||!text(fixture.description)||!Number.isSafeInteger(fixture.now)||!text(fixture.readySelector)||
   !Array.isArray(fixture.gaps)||!fixture.gaps.every(text)||!Array.isArray(fixture.reuse)||!fixture.reuse.every(text)||
   !Array.isArray(fixture.steps)||!fixture.steps.every((s:FixtureStep)=>s&&text(s.selector)&&['click','fill'].includes(s.action)&&(s.action!=='fill'||typeof s.value==='string')&&(s.readySelector===undefined||text(s.readySelector)))||

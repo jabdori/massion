@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B16-later.dc.html",
- "screenshot": "contracts/shots/B16-later.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B16-later.dc.html",
+ "screenshot": "shots/dark/B16-later.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B16-later.dc.html",
+   "screenshot": "shots/dark/B16-later.png"
+  },
+  "light": {
+   "source": "proto/render/light/B16-later.dc.html",
+   "screenshot": "shots/light/B16-later.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -82,14 +92,6 @@
      "text": "{member}",
      "required": true,
      "order": 3,
-     "example": "퀼",
-     "visible_text": "퀼"
-    },
-    {
-     "role": "link",
-     "text": "{member}",
-     "required": true,
-     "order": 4,
      "example": "주노",
      "visible_text": "주노"
     },
@@ -97,13 +99,13 @@
      "role": "button",
      "text": "우선순위",
      "required": true,
-     "order": 5
+     "order": 4
     },
     {
      "role": "link",
      "text": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.",
      "required": true,
-     "order": 6,
+     "order": 5,
      "example": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.",
      "visible_text": "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3. 하"
     },
@@ -111,7 +113,7 @@
      "role": "status",
      "text": "읽지 않음",
      "required": true,
-     "order": 7
+     "order": 6
     }
    ]
   },
@@ -172,24 +174,36 @@
      "example": "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
     },
     {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 3
+    },
+    {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 3,
+     "order": 4,
      "example": "나중에: 노트북의 Claude Code에게 맡기기 다시 묻기"
     },
     {
      "role": "button",
      "text": "다시 묻기",
      "required": true,
-     "order": 4
+     "order": 5
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 5,
+     "order": 6,
      "example": "알겠어요. 아무것도 보내지 않았어요."
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 7
     }
    ]
   },
@@ -237,8 +251,8 @@
    "longest": 1
   },
   "sidebar": {
-   "chars": 60,
-   "strings": 6,
+   "chars": 59,
+   "strings": 5,
    "sentences": 1,
    "longest": 41
   },
@@ -272,6 +286,18 @@
    "composer"
   ],
   "regions": {
+   "composer": [
+    530,
+    808,
+    680,
+    78
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -283,18 +309,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
-   ],
-   "composer": [
-    530,
-    808,
-    680,
-    78
    ]
   }
  },

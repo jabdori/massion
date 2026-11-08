@@ -1,0 +1,323 @@
+{
+ "artboard": "B2-offline",
+ "title": "B2-offline 하나와의 대화 · 연결 끊김",
+ "viewport": {
+  "width": 1440,
+  "height": 900
+ },
+ "source": "proto/render/dark/B2-offline.dc.html",
+ "screenshot": "shots/dark/B2-offline.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B2-offline.dc.html",
+   "screenshot": "shots/dark/B2-offline.png"
+  },
+  "light": {
+   "source": "proto/render/light/B2-offline.dc.html",
+   "screenshot": "shots/light/B2-offline.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "regions": [
+  {
+   "region": "rail",
+   "rect": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "elements": [
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 0,
+     "example": "하나",
+     "visible_text": "하",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "결과물",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "예약",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "내 계정",
+     "required": true,
+     "order": 3,
+     "visible_text": "나"
+    }
+   ]
+  },
+  {
+   "region": "sidebar",
+   "rect": [
+    52,
+    0,
+    248,
+    900
+   ],
+   "elements": [
+    {
+     "role": "switch",
+     "text": "활동 보기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "검색",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 2,
+     "example": "하나",
+     "visible_text": "하나",
+     "current": true
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 3,
+     "example": "퀼"
+    },
+    {
+     "role": "status",
+     "text": "작업 중",
+     "required": true,
+     "order": 4
+    },
+    {
+     "role": "link",
+     "text": "{work_title}",
+     "required": true,
+     "order": 5,
+     "example": "이탈 원인 조사"
+    },
+    {
+     "role": "status",
+     "text": "실행 중",
+     "required": true,
+     "order": 6
+    },
+    {
+     "role": "link",
+     "text": "{member}",
+     "required": true,
+     "order": 7,
+     "example": "주노",
+     "visible_text": "주노"
+    }
+   ]
+  },
+  {
+   "region": "header",
+   "rect": null,
+   "elements": [
+    {
+     "role": "link",
+     "text": "사이드바 숨기기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "text",
+     "text": "{member}",
+     "required": true,
+     "order": 1,
+     "example": "하나"
+    },
+    {
+     "role": "status",
+     "text": "연결 끊김",
+     "required": true,
+     "order": 2
+    }
+   ]
+  },
+  {
+   "region": "conversation",
+   "rect": [
+    300,
+    44,
+    1140,
+    856
+   ],
+   "elements": [
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 0,
+     "example": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘."
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 1,
+     "example": "합계: 3센트"
+    },
+    {
+     "role": "button",
+     "text": "복사",
+     "required": true,
+     "order": 2
+    }
+   ]
+  },
+  {
+   "region": "composer",
+   "rect": [
+    530,
+    780,
+    680,
+    106
+   ],
+   "elements": [
+    {
+     "role": "textbox",
+     "text": "하나에게 메시지 보내기",
+     "required": true,
+     "order": 0
+    },
+    {
+     "role": "button",
+     "text": "파일 추가",
+     "required": true,
+     "order": 1
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 2
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 3
+    }
+   ]
+  }
+ ],
+ "text_budget": {
+  "rail": {
+   "chars": 1,
+   "strings": 1,
+   "sentences": 0,
+   "longest": 1
+  },
+  "sidebar": {
+   "chars": 13,
+   "strings": 4,
+   "sentences": 0,
+   "longest": 8
+  },
+  "header": {
+   "chars": 7,
+   "strings": 2,
+   "sentences": 0,
+   "longest": 5
+  },
+  "conversation": {
+   "chars": 47,
+   "strings": 2,
+   "sentences": 1,
+   "longest": 40
+  },
+  "composer": {
+   "chars": 59,
+   "strings": 2,
+   "sentences": 1,
+   "longest": 54
+  }
+ },
+ "visual": {
+  "refs": [
+   "shell.rail",
+   "shell.sidebar",
+   "shell.header",
+   "shell.main",
+   "shell.composer",
+   "bubble.user",
+   "composer"
+  ],
+  "regions": {
+   "composer": [
+    530,
+    780,
+    680,
+    106
+   ],
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
+   "rail": [
+    0,
+    0,
+    52,
+    900
+   ],
+   "sidebar": [
+    52,
+    0,
+    248,
+    900
+   ]
+  }
+ },
+ "forbidden": [
+  "^Send$",
+  "^Message$",
+  "^Results$",
+  "^Schedules$",
+  "^Me$",
+  "^Activity$",
+  "^Members$",
+  "^Sidebar$",
+  "^Search$",
+  "^Later$",
+  "^Add member$",
+  "^Retry$",
+  "^Cancel$",
+  "^Settings$",
+  "^Conversation$",
+  "^People and work$",
+  "\\bWorking\\b",
+  "\\bWorked for\\b",
+  "^Write$",
+  "^Check$",
+  "^Representative$",
+  "^Mission\\b",
+  "'s work$",
+  "^Sun|^Mon|^Tue|^Wed|^Thu|^Fri|^Sat",
+  "\\b\\d+ min\\b",
+  "are paused until",
+  "remain available",
+  "is retried",
+  "permissions are refreshed",
+  "★",
+  "비서",
+  "^대표$",
+  "확인함 배지"
+ ]
+}

@@ -39,3 +39,36 @@ All four checks use one occurrence model, built before matching:
 The accessibility snapshot is the evidence boundary: name-only controls are a text fallback, not a claim about pixels. Explicit text children take precedence over aggregate accessible names. Descriptions can alias existing text; they do not manufacture rendered text when no text occurrence represents them.
 
 Table-driven regression cases cover the standalone-title and repeated-sentence reproductions, sibling identity, nested/partial aliases, semantic and joined labels, separator consumption, order, and forbidden-hit multiplicity. Recheck the same 51 stored snapshots before/after so count changes reflect checker semantics rather than new browser captures.
+
+## Screen contracts v2
+
+Import only the 75 approved generated B*.json contracts, 241-string copy table,
+role-to-palette visual spec, and the exact dark/light artboards. P1–P20 and P22
+are approved; P21 remains deferred. The private extension and visual review are
+context only, not repository artifacts. All 150 artboards must be present and
+at most 200,000 bytes after metadata stripping/resizing.
+
+Reuse the 51 existing fixtures. Each new state has a small JSON file extending
+the nearest existing fixture; route overrides replace whole responses, while
+steps and explicit gaps describe reachable behavior and unsupported states.
+Do not inject HTML/CSS, simulate owner writes, fabricate credentials, or add UI.
+The loader rejects invalid parent names and inheritance cycles before serving.
+
+Run the same contracts in two isolated browser system-preference environments,
+forcing `--color-scheme` on every command and checking `matchMedia` after the
+interactions. The current workbench hard-codes dark colors and has no system
+preference handler: light palette mismatches are product drift, not a reason
+to patch the page. Resolve approved role tokens through the chosen palette;
+normalize expected and actual colors through the browser. Store every evidence
+path under its theme and include theme in every report row and heading.
+
+Implementation/verification sequence:
+
+1. Extend existing asset, fixture and report tests first; observe failures for
+   missing v2 coverage, inheritance, theme token resolution and evidence links.
+2. Import the allowlisted artifacts, resize 150 PNGs, add 24 inherited fixtures,
+   and extend loader, visual checks, runner and reports. Keep CI report-only.
+3. Run focused tests, typecheck, syntax/copy checks, the full fixture test suite,
+   and all 150 browser captures. Inspect representative pairs in both themes.
+4. Commit and deliver a PR with all per-screen/theme counts, known gaps, test
+   limitations and evidence locations. No merge, release or deployment.

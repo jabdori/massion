@@ -6,15 +6,18 @@ import {workbenchPage} from '../src/workbench.ts';
 import {hash} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
 
-const screens='B1 B1-signin B2 B3 B3-run B4 B5 B6 B7 B7-churn B7-done B7-fail B7-unknown B8 B8-done B8-fail B8-unknown B9 B10 B10-preview B11 B11-quill B12 B13 B13-devices B14 B15 B16 B16-later B16-sent B17 B17-empty B18 B18-room-b B19 B19-juno B20 B20-coding B21 B21-name B22 B22-room B22-room-steps B23 B23-github B24 B24-done B24-later B25 B25-done B25-later'.split(' ').sort();
+const screens=(await readdir(new URL('../docs/product/screens/contracts/',import.meta.url))).filter(f=>f.endsWith('.json')).map(f=>f.slice(0,-5)).sort();
 const fixtureDir=new URL('../scripts/ui-contracts/fixtures/',import.meta.url);
 
 test('every approved screen has its own explicit fixture and setup metadata',async()=>{
  const files=await readdir(fixtureDir).catch(()=>[]);
  assert.deepEqual(files.filter(f=>f.endsWith('.json')).sort(),screens.map(s=>s+'.json').sort());
+ assert.equal(screens.length,75);
+ const {loadFixture}=await hostModule();
  const states=new Set<string>();
  for(const screen of screens){
-  const fixture=JSON.parse(await readFile(new URL(screen+'.json',fixtureDir),'utf8'));
+  const raw=JSON.parse(await readFile(new URL(screen+'.json',fixtureDir),'utf8'));
+  const fixture=await loadFixture(screen);
   assert.equal(fixture.screen,screen);
   assert.ok(fixture.description.length>0,screen);
   assert.ok(Array.isArray(fixture.steps),screen);
@@ -23,7 +26,7 @@ test('every approved screen has its own explicit fixture and setup metadata',asy
   for(const step of fixture.steps){assert.ok(step.selector,screen);assert.ok(['click','fill'].includes(step.action),screen);if(step.action==='fill')assert.equal(typeof step.value,'string');}
   assert.ok(fixture.routes['/assistant/conversation'],screen);
   const state=JSON.stringify([fixture.steps,fixture.routes]);
-  assert.ok(!states.has(state),'Duplicate state without distinct setup: '+screen);states.add(state);
+  assert.ok(!states.has(state)||raw.extends&&raw.gaps?.length,'Duplicate state without explicit unsupported-state gap: '+screen);states.add(state);
  }
 });
 
@@ -115,4 +118,39 @@ test('only declared read-only app views accept bounded exact JSON POST bodies',a
  assert.equal((await post('{')).status,400);assert.equal((await post('"'+'x'.repeat(9000)+'"')).status,413);
  assert.equal((await post('{}','assistant/apps')).status,405);
  assert.equal((await fetch(host.url+'assistant/apps/view',{method:'POST',headers:{Origin:'https://example.invalid','content-type':'application/json'},body:'{}'})).status,403);
+});
+
+test('inherited fixtures resolve routes without aliasing parents and reject cycles and invalid parent paths',async t=>{
+ const {loadFixture}=await hostModule();
+ const {writeFile,rm}=await import('node:fs/promises');
+ const paths=['B99','B98'].map(s=>new URL(s+'.json',fixtureDir));
+ t.after(async()=>{for(const path of paths)await rm(path,{force:true});});
+ await writeFile(paths[0]!,JSON.stringify({screen:'B99',extends:'../B2'}));
+ await assert.rejects(loadFixture('B99'),/Unknown fixture/);
+ await writeFile(paths[0]!,JSON.stringify({screen:'B99',extends:'B98'}));
+ await writeFile(paths[1]!,JSON.stringify({screen:'B98',extends:'B99'}));
+ await assert.rejects(loadFixture('B99'),/cycle/i);
+ const parent=await loadFixture('B13'),child=await loadFixture('B13-general');
+ assert.deepEqual(child.routes,parent.routes);
+ assert.notDeepEqual(child.steps,parent.steps);
+ child.routes['/assistant/conversation']!.status=500;
+ assert.equal((await loadFixture('B13')).routes['/assistant/conversation']!.status,200);
+});
+
+test('completed and deferred v2 decisions render the declared readiness node without submitting commands',async()=>{
+ const {harness,reply,settle}=await import('./support/workbench-client.ts');
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B21-done-hana','B24-connect-later']){
+  const f=await loadFixture(screen);
+  const app=harness(async(path,options)=>{
+   assert.notEqual(options?.method,'POST');
+   const response=f.routes[path]||f.routes[path.startsWith('/events?')?'/events':''];
+   return reply(response?.body??{error:'No fixture response'},response?.status??404);
+  });
+  await settle();
+  assert.ok(app.all().some(n=>n.id===f.readySelector.slice(1)),screen+' readiness node must be rendered');
+  if(screen==='B21-done-hana')assert.ok(app.all().some(n=>n.id==='side-member-member-sem'),'admitted member must appear in the sidebar');
+  for(const d of (f.routes['/assistant/conversation']!.body as {decisions:{id:string}[]}).decisions)
+   assert.ok(app.all().some(n=>n.id==='chat-system-'+d.id),screen+' completed/deferred decision must not be discarded');
+ }
 });

@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B19.dc.html",
- "screenshot": "contracts/shots/B19.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B19.dc.html",
+ "screenshot": "shots/dark/B19.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B19.dc.html",
+   "screenshot": "shots/dark/B19.png"
+  },
+  "light": {
+   "source": "proto/render/light/B19.dc.html",
+   "screenshot": "shots/light/B19.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -40,9 +50,10 @@
     },
     {
      "role": "link",
-     "text": "GitHub",
+     "text": "{work_title}",
      "required": true,
-     "order": 3
+     "order": 3,
+     "example": "GitHub"
     },
     {
      "role": "button",
@@ -107,21 +118,27 @@
     },
     {
      "role": "link",
-     "text": "앱",
+     "text": "사용량",
      "required": true,
      "order": 7
     },
     {
      "role": "link",
-     "text": "개선",
+     "text": "앱",
      "required": true,
      "order": 8
     },
     {
      "role": "link",
-     "text": "권한",
+     "text": "개선",
      "required": true,
      "order": 9
+    },
+    {
+     "role": "link",
+     "text": "권한",
+     "required": true,
+     "order": 10
     }
    ]
   },
@@ -305,8 +322,8 @@
     },
     {
      "role": "text",
-     "text": "{content}",
-     "required": false,
+     "text": "{work_title}",
+     "required": true,
      "order": 26,
      "example": "GitHub"
     },
@@ -325,7 +342,7 @@
     },
     {
      "role": "heading",
-     "text": "최근 개선",
+     "text": "기억",
      "required": true,
      "order": 29
     },
@@ -334,46 +351,125 @@
      "text": "{content}",
      "required": false,
      "order": 30,
+     "example": "표 금액은 원 단위"
+    },
+    {
+     "role": "text",
+     "text": "{date}",
+     "required": true,
+     "order": 31,
+     "example": "11월 5일"
+    },
+    {
+     "role": "link",
+     "text": "퀼과의 대화 ›",
+     "required": true,
+     "order": 32
+    },
+    {
+     "role": "button",
+     "text": "지우기",
+     "required": true,
+     "order": 33
+    },
+    {
+     "role": "heading",
+     "text": "최근 개선",
+     "required": true,
+     "order": 34
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 35,
      "example": "해지 기록은 자유 입력 칸까지 모으기"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 31,
+     "order": 36,
      "example": "11월 4일 · 문의 분류"
     },
     {
      "role": "button",
      "text": "되돌리기",
      "required": true,
-     "order": 32
+     "order": 37
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 33,
+     "order": 38,
      "example": "표 마지막 열에 출처 링크 붙이기"
     },
     {
      "role": "text",
      "text": "{content}",
      "required": false,
-     "order": 34,
+     "order": 39,
      "example": "11월 4일 · 근거 확인"
     },
     {
      "role": "button",
      "text": "되돌리기",
      "required": true,
-     "order": 35
+     "order": 40
     },
     {
      "role": "heading",
      "text": "예약",
      "required": true,
-     "order": 36
+     "order": 41
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 42,
+     "example": "경쟁사 가격 다시 보기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 43,
+     "example": "매주 월요일 오전 9:00"
+    },
+    {
+     "role": "switch",
+     "text": "{work_title} 다시 보기",
+     "required": true,
+     "order": 44,
+     "example": "경쟁사 가격 다시 보기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 45,
+     "example": "해지 사유 모아 보기"
+    },
+    {
+     "role": "text",
+     "text": "{content}",
+     "required": false,
+     "order": 46,
+     "example": "일시 정지됨"
+    },
+    {
+     "role": "switch",
+     "text": "해지 사유 모아 보기",
+     "required": true,
+     "order": 47
+    },
+    {
+     "role": "button",
+     "text": "보관",
+     "required": true,
+     "order": 48
     }
    ]
   }
@@ -386,14 +482,14 @@
    "longest": 1
   },
   "sidebar": {
-   "chars": 18,
-   "strings": 9,
+   "chars": 21,
+   "strings": 10,
    "sentences": 0,
    "longest": 3
   },
   "settings": {
-   "chars": 247,
-   "strings": 37,
+   "chars": 321,
+   "strings": 47,
    "sentences": 1,
    "longest": 23
   }
@@ -406,6 +502,12 @@
    "chip"
   ],
   "regions": {
+   "main": [
+    300,
+    0,
+    1140,
+    900
+   ],
    "rail": [
     0,
     0,
@@ -416,12 +518,6 @@
     52,
     0,
     248,
-    900
-   ],
-   "main": [
-    300,
-    0,
-    1140,
     900
    ]
   }

@@ -5,9 +5,19 @@
   "width": 1440,
   "height": 900
  },
- "source": "proto/render/B11.dc.html",
- "screenshot": "contracts/shots/B11.png",
- "notes": "Generated from the rendered artboard (visible DOM at 1440x900). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "source": "proto/render/dark/B11.dc.html",
+ "screenshot": "shots/dark/B11.png",
+ "themes": {
+  "dark": {
+   "source": "proto/render/dark/B11.dc.html",
+   "screenshot": "shots/dark/B11.png"
+  },
+  "light": {
+   "source": "proto/render/light/B11.dc.html",
+   "screenshot": "shots/light/B11.png"
+  }
+ },
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -83,14 +93,6 @@
      "text": "{member}",
      "required": true,
      "order": 3,
-     "example": "퀼",
-     "visible_text": "퀼"
-    },
-    {
-     "role": "link",
-     "text": "{member}",
-     "required": true,
-     "order": 4,
      "example": "주노",
      "visible_text": "주노"
     }
@@ -153,29 +155,35 @@
      "example": "TOTAL: 4 cents"
     },
     {
-     "role": "listbox",
-     "text": "구성원",
+     "role": "button",
+     "text": "복사",
      "required": true,
      "order": 3
     },
     {
-     "role": "text",
+     "role": "listbox",
      "text": "구성원",
      "required": true,
      "order": 4
     },
     {
-     "role": "option",
-     "text": "퀼 Enter",
+     "role": "text",
+     "text": "구성원",
      "required": true,
-     "order": 5,
+     "order": 5
+    },
+    {
+     "role": "option",
+     "text": "Enter",
+     "required": true,
+     "order": 6,
      "visible_text": "퀼 Enter"
     },
     {
      "role": "option",
      "text": "{member}",
      "required": true,
-     "order": 6,
+     "order": 7,
      "example": "주노",
      "visible_text": "주노"
     },
@@ -183,32 +191,38 @@
      "role": "link",
      "text": "구성원 관리",
      "required": true,
-     "order": 7
+     "order": 8
     },
     {
      "role": "text",
      "text": "@",
      "required": false,
-     "order": 8,
+     "order": 9,
      "example": "@"
     },
     {
      "role": "button",
-     "text": "파일 추가",
-     "required": true,
-     "order": 9
-    },
-    {
-     "role": "button",
-     "text": "기본 권한",
+     "text": "복사",
      "required": true,
      "order": 10
     },
     {
      "role": "button",
-     "text": "보내기",
+     "text": "파일 추가",
      "required": true,
      "order": 11
+    },
+    {
+     "role": "button",
+     "text": "기본 권한",
+     "required": true,
+     "order": 12
+    },
+    {
+     "role": "button",
+     "text": "보내기",
+     "required": true,
+     "order": 13
     }
    ]
   }
@@ -221,8 +235,8 @@
    "longest": 1
   },
   "sidebar": {
-   "chars": 5,
-   "strings": 3,
+   "chars": 4,
+   "strings": 2,
    "sentences": 0,
    "longest": 2
   },
@@ -248,6 +262,12 @@
    "bubble.user"
   ],
   "regions": {
+   "main": [
+    300,
+    44,
+    1140,
+    856
+   ],
    "rail": [
     0,
     0,
@@ -259,12 +279,6 @@
     0,
     248,
     900
-   ],
-   "main": [
-    300,
-    44,
-    1140,
-    856
    ]
   }
  },

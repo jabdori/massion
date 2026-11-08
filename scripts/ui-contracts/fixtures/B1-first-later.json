@@ -1,0 +1,72 @@
+{
+  "screen": "B1-first-later",
+  "extends": "B1",
+  "description": "First-work selection after deferring mail connection.",
+  "gaps": [
+    "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture."
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "mail-connect",
+            "at": 1793855520000,
+            "title": "Gmail",
+            "question": "Gmail을 연결할까요?",
+            "rows": [],
+            "action": "연결",
+            "state": "later"
+          }
+        ],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [],
+        "apps": [],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "decisions": [
+          {
+            "id": "mail-connect",
+            "at": 1793855520000,
+            "title": "Gmail",
+            "question": "Gmail을 연결할까요?",
+            "rows": [],
+            "action": "연결",
+            "state": "later"
+          }
+        ],
+        "briefings": []
+      }
+    }
+  }
+}

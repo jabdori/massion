@@ -1,0 +1,9 @@
+{
+  "screen": "B9-restart",
+  "extends": "B9",
+  "description": "Profile device needs a restart.",
+  "gaps": [
+    "The header member popover in the contract has no corresponding production control.",
+    "The production header has no member profile/device-status popover or restart state."
+  ]
+}

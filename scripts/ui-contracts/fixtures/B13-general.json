@@ -1,0 +1,25 @@
+{
+  "screen": "B13-general",
+  "extends": "B13",
+  "description": "General settings using existing settings navigation.",
+  "gaps": [
+    "Notification and installed-version rows are not implemented in production general settings."
+  ],
+  "steps": [
+    {
+      "selector": "#rail-me",
+      "action": "click",
+      "readySelector": "#me-menu"
+    },
+    {
+      "selector": "#me-settings",
+      "action": "click",
+      "readySelector": "#page-settings"
+    },
+    {
+      "action": "click",
+      "selector": "#settings-nav-general",
+      "readySelector": "#settings-general-body .set-row"
+    }
+  ]
+}

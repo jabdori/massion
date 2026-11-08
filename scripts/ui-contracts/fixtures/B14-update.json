@@ -1,0 +1,9 @@
+{
+  "screen": "B14-update",
+  "extends": "B14",
+  "description": "Connection subscriptions need an update.",
+  "gaps": [
+    "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+  ]
+}

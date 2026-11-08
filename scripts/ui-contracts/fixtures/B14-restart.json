@@ -1,0 +1,9 @@
+{
+  "screen": "B14-restart",
+  "extends": "B14",
+  "description": "Connection subscriptions need a restart.",
+  "gaps": [
+    "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "The production connection summary has no restart state or restart control."
+  ]
+}
