@@ -1,0 +1,147 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {runInContext} from 'node:vm';
+import {harness,reply,settle} from './support/workbench-client.ts';
+import type {Node} from './support/workbench-client.ts';
+
+// docs/architecture/member-work.md, surface: Work lines and activity from the host Work list, member avatar on cards and in the room, Worked for N min, steering tag.
+const T0=Date.UTC(2026,10,5,1,14);
+const quill={id:'member-q',name:'Quill',look:{shape:'drop',color:'agent-1'},modelGroup:'default'};
+type Row={workId:string;title:string;memberId:string|null;execution:string;acceptance:string;started:boolean;startedAt?:number|null;endedAt?:number|null;turnId?:string};
+const row=(r:Row)=>({missionId:'intake',missionRevision:3,unknown:false,startedAt:T0,endedAt:null,segment:1,turnId:'assistant-turn:m:'+r.workId.padEnd(32,'0'),...r});
+function fixture(initial:{works?:Row[];turns?:any[];messages?:any[];memberThread?:{messages:any[];turns:any[]}}={}){
+ const state={works:(initial.works??[]).map(row),feedId:'feed:a',hold:null as null|Promise<void>,chatHold:null as null|Promise<void>,worksStatus:200,worksBody:undefined as unknown,worksCalls:0,turns:initial.turns??[],messages:initial.messages??[]};
+ const view=(member:string|null)=>({feedId:state.feedId,cursor:1,head:1,members:[quill],...(member?{member:{id:member,name:'Quill'},decisions:[]}:{decisions:[]}),
+  segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:member?initial.memberThread?.messages??[]:state.messages},turns:member?initial.memberThread?.turns??[]:state.turns});
+ const app=harness(async(path)=>{
+  if(path==='/assistant/works'){state.worksCalls++;const snapshot=structuredClone(state.worksBody??{feedId:state.feedId,works:state.works}),status=state.worksStatus,hold=state.hold;if(hold)await hold;return reply(snapshot,status);}
+  if(path.startsWith('/assistant/conversation')){const member=new URLSearchParams(path.split('?')[1]??'').get('member'),snapshot=structuredClone(view(member)),hold=state.chatHold;if(hold)await hold;return reply(snapshot);}
+  if(path.startsWith('/events'))return reply({feedId:state.feedId,cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ });
+ return {app,state};
+}
+const kids=(node:Node)=>node.children.filter(child=>!child.hidden);
+const memberLines=(app:ReturnType<typeof harness>)=>{const li=app.all().find(n=>n.id==='side-member-member-q')?.parentElement;const ul=li?.children.find(c=>c.tagName==='UL');return ul?kids(ul).map(n=>n.textContent):[];};
+
+test('Work lines come from the host Work list: the Representative\'s and each member\'s running Work, also Work outside the shown segment; activity lists them all',async()=>{
+ const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
+ await settle();
+ assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.split('Working')[0]),['Weekly totals'],'the shown segment has no cards; the lines still show');
+ assert.deepEqual(memberLines(app).map(t=>t.replace(/Working|Waiting/,'')),['Churn causes','Price table']);
+ await app.node('activity-toggle').fire('click');
+ const titles=kids(app.node('activity-list')).map(li=>li.children[0]!.children.find(c=>c.tagName==='STRONG')!.textContent);assert.deepEqual(titles,['Churn causes','Price table','Weekly totals','Old summary']);
+ const marks=kids(app.node('activity-list'))[0]!.children[0]!.children.find(c=>c.className==='marks')!;assert.equal(marks.children[0]!.textContent,'Q','a member Work shows its member');
+});
+
+test('a slower earlier Work list answer never replaces a newer one; a replaced database clears the list',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'First',memberId:null,execution:'active',acceptance:'pending',started:true}]});await settle();
+ let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const slow=runInContext('shellWorksLoad()',app.context);
+ state.hold=null;state.works=[row({workId:'w2',title:'Second',memberId:null,execution:'active',acceptance:'pending',started:true})];await runInContext('shellWorksLoad()',app.context);await settle();
+ release();await slow;await settle();
+ assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.replace('Working','')),['Second']);
+ state.feedId='feed:b';state.works=[];await runInContext('chatReset()',app.context);await settle();
+ assert.deepEqual(kids(app.node('side-work')),[],'the replaced database\'s list is read anew');
+});
+
+test('a Work that ends without an event leaves the lines on the next minute read, also while a member conversation is open',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true}]});await settle();
+ assert.notEqual(runInContext('chatPendingTimer',app.context),0,'a running listed Work keeps the minute read');
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ const timers=new Map<number,{run:()=>void;delay:number}>();let next=0;
+ app.context.setTimeout=(run:()=>void,delay:number)=>{const id=++next;timers.set(id,{run,delay});return id;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ await runInContext('readChat()',app.context);await settle();
+ const timer=timers.get(runInContext('chatPendingTimer',app.context))!;assert.equal(timer.delay,60000);
+ state.works=[row({workId:'w1',title:'Weekly totals',memberId:null,execution:'settled',acceptance:'accepted',started:true,endedAt:T0+240000})];
+ timer.run();await settle();
+ assert.deepEqual(kids(app.node('side-work')),[],'the Representative\'s line follows the host list, not the last Representative read');
+ assert.equal(runInContext('chatPendingTimer',app.context),0,'no running Work remains to poll');
+});
+
+test('cards and the room show the member who holds the Work; a finished Work folds to Worked for N min',async()=>{
+ const turn=(id:string,work:any)=>({id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',at:T0,proposal:{title:work.title},outcome:{missionId:'intake',work:{status:'admitted',diagnostics:[]},run:{status:'requested',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:work.workId,title:work.title,execution:work.execution,acceptance:work.acceptance,started:true,starting:false,startedAt:T0,unknown:false,steps:{done:0,total:2},...work}});
+ const a='a'.repeat(32),b='b'.repeat(32);
+ const {app}=fixture({messages:[{id:'m:'+a,role:'owner',turnId:null,text:'Find churn causes'},{id:'r:assistant-turn:m:'+a,role:'representative',turnId:'assistant-turn:m:'+a,text:'Quill will.'},{id:'m:'+b,role:'owner',turnId:null,text:'Totals'},{id:'r:assistant-turn:m:'+b,role:'representative',turnId:'assistant-turn:m:'+b,text:'Done soon.'}],
+  turns:[turn(a,{workId:'w1',title:'Churn causes',execution:'active',acceptance:'pending',memberId:'member-q'}),turn(b,{workId:'w2',title:'Totals',execution:'settled',acceptance:'accepted',memberId:null,endedAt:T0+4*60000})]});
+ await settle();
+ const card=app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+a)!;assert.match(card.textContent,/Churn causes.*Quill/);assert.doesNotMatch(card.textContent,/하나/);
+ assert.equal(app.all().find(n=>n.id==='chat-fold-assistant-turn:m:'+b)!.textContent,'Worked for 4 min ›');
+ await card.children[0]!.fire('click');await settle();
+ assert.match(app.node('pane-people').textContent,/^QQuill.*Check$/,'the member holds the producing seat; Check is last');
+});
+
+test('a member message that steered a Work carries the steering tag',async()=>{
+ const m='c'.repeat(32);
+ const {app}=fixture({memberThread:{messages:[{id:'m:'+m,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:assistant-turn:m:'+m,role:'representative',turnId:'assistant-turn:m:'+m,text:'Sure.'}],turns:[{id:'assistant-turn:m:'+m,messageId:'m:'+m,status:'answered',displayStatus:'answered',at:T0,steer:{missionId:'intake',workId:'w1',status:'recorded',title:'Churn causes'}}]}});
+ await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ assert.equal(app.all().find(n=>n.id==='chat-steer-assistant-turn:m:'+m)!.textContent,'↩ Churn causes · Steered');
+});
+
+test('a changed Work-list feed replaces the old list and rereads member identities',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Old database',memberId:null,execution:'active',acceptance:'pending',started:true}]});await settle();
+ state.feedId='feed:b';state.works=[row({workId:'w2',title:'New database',memberId:'member-q',execution:'active',acceptance:'pending',started:true})];
+ await runInContext('shellWorksLoad()',app.context);await settle();
+ assert.deepEqual(kids(app.node('side-work')),[]);assert.deepEqual(memberLines(app),['New databaseWorking']);
+ assert.equal(runInContext('chatView.feedId',app.context),'feed:b');assert.doesNotMatch(app.node('activity-list').textContent,/Old database/);
+});
+
+test('reset clears Work immediately and a late old-feed answer cannot restore it, even if the new list is unavailable',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Old database',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
+ let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('shellWorksLoad()',app.context);
+ state.feedId='feed:b';state.hold=null;state.worksStatus=503;runInContext('chatReset()',app.context);
+ assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');await settle();release();await old;await settle();
+ assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');
+});
+
+test('reset discards an old conversation response before it can repopulate cards or member identities',async()=>{
+ const id='d'.repeat(32),{app,state}=fixture({messages:[{id:'m:'+id,role:'owner',turnId:null,text:'Old message'}]});await settle();
+ let release=()=>{};state.chatHold=new Promise<void>(r=>{release=r;});const old=runInContext('readChat()',app.context);
+ state.chatHold=null;state.feedId='feed:b';state.messages=[];runInContext('chatReset()',app.context);await settle();
+ release();await old;await settle();assert.equal(app.node('chat-log').textContent,'');assert.equal(runInContext('chatView.feedId',app.context),'feed:b');
+});
+
+test('an off-segment member Work opens the same tab from its line and activity, and refreshes on intake events',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Earlier member Work',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ await app.all().find(n=>n.id==='side-line-intake/w1')!.fire('click');await settle();
+ assert.match(app.node('pane-people').textContent,/^QQuillCheck$/);assert.equal(kids(app.node('pane-tabs')).length,1);
+ await app.all().find(n=>n.id==='activity-row-intake/w1')!.fire('click');await settle();assert.equal(kids(app.node('pane-tabs')).length,1);
+ assert.ok(app.calls.some(c=>c.path==='/missions/intake'),'both entries use the existing Mission reader');
+ state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted',endedAt:T0+240000}];
+ runInContext('chatEvents([{aggregateId:"intake"}])',app.context);await settle();
+ assert.deepEqual(memberLines(app),[]);assert.match(app.node('activity-list').textContent,/Earlier member Work.*Done/);
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('an unavailable or malformed Work list never falls back to the shown conversation, and malformed rows are skipped',async()=>{
+ const work=row({workId:'w1',title:'Only in the conversation',memberId:null,execution:'active',acceptance:'pending',started:true});
+ const {app,state}=fixture({turns:[{id:work.turnId,work}]});await settle();
+ state.worksStatus=503;await runInContext('shellWorksLoad()',app.context);await settle();assert.deepEqual(kids(app.node('side-work')),[]);
+ state.worksStatus=200;state.worksBody={feedId:'feed:a',works:[null,{...work,workId:null},{...work,execution:'invented'},work]};
+ await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(kids(app.node('side-work')).length,1);
+ state.worksBody={feedId:'feed:a',works:null};await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(kids(app.node('side-work')).length,1,'a malformed read keeps the last good list');
+ assert.notEqual(runInContext('chatPendingTimer',app.context),0,'a failed refresh does not stop polling a running Work');
+});
+
+test('folded durations use whole elapsed minutes, never wall time, and missing or invalid times stay untimed',async()=>{
+ const {app}=fixture();await settle();
+ for(const [startedAt,endedAt,want] of [[T0,T0+299999,'Worked for 4 min ›'],[T0,T0+1000,'Worked for 1 min ›'],[T0,null,'Worked ›'],[null,T0,'Worked ›'],[T0,T0-1,'Worked ›']] as const){
+  app.context.durationWork={startedAt,endedAt};assert.equal(runInContext('chatFold({id:"duration",work:durationWork}).textContent',app.context),want);
+ }
+});
+
+test('steering is shown only when recorded, keeps its node on reread and treats the title as text',async()=>{
+ const id='e'.repeat(32),steer={missionId:'intake',workId:'w1',status:'not_recorded',title:'<img src=x>'},turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',at:T0,steer};
+ const {app}=fixture({memberThread:{messages:[{id:'m:'+id,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:'+turn.id,role:'representative',turnId:turn.id,text:'Sure.'}],turns:[turn]}});await settle();
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.equal(app.all().find(n=>n.id==='chat-steer-'+turn.id),undefined);
+ steer.status='recorded';await runInContext('readChat()',app.context);await settle();const tag=app.all().find(n=>n.id==='chat-steer-'+turn.id)!;
+ assert.equal(tag.textContent,'↩ <img src=x> · Steered');assert.equal(tag.children[0]!.tagName,'SPAN');
+ await runInContext('readChat()',app.context);await settle();assert.equal(tag.detaches,0);assert.equal(app.all().find(n=>n.id==='chat-steer-'+turn.id),tag);
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('a new conversation feed clears old Work even when the replacement list cannot be read',async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Old database',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
+ state.feedId='feed:b';state.worksStatus=503;await runInContext('readChat()',app.context);await settle();
+ assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');
+});

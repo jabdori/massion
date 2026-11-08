@@ -35,6 +35,7 @@ function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[
   return {feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns};};
  const app=harness(async(path,options)=>{
   const handled=extra?.(path,options,state,mission);if(handled)return reply(handled);
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.map(t=>({memberId:null,unknown:false,startedAt:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:state.cursor,events:state.events});
   if(path.startsWith('/read-state')){state.missions++;return reply({feedId:'feed:a',cursor:1,snapshot:{revision:state.revision,value:mission()}});}
@@ -81,7 +82,7 @@ test('Work lines show running Work under the Representative; the activity list o
 test('tabs close one at a time, widen takes the room, the sidebar hides, and the owner menu opens Settings with the earlier forms',async()=>{
  const {app}=fixture([{workId:'work:a',title:'First',execution:'active',acceptance:'pending',started:true},{workId:'work:b',title:'Second',execution:'waiting',acceptance:'pending',started:true}]);
  await settle();
- for(const line of kids(app.node('side-work'))){await line.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();}
+ for(const line of kids(app.node('side-work')).reverse()){await line.children.find(c=>c.tagName==='BUTTON')!.fire('click');await settle();}
  const tabs=()=>kids(app.node('pane-tabs'));assert.equal(tabs().length,2);
  const close=(tab:Node)=>tab.children.find(c=>c.attributes.get('aria-label')?.startsWith('Close'))!;assert.equal(close(tabs()[1]!).attributes.get('aria-label'),'Close Second');
  await close(tabs()[1]!).fire('click');await settle();assert.equal(tabs().length,1);assert.equal(tabs()[0]!.children[0]!.attributes.get('aria-selected'),'true');assert.equal(app.node('work-pane').hidden,false);

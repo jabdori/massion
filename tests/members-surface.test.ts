@@ -6,7 +6,7 @@ import type {Node} from './support/workbench-client.ts';
 
 // docs/architecture/members.md, Surface: members in the sidebar, one 1:1 conversation each, the name-and-shape dialog behind Add member, Work room participants.
 const T0=Date.UTC(2026,10,5,1,14);
-const decision={id:'decision:1',at:T0,title:'Data analysis',question:'Data analysis came up 4 times this month. Add a member for it?',rows:[['This month','Discount totals by weekday · Order discount totals and 2 more'],['Model group','Default']],action:'Add member',form:'member',state:'open'};
+const decision={id:'decision:1',at:T0,title:'Data analysis',question:'Data analysis came up 4 times this month. Add a member for it?',rows:[['This month','Discount totals by weekday · Order discount totals and 2 more'],['Work to hand','Check totals'],['Model group','Default']],action:'Add member',form:'member',state:'open'};
 const sem={id:'member-a',name:'셈',look:{shape:'drop',color:'agent-4'}};
 function fixture(initial:{members?:any[];decisions?:any[];threads?:Record<string,any[]>;turns?:any[];decisionStatus?:number}={}){
  const state={members:[] as any[],decisions:[decision] as any[],posted:[] as {path:string;body:any}[],threads:{} as Record<string,{id:string;role:string;turnId:string|null;text:string}[]>,turns:[] as any[],decisionStatus:200,...initial};
@@ -14,6 +14,7 @@ function fixture(initial:{members?:any[];decisions?:any[];threads?:Record<string
   segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:state.threads[member??'']??[]},turns:member?[]:state.turns});
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){const body=JSON.parse(options.body);state.posted.push({path,body});return path==='/assistant/decisions'&&state.decisionStatus!==200?reply({error:'Invalid or taken name'},state.decisionStatus):reply({status:'committed',revision:2});}
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:state.turns.filter(t=>t.work).map(t=>({memberId:null,unknown:false,startedAt:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation')){const member=new URLSearchParams(path.split('?')[1]??'').get('member');return reply(view(member));}
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
   return reply({error:'Not configured'},503);
@@ -25,7 +26,7 @@ const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Nod
 
 test('Add member opens the name-and-shape dialog; Cancel sends nothing, Create sends act with the name and shape once',async()=>{
  const {app,state}=fixture();await settle();
- const card=byId(app,'chat-decision-decision:1')!;assert.ok(card);assert.match(card.textContent,/Add a member for it\?.*This month.*Model group.*Default.*Add member.*Later/);
+ const card=byId(app,'chat-decision-decision:1')!;assert.ok(card);assert.match(card.textContent,/Add a member for it\?.*This month.*Work to hand.*Check totals.*Model group.*Default.*Add member.*Later/);
  assert.equal(app.node('member-dialog').hidden,true);
  await button(card,'Add member')!.fire('click');await settle();
  assert.equal(app.node('member-dialog').hidden,false);assert.equal(state.posted.length,0,'the card answer waits for a name');

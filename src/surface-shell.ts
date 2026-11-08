@@ -25,6 +25,17 @@ export const shellPaneBar=String.raw`<div class="pane-bar"><div id="pane-tabs" c
 export const shellClient=String.raw`
 const seenKey='massion.workbench.seen',shellPages={chat:['page-chat','${representativeName}','rail-chat'],results:['page-results','Results','rail-results'],schedules:['page-schedules','Schedules','rail-schedules'],settings:['page-settings','Settings',''],app:['page-app','','']};
 let shellActivity=false,shellOrder='priority',paneTabs=[],paneActive='',paneMission='',paneWideOn=false;
+let shellWorks=[],shellWorksFeed='',shellWorksSequence=0;
+const shellWorkValid=w=>w&&chatText(w.missionId)&&chatText(w.workId)&&chatText(w.title)&&chatText(w.turnId)&&Number.isSafeInteger(w.missionRevision)&&w.missionRevision>=0&&(w.memberId===null||chatText(w.memberId))&&typeof w.started==='boolean'&&typeof w.unknown==='boolean'&&['queued','active','waiting','blocked','cancelled','settled'].includes(w.execution)&&['pending','failed','stale','accepted'].includes(w.acceptance);
+/** A whole host list, independent of the shown segment; reset and newer reads fence late replies. */
+async function shellWorksLoad(){const sequence=++shellWorksSequence,generation=chatGeneration,expectedFeed=chatView&&chatView.feedId;
+ try{const {response,body}=await request('/assistant/works');if(sequence!==shellWorksSequence||generation!==chatGeneration)return;
+  if(!response.ok||!chatText(body.feedId)||!Array.isArray(body.works))return;
+  if(chatView&&expectedFeed!==chatView.feedId)return;
+  if(expectedFeed&&body.feedId!==expectedFeed){chatReset();return;}
+  if(shellWorksFeed&&shellWorksFeed!==body.feedId)storage.remove(seenKey);shellWorksFeed=body.feedId;shellWorks=body.works.filter(shellWorkValid);renderShell();
+ }catch{}finally{if(sequence===shellWorksSequence)chatScheduleRead();}
+}
 function shellShow(page){for(const [name,[id,title,rail]] of Object.entries(shellPages)){$(id).hidden=name!==page;if(rail)$(rail).setAttribute('aria-current',name===page?'page':'false');if(name===page){if(name==='chat')shellHeading();else $('page-heading').textContent=title;}}$('side-representative').setAttribute('aria-current',page==='chat'&&!chatThread?'page':'false');shellMembers();
   // Results, Schedules and Settings bring their own sidebar (B10, B17, B12); the people and activity views come back with the conversation.
   const own=page==='results'||page==='schedules'||page==='settings'||page==='app',activity=shellActivity;$('side-app').hidden=page!=='app';appsCurrent();$('side-results').hidden=page!=='results';$('side-schedules').hidden=page!=='schedules';$('side-settings').hidden=page!=='settings';$('side-people').hidden=own||activity;$('side-activity').hidden=own||!activity;$('activity-toggle').hidden=own;
@@ -39,6 +50,8 @@ function shellRank(work){if(work.unknown)return 0;if(work.acceptance==='accepted
 function shellState(work){const rank=shellRank(work);return element('span',undefined,'state'+(rank===0?' exception':rank===2?' done':''));}
 const shellMemberRows=new Map(),shellColor=m=>'var(--'+(m&&m.look&&/^agent-[1-7]$/.test(m.look.color)?m.look.color:'agent-0')+')';
 function shellLook(avatar,m){avatar.style.background=shellColor(m);if(m&&m.look&&typeof m.look.shape==='string')avatar.setAttribute('data-shape',m.look.shape);else avatar.removeAttribute('data-shape');}
+function shellWorkIdentity(avatar,label,work){const member=work&&work.memberId?chatMembers().find(m=>m.id===work.memberId):null,name=member?member.name:work&&work.memberId?'Member':'${representativeName}';avatar.textContent=[...name][0];avatar.setAttribute('aria-hidden','true');shellLook(avatar,member);if(label)label.textContent=name;}
+function shellWorkLines(box,memberId){box.replaceChildren(...shellWorks.filter(w=>w.memberId===memberId&&shellRank(w)===1&&w.started).map(work=>{const row=element('li'),open=element('button',undefined,'work-line');open.type='button';open.id='side-line-'+shellKey(work);const state=shellState(work);state.append(element('span',chatCardLabel({work}),'visually-hidden'));open.append(element('span',work.title),state);open.addEventListener('click',()=>void shellOpenWork(work.turnId));row.append(open);return row;}));}
 /** The conversation header: the shown conversation's avatar, as in the sidebar, then its name. */
 function shellHeading(){const name=chatName(),avatar=element('span',[...name][0],'avatar');avatar.setAttribute('aria-hidden','true');shellLook(avatar,chatMembers().find(m=>m.id===chatThread));$('page-heading').replaceChildren(avatar,element('span',name));}
 /** Members under the Representative, in admission order; rows are kept by ID so a reread keeps focus. The host picks each colour. */
@@ -46,24 +59,24 @@ function shellMembers(){
  const list=chatMembers(),chat=!$('page-chat').hidden;$('side-members').hidden=!list.length;
  const rows=list.map(m=>{let row=shellMemberRows.get(m.id);
   if(!row){row=element('li');const open=element('button',undefined,'side-row');open.type='button';open.id='side-member-'+m.id;row.avatar=element('span',undefined,'avatar');row.avatar.setAttribute('aria-hidden','true');row.label=element('span');open.append(row.avatar,row.label);open.addEventListener('click',()=>chatOpenThread(m.id,m.name));row.open=open;row.append(open);shellMemberRows.set(m.id,row);}
+  if(!row.works){row.works=element('ul',undefined,'work-lines');row.append(row.works);}row.works.setAttribute('aria-label',m.name+"'s work");shellWorkLines(row.works,m.id);
   row.avatar.textContent=[...m.name][0];shellLook(row.avatar,m);row.label.textContent=m.name;row.open.setAttribute('aria-current',chat&&chatThread===m.id?'page':'false');return row;}),box=$('side-members');
  if(rows.length!==box.children.length||rows.some((row,i)=>box.children[i]!==row))box.replaceChildren(...rows);
 }
-/** Work lines and activity rows come from the conversation's Work cards; each row keeps its ID so a reread keeps focus. */
-// ponytail: only the shown conversation segment's cards; a host Work list query replaces this when members bring Work of their own.
+/** Work lines and activity use the host list, newest first, even while an earlier segment or member chat shows. */
 function renderShell(){
- const items=(chatRep?chatRep.turns:[]).filter(turn=>turn.work).map(turn=>({turn,work:turn.work,label:chatCardLabel(turn)})),seen=shellSeen(),kept={...seen};
+ const items=shellWorks.map(work=>({turn:{id:work.turnId,work},work,label:chatCardLabel({work})})),seen=shellSeen(),kept={...seen};
  for(const item of items){const key=shellKey(item.work);kept[key]=typeof seen[key]==='string'?seen[key]:item.label;item.unread=kept[key]!==item.label;}
  if(JSON.stringify(kept)!==JSON.stringify(seen))storage.set(seenKey,JSON.stringify(kept));
  const focused=document.activeElement&&document.activeElement.id;
- $('side-work').replaceChildren(...items.filter(item=>shellRank(item.work)===1&&item.work.started).map(item=>{const row=element('li'),open=element('button',undefined,'work-line');open.type='button';open.id='side-line-'+shellKey(item.work);const state=shellState(item.work);state.append(element('span',item.label,'visually-hidden'));open.append(element('span',item.work.title),state);open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
- const ordered=items.slice().reverse();if(shellOrder==='priority')ordered.sort((a,b)=>shellRank(a.work)-shellRank(b.work));
+ shellWorkLines($('side-work'),null);
+ const ordered=items.slice();if(shellOrder==='priority')ordered.sort((a,b)=>shellRank(a.work)-shellRank(b.work));
  // ponytail: decisions lead both orders; they join the recent order by time once Work rows carry times too.
  const decisions=chatDecisions(chatRep).filter(d=>d.state==='open').map(d=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-decision:'+d.id;const marks=element('span',undefined,'marks'),avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);open.append(element('strong',d.title),marks,element('span',d.question,'summary'));
   open.addEventListener('click',()=>{if(chatOpenThread(''))document.getElementById('chat-decision-'+d.id)?.querySelector?.('button')?.focus();});row.append(open);return row;});
- $('activity-list').replaceChildren(...decisions,...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span','하','avatar');avatar.setAttribute('aria-hidden','true');marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
+ $('activity-list').replaceChildren(...decisions,...ordered.map(item=>{const row=element('li'),open=element('button',undefined,'activity-row');open.type='button';open.id='activity-row-'+shellKey(item.work);const marks=element('span',undefined,'marks'),avatar=element('span',undefined,'avatar');shellWorkIdentity(avatar,null,item.work);marks.append(avatar);if(item.unread)marks.append(element('span','Unread','unread'));open.append(element('strong',item.work.title),marks,element('span',item.label,'summary'));open.addEventListener('click',()=>void shellOpenWork(item.turn.id));row.append(open);return row;}));
  $('activity-head').hidden=!items.length&&!decisions.length;
- shellMembers();appsRail(chatView||chatRep);
+ shellMembers();paneParticipants();appsRail(chatView||chatRep);
  if(focused&&document.activeElement?.id!==focused&&/^(side-line|activity-row)-/.test(focused))document.getElementById(focused)?.focus();
 }
 function shellMarkSeen(turn){const seen=shellSeen();seen[shellKey(turn.work)]=chatCardLabel(turn);storage.set(seenKey,JSON.stringify(seen));}
@@ -81,9 +94,10 @@ function paneFilter(){const tab=paneTabs.find(t=>t.key===paneActive),only=tab&&t
 let sideBefore=false;
 /** Widening hides the sidebar for real, so its toggle reads collapsed; narrowing restores what the owner had. */
 function paneWide(on){if(on===paneWideOn)return;paneWideOn=on;$('app').className='app'+(on?' wide':'');$('pane-widen').setAttribute('aria-pressed',String(on));if(on)sideBefore=$('sidebar').hidden;const hide=on||sideBefore;$('sidebar').hidden=hide;$('sidebar-toggle').setAttribute('aria-expanded',String(!hide));}
-// Work room participants (members.md): every Work today has the Representative as its producing seat and an independent check, listed last.
-// ponytail: fixed until member Work brings named members and role chips per step.
-function paneParticipants(){const box=$('pane-people'),tab=paneTabs.find(t=>t.key===paneActive);if(!box.children.length){const avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');box.append(avatar,element('span','${representativeName}','pane-person'),element('span','Check','chip check'));}box.hidden=!(tab&&tab.workId);}
+// The pinned member holds the producing seat; the independent check stays last.
+function paneParticipants(){const box=$('pane-people'),tab=paneTabs.find(t=>t.key===paneActive);box.hidden=!(tab&&tab.workId);if(box.hidden)return;
+ const stored=snapshot&&snapshot.value.id===tab.missionId&&snapshot.value.works.find(w=>w.id===tab.workId),work=shellWorks.find(w=>shellKey(w)===tab.key)||(chatRep?chatRep.turns:[]).map(t=>t.work).find(w=>w&&shellKey(w)===tab.key)||(stored?{memberId:stored.assistantSource&&stored.assistantSource.memberId}:null);
+ if(!box.children.length)box.append(element('span',undefined,'avatar'),element('span',undefined,'pane-person'),element('span','Check','chip check'));shellWorkIdentity(box.children[0],box.children[1],work);}
 function renderPane(){
  // A result tab shows its preview in place of the Work detail (B10-preview).
  const shown=paneTabs.find(t=>t.key===paneActive);$('pane-result').hidden=!(shown&&shown.result);$('pane-app').hidden=!(shown&&shown.appTab);$('pane-body').hidden=!!(shown&&(shown.result||shown.appTab));
