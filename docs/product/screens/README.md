@@ -31,6 +31,8 @@ The CI job `ui-contracts` runs all states and uploads these files even if a step
 
 A required-element match is one pass. Failure counts also include forbidden-string occurrences and hard text-budget breaches, so failures are not `required - passed`. Non-shell text-budget warnings keep the supplied checker's advisory semantics. The runner checks declared colour tokens and visible region rectangles with a two-pixel tolerance; it does not use a global pixel score. Typography, component detail, motion and composition still require reviewing the pairs. OS fonts and font rasterization can differ.
 
+Text matching, ordering, forbidden hits and budgets share a [canonical occurrence model](../../architecture/ui-contract-harness.md#canonical-accessibility-text-occurrences). Text is identified by its source tree position, so ancestor aliases collapse while equal sibling labels remain distinct. Standalone placeholders match a complete label or a segment separated by `·`, `•`, `|`, `;` or a newline; spaces inside titles are preserved. Literal/template matches consume whole touched segments, including when a semantic container carries the accessible name. Budgets count each canonical text occurrence, never each distinct string value. Forbidden patterns charge each affected occurrence once, including cross-node matches carried by a container name.
+
 ## Change a contract
 
 1. Change the UI only against an owner-approved design change. Do not remove requirements, add arbitrary copy entries or replace the prototype PNG merely to make a failing implementation pass.

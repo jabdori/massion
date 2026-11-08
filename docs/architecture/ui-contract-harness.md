@@ -22,6 +22,20 @@ Copy lint scans the requested panel/shell/workbench sources and reports visible 
 
 Owner-command races, ownerStore draining, stale client writes and generation tokens are unchanged: this harness supplies read-only isolated fixtures, and admits no product writes. Existing product tests continue to cover those paths.
 
-## Shared accessibility text occurrences
+## Canonical accessibility text occurrences
 
-Accessible names can repeat the text of descendant nodes. Text requirements must consume a shared occurrence across those representations, not one occurrence per flattened node. Map matching descendant text spans into their ancestor's name/description in tree order; keep unmatched ancestor text and separate sibling occurrences independent. Apply the same consumption rule to direct and joined-text matches while preserving semantic control matching. Regression cases cover nested/partial aliases, repeated sibling text and joined labels.
+All four checks use one occurrence model, built before matching:
+
+| Rule | Meaning |
+| --- | --- |
+| Identity | A text occurrence is identified by its source tree path and label field/range, never by string value. Equal sibling labels remain separate. |
+| Aliases | A container name that repeats descendant text is a view of those descendant occurrences. Use non-overlapping label spans, preferring longer labels when they overlap. Canonical child order survives even when the container name reorders its aliases. Unmatched text in a name-only control or semantic text element remains a fallback occurrence. Structural landmark names create no extra rendered text. |
+| Segments | An occurrence may contain segments delimited by `·`, `•`, `|`, `;` or a newline. Whitespace inside a title is not a delimiter. Segments retain the source occurrence identity for budgets and forbidden checks. |
+| Required matching | Standalone placeholders match a whole label/segment. Literal/template matches may occur inside a larger label, but consume whole touched segments. Joined labels use adjacent text occurrences without a fixed node-count cap. A view match must be fully backed by occurrence spans (apart from separators); unrepresented landmark/description text cannot supply a match. Roles are carried by semantic views; a single control/heading cannot satisfy two structural requirements. |
+| Order | Every match advances through the canonical occurrence/segment order. An ancestor alias cannot move a descendant occurrence earlier. No consumed segment can satisfy another requirement. |
+| Forbidden copy | Scan canonical labels and fully represented semantic views, including overlapping matches, charging each affected occurrence once per pattern. Ancestor aliases add no hit; identical siblings do. |
+| Budgets | Count every canonical occurrence once: characters, strings, sentences and longest label. Never deduplicate by string value. Existing hard/advisory regions and numeric tolerances remain unchanged. |
+
+The accessibility snapshot is the evidence boundary: name-only controls are a text fallback, not a claim about pixels. Explicit text children take precedence over aggregate accessible names. Descriptions can alias existing text; they do not manufacture rendered text when no text occurrence represents them.
+
+Table-driven regression cases cover the standalone-title and repeated-sentence reproductions, sibling identity, nested/partial aliases, semantic and joined labels, separator consumption, order, and forbidden-hit multiplicity. Recheck the same 51 stored snapshots before/after so count changes reflect checker semantics rather than new browser captures.
