@@ -53,3 +53,21 @@ represented by unit fixtures. [Browser measurements](unknown-browser.json).
 ![Unknown delivery, dark](unknown-dark.png)
 
 ![Unknown delivery, light](unknown-light.png)
+
+## Durable-host CI follow-up
+
+The first fresh CI run passed the Linux type/syntax/unit stage, then exposed ten
+additional UI expectations in the previously gated native host tests. Nine still
+expected the removed sync banner to become visible after SIGKILL; one still
+searched for the English acceptance label. These are corrected to observe the
+actual connection badge, await enabled write fields at readiness/recovery, and
+use the approved acceptance copy key. Runtime behavior, effect/receipt assertions,
+private-draft preservation, original journals and no-replay checks are unchanged.
+
+Reproduced **10 failures** before the changes in a network-disabled Linux Node 24
+container with a disposable SurrealDB 3.3.0 extracted from the already installed
+image. The same owned launcher and all three complete native test files then
+passed **12/12, with zero skips**: `cli-host-kill.test.ts`,
+`host-process-kill.test.ts`, and `host-cli.test.ts`. Eight kill boundaries retain
+their original process ownership and no-replay verification. The database and all
+child processes are owned by the temporary test launcher and cleaned up after it.
