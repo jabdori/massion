@@ -189,3 +189,15 @@ test('review 6: legacy accounting and admission journals replay, but new records
  await host.dispatch({missionId:'m',commandId:'old-timeout',expectedRevision:4,actorId:'discriminator-host',command:{type:'record-moderation',workId:'w',questionId:questionId(i),result:{rawOutput:null,output:null,model:'fixture',usage:null,latencyMs:2000,hostTime:2100,decision:'timeout',applied:false,disabled:false}}});assert.equal((await store.load('m'))!.value.works[0]!.budget.measured,null);validateMissionJournalLineage(store.inspect());
  const current=await setup();await reservePending(current.store,i,100,'discriminator-shadow/v1');const service=new DiscriminatorService(current.store,async()=>assert.fail('Expired reservation never calls a model'),()=>3000);assert.equal((await service.ask('m','moderator',i)).status,'recorded');assert.equal((await current.store.load('m'))!.value.works[0]!.budget.measured,0);validateMissionJournalLineage(current.store.inspect());
 });
+
+test('retained raw-output depth accounts for the journal envelope without widening payload limits',async()=>{
+ const {store}=await setup();let calls=0;
+ for(const depth of [7,8,9]){let raw:unknown='leaf';for(let n=0;n<depth;n++)raw={nested:raw};const service=new DiscriminatorService(store,async()=>({adapter:fixtureDiscriminator(pin,()=>{calls++;return raw;}),release(){}}),()=>100);
+  const result=await service.ask('m','moderator',input(depth));assert.equal(result.status,'recorded');if(result.status!=='recorded')return;
+  assert.equal(result.record.result.decision,'invalid');assert.equal(result.record.result.output,null);assert.deepEqual(result.record.result.rawOutput,depth<=8?raw:null);assert.equal(result.record.result.disabled,depth===9);
+  const work=(await store.load('m'))!.value.works[0]!;assert.ok(work.moderation!.every(e=>e.result!==null));validateModeration(work);validateMissionLineage((await store.load('m'))!.value);validateMissionJournalLineage(store.inspect());
+  if(depth===8){const forged=structuredClone(work);forged.moderation!.at(-1)!.result!.rawOutput={nested:raw};assert.throws(()=>validateModeration(forged),/JSON depth/);forged.moderation!.at(-1)!.result!.rawOutput='x'.repeat(32769);assert.throws(()=>validateModeration(forged),/JSON .*bound/);}
+ }
+ const replay=new DiscriminatorService(store,async()=>assert.fail('Committed results and failure fallback never resolve a model'));
+ assert.equal((await replay.replay('m',input(7))).status,'recorded');assert.deepEqual(await replay.ask('m','moderator',input(10)),{status:'fixed-rules',reason:'failures'});assert.equal(calls,3);
+});

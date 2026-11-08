@@ -34,7 +34,7 @@ The independent review identified and regression-tested four corrected cases: ma
 
 No real model call, calibration run, real database restore, room integration, or automatic application was performed. The adapter tests use a loopback mock server and injected HTTP responses, including the HTTPS credential path. The initial threshold numbers are provisional shadow defaults, identical across moments/languages; they are not calibrated operating thresholds.
 
-Final local verification (Node 24.21.0, physical scratchpad TMPDIR): `npm run typecheck` and `node scripts/check.mjs` passed. `npm test`: 1,145 passed, 335 skipped, one failed. The sole failure is the brief's known macOS-only `portable inventory order is stable across English and Turkish process locales` (`Text artifact boundary: directory realpath mismatch`); its code was not changed. Optional database/browser integrations were not enabled.
+Final local verification (Node 24.21.0, physical scratchpad TMPDIR): `npm run typecheck` and `node scripts/check.mjs` passed. `npm test`: 1,146 passed, 335 skipped, one failed. The sole failure is the brief's known macOS-only `portable inventory order is stable across English and Turkish process locales` (`Text artifact boundary: directory realpath mismatch`); its code was not changed. Optional database/browser integrations were not enabled.
 
 ## PR review corrections
 
@@ -43,3 +43,7 @@ All eight verified findings have regressions: (1) close expired, uncertain, clos
 Follow-up: artboard-approved discriminator selection and copy, sharing the resolver's eligibility rules. This PR supplies the headless group role and slot only.
 
 Threshold versions live in a frozen table. The first reservation pins one threshold version for all later entries of that Work; v1 records retain their original confidence interpretation, while newly started Works use v2. New journal commands carry `hostVersion: 2` to enforce execution headroom and preserve known usage. Commands without that field replay the original accounting/admission behavior, so historical backups are not rewritten or invalidated. This compatibility path is not exposed as a caller setting.
+
+## Retained raw-output depth
+
+The entry validator must account for the two host-owned nesting levels around `result.rawOutput`. Keep raw evidence at depth 8 and 32 KiB, but allow the enclosing 96 KiB entry depth 10 and separately validate its raw payload. Regression coverage exercises depths 7 and 8 (retained invalid evidence), depth 9 (discarded invalid evidence), committed failure accounting, fallback after three failures, and journal replay without model calls.
