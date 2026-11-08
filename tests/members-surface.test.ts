@@ -106,3 +106,19 @@ test('a replaced database without the open member falls back to the Representati
  assert.equal(app.node('chat-input').value,'Representative draft');assert.equal(app.node('page-heading').textContent,'하하나');
  assert.equal(app.node('side-representative').attributes.get('aria-current'),'page');assert.equal(app.node('side-members').hidden,true);
 });
+
+for(const unavailable of [false,true])test('Send waits through an invalidated earlier chat read before '+(unavailable?'refusing an unavailable member':'using the member head and feed'),async()=>{
+ const {runInContext}=await import('node:vm');let holdOld=false,holdMember=true,releaseOld!:(r:any)=>void,releaseMember!:(r:any)=>void;
+ const posted:{body:any;feed:string}[]=[],view=(member=false)=>({feedId:'feed:a',cursor:1,head:member?7:2,members:[sem],...(member?{member:{id:sem.id,name:sem.name}}:{}),segment:{number:member?7:2,revision:member?9:4,closed:false,full:false,previous:null,messages:[]},turns:[]});
+ const app=harness((path,options)=>{
+  if(path==='/assistant/messages'){posted.push({body:JSON.parse(options.body),feed:options.headers['X-Massion-Feed']});return reply({message:{status:'committed'}});}
+  if(path.startsWith('/assistant/conversation')){if(path.includes('member='))return holdMember?new Promise(resolve=>releaseMember=resolve):unavailable?reply({},503):reply(view(true));return holdOld?new Promise(resolve=>releaseOld=resolve):reply(view());}
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:null});return reply({});
+ });await settle();holdOld=true;const earlier=runInContext('readChat()',app.context);await settle();await byId(app,'side-member-member-a')!.fire('click');
+ app.node('chat-input').value='Retain this draft until the target is read';const sending=runInContext('sendChat()',app.context);await settle();assert.equal(posted.length,0);
+ holdOld=false;releaseOld(reply(view()));await settle();
+ try{assert.equal(posted.length,0,'the send must still wait while the new member read is held');}
+ finally{holdMember=false;releaseMember(unavailable?reply({},503):reply(view(true)));await earlier;await sending;await settle();}
+ if(unavailable){assert.equal(posted.length,0);assert.equal(app.node('chat-input').value,'Retain this draft until the target is read');}
+ else{assert.equal(posted.length,1);assert.deepEqual([posted[0]!.body.member,posted[0]!.body.segment,posted[0]!.body.expectedRevision,posted[0]!.feed],['member-a',7,9,'feed:a']);}
+});

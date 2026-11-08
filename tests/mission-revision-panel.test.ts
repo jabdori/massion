@@ -21,7 +21,7 @@ async function setup(t:TestContext,durable=false){
  let lost=false,failEvents=false,unknown=false,holdWrite=false,holdRead=false,releaseWrite:undefined|(()=>void),releaseRead:undefined|(()=>void),readReleased=false;
  const handler=async(path:string,options:any)=>{
   const revision=path.endsWith('/revision')&&options.method==='POST';
-  if(failEvents&&path.startsWith('/events')){failEvents=false;throw new Error('Controlled first receipt poll unavailable');}
+  if(failEvents&&path.startsWith('/events')){throw new Error('Controlled receipt read unavailable until released');}
   if(revision&&unknown)return reply({error:'Controlled unresolved dispatch',outcome:'unknown'},503);
   const response=await fetch(base+path,options),body=await response.json();
   if(revision){if(holdWrite){holdWrite=false;await new Promise<void>(r=>releaseWrite=r);}if(lost){lost=false;throw new Error('Controlled acknowledgement loss');}}
@@ -38,7 +38,7 @@ async function setup(t:TestContext,durable=false){
   for(const [name,value] of [['revision-purpose',purpose],['revision-version',version],['revision-criteria',description],['revision-oracle',oracle]]){app.node(name!).value=value!;await app.node(name!).fire('input');}
  }
  const journal=()=>store instanceof SurrealStore?store.exportJournal():Promise.resolve(store.inspect());
- return {store,product,id,other,client,draft,until,journal,lose(){lost=true;},lateReceipt(){lost=true;failEvents=true;},unknown(){unknown=true;},holdWrite(){holdWrite=true;releaseWrite=undefined;},holdRead(){holdRead=true;releaseRead=undefined;readReleased=false;},writeHeld(){return !!releaseWrite;},readHeld(){return !!releaseRead;},releaseWrite(){releaseWrite!();},releaseRead(){releaseRead!();},readReleased(){return readReleased;}};
+ return {store,product,id,other,client,draft,until,journal,lose(){lost=true;},lateReceipt(){lost=true;failEvents=true;},releaseReceipts(){failEvents=false;},unknown(){unknown=true;},holdWrite(){holdWrite=true;releaseWrite=undefined;},holdRead(){holdRead=true;releaseRead=undefined;readReleased=false;},writeHeld(){return !!releaseWrite;},readHeld(){return !!releaseRead;},releaseWrite(){releaseWrite!();},releaseRead(){releaseRead!();},readReleased(){return readReleased;}};
 }
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} revision UI/HTTP separates original Work purpose/criteria from revised future Work without model execution`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async t=>{
  const f=await setup(t,durable),app=await f.client(),original=(await f.store.load(f.id))!.value.works[0]!,other=await f.store.load(f.other);await f.draft(app);app.node('save-revision').focus();await app.submit('revision-form');
@@ -88,12 +88,12 @@ test('Work cancellation preserves original criteria while a future-only Mission 
 for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory fixture'} delayed revision receipt settles the unchanged draft without replay`,{skip:durable&&(process.platform!=='linux'||!process.env.SURREAL_TEST_RUNTIME)},async t=>{
  const f=await setup(t,durable),app=await f.client();await f.draft(app);f.lateReceipt();await app.submit('revision-form');
  assert.match(app.node('revision-status').textContent,/not confirmed/);assert.ok(app.storage.has('massion.workbench.pending'));assert.equal((await f.store.load(f.id))?.value.version,2);
- await app.tick();await f.until(()=>!app.storage.has('massion.workbench.pending'));
+ f.releaseReceipts();await app.tick();await f.until(()=>!app.storage.has('massion.workbench.pending'));
  assert.match(app.node('revision-status').textContent,/^Mission revision confirmed\./);assert.equal(app.node('revision-version').value,'3');assert.match(app.node('revision-base').textContent,/based on revision 3/);assert.equal(app.calls.filter(c=>c.path.endsWith('/revision')).length,1);
 });
 test('delayed revision receipt preserves edits made after submission',async t=>{
  const f=await setup(t),app=await f.client();await f.draft(app);f.lateReceipt();await app.submit('revision-form');
  // Supporting DOM fixture: simulate a private edit while the unresolved barrier disables keyboard input.
- app.node('revision-purpose').value='Later private edit';await app.node('revision-purpose').fire('input');await app.tick();await f.until(()=>!app.storage.has('massion.workbench.pending'));
+ app.node('revision-purpose').value='Later private edit';await app.node('revision-purpose').fire('input');f.releaseReceipts();await app.tick();await f.until(()=>!app.storage.has('massion.workbench.pending'));
  assert.equal(app.node('revision-purpose').value,'Later private edit');assert.equal(app.node('revision-version').value,'2');assert.match(app.node('revision-status').textContent,/^Mission revision confirmed\./);assert.equal(app.calls.filter(c=>c.path.endsWith('/revision')).length,1);
 });

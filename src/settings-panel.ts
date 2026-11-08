@@ -31,10 +31,10 @@ function settingsRow(title,sub,...controls){const row=element('div',undefined,'s
 function settingsCard(label,rows,action){const head=element('h3',label);if(action)head.append(action);const card=element('div',undefined,'set-card');card.append(...(rows.length?rows:[element('div','None','set-empty')]));return [head,card];}
 /** Opens one section and reads what it shows; nothing is written by opening. */
 function settingsOpen(name,app=''){settingsShown=name;settingsAdding=false;settingsMember='';settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
-async function settingsRead(path){try{const {response,body}=await request(path);return response.ok?body:null;}catch{return null;}}
+async function settingsRead(path,scope){try{const {response,body}=await request(path,{scope});return response.ok?body:null;}catch{return null;}}
 /** Each section's read has its own generation: a slower earlier read for the same section never overwrites a newer one. */
 async function settingsLoad(name){
- const gen=settingsGen[name]=(settingsGen[name]||0)+1,read=async path=>{const body=await settingsRead(path);if(gen!==settingsGen[name])throw settingsStale;return body;};
+ const gen=settingsGen[name]=(settingsGen[name]||0)+1,read=async path=>{const body=await settingsRead(path,'settings:'+name+':'+path);if(gen!==settingsGen[name])throw settingsStale;return body;};
  try{
  if(name==='general')await schedulesLoad();
  if(name==='memory'||name==='members'||name==='connections')settingsCatalog=await read('/connections');

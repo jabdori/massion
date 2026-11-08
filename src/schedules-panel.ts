@@ -18,7 +18,7 @@ const scheduleClock=minute=>String(Math.floor(minute/60)).padStart(2,'0')+':'+St
 // ponytail: the cycle shows the stored minute, which is the owner's local time while the browser keeps the offset it was created in.
 const scheduleCycle=s=>'Daily '+scheduleClock(s.minute);
 /** Only the latest read lands, so a read sent before a database replacement or a later read never overwrites a newer one. */
-async function schedulesLoad(){const seq=++scheduleLoadSeq;let list=null;try{const {response,body}=await request('/assistant/schedules');if(response.ok&&Array.isArray(body.schedules))list=body.schedules.filter(scheduleValid);}catch{}
+async function schedulesLoad(){const seq=++scheduleLoadSeq;let list=null;try{const {response,body}=await request('/assistant/schedules',{scope:'schedules-list'});if(response.ok&&Array.isArray(body.schedules))list=body.schedules.filter(scheduleValid);}catch{}
  if(seq!==scheduleLoadSeq)return;if(list){scheduleList=list;scheduleLoaded=true;}renderSchedules();
  // A running run whose host dies emits nothing, so the page reads again just after its deadline to show result unknown; a failed read retries every 10 s.
  clearTimeout(scheduleTimer);const due=Math.min(...scheduleList.flatMap(s=>s.runs.filter(r=>r&&r.state==='running'&&Number.isSafeInteger(r.deadlineAt)).map(r=>r.deadlineAt)));

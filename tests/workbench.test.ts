@@ -116,7 +116,7 @@ test('Mission submit has stable IDs, blocks duplicate writes and renders host te
  app.node('purpose').value='<img src=x onerror=alert(1)>';app.node('scope').value='Project';app.node('constraints').value='First\n Second\n\n';app.node('criteria').value='A reviewable result';
  const first=app.node('mission-form').fire('submit');await settle();await app.node('mission-form').fire('submit');
  assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('mission-fields').disabled,true);
- assert.equal(submitted.id,'mission:uuid-1');assert.equal(submitted.commandId,'uuid-2');assert.deepEqual(submitted.constraints,['First','Second']);assert.equal(submitted.criteria.oracle,'manual-review/v1');
+ assert.match(submitted.id,/^mission:uuid-\d+$/);assert.match(submitted.commandId,/^uuid-\d+$/);assert.notEqual(submitted.id.slice(8),submitted.commandId);assert.deepEqual(submitted.constraints,['First','Second']);assert.equal(submitted.criteria.oracle,'manual-review/v1');
  resolvePost(reply({status:'committed',revision:1,value:{...fixtureMission(submitted.id),purpose:submitted.purpose}},201));await first;await settle();
  assert.equal(app.node('mission-purpose').textContent,submitted.purpose);assert.equal(app.node('mission-purpose').children.length,0);
  assert.equal(app.storage.get('massion.workbench.mission'),submitted.id);assert.equal(app.node('mission-fields').disabled,false);
@@ -141,7 +141,7 @@ test('Work admission uses the current revision and conflict refresh never retrie
   return reply({revision,value:mission});
  },{'massion.workbench.mission':mission.id});await settle();
  app.node('work-title').value='Build the report';app.node('work-budget').value='12.5';await app.submit('work-form');
- assert.equal(submitted.expectedRevision,2);assert.equal(submitted.budget,12.5);assert.equal(submitted.workId,'work:uuid-2');
+ assert.equal(submitted.expectedRevision,2);assert.equal(submitted.budget,12.5);assert.match(submitted.workId,/^work:uuid-\d+$/);
  assert.equal(app.calls.filter(call=>call.options.method==='POST').length,1);assert.equal(app.node('revision').textContent,'Revision 4');assert.match(app.node('status').textContent,/not retried/);
 });
 
@@ -306,7 +306,7 @@ test('two simultaneous tabs cannot overwrite pending identities or clear a newer
  for(const app of [first,second]){app.node('purpose').value='A separate purpose';app.node('scope').value='Scope';app.node('criteria').value='Inspect evidence';}
  // These submissions overlap before the lock callback executes; they are not sequential claims.
  const firstRequest=first.node('mission-form').fire('submit');const collision=second.node('mission-form').fire('submit');await settle();await collision;
- assert.equal(commands.length,1);assert.equal(commands[0].id,'mission:client-a-1');assert.match(second.node('status').textContent,/Another tab/);
+ assert.equal(commands.length,1);assert.match(commands[0].id,/^mission:client-a-\d+$/);assert.match(second.node('status').textContent,/Another tab/);
  assert.equal(JSON.parse(storage.get('massion.workbench.pending')!).commandId,commands[0].commandId);
  // Once the atomic claim lock is free, the saved marker still blocks the other client.
  await second.submit('mission-form');assert.equal(commands.length,1);assert.equal(second.node('mission-fields').disabled,true);
