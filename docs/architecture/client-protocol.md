@@ -81,8 +81,8 @@ storage live-query optimization and actual chunk transfers are out of scope.
 
 ## Verification and review
 
-Node 24.21.0 on macOS with the brief's physical TMPDIR. Before integration with
-new main, the full fixture suite passed 1334 tests, skipped 340 opt-in tests and
+Node 24.21.0 on macOS with the brief's physical TMPDIR. After integration with
+main at `cd16119`, the full fixture suite passed 1405 tests, skipped 340 opt-in tests and
 reproduced the documented baseline failure `portable inventory order is stable
 across English and Turkish process locales` (case-insensitive artifact paths).
 Typecheck, runtime syntax checks and diff whitespace checks passed.
@@ -101,3 +101,21 @@ Rendered HTML/CSS outside the script is byte-for-byte equal to the original head
 Artifacts live in the owner's scratchpad `ui/`: `e2-protocol.png`,
 `e2-protocol-push.png`, `e2-protocol-reconnect.png` and matching snapshots.
 No real provider, persistent DB, desktop transport or release was exercised.
+
+
+The new main-branch UI contract fixture host now wraps its existing read-only
+responses in protocol v1 and keeps an idle SSE subscription. Product commands
+remain refused; only its explicitly declared bounded app-view fixtures accept
+POST. A regression verifies negotiation, query framing, command refusal, app
+view reads, incompatible versions and stream shutdown through fixture cleanup.
+
+Six contract states (`B1`, `B2`, `B7-done`, `B13`, `B17`, `B22`) were captured
+headlessly both on this branch and on isolated `origin/main` source. All six
+completed with zero infrastructure errors and identical contract/visual failure
+counts. Those existing report-only mismatches are not fixed by this transport PR.
+Five screenshots have zero changed pixels; `B7-done` differs by 14 pixels out of
+1,296,000. Current and baseline reports, screenshots and prototype comparison
+pairs are retained in `/private/tmp/e2-ui-contracts` and
+`/private/tmp/e2-ui-contracts-baseline`. The other contract states are left to CI.
+`node scripts/check.mjs` passes; its new advisory copy lint reports 907 existing
+findings. No UI text was rewritten to satisfy a design contract.
