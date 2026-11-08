@@ -16,6 +16,7 @@ let chatDraftKey='massion.workbench.chat-draft',chatThread='',chatThreadName='';
 let chatView=null,chatRep=null,chatReadDone=null,chatSegment=null,chatReading=false,chatAgain=false,chatSending=false,chatPendingTimer=0,chatGeneration=0;
 // Nodes are kept by message and turn ID so a reread never moves or recreates what is already shown: focus stays and the live log announces only new items.
 const chatCards=new Map(),chatNodes=new Map(),chatStarting=new Set(),chatClosing=new Set(),chatDeciding=new Set();
+const chatSteering=new Map(),chatSteerKey=choice=>JSON.stringify([choice.feed,choice.member,choice.segment,choice.turnId]),chatSteerReceipt=key=>'massion.workbench.steering:'+key;
 // target is the segment and revision of a submission whose outcome is unknown: a retry goes there, where its message would sit, so the host replays it however far the head moved.
 function chatDraft(){try{const value=JSON.parse(storage.get(chatDraftKey)||'null'),target=value&&value.target;return value&&typeof value.text==='string'&&typeof value.commandId==='string'?{text:value.text,commandId:value.commandId,target:target&&Number.isSafeInteger(target.segment)&&target.segment>=1&&Number.isSafeInteger(target.expectedRevision)&&target.expectedRevision>=0?{segment:target.segment,expectedRevision:target.expectedRevision}:null}:{text:'',commandId:'',target:null};}catch{return {text:'',commandId:'',target:null};}}
 /** Records the target only while the stored draft is still this command, so an edit made while sending stays a new message. */
@@ -56,6 +57,32 @@ function chatButton(label,run,className='secondary'){const button=element('butto
 function chatKeyed(key,tag,className,signature,build){let node=chatNodes.get(key);if(!node){node=element(tag,undefined,className);node.id='chat-'+key;chatNodes.set(key,node);}if(node.chatSignature!==signature){node.chatSignature=signature;node.replaceChildren(...build());}node.hidden=false;return node;}
 function chatFold(turn){const w=turn.work,timed=Number.isSafeInteger(w.startedAt)&&Number.isSafeInteger(w.endedAt)&&w.endedAt>=w.startedAt,label=timed?'Worked for '+Math.max(1,Math.floor((w.endedAt-w.startedAt)/60000))+' min ›':'Worked ›',node=chatKeyed('fold-'+turn.id,'button','chat-fold',label,()=>[element('span',label)]);if(!node.chatBound){node.chatBound=true;node.type='button';node.addEventListener('click',()=>void shellOpenWork(turn.id));}return node;}
 function chatSystem(key,text,buttons=[]){return chatKeyed('system-'+key,'p','chat-system',text+'|'+buttons.map(b=>b[0]).join('|'),()=>[element('span',text),...buttons.map(([label,run])=>chatButton(label,run))]);}
+function chatSteerCurrent(choice){return choice.generation===chatGeneration&&choice.member===chatThread&&choice.selection===chatSegment&&chatView&&choice.feed===chatView.feedId&&choice.segment===chatView.segment?.number&&chatView.member?.id===choice.member;}
+/** Model output proposes only. An explicit click binds the stored message and target on the host. */
+function chatSteerLine(turn){const steer=turn.steer;if(!steer)return null;
+ const choice={feed:chatView.feedId,member:chatThread,segment:chatView.segment?.number,turnId:turn.id,generation:chatGeneration,selection:chatSegment},key=chatSteerKey(choice);
+ if(steer.status==='recorded'||steer.status==='not_recorded'){chatSteering.delete(key);storage.remove(chatSteerReceipt(key));}
+ if(!chatText(steer.title))return null;
+ if(steer.status==='recorded')return chatSystem('steer-'+turn.id,'Steered: '+steer.title);
+ const pending=chatSteering.get(key),receipt=storage.get(chatSteerReceipt(key));
+ if(steer.status==='unknown'||steer.status==='proposed'&&(!storage.readable||!pending&&receipt!==null||pending&&(!pending.busy||pending.generation!==chatGeneration)))return chatSystem('steer-'+turn.id,'Result unknown: '+steer.title,[['Check',()=>readChat()]]);
+ if(steer.status!=='proposed'||!chatText(choice.feed)||!chatText(choice.member)||!Number.isSafeInteger(choice.segment)||choice.segment<1||!chatSteerCurrent(choice))return null;
+ return chatKeyed('system-steer-'+turn.id,'p','chat-system',JSON.stringify([choice,steer.title,!!pending]),()=>{const apply=chatButton('Apply to '+steer.title,()=>chatApplySteer(choice,apply));apply.disabled=!!pending;return [apply];});
+}
+async function chatApplySteer(choice,button){
+ if(!chatSteerCurrent(choice)||$('page-chat').hidden||!$('chat-log').contains(button)||button.disabled)return;
+ const turn=chatView.turns.find(t=>t.id===choice.turnId),key=chatSteerKey(choice);if(turn?.steer?.status!=='proposed'||chatSteering.has(key))return;
+ if(storage.get(chatSteerReceipt(key))!==null||!storage.readable){renderChat();return;}
+ // Persist before sending so a reload cannot turn an unseen commit back into Apply.
+ if(!storage.set(chatSteerReceipt(key),'pending')){chatShow('Unavailable');return;}
+ const pending={busy:true,generation:choice.generation};chatSteering.set(key,pending);renderChat();
+ try{await request('/assistant/steering',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':choice.feed},body:JSON.stringify({member:choice.member,segment:choice.segment,turnId:choice.turnId})});}
+ catch{}finally{
+  // A lost answer, including a read that still says proposed, never authorizes another POST.
+  if(chatSteering.get(key)===pending)pending.busy=false;
+  if(chatSteerCurrent(choice)){await readChat();if(chatSteerCurrent(choice))renderChat();}
+ }
+}
 /** Result unknown offers Check only: an unknown outcome is never resent (ADR 0002 §8). Failure offers Retry and Close. */
 function chatException(turn,kind){
  const title=turn.work?turn.work.title:turn.proposal.title,fact=kind==='unknown'?(turn.work?'Not resent':'Unknown whether created'):chatCardLabel(turn),busy=chatClosing.has(turn.id);
@@ -71,8 +98,8 @@ function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&
 function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
 /** Opens the Representative ('') or a member conversation in the page at its head and returns true; a switch refused while a send is pending returns false and changes nothing. A switch drops the shown nodes and reads that thread, and reopening the thread shown at an earlier segment returns to the head, where briefings and exception cards are. */
 function chatOpenThread(id,name=''){
- if(id!==chatThread){if(chatSending)return false;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
- else if(chatSegment!==null){chatSegment=null;void readChat();}
+ if(id!==chatThread){if(chatSending)return false;++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ else if(chatSegment!==null){++chatGeneration;chatSegment=null;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',chatThread?'Message '+chatName():'Message');$('chat-input').focus();renderShell();return true;}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
 /** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */
@@ -106,7 +133,7 @@ function renderChat(){
   if(message.role==='owner'&&turn&&Number.isSafeInteger(turn.at))while(extras.length&&extras[0].at<turn.at){const extra=extras.shift();dated(extra.at,extra.node());}
   dated(message.role==='owner'&&turn?turn.at:null,chatNode(message.id,message.text,message.role==='owner'?'chat-owner':'chat-reply'));if(!turn)continue;
   // The state line always follows its message, empty when there is nothing to say, so a later reply only appends.
-  if(message.role==='owner'){items.push(chatNode('state:'+turn.id,chatTurnLabel(turn),'chat-state'));const steer=turn.steer;if(steer&&chatText(steer.title)){if(steer.status==='recorded')items.push(chatSystem('steer-'+turn.id,'Steered: '+steer.title));else if(steer.status==='unknown')items.push(chatSystem('steer-'+turn.id,'Result unknown: '+steer.title,[['Check',()=>readChat()]]));}}
+  if(message.role==='owner'){items.push(chatNode('state:'+turn.id,chatTurnLabel(turn),'chat-state'));const steer=chatSteerLine(turn);if(steer)items.push(steer);}
   else if(turn.proposal)items.push(...chatSlot(turn));
  }
  for(const extra of extras)dated(extra.at,extra.node());
@@ -192,7 +219,7 @@ function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='st
 $('chat-input').value=chatDraft().text;
 $('chat-input').addEventListener('input',()=>{const text=$('chat-input').value,draft=chatDraft();storage.set(chatDraftKey,JSON.stringify(draft.text===text?draft:{text,commandId:'',target:null}));});
 $('chat-form').addEventListener('submit',event=>{event.preventDefault();void sendChat();});
-$('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;chatSegment=chatView.segment.number-1;void readChat();});
-$('chat-latest').addEventListener('click',()=>{chatSegment=null;void readChat();});
+$('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;++chatGeneration;chatSegment=chatView.segment.number-1;void readChat();});
+$('chat-latest').addEventListener('click',()=>{++chatGeneration;chatSegment=null;void readChat();});
 void readChat();
 `;

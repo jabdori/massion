@@ -4,7 +4,7 @@ import type {Mission,Work} from './domain.ts';
 import type {Store,Snapshot} from './storage.ts';
 import {workAdmissionPreflight,rejectedRun,hostBusyPreflight} from './configured-runtime.ts';
 import type {WorkRuntime,RuntimeResult} from './configured-runtime.ts';
-import type {ExecutionChoice} from './selectable-runtime.ts';
+import type {ExecutionChoice,DefaultResolution} from './selectable-runtime.ts';
 import type {ConnectionDiagnostic} from './provider-profiles.ts';
 import {prerequisitePins,resolvedPrerequisites} from './work-prerequisites.ts';
 import {keys} from './growth-evaluation.ts';
@@ -30,7 +30,7 @@ function plannedPrerequisites(snapshot:Snapshot<Mission>,w:Work,earlier:Set<stri
  const external=pins.filter(pin=>!earlier.has(pin.workId)),view={...w};if(external.length)view.prerequisites=external;else delete view.prerequisites;
  resolvedPrerequisites(snapshot.value,view);
 }
-export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[],entryBusy?:boolean):Promise<RunSequenceResult>{
+export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missionId:string,submitted:RunSequenceInput,unresolved?:ConnectionDiagnostic[],entryBusy?:boolean,resolveChoice?:(mission:Mission,workId:string)=>Promise<DefaultResolution>):Promise<RunSequenceResult>{
  const input=structuredClone(submitted);bound(input);const busyAtEntry=entryBusy??runtime.hasActiveAdmission?.()??false,configuration=hash(runtime.configuration?.()??null);
  let snapshot=await store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
  const results:RunSequenceResult['results']=[],completedWorkIds:string[]=[],stop=(entry:SequenceWork,index:number,result:RuntimeResult):RunSequenceResult=>({status:'stopped',snapshot:result.snapshot,completedWorkIds,results:[...results,{workId:entry.workId,runId:sequenceRunId(input.commandId,index),status:result.status,reason:result.reason}],reason:result.reason});
@@ -48,10 +48,12 @@ export async function runSequence(store:Store<Mission>,runtime:WorkRuntime,missi
   const expectedRevision=snapshot.revision,current=await store.load(missionId);if(!current)throw new DomainError('Unknown Mission');snapshot=current;
   original(snapshot,entry);
   if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});
-  const checked=runtime.preflight?.(snapshot,entry.workId,expectedRevision,input.selection)??{...workAdmissionPreflight(snapshot,entry.workId,expectedRevision),ready:false,diagnostics:[{code:'selection_unavailable',message:'Sequence requires the existing execution preflight.'}]};
+  let choice=input.selection;if(resolveChoice){const resolved=await resolveChoice(snapshot.value,entry.workId);if(resolved.status==='unresolved')return stop(entry,index,{status:'blocked',snapshot,reason:resolved.diagnostics.map(d=>d.message).join(' ')});choice=resolved.choice;
+   if(hash(runtime.configuration?.()??null)!==configuration)return stop(entry,index,{status:'blocked',snapshot,reason:'Original sequence execution configuration changed; inspect and deliberately request again.'});}
+  const checked=runtime.preflight?.(snapshot,entry.workId,expectedRevision,choice)??{...workAdmissionPreflight(snapshot,entry.workId,expectedRevision),ready:false,diagnostics:[{code:'selection_unavailable',message:'Sequence requires the existing execution preflight.'}]};
   if(!checked.ready)return stop(entry,index,rejectedRun(checked,snapshot));
   if(hash(original(snapshot,entry))!==reviewed.get(entry.workId))return stop(entry,index,{status:'blocked',snapshot,reason:'Original reviewed unstarted Work changed during the sequence; no automatic rebase.'});
-  const runId=sequenceRunId(input.commandId,index),result=await runtime.run(missionId,entry.workId,runId,expectedRevision,input.selection);snapshot=result.snapshot;
+  const runId=sequenceRunId(input.commandId,index),result=await runtime.run(missionId,entry.workId,runId,expectedRevision,choice);snapshot=result.snapshot;
   const w=snapshot.value.works.find(w=>w.id===entry.workId)!;if(result.status!=='settled'||w.acceptance!=='accepted'||!w.record)return stop(entry,index,{...result,reason:result.reason??'Prior Work has no independently accepted Record; remaining Work was not requested.'});
   results.push({workId:entry.workId,runId,status:result.status});completedWorkIds.push(entry.workId);
  }

@@ -137,10 +137,10 @@ export class ProductService {
   if(!input||typeof input!=='object'||Object.hasOwn(input,'selection')||!this.runtime.resolveDefault)return runSequence(this.app.store,this.runtime,missionId,input);
   // Capacity is captured before any await so a request made while the host is busy is refused, not deferred.
   const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,input.works?.[0]?.workId);
   // Resolve and enter synchronously: the sequence captures the configuration that produced this choice.
   if(resolved.status==='unresolved')return runSequence(this.app.store,this.runtime,missionId,input,resolved.diagnostics,busyAtEntry);
-  return {...await runSequence(this.app.store,this.runtime,missionId,{...input,selection:resolved.choice},undefined,busyAtEntry),selection:{source:'default' as const,choice:resolved.choice}};
+  return {...await runSequence(this.app.store,this.runtime,missionId,input,undefined,busyAtEntry,(mission,workId)=>this.resolveFresh(mission,workId)),selection:{source:'default' as const,choice:resolved.choice}};
  }
  /** `activationActorId` and `expectedDefault` are set only by the conversation host path; HTTP runs are the owner's. `expectedDefault` is the default choice an earlier check approved: a different one now refuses the run. */
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');

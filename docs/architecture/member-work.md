@@ -31,17 +31,19 @@ Members exist, but every Work is the Representative's. The Representative cannot
 
 - A member in the `default` group runs on the default route unchanged (the default group is the default route).
 - A member in an owner group: the executor is the group's first available model within the default route's cap. The checker is, in order: a different-family model in the same group; a different-family model in any group (so the preflight rule `verifier_family_available` holds); otherwise the group's first model (a same-family check in a separate run). Producers are the executor and the Representative.
-- When automatic start is deferred, selection-less manual preflight and Start re-resolve the pinned member’s current model group through the same host group selector. A missing member or missing group authorization refuses the start; no default execution route substitutes for an unauthorized group. An explicitly supplied owner selection keeps its existing behavior.
+- When automatic start is deferred, selection-less manual preflight, Start and each Work in a run sequence re-resolve the pinned member’s current model group through the same host group selector. A missing member or missing group authorization refuses the start; no default execution route substitutes for an unauthorized group. An explicitly supplied owner selection keeps its existing behavior.
 - The default route sets the per-call cap. An existing grant for the Mission scope must cover both selected models at that cap. Without one, admission is refused with `member_grant_missing`; the host never creates or widens a grant. The admitted Work still passes the full preflight.
 - The owner sets a member's group (`set-member-group`, owner setting, ADR 0003 §3). The group must exist inside the connection settings write fence. If a referenced group is later removed, future conversations and Works use the default group; existing run pins do not change. `POST /members/group {commandId, memberId, modelGroup}` is currently the host/test seam for routing; no group picker is delivered in Q12.
 
 ## Steering from a member's 1:1 conversation
 
 - A member turn's request carries `works: [{id, title}]`: the member's eight newest actively running Works (`runtimeRun` present and `execution: active`). The member model may name one in `steer`.
-- The host checks the named Work is in that list and records the owner's exact message as that Work's steering through the existing `steer` command, as the owner, through the drain-aware owner store, with command ID `assistant-steer:<turnId>`. After the write commits, the host interrupts the active run through the existing runtime intervention hook. The model only routes; the instruction is the owner's text.
-- Settle the answer with a durable steering intent (`missionId`, `workId`, `expectedRevision`, `status: unknown`) before the owner write. Only a fresh settle permits that one write. A separate host step records its outcome, even after the reply deadline. Reads can reconcile an unfinished intent by the exact operation identity after a crash, without resending; newly confirmed receipts also interrupt any still-owned local run.
-- A lost acknowledgment gets one read-only operation lookup: confirmed commits are `recorded` and interrupt the run; an unresolved outcome remains `unknown`; a known refusal is `not_recorded`. A stopped Work is waiting for attention, has an end time, and is not a running sidebar line or a reason to keep polling. There is no automatic resume path.
-- The member message shows `Steered: <title>` as a gray system line; an unresolved write shows `Result unknown: <title>` (B18).
+- The member model may only propose a target from the active Work list. The answered turn records `steer: {missionId, workId, status: proposed}`. Model output and conversation reads never write an instruction or interrupt a run.
+- A gray line offers `Apply to <title>`. This explicit owner action posts `POST /assistant/steering {member, segment, turnId}` with the current feed. The host derives the exact original owner message and proposed target from the stored turn; the caller cannot supply replacement text or a different target.
+- Confirmation rechecks that the Work is actively running and assigned to this member. An owner-only segment command records the confirmed intent and the current Work revision through the drain-aware owner store. Only its fresh commit permits one existing `steer` command, also through that store, followed by local interruption on confirmed success.
+- Before posting, the client stores a pending confirmation receipt bound to feed, member, segment and turn; a browser reload cannot offer Apply again while that receipt remains unresolved. The host also retains uncertain attempts for its session, so an invisible confirmation receipt is not interpreted as permission to send again.
+- The confirmation command is deterministic per turn. Overlapping confirmations replay; an uncertain confirmation or steering write is never resent. Outcome recording and read-only operation reconciliation survive deadlines/crashes. A newly confirmed steering receipt can interrupt its still-owned local run only when the intent has explicit owner provenance. Legacy unconfirmed intents remain historical data, not permission for a new interruption.
+- The line becomes `Steered: <title>` after success or `Result unknown: <title>` with read-only Check while uncertain. Stopped Work needs attention and is not a running sidebar line or a reason to keep polling. No automatic resume path is added.
 
 ## Host Work list
 
@@ -52,7 +54,7 @@ Members exist, but every Work is the Representative's. The Representative cannot
 ```
 
 - The sidebar's Work lines (the Representative's and each member's) and the activity list read this list, not the shown conversation segment, so Works from earlier segments and member Works appear while any conversation is open.
-- The client keeps a request generation: a slower earlier answer never replaces a newer one. A changed `feedId` replaces the whole list. While any listed Work runs, the list is read again with the conversation's minute timer, so a Work that ends without an event still leaves the lines.
+- The global Work list keeps its own request sequence, independent of conversation/thread generations: a slower earlier answer never replaces a newer one, and switching threads cannot discard a valid same-feed Work list. A changed `feedId` replaces the whole list. While any listed Work runs, the list is read again with the conversation's minute timer, so a Work that ends without an event still leaves the lines.
 
 ## Durable end time
 
@@ -67,7 +69,7 @@ Members exist, but every Work is the Representative's. The Representative cannot
 
 1. A Work is assigned only to a member that exists when it is admitted; the host never reassigns.
 2. The producer never judges: a member Work keeps distinct executor and checker identities and its family relation is pinned as before.
-3. Steering records the owner's exact words only; a model reply never becomes an instruction.
+3. Steering records the owner's exact words only after explicit owner target confirmation; a model reply alone never authorizes an instruction or interruption.
 4. A steer or admission whose outcome is unknown is never resent.
 5. Owner writes (`set-member-group`, steering) go through the drain-aware owner store.
 
@@ -87,9 +89,16 @@ Members exist, but every Work is the Representative's. The Representative cannot
 - `tests/member-work.test.ts`: v1/v2 parsing, assignment and lineage, unknown-member refusal, group routing and grants, different/same-family checks, group-change replay and drain, cached member routing, steering interruption and unknown outcomes, HTTP reads, durable end times and B21 handoff.
 - `tests/member-work-surface.test.ts`: host-list sidebar and activity, off-segment room links, feed replacement, delayed responses, polling without events, member identity, duration and steering tags. Existing surface fixtures now serve the host list.
 - Checked the actual workbench HTML in Aside with loopback fixture responses: member sidebar and card, activity, `Worked for 4 min`, member-thread steering and B21 rows. This is fixture UI evidence, not a real-provider or durable-database run.
-- Node 24.21.0, physical macOS `TMPDIR`: typecheck and runtime syntax checks pass. Full `npm test`: 1,497 tests, 1,161 passed, 335 environment-gated tests skipped, and the brief's known failure `portable inventory order is stable across English and Turkish process locales` (`directory realpath mismatch`).
+- Node 24.21.0, physical macOS `TMPDIR`: typecheck and runtime syntax checks pass. Full `npm test`: 1,529 tests, 1,193 passed, 335 environment-gated tests skipped, and the brief's known failure `portable inventory order is stable across English and Turkish process locales` (`directory realpath mismatch`).
 - Review regressions cover stopped active runs over HTTP, ineligible queued Work, a deadline crossing the steering commit, a crash before the outcome record, confirmed/unconfirmed lost acknowledgments, another host changing intake during a run, removed groups and concurrent group writes, closure timestamps, gray steering lines and missing member identities.
 
 ## PR #96 review repair scope
 
 Findings 1–3 retain requested steering with active-only eligibility, durable intent and read-only outcome reconciliation, and attention rather than running display. Findings 5/9 reuse gray system lines and show no invented member identity. Findings 6–8 retain old intake pins, use the default group after removal, fence member-group validation, and preserve the actual run end. Finding 4 is explicitly deferred above. Finding 10 retains steering and the B21 `Work to hand` field because the Q12 request explicitly includes both; repeat detection and a group picker remain follow-up, with no claim that these producers/screens exist.
+
+## Owner confirmation and sequence review verification
+
+- Selection-less run sequences resolve the implicit route separately for each Work, through the same member-aware resolver as Start. Explicit owner selections and the original configuration/freshness/no-replay guards remain intact.
+- The model only proposes steering. Tests verify no instruction or interruption before owner confirmation, exact stored-message/target binding, duplicate confirmation races, stale feeds, host drain, unobservable receipts, browser reloads and detached/late UI events.
+- `agent-desktop` ran the required `scratchpad/ui/verify.sh` with a loopback fixture, then headless semantic clicks in an isolated Chrome app profile. PNGs were opened and compared with prototype B18. Member name/avatar, selected sidebar row, right-aligned owner message and gray system/action line match the established structure; in-thread cards remain the documented follow-up.
+- Final screen evidence in `scratchpad/ui/`: `q12-apply-final-check.png` (verify.sh capture), `q12-representative-final.png` (member Work under the Representative view), `q12-member-proposal-final.png` (the same line remains after opening Quill; Apply visible), and `q12-member-applied-final.png` (only the explicit Apply produces Steered and removes the stopped Work from running lines). Corresponding JSON accessibility snapshots retain the actual names and button roles. The fixture recorded exactly one confirmation POST, after the explicit click.

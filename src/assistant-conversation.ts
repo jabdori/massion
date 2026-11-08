@@ -18,7 +18,7 @@ export interface AssistantTurn {id:string;messageId:string;status:'not_started'|
 /** `member` is the name the Representative's model gave (member-work.md); the host checks it at admission. */
 export interface AssistantProposal {title:string;member?:string}
 /** A member thread's remark recorded as a Work's steering, or refused before or at its commit. */
-export interface AssistantSteer {missionId:string;workId:string;status:'recorded'|'not_recorded'|'unknown';expectedRevision?:number}
+export interface AssistantSteer {missionId:string;workId:string;status:'proposed'|'recorded'|'not_recorded'|'unknown';expectedRevision?:number;confirmedBy?:string}
 export const MEMBER_NAME_CHARS=32;
 export interface AssistantSegment {kind:'assistant-conversation';id:string;segment:number;previous:{id:string;lastMessageId:string}|null;closed:boolean;timeWatermark:number;messages:AssistantMessage[];turns:AssistantTurn[]}
 export type AssistantTurnInput = {status:'pending';id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
@@ -28,7 +28,8 @@ export type AssistantCommand =
  | {type:'close-assistant-segment';segment:number}
  | {type:'settle-assistant-turn';turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:AssistantProposal|null;steer?:AssistantSteer}
  | {type:'settle-assistant-turn';turnId:string;status:'failed'|'unknown';usage:AssistantUsage;receipt:string}
- | {type:'record-assistant-steer';turnId:string;status:AssistantSteer['status']}
+ | {type:'confirm-assistant-steer';turnId:string;workRevision:number}
+ | {type:'record-assistant-steer';turnId:string;status:Exclude<AssistantSteer['status'],'proposed'>}
  | {type:'record-assistant-outcome';turnId:string;missionId?:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
 /** The owner's exact words pinned into a Work. The title stays the Representative's summary. */
 export interface AssistantSource {segmentId:string;turnId:string;messageId:string;messageHash:string;message:AssistantMessage;representative:{provider:string;model:string};memberId?:string}
@@ -87,12 +88,15 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
    ensure(exact(command.usage,['inputTokens','outputTokens'])&&[command.usage.inputTokens,command.usage.outputTokens].every(n=>n===null||count(n)),'Invalid usage');text(command.receipt,RECEIPT_BYTES,'receipt',true);
    if(command.status==='answered'){text(command.reply,MESSAGE_BYTES,'reply');ensure(command.proposal===null||exact(command.proposal,['title'])||exact(command.proposal,['title','member']),'Invalid proposal');if(command.proposal){text(command.proposal.title,TITLE_BYTES,'proposal title',true);if(Object.hasOwn(command.proposal,'member'))memberName(command.proposal.member);}
     // Only a member thread steers, and it never proposes alongside.
-    if(Object.hasOwn(command,'steer')){const st=command.steer!;ensure(thread!==''&&command.proposal===null&&(exact(st,['missionId','workId','status'])||exact(st,['missionId','workId','status','expectedRevision'])&&count(st.expectedRevision,1))&&id(st.missionId)&&id(st.workId)&&['recorded','not_recorded','unknown'].includes(st.status),'Invalid steer');}}
+    if(Object.hasOwn(command,'steer')){const st=command.steer!;ensure(thread!==''&&command.proposal===null&&(exact(st,['missionId','workId','status'])||exact(st,['missionId','workId','status','expectedRevision'])&&count(st.expectedRevision,1))&&id(st.missionId)&&id(st.workId)&&['proposed','recorded','not_recorded','unknown'].includes(st.status),'Invalid steer');}}
    const t=observe(state,time);ensure(!state.closed,'Segment is closed; no reply lands after close');const turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&turn.status==='pending','Only a pending turn settles, once');
    if(command.status!=='unknown')ensure(t<turn.ownership!.deadlineAt,'A reply after the deadline is not accepted; settle unknown');
    turn.status=command.status;turn.usage=structuredClone(command.usage);turn.receipt=command.receipt;
    if(command.status==='answered'){ensure(command.usage.outputTokens!==null&&command.usage.outputTokens<=turn.route!.outputTokenCap,'Answered usage must be known and within the cap');if(command.proposal)turn.proposal=structuredClone(command.proposal);if(command.steer)turn.steer=structuredClone(command.steer);state.messages.push({id:'r:'+turn.id,ordinal:state.messages.length+1,actorId:actor.id,role:'representative',turnId:turn.id,text:command.reply});}
    expire(state,t);break;
+  }
+  case 'confirm-assistant-steer': {
+   role(actor,'owner');ensure(thread!==''&&exact(command,['type','turnId','workRevision'])&&count(command.workRevision,1),'Exact steering confirmation fields required');const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn?.status==='answered'&&turn.steer?.status==='proposed'&&state.messages.find(m=>m.id===turn.messageId)?.actorId===actor.id,'Only the message owner confirms its proposed target');turn.steer={...turn.steer,status:'unknown',expectedRevision:command.workRevision,confirmedBy:actor.id};if(!state.closed)expire(state,t);break;
   }
   case 'record-assistant-steer': {
    role(actor,'assistant');ensure(thread!==''&&exact(command,['type','turnId','status'])&&['recorded','not_recorded','unknown'].includes(command.status),'Exact steering outcome fields required');const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&['answered','unknown'].includes(turn.status)&&turn.steer?.status==='unknown','Only an unresolved steering intent takes an outcome');turn.steer.status=command.status;if(!state.closed)expire(state,t);break;
@@ -111,7 +115,7 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
 export function requireAssistantCommandIdentity(commandId:string,command:AssistantCommand,thread=''):void {
  ensure(typeof commandId==='string'&&commandId.length>0,'Missing command identity');
  if(command.type==='append-assistant-message'||command.type==='open-assistant-segment'){ensure(!commandId.startsWith('assistant-'),'Command IDs starting with assistant- are reserved for host steps');ensure(command.messageId===ownerMessageId(commandId),'Owner message ID must derive from the command ID');return;}
- const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:command.type==='record-assistant-steer'?'assistant-steer-outcome:'+command.turnId:null;
+ const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:command.type==='record-assistant-steer'?'assistant-steer-outcome:'+command.turnId:command.type==='confirm-assistant-steer'?'assistant-confirm-steer:'+command.turnId:null;
  ensure(expected!==null&&commandId===expected,`Command ID must be ${expected}`);
 }
 /** Command IDs are global in the store, so a member thread's close names its thread. */

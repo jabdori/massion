@@ -10,12 +10,12 @@ const quill={id:'member-q',name:'Quill',look:{shape:'drop',color:'agent-1'},mode
 type Row={workId:string;title:string;memberId:string|null;execution:string;acceptance:string;started:boolean;startedAt?:number|null;endedAt?:number|null;turnId?:string};
 const row=(r:Row)=>({missionId:'intake',missionRevision:3,unknown:false,startedAt:T0,endedAt:null,segment:1,turnId:'assistant-turn:m:'+r.workId.padEnd(32,'0'),...r});
 function fixture(initial:{works?:Row[];turns?:any[];messages?:any[];memberThread?:{messages:any[];turns:any[]}}={}){
- const state={works:(initial.works??[]).map(row),feedId:'feed:a',hold:null as null|Promise<void>,chatHold:null as null|Promise<void>,worksStatus:200,worksBody:undefined as unknown,worksCalls:0,members:[quill],turns:initial.turns??[],messages:initial.messages??[]};
+ const state={works:(initial.works??[]).map(row),feedId:'feed:a',hold:null as null|Promise<void>,chatHold:null as null|Promise<void>,chatStatus:200,worksStatus:200,worksBody:undefined as unknown,worksCalls:0,members:[quill],turns:initial.turns??[],messages:initial.messages??[]};
  const view=(member:string|null)=>({feedId:state.feedId,cursor:1,head:1,members:state.members,...(member?{member:{id:member,name:'Quill'},decisions:[]}:{decisions:[]}),
   segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:member?initial.memberThread?.messages??[]:state.messages},turns:member?initial.memberThread?.turns??[]:state.turns});
  const app=harness(async(path)=>{
   if(path==='/assistant/works'){state.worksCalls++;const snapshot=structuredClone(state.worksBody??{feedId:state.feedId,works:state.works}),status=state.worksStatus,hold=state.hold;if(hold)await hold;return reply(snapshot,status);}
-  if(path.startsWith('/assistant/conversation')){const member=new URLSearchParams(path.split('?')[1]??'').get('member'),snapshot=structuredClone(view(member)),hold=state.chatHold;if(hold)await hold;return reply(snapshot);}
+  if(path.startsWith('/assistant/conversation')){const member=new URLSearchParams(path.split('?')[1]??'').get('member'),snapshot=structuredClone(view(member)),hold=state.chatHold,status=state.chatStatus;if(hold)await hold;return reply(snapshot,status);}
   if(path.startsWith('/events'))return reply({feedId:state.feedId,cursor:1,events:[]});
   return reply({error:'Not configured'},503);
  });
@@ -186,4 +186,109 @@ test('unknown steering offers only read-only Check and changes to Steered only a
  const buttons=line.children.filter(n=>n.tagName==='BUTTON');assert.deepEqual(buttons.map(n=>n.textContent),['Check']);
  const reads=()=>app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,before=reads();await buttons[0]!.fire('click');await settle();assert.ok(reads()>before);assert.equal(line.children[0]!.textContent,'Result unknown: Churn causes');assert.equal(line.detaches,0);
  steer.status='recorded';await buttons[0]!.fire('click');await settle();assert.equal(line.textContent,'Steered: Churn causes');assert.equal(line.children.filter(n=>n.tagName==='BUTTON').length,0);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+function steeringFixture(options:{storage?:Map<string,string>;storageFault?:'read'|'write'|'remove'}={}){
+ const id='9'.repeat(32),turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',steer:{missionId:'intake',workId:'w1',title:'Churn causes',status:'proposed'}};
+ const state={feed:'feed:a',head:2,turn,hold:null as Promise<void>|null,fail:false,postStatus:200,reads:0,receiptsAtPost:[] as [string,string][]};
+ const app=harness(async(path,options)=>{
+  if(path==='/assistant/steering'){state.receiptsAtPost=[...app.storage].filter(([key])=>key.startsWith('massion.workbench.steering:'));if(state.hold)await state.hold;if(state.fail)throw new Error('Lost answer');return reply({status:'recorded'},state.postStatus);}
+  if(path.startsWith('/assistant/conversation')){state.reads++;const query=new URLSearchParams(path.split('?')[1]??''),member=query.get('member'),segment=Number(query.get('segment')??state.head);return reply({feedId:state.feed,cursor:1,head:state.head,members:[quill],...(member?{member:{id:member,name:quill.name}}:{}),decisions:[],segment:{number:segment,revision:7,previous:segment>1?'previous':null,closed:false,full:false,messages:member?[{id:turn.messageId,role:'owner',turnId:null,text:'Annual plans only.'}]:[]},turns:member?[structuredClone(turn)]:[]});}
+  if(path==='/assistant/works')return reply({feedId:state.feed,works:[]});
+  if(path.startsWith('/events'))return reply({feedId:state.feed,cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ },{},options.storageFault,{storage:options.storage});
+ const line=()=>app.all().find(n=>n.id==='chat-system-steer-'+turn.id),apply=()=>line()?.children.find(n=>n.tagName==='BUTTON'&&n.textContent==='Apply to Churn causes'),posts=()=>app.calls.filter(c=>c.options?.method==='POST');
+ const open=async()=>{await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();};
+ return {app,state,line,apply,posts,open};
+}
+
+test('steering proposals only POST on an explicit click, with exact server-derived identity and view feed; double click sends once',async()=>{
+ const {app,state,line,apply,posts,open}=steeringFixture();await open();assert.ok(apply(),'a proposal offers Apply');assert.equal(line()!.className,'chat-system');
+ await runInContext('readChat()',app.context);await settle();runInContext('chatEvents([{aggregateId:"assistant-conversation:member:member-q:2"}])',app.context);await settle();assert.equal(posts().length,0,'reads never confirm proposals');
+ runInContext('feedId="stale-global-feed"',app.context);let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const button=apply()!;
+ await button.fire('click');await button.fire('click');await settle();assert.equal(posts().length,1);assert.equal(apply()!.disabled,true);
+ assert.equal(posts()[0]!.path,'/assistant/steering');assert.deepEqual(JSON.parse(posts()[0]!.options.body),{member:'member-q',segment:2,turnId:state.turn.id});assert.equal(posts()[0]!.options.headers['X-Massion-Feed'],'feed:a');
+ state.turn.steer.status='recorded';release();await settle();assert.equal(line()!.textContent,'Steered: Churn causes');assert.equal(posts().length,1);
+});
+
+for(const move of ['thread','thread-return','segment','segment-return','feed','reset'] as const)test('a detached steering Apply cannot send after '+move,async()=>{
+ const {app,state,apply,posts,open}=steeringFixture();await open();const old=apply();assert.ok(old,'proposal button exists');
+ if(move.startsWith('thread')){await app.node('side-representative').fire('click');await settle();if(move==='thread-return')await open();}
+ else if(move.startsWith('segment')){await app.node('chat-earlier').fire('click');await settle();if(move==='segment-return'){await app.node('chat-latest').fire('click');await settle();}}
+ else {if(move==='feed')state.feed='feed:b';runInContext('chatReset()',app.context);await open();}
+ await old.fire('click');await settle();assert.equal(posts().length,0,'the previous choice never becomes authority for the current view');
+});
+
+for(const outcome of ['lost','http-error','unconfirmed-success'] as const)test('an '+outcome+' Apply answer keeps only Check while the read still says proposed, including after leaving and returning',async()=>{
+ const {app,state,line,apply,posts,open}=steeringFixture();await open();const button=apply();assert.ok(button,'proposal button exists');
+ state.fail=outcome==='lost';state.postStatus=outcome==='http-error'?503:200;await button.fire('click');await settle();
+ assert.equal(posts().length,1);assert.match(line()!.textContent,/^Result unknown: Churn causesCheck$/);assert.equal(apply(),undefined);
+ const before=state.reads;await line()!.children.find(n=>n.tagName==='BUTTON')!.fire('click');await settle();assert.ok(state.reads>before);assert.equal(posts().length,1);
+ await app.node('side-representative').fire('click');await open();assert.equal(apply(),undefined);assert.match(line()!.textContent,/^Result unknown:/);
+ state.turn.steer.status='not_recorded';await runInContext('readChat()',app.context);await settle();assert.equal(apply(),undefined);assert.equal(line(),undefined);assert.equal(posts().length,1);
+});
+
+for(const move of ['thread','segment','reset'] as const)test('a late Apply response does not change or reread the view after '+move,async()=>{
+ const {app,state,line,apply,posts,open}=steeringFixture();await open();let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});assert.ok(apply(),'proposal button exists');await apply()!.fire('click');await settle();
+ if(move==='thread')await app.node('side-representative').fire('click');else if(move==='segment')await app.node('chat-earlier').fire('click');else {state.feed='feed:b';runInContext('chatReset()',app.context);await open();}
+ await settle();const before={reads:state.reads,text:app.node('chat-log').textContent,heading:app.node('page-heading').textContent};release();await settle();
+ assert.equal(state.reads,before.reads);assert.equal(app.node('chat-log').textContent,before.text);assert.equal(app.node('page-heading').textContent,before.heading);assert.equal(posts().length,1);
+ if(move==='reset')assert.equal(line()!.textContent,'Apply to Churn causes','an old-feed reply cannot settle the new feed proposal');
+});
+
+for(const move of ['thread-return','same-feed-reset'] as const)test('an in-flight Apply revisited after '+move+' offers Check without waiting for its old response',async()=>{
+ const {app,state,line,apply,posts,open}=steeringFixture();await open();let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});assert.ok(apply());await apply()!.fire('click');await settle();
+ if(move==='thread-return')await app.node('side-representative').fire('click');else runInContext('chatReset()',app.context);await open();
+ try{assert.equal(line()!.textContent,'Result unknown: Churn causesCheck');assert.equal(apply(),undefined);await line()!.children.find(n=>n.tagName==='BUTTON')!.fire('click');await settle();assert.equal(posts().length,1);}finally{release();await settle();}
+});
+
+for(const status of ['recorded','unknown','not_recorded'] as const)test('a replaced proposal button cannot Apply after a read reports '+status,async()=>{
+ const {app,state,line,apply,posts,open}=steeringFixture();await open();const old=apply();assert.ok(old);state.turn.steer.status=status;await runInContext('readChat()',app.context);await settle();
+ await old.fire('click');await settle();assert.equal(posts().length,0);assert.equal(apply(),undefined);if(status==='not_recorded')assert.equal(line(),undefined);
+});
+
+for(const resolved of ['recorded','not_recorded'] as const)test('a saved steering receipt survives reload with proposed and unknown reads until '+resolved,async()=>{
+ const storage=new Map<string,string>(),first=steeringFixture({storage});await first.open();first.state.fail=true;await first.apply()!.fire('click');await settle();
+ assert.equal(first.posts().length,1);assert.equal(first.state.receiptsAtPost.length,1,'receipt is durable before transmission');const receipt=first.state.receiptsAtPost[0]![0];
+ const reloaded=steeringFixture({storage});await reloaded.open();assert.equal(reloaded.apply(),undefined);assert.equal(reloaded.line()!.textContent,'Result unknown: Churn causesCheck');assert.ok(storage.has(receipt));
+ await reloaded.line()!.children.find(n=>n.tagName==='BUTTON')!.fire('click');await settle();assert.equal(reloaded.apply(),undefined);assert.ok(storage.has(receipt),'proposed after a read does not authorize resending');
+ reloaded.state.turn.steer.status='unknown';await runInContext('readChat()',reloaded.app.context);await settle();assert.ok(storage.has(receipt),'unknown does not clear the receipt');
+ reloaded.state.turn.steer.status=resolved;await runInContext('readChat()',reloaded.app.context);await settle();assert.equal(storage.has(receipt),false,'only the known authoritative result clears the receipt');
+ assert.equal(first.posts().length+reloaded.posts().length,1);assert.equal(reloaded.apply(),undefined);
+});
+
+test('a steering receipt write failure prevents any POST',async()=>{
+ const {app,apply,posts,open}=steeringFixture({storageFault:'write'});await open();const button=apply();assert.ok(button);await button.fire('click');await settle();
+ assert.equal(posts().length,0);assert.equal([...app.storage].some(([key])=>key.startsWith('massion.workbench.steering:')),false);
+});
+
+test('an already-rendered Apply in another client checks the saved receipt before sending',async()=>{
+ const storage=new Map<string,string>(),first=steeringFixture({storage}),second=steeringFixture({storage});await first.open();await second.open();const old=second.apply();assert.ok(old);
+ first.state.fail=true;await first.apply()!.fire('click');await settle();await old.fire('click');await settle();
+ assert.equal(first.posts().length+second.posts().length,1);assert.equal(second.apply(),undefined);assert.equal(second.line()!.textContent,'Result unknown: Churn causesCheck');
+});
+
+for(const held of [false,true])test('active member Work stays in the sidebar across Representative / Quill / Representative with recorded steering'+(held?' and held Work reads':''),async()=>{
+ const id='8'.repeat(32),turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',steer:{missionId:'intake',workId:'w1',title:'Churn causes',status:'recorded'}};
+ const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}],memberThread:{messages:[{id:turn.messageId,role:'owner',turnId:null,text:'Annual plans only.'}],turns:[turn]}});await settle();
+ const visible=()=>{assert.equal(app.node('side-members').hidden,false);assert.deepEqual(memberLines(app),['Churn causesWorking']);assert.equal(state.works[0]!.execution,'active');};visible();
+ let release=()=>{};if(held){state.hold=new Promise<void>(r=>{release=r;});void runInContext('shellWorksLoad()',app.context);}
+ try{
+  await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');visible();await settle();visible();assert.equal(app.node('page-heading').textContent,'QQuill');assert.match(app.node('chat-log').textContent,/Steered: Churn causes/);
+  state.hold=null;await app.node('side-representative').fire('click');visible();await settle();visible();assert.equal(app.node('page-heading').textContent,'하하나');
+ }finally{release();await settle();}
+ visible();assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0,'viewing recorded steering never applies another instruction');
+});
+
+for(const chatStatus of [200,503])test('the initial global Work list lands across a thread switch while member chat is held'+(chatStatus===503?' then unavailable':''),async()=>{
+ const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});
+ let releaseWorks=()=>{},releaseChat=()=>{};state.hold=new Promise<void>(r=>{releaseWorks=r;});await settle();
+ assert.equal(state.worksCalls,1);assert.deepEqual(memberLines(app),[],'the first Work list has not arrived');
+ state.chatHold=new Promise<void>(r=>{releaseChat=r;});state.chatStatus=chatStatus;await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ try{
+  releaseWorks();await settle();assert.equal(state.worksCalls,1,'no newer list request superseded the held one');assert.deepEqual(memberLines(app),['Churn causesWorking'],'global Work is not bound to the selected conversation');
+  state.hold=null;state.worksStatus=503;releaseChat();await settle();assert.deepEqual(memberLines(app),['Churn causesWorking'],'an unavailable subsequent read keeps the received list');
+  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+ }finally{releaseWorks();releaseChat();await settle();}
 });

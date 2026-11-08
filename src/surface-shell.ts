@@ -28,11 +28,12 @@ let shellActivity=false,shellOrder='priority',paneTabs=[],paneActive='',paneMiss
 let shellWorks=[],shellWorksFeed='',shellWorksSequence=0;
 const shellWorkValid=w=>w&&chatText(w.missionId)&&chatText(w.workId)&&chatText(w.title)&&chatText(w.turnId)&&Number.isSafeInteger(w.missionRevision)&&w.missionRevision>=0&&(w.memberId===null||chatText(w.memberId))&&typeof w.started==='boolean'&&typeof w.unknown==='boolean'&&['queued','active','waiting','blocked','cancelled','settled'].includes(w.execution)&&['pending','failed','stale','accepted'].includes(w.acceptance);
 /** A whole host list, independent of the shown segment; reset and newer reads fence late replies. */
-async function shellWorksLoad(){const sequence=++shellWorksSequence,generation=chatGeneration,expectedFeed=chatView&&chatView.feedId;
- try{const {response,body}=await request('/assistant/works');if(sequence!==shellWorksSequence||generation!==chatGeneration)return;
+async function shellWorksLoad(){const sequence=++shellWorksSequence,expectedFeed=shellWorksFeed||(chatView||chatRep)?.feedId;
+ try{const {response,body}=await request('/assistant/works');if(sequence!==shellWorksSequence)return;
   if(!response.ok||!chatText(body.feedId)||!Array.isArray(body.works))return;
-  if(chatView&&expectedFeed!==chatView.feedId)return;
-  if(expectedFeed&&body.feedId!==expectedFeed){chatReset();return;}
+  const currentFeed=shellWorksFeed||(chatView||chatRep)?.feedId;
+  if(expectedFeed&&currentFeed&&expectedFeed!==currentFeed)return;
+  if((currentFeed||expectedFeed)&&body.feedId!==(currentFeed||expectedFeed)){chatReset();return;}
   if(shellWorksFeed&&shellWorksFeed!==body.feedId)storage.remove(seenKey);shellWorksFeed=body.feedId;shellWorks=body.works.filter(shellWorkValid);renderShell();
  }catch{}finally{if(sequence===shellWorksSequence)chatScheduleRead();}
 }
