@@ -1,7 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
-import {readFile,readdir} from 'node:fs/promises';
+import {readFile,readdir,mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 
 const root=new URL('../',import.meta.url),generator=new URL('scripts/generate-ui-tokens.mjs',root),output=new URL('src/ui-tokens.ts',root);
@@ -9,9 +12,10 @@ const visual=JSON.parse(await readFile(new URL('docs/product/screens/visual.json
 const source=()=>readFile(output,'utf8').catch(error=>{if(error.code==='ENOENT')return '';throw error;});
 const declarations=(block:string)=>Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(m=>[m[1],m[2]!.trim()]));
 
-test('token generation is deterministic, checked in and independent of the caller directory',async()=>{
+test('token generation is deterministic, checked in and independent of the caller directory',async t=>{
  assert.ok(existsSync(generator),'The UI token generator must exist');
- const run=(flag:string)=>{const result=spawnSync(process.execPath,[generator.pathname,flag],{cwd:'/private/tmp',encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout;};
+ const cwd=await mkdtemp(join(tmpdir(),'massion-ui-tokens-'));t.after(()=>rm(cwd,{recursive:true,force:true}));
+ const run=(flag:string)=>{const result=spawnSync(process.execPath,[fileURLToPath(generator),flag],{cwd,encoding:'utf8'});assert.ifError(result.error);assert.equal(result.status,0,result.stderr);return result.stdout;};
  const first=run('--stdout');assert.equal(first,run('--stdout'));assert.equal(first,await source());
  run('--check');
 });

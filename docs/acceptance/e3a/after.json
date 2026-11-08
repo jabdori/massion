@@ -2344,5 +2344,18 @@
       "light"
     ],
     "remaining_screens": "Retain the original E3a candidate measurements; not recaptured in this visual correction."
+  },
+  "delivery_followup": {
+    "previous_candidate": "76b47ee",
+    "rerun_screens": [
+      "B2",
+      "B2-offline",
+      "B2-offline-failed"
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "scope": "Unknown delivery is blocked, definite non-delivery retains same-ID retry. Other rows retain their previous measured revisions."
   }
 }

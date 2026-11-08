@@ -42,3 +42,24 @@ fixture disconnects before Send and reconnects before capture, without a product
 write reaching the host. Member avatar rendering continues to honor the host's
 role token; fix example member roles in fixtures against the approved artboard
 rather than assigning colors by display name.
+
+## CI and delivery-outcome correction
+
+A lost response or an unclassified HTTP failure is unknown, including after a
+reload. Persist the command identity, original target and delivery classification
+before attempting the request; neither the resend action nor normal Submit may
+reissue an unknown draft. Only an explicit pre-admission refusal, or the browser
+being offline before request dispatch, permits the B2 retry with the same command
+ID. A deliberate edit is a new private draft, not a reclassification of an
+uncertain earlier submission. Connection status remains independent.
+
+The token generation test must use a fresh caller directory under `os.tmpdir()`;
+macOS-only `/private/tmp` is not a portable prerequisite. Relation review tests
+must wait on the actual fresh write gate, not the permanently hidden shell notice.
+
+Local draft preparation, uncertain dispatch intent, input persistence and receipt
+cleanup share the existing browser recovery lock. Re-read the current delivery
+classification inside that lock after asynchronous reads. Pending input edits
+retain their original conversation key and newest edit object while waiting;
+preparation consumes only the matching persisted edit, and a receipt never
+clears a newer unsaved edit. No network request runs while holding the lock.

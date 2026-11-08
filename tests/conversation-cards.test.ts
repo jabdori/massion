@@ -124,7 +124,7 @@ test('a Work stopped after starting offers Retry and Close; a refused Close is n
  assert.equal(posts(app).length,1);assert.ok(shown(app).includes(card));assert.equal(button(card,'닫기')!.disabled,false);
 });
 
-test('Retry keeps typed text and a draft whose result is unknown, so the unknown message replays under its own command ID',async()=>{
+test('Retry keeps typed text and never replaces a draft whose delivery is unknown',async()=>{
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:f',title:'Churn causes',execution:'settled',acceptance:'failed',started:true}}]);await settle();
  const card=byId(app,'chat-exception-'+turnId(1))!,input=app.node('chat-input'),key='massion.workbench.chat-draft';
  input.value='A new note';await input.fire('input');await button(card,'다시 시도')!.fire('click');await settle();

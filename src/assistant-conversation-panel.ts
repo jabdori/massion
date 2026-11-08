@@ -16,12 +16,18 @@ let chatDraftKey='massion.workbench.chat-draft',chatThread='',chatThreadName='';
 // chatRep keeps the Representative's decisions while a member conversation is open; Work lines use the host list.
 let chatView=null,chatRep=null,chatReadDone=null,chatSegment=null,chatReading=false,chatAgain=false,chatSending=false,chatPendingTimer=0,chatGeneration=0,chatSendFailed=false,chatDisconnected=false;
 // Nodes are kept by message and turn ID so a reread never moves or recreates what is already shown: focus stays and the live log announces only new items.
-const chatCards=new Map(),chatNodes=new Map(),chatStarting=new Set(),chatClosing=new Set(),chatDeciding=new Set();
+const chatCards=new Map(),chatNodes=new Map(),chatStarting=new Set(),chatClosing=new Set(),chatDeciding=new Set(),chatDraftEdits=new Map();
 const chatSteering=new Map(),chatSteerKey=choice=>JSON.stringify([choice.feed,choice.member,choice.segment,choice.turnId]),chatSteerReceipt=key=>'massion.workbench.steering:'+key;
-// target is the segment and revision of a submission whose outcome is unknown: a retry goes there, where its message would sit, so the host replays it however far the head moved.
-function chatDraft(){try{const value=JSON.parse(storage.get(chatDraftKey)||'null'),target=value&&value.target;return value&&typeof value.text==='string'&&typeof value.commandId==='string'?{text:value.text,commandId:value.commandId,target:target&&Number.isSafeInteger(target.segment)&&target.segment>=1&&Number.isSafeInteger(target.expectedRevision)&&target.expectedRevision>=0?{segment:target.segment,expectedRevision:target.expectedRevision}:null}:{text:'',commandId:'',target:null};}catch{return {text:'',commandId:'',target:null};}}
-/** Records the target only while the stored draft is still this command, so an edit made while sending stays a new message. */
-function chatPin(commandId,target){const draft=chatDraft();if(draft.commandId===commandId)storage.set(chatDraftKey,JSON.stringify({text:draft.text,commandId,target}));}
+// Persist uncertain delivery before dispatch; only a proven refusal or a pre-dispatch offline check permits resend.
+function chatDraft(key=chatDraftKey){try{const value=JSON.parse(storage.get(key)||'null'),pin=value&&value.target;
+ if(value&&typeof value.text==='string'&&typeof value.commandId==='string')return {text:value.text,commandId:value.commandId,target:pin&&Number.isSafeInteger(pin.segment)&&pin.segment>=1&&Number.isSafeInteger(pin.expectedRevision)&&pin.expectedRevision>=0?{segment:pin.segment,expectedRevision:pin.expectedRevision}:null,delivery:value.delivery==='not-delivered'?'not-delivered':value.delivery==='unknown'||value.commandId?'unknown':'not-delivered'};
+ }catch{}return {text:'',commandId:'',target:null,delivery:'not-delivered'};}
+/** Keep command identity, target and delivery together before effects; later edits retain their own draft. */
+async function chatPin(binding,target,delivery='unknown'){const locked=await withRecoveryLock(()=>{const draft=chatDraft();
+ if(chatDraftKey!==binding.key||draft.commandId!==binding.commandId||draft.text!==binding.text||delivery==='unknown'&&draft.delivery!=='not-delivered')return false;
+ return storage.set(chatDraftKey,JSON.stringify({text:draft.text,commandId:draft.commandId,target,delivery}));},false);return locked.acquired&&locked.value===true;}
+function chatRestoreDraft(){const draft=chatDraft(),edit=chatDraftEdits.get(chatDraftKey);$('chat-input').value=edit?edit.text:draft.text;chatSendFailed=false;
+ if(draft.delivery==='unknown')chatShow(copy('conversation.text.01'));else if(draft.commandId&&!edit)chatFailed({key:chatDraftKey,commandId:draft.commandId,text:draft.text});else chatShow('');chatControls();}
 const chatReasons={assistant_route_missing:copy('ui.reason-route-missing'),assistant_route_stale:copy('ui.reason-route-stale'),settings_pending:copy('ui.reason-settings-pending'),settings_changed:copy('ui.reason-settings-changed'),default_route_missing:copy('ui.reason-default-missing'),default_route_stale:copy('ui.reason-default-stale'),assistant_intake_unsupported:copy('ui.reason-intake-unsupported'),host_busy:copy('ui.reason-host-busy'),host_draining:copy('ui.reason-host-draining'),intake_conflict:copy('ui.reason-intake-conflict'),work_not_admitted:copy('ui.reason-work-not-admitted')};
 function chatReason(list){const code=Array.isArray(list)&&list[0]&&typeof list[0].code==='string'?list[0].code:'';return Object.hasOwn(chatReasons,code)?chatReasons[code]:'';}
 function chatTurnLabel(turn){if(turn.displayStatus==='not_started'){const reason=chatReason(turn.diagnostics);return reason?copy('ui.not-sent-reason',{reason}):copy('ui.not-sent');}if(turn.displayStatus==='unknown')return copy('conversation.text.01');if(turn.displayStatus==='failed')return '';if(turn.displayStatus==='pending')return '…';return '';}
@@ -32,9 +38,9 @@ function chatCardLabel(turn){const work=turn.work,result=turn.outcome;
  if(work.execution==='blocked')return copy('ui.stopped');if(work.execution==='waiting')return copy('ui.waiting');return copy('sidebar.status.05');}
 function chatConnection(disconnected){chatDisconnected=disconnected;const status=$('chat-connection');status.textContent=copy('header.status.01');status.hidden=!(disconnected||reconnectRequired);}
 function chatClearFailed(){if(!chatSendFailed)return;chatSendFailed=false;chatConnection(chatDisconnected);chatShow('');}
-function chatFailed(failed){const key=failed.key,current=chatDraft();chatSendFailed=true;chatConnection(chatDisconnected);if(chatDraftKey!==key||current.commandId!==failed.commandId||current.text!==failed.text||$('chat-input').value!==failed.text){chatShow(copy('conversation.text.01'));return;}const status=$('chat-status');status.replaceChildren(element('span',copy('ui.not-sent')+' · ','chat-send-failure'),chatButton(copy('composer.button.02'),()=>{const draft=chatDraft();if(chatDraftKey===key&&draft.commandId===failed.commandId&&draft.text===failed.text&&$('chat-input').value===failed.text)return sendChat();},''));status.hidden=false;}
+function chatFailed(failed){const key=failed.key,current=chatDraft();chatSendFailed=true;chatConnection(chatDisconnected);if(current.delivery!=='not-delivered'||chatDraftKey!==key||current.commandId!==failed.commandId||current.text!==failed.text||$('chat-input').value!==failed.text){chatShow(copy('conversation.text.01'));return;}const status=$('chat-status');status.replaceChildren(element('span',copy('ui.not-sent')+' · ','chat-send-failure'),chatButton(copy('composer.button.02'),()=>{const draft=chatDraft();if(draft.delivery==='not-delivered'&&chatDraftKey===key&&draft.commandId===failed.commandId&&draft.text===failed.text&&$('chat-input').value===failed.text)return sendChat();},''));status.hidden=false;}
 function chatShow(text){$('chat-status').textContent=text;$('chat-status').hidden=!text;}
-function chatControls(){$('chat-send').disabled=chatSending;$('chat-earlier').hidden=!(chatView&&chatView.segment&&chatView.segment.previous);$('chat-latest').hidden=!chatSegment;}
+function chatControls(){$('chat-send').disabled=chatSending||chatDraft().delivery==='unknown';$('chat-earlier').hidden=!(chatView&&chatView.segment&&chatView.segment.previous);$('chat-latest').hidden=!chatSegment;}
 const chatTime=at=>new Date(at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),chatDay=at=>{const date=new Date(at);return copy('ui.date',{month:date.getMonth()+1,day:date.getDate(),weekday:copy('ui.weekday-'+date.getDay())})};
 /** What a turn's slot shows (conversation-cards.md): a card while open, then a folded line, with an exception card or a grey line when it ended badly or was closed. */
 function chatKind(turn){const w=turn.work;if(!w)return turn.outcome&&turn.outcome.work.status==='unknown'?'unknown':'card';
@@ -110,7 +116,7 @@ function chatMembers(){const view=chatView||chatRep;return (Array.isArray(view&&
 function chatName(){return chatThread?(chatMembers().find(m=>m.id===chatThread)||{name:chatThreadName}).name:'${representativeName}';}
 /** Opens the Representative ('') or a member conversation in the page at its head and returns true; a switch refused while a send is pending returns false and changes nothing. A switch drops the shown nodes and reads that thread, and reopening the thread shown at an earlier segment returns to the head, where briefings and exception cards are. */
 function chatOpenThread(id,name=''){
- if(id!==chatThread){if(chatSending)return false;chatClearFailed();protocol.invalidate('chat-view');++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-input').value=chatDraft().text;void readChat();}
+ if(id!==chatThread){if(chatSending)return false;chatClearFailed();protocol.invalidate('chat-view');++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatRestoreDraft();void readChat();}
  else if(chatSegment!==null){protocol.invalidate('chat-view');++chatGeneration;chatSegment=null;void readChat();}
  shellShow('chat');$('chat-input').setAttribute('placeholder',copy('ui.message',{member:chatName()}));$('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));$('chat-input').focus();renderShell();return true;}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText));}
@@ -179,7 +185,7 @@ function chatScheduleRead(){
 }
 /** A replaced database invalidates every shown message and card: clear them and read the conversation of the current one. */
 // A replaced database may not hold the open member, so the conversation falls back to the Representative and its draft.
-function chatReset(){protocol.invalidate('chat-view');++chatGeneration;++shellWorksSequence;shellWorks=[];shellWorksFeed='';paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';$('chat-input').value=chatDraft().text;$('chat-input').setAttribute('placeholder',copy('ui.message',{member:chatName()}));$('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
+function chatReset(){protocol.invalidate('chat-view');++chatGeneration;++shellWorksSequence;shellWorks=[];shellWorksFeed='';paneTabs=[];paneActive='';paneMission='';storage.remove(seenKey);renderPane();chatThread='';chatThreadName='';chatDraftKey='massion.workbench.chat-draft';chatRestoreDraft();$('chat-input').setAttribute('placeholder',copy('ui.message',{member:chatName()}));$('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));if(!$('page-chat').hidden)shellShow('chat');chatView=null;chatRep=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();chatControls();renderShell();void readChat();}
 /** A Representative turn by ID, also one a briefing carries from an earlier segment, so its Work links open. */
 function chatWorkTurn(turnId){const listed=shellWorks.find(w=>w.turnId===turnId);if(listed)return {id:turnId,work:listed};if(!chatRep)return;return chatRep.turns.find(t=>t.id===turnId)??(Array.isArray(chatRep.briefings)?chatRep.briefings:[]).flatMap(b=>b&&Array.isArray(b.turns)?b.turns:[]).find(t=>t&&t.id===turnId);}
 async function openChatWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
@@ -192,7 +198,10 @@ async function startChatWork(turnId){
 }
 /** Retry sends nothing: the owner's original request goes back into the input so the conditions can change before a new Send.
  * Typed text and a draft whose result is unknown are kept: the draft's command ID is what lets Send replay it instead of sending it twice. */
-function chatRetry(turnId){const turn=chatView&&chatView.turns.find(t=>t.id===turnId),message=turn&&chatView.segment&&chatView.segment.messages.find(m=>m.id===turn.messageId);if(!message)return;const input=$('chat-input');if(chatDraft().commandId||input.value.trim()&&input.value!==message.text){input.focus();return;}input.value=message.text;storage.set(chatDraftKey,JSON.stringify({text:message.text,commandId:'',target:null}));$('chat-input').focus();}
+async function chatRetry(turnId){const turn=chatView&&chatView.turns.find(t=>t.id===turnId),message=turn&&chatView.segment&&chatView.segment.messages.find(m=>m.id===turn.messageId),key=chatDraftKey;if(!message)return;
+ await withRecoveryLock(()=>{if(chatDraftKey!==key)return;const input=$('chat-input');if(chatDraft().commandId||input.value.trim()&&input.value!==message.text){input.focus();return;}input.value=message.text;
+ if(!storage.set(key,JSON.stringify({text:message.text,commandId:'',target:null,delivery:'not-delivered'})))chatShow(copy('ui.recovery-blocked'));input.focus();chatControls();},false);}
+
 /** Close records the owner's cancel once at the card's revision; whatever the answer, the next read says how it ended and nothing is retried. */
 async function chatCloseWork(turnId){
  const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||chatClosing.has(turnId))return;const work=turn.work;chatClosing.add(turnId);renderChat();
@@ -208,30 +217,42 @@ async function chatDecide(decisionId,answer){
 async function sendChat(){
  const text=$('chat-input').value;if(chatSending||!text.trim())return;
  if(new TextEncoder().encode(text).length>4096){chatShow(copy('ui.too-long'));return;}
- const draft=chatDraft(),same=draft.text===text&&!!draft.commandId,commandId=same?draft.commandId:crypto.randomUUID();let pinned=same?draft.target:null;storage.set(chatDraftKey,JSON.stringify({text,commandId,target:pinned}));
- const failed={key:chatDraftKey,commandId,text};chatSending=true;chatShow('');chatControls();
+ const key=chatDraftKey;chatSending=true;chatSendFailed=false;chatShow('');chatControls();
  try{
+  const prepared=await withRecoveryLock(()=>{if(chatDraftKey!==key||$('chat-input').value!==text)return null;
+   const draft=chatDraft(),edit=chatDraftEdits.get(key),same=draft.text===text&&!!draft.commandId;if(same&&draft.delivery==='unknown')return {unknown:true};
+   const commandId=same?draft.commandId:crypto.randomUUID(),target=same?draft.target:null;
+   if(!same&&!storage.set(key,JSON.stringify({text,commandId,target,delivery:'not-delivered'})))return null;
+   if(edit&&edit.text===text&&chatDraftEdits.get(key)===edit)chatDraftEdits.delete(key);
+   return {failed:{key,commandId,text},target};},false);
+  if(!prepared.acquired||!prepared.value){chatShow(copy('ui.recovery-blocked'));return;}
+  if(prepared.value.unknown){chatShow(copy('conversation.text.01'));return;}
+  const failed=prepared.value.failed,commandId=failed.commandId;let pinned=prepared.value.target;
+  if(navigator.onLine===false){chatFailed(failed);return;}
   if(chatSegment||!chatView){chatSegment=null;if(!await readChat()){chatFailed(failed);return;}}
   for(let attempt=0;attempt<2;attempt++){
-   const view=chatView,segment=view&&view.segment;const target=pinned??(!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision});chatPin(commandId,target);
+   const view=chatView,segment=view&&view.segment;const target=pinned??(!segment?{segment:1,expectedRevision:0}:segment.full?{segment:view.head+1,expectedRevision:0}:{segment:view.head,expectedRevision:segment.revision});
+   if(navigator.onLine===false){chatFailed(failed);return;}
+   if(!await chatPin(failed,target)){chatShow(copy(chatDraft().delivery==='unknown'?'conversation.text.01':'ui.recovery-blocked'));return;}
    const {response,body}=await request('/assistant/messages',{method:'POST',headers:{'Content-Type':'application/json',...(view&&view.feedId?{'X-Massion-Feed':view.feedId}:{})},body:JSON.stringify({commandId,...target,text,...(chatThread?{member:chatThread}:{})})},130000);
-   // The private draft clears only on its committed receipt, and only while the input still holds the sent text: an edit made while waiting is unsent and stays.
-   // A conflict commits nothing, so the same command ID is reused.
-   if(response.ok){chatSendFailed=false;chatConnection(false);chatShow('');if($('chat-input').value===text){storage.remove(chatDraftKey);$('chat-input').value='';}await readChat();return;}
-   // A changed database is not a revision race: the message goes to it only on the owner's next Send.
-   // A conflict proves the message is not at its target (the host replays from there first; a feed conflict means the target belongs to a replaced database), so the target is dropped and the next try reads the head.
-   // A draining host refuses before that replay, so its refusal keeps the target.
-   const feed=body.reason==='feed',refused=response.status===400||response.status===409||response.status===503&&body.outcome==='rejected';if(response.status===409){pinned=null;chatPin(commandId,null);}
-   await readChat();if(response.status===409&&attempt===0&&!feed&&!/^answer_in_progress/.test(body.error||''))continue;
-   // Only a refusal before the commit is "not sent"; any other answer may follow a stored message, so the result is unknown and Send replays it at the kept target.
-   if(/^answer_in_progress/.test(body.error||''))chatShow(copy('ui.answer-in-progress'));else chatFailed(failed);return;
+   // Clear only this committed draft; editing back to the same text is still a new private draft.
+   if(response.ok){chatSendFailed=false;chatConnection(false);chatShow('');await withRecoveryLock(()=>{if(chatDraftKey===failed.key&&!chatDraftEdits.has(failed.key)&&chatDraft().commandId===commandId&&$('chat-input').value===text){storage.remove(chatDraftKey);$('chat-input').value='';}},false);await readChat();return;}
+   const feed=body.reason==='feed',refused=body.outcome!=='unknown'&&(response.status===400||response.status===409||response.status===503&&body.outcome==='rejected');
+   // A refusal proves no admission for this attempt; uncertainty never becomes permission to resend.
+   if(refused){if(response.status===409)pinned=null;await chatPin(failed,response.status===409?null:target,'not-delivered');}
+   await readChat();if(refused&&response.status===409&&attempt===0&&!feed&&!/^answer_in_progress/.test(body.error||''))continue;
+   if(refused&&/^answer_in_progress/.test(body.error||''))chatShow(copy('ui.answer-in-progress'));else if(refused)chatFailed(failed);else chatShow(copy('conversation.text.01'));return;
   }
- }catch{chatFailed(failed);await readChat();}finally{chatSending=false;chatControls();}
+ }catch{chatShow(copy('conversation.text.01'));await readChat();}finally{chatSending=false;chatControls();}
 }
+
 function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='string'&&(event.aggregateId.startsWith('assistant-conversation:')||shellWorks.some(w=>w.missionId===event.aggregateId)||chatView&&chatView.turns.some(turn=>turn.work&&turn.work.missionId===event.aggregateId))))void readChat();}
-$('chat-input').value=chatDraft().text;
+chatRestoreDraft();
 $('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));
-$('chat-input').addEventListener('input',()=>{chatClearFailed();const text=$('chat-input').value,draft=chatDraft();storage.set(chatDraftKey,JSON.stringify(draft.text===text?draft:{text,commandId:'',target:null}));});
+$('chat-input').addEventListener('input',()=>{chatClearFailed();const key=chatDraftKey,edit={text:$('chat-input').value};chatDraftEdits.set(key,edit);
+ return withRecoveryLock(()=>{if(chatDraftEdits.get(key)!==edit)return;const draft=chatDraft(key);
+ if(storage.set(key,JSON.stringify(draft.text===edit.text?draft:{text:edit.text,commandId:'',target:null,delivery:'not-delivered'})))chatDraftEdits.delete(key);else if(chatDraftKey===key)chatShow(copy('ui.recovery-blocked'));
+ if(chatDraftKey===key)chatControls();},false);});
 $('chat-form').addEventListener('submit',event=>{event.preventDefault();void sendChat();});
 $('chat-earlier').addEventListener('click',()=>{if(!chatView||!chatView.segment||!chatView.segment.previous)return;protocol.invalidate('chat-view');++chatGeneration;chatSegment=chatView.segment.number-1;void readChat();});
 $('chat-latest').addEventListener('click',()=>{protocol.invalidate('chat-view');++chatGeneration;chatSegment=null;void readChat();});

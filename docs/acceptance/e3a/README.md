@@ -2,7 +2,9 @@
 
 This is the first E3 foundation slice, not full screen fidelity.
 
-The latest [visual correction](visual-followup.md) recaptures 17 states in both
+The latest [delivery/CI correction](ci-followup.md) recaptures B2 and its two
+offline variants in both themes, and separately checks unknown delivery across
+reload. The preceding [visual correction](visual-followup.md) recaptures 17 states in both
 themes. The other 58 states retain the original candidate measurements; the
 combined table is not a claim that they were recaptured after this correction. The screen runner
 remains report-only; keyed copy lint and generated-token drift checks block.
