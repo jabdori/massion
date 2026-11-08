@@ -1,3 +1,4 @@
+import {protocolClientScript} from './client-protocol.ts';
 import {memoryExpiryPanel,memoryExpiryClient} from './memory-expiry-panel.ts';
 import {memoryConflictPanel,memoryConflictClient} from './memory-conflict-panel.ts';
 import {missionConstraintsPanel,missionConstraintsClient} from './mission-constraints-panel.ts';
@@ -122,6 +123,8 @@ ${appsPane}
 </div>
 <script>
 'use strict';
+${protocolClientScript}
+const protocol = createProtocolClient(createSseTransport(createHttpTransport()));
 const $ = id => document.getElementById(id);
 const storage = {
   readable:true,
@@ -146,7 +149,7 @@ let selectedId = initialReference.present ? initialReference.id : storage.get(mi
 let cursor = Number(storage.get(cursorKey) || 0);
 if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
 let feedId = storage.get(feedKey) || '';
-let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, reconnectRequired = true, connectionEpoch = 0;
+let snapshot = null, busy = false, loading = false, readSequence = 0, polling = false, feedRecoveryPending = false, reconnectRequired = true, connectionEpoch = 0;
 let unknownOperation = null, providerSelection = null, providerKnown = false, runtimeConfiguration = null, activity = [], eventRefreshNeeded = false;
 let recoveryProblem = '', fixtureUnknown = storage.get(fixtureKey) !== null;
 let impactSequence = 0, impactReading = false, impactFocus = null;
@@ -291,6 +294,7 @@ function report(message, tone = '') {
   $('page-status').textContent = message; $('page-status').hidden = !$('work-pane').hidden || tone !== 'error' && tone !== 'warning';
 }
 function controls() {
+  resumeFeedRecovery();
   const locked = reconnectRequired || busy || loading || !!unknownOperation || !!recoveryProblem;
   $('sync-notice').hidden = !reconnectRequired;
   $('sync-notice').textContent = reconnectRequired ? 'New actions are paused until current host state and permissions are refreshed. Mission reads and your drafts remain available. No command is retried.' : '';
@@ -399,16 +403,8 @@ $('impact-form').addEventListener('submit',async event => {
   } catch(error) { if (currentImpact(choice)) { $('impact-status').textContent = 'Impact unavailable: ' + error.message; $('impact-status').className = 'status error'; } }
   finally { if (currentImpact(choice)) { impactReading = false; if (submittedFocus === $('impact-read')) impactFocus = {choice,previous:submittedFocus}; impactControls(); } }
 });
-async function request(path, options = {}, timeout = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(path, {...options, signal: controller.signal, cache:'no-store'});
-    let body;
-    try { body = await response.json(); } catch { throw new Error('The host returned an unreadable response.'); }
-    return {response, body};
-  } finally { clearTimeout(timer); }
-}
+const request = protocol.request;
+
 function validSnapshot(value, id) { return value && Number.isSafeInteger(value.revision) && value.revision > 0 && value.value && value.value.id === id && Array.isArray(value.value.works); }
 function rememberMission(id) { selectedId = id; $('mission-id').value = id; storage.set(missionKey, id); }
 function clearSnapshot(message) {
@@ -724,7 +720,13 @@ async function refreshReadState(epoch, expectedFeed) {
     storage.set(feedKey,feedId); storage.set(cursorKey,String(cursor)); renderActivity();
   } finally { loading = false; controls(); }
 }
-async function pollEvents() {
+let eventReadDone=null;
+function pollEvents() {
+ if(eventReadDone)return eventReadDone;
+ const read=(async()=>{while(await readEventPage()) {}})();eventReadDone=read;
+ void read.finally(()=>{if(eventReadDone===read)eventReadDone=null;});return read;
+}
+async function readEventPage() {
   if (polling) return;
   polling = true; let epoch = connectionEpoch;
   try {
@@ -757,8 +759,9 @@ async function pollEvents() {
     $('event-state').textContent = 'Connected · ' + cursor; $('event-state').className = 'tag good';
     $('event-help').textContent = 'Committed events refresh this Mission automatically. Cursor ' + cursor + ' is saved for reconnect.';
     renderActivity();
+    if(body.events.length===100)return true;
     if (reconnectRequired) {
-      if (busy || loading) return;
+      if (busy || loading) { feedRecoveryPending=true;return; }
       if (!await refreshProviders()) throw new Error('Current host permissions could not be refreshed');
       await refreshConnections(); providerNotice();
       const missionId = selectedId;
@@ -766,13 +769,13 @@ async function pollEvents() {
       else if (missionId && !await loadMission(missionId, false)) throw new Error('Current Mission could not be refreshed');
       if (epoch !== connectionEpoch || missionId !== selectedId) throw new Error('Connection or selected Mission changed during refresh');
       if (snapshot) renderMission();
-      reconnectRequired = false; eventRefreshNeeded = false; controls();
+      reconnectRequired = false; feedRecoveryPending=false; eventRefreshNeeded = false; controls();
     } else if (eventRefreshNeeded && !busy && !loading && selectedId) { eventRefreshNeeded = false; await loadMission(selectedId, false); }
   } catch (error) {
     requireReconnect();
     $('event-state').textContent = 'Disconnected'; $('event-state').className = 'tag warn';
     $('event-help').textContent = 'Event polling interrupted: ' + error.message + ' Snapshot refresh remains available; reconnect will resume from cursor ' + cursor + '.';
-  } finally { polling = false; }
+  } finally { polling = false; resumeFeedRecovery(); }
 }
 async function write(path, body, missionId, successMessage, revisionSubmission = null, retirementSubmission = null, budgetSubmission = null, growthSubmission = null, organizationSubmission = null, relationSubmission = null, documentSubmission = null, sourceSubmission = null, conversationSubmission = null, prerequisiteSubmission = null, correctionSubmission = null, expiredSubmission = null, conversationWorkSubmission = null, clarificationSubmission = null, constraintSubmission = null, memoryConflictSubmission = null, memoryExpirySubmission = null) {
   const longRun = path.endsWith('/run'); let ownsBusy = true;
@@ -946,7 +949,7 @@ function renderDocumentUses(body,choice){
 async function readStoredDocument(mode){
  documentReadControls();const button=$(documentReadButton(mode));if(button.disabled)return;const d=selectedDocument(),query=$('document-query').value;if(mode==='search' && (!query.trim() || query.length>200 || !query.isWellFormed())){$('document-read-status').textContent='Enter a bounded literal query. No read was sent.';return;}const focus=document.activeElement;invalidateDocumentRead();
  const choice={sequence:documentReadSequence,missionId:selectedId,revision:snapshot.revision,feed:feedId,epoch:connectionEpoch,mode,query,selection:$('document-choice').value,document:d?JSON.parse(JSON.stringify(d)):null},controller=new AbortController();documentReadController=controller;documentReadMode=mode;documentReadControls();$('document-read-status').textContent='Reading stored '+(mode==='search'?'latest source matches':mode==='usage'?'exact source Work/Record uses':'exact original source')+'…';const timer=setTimeout(()=>controller.abort(),15000);
- try{const path='/missions/'+encodeURIComponent(choice.missionId)+(mode==='search'?'/documents?query='+encodeURIComponent(query):(mode==='usage'?'/document-usage?id=':'/document?id=')+encodeURIComponent(d.id)+'&version='+d.version+'&sha256='+d.contentSha256),response=await fetch(path,{headers:{'X-Massion-Feed':choice.feed},signal:controller.signal,cache:'no-store'}),body=await response.json();if(!currentDocumentRead(choice))return;if(!response.ok)throw Error(body?.error || 'Document read unavailable.');if(body.missionId!==choice.missionId || body.feedId!==choice.feed || body.revision!==choice.revision || !Number.isSafeInteger(body.cursor) || body.cursor<0)throw Error('Reply does not match current Mission/feed/revision. Refresh and choose exact source.');
+ try{const path='/missions/'+encodeURIComponent(choice.missionId)+(mode==='search'?'/documents?query='+encodeURIComponent(query):(mode==='usage'?'/document-usage?id=':'/document?id=')+encodeURIComponent(d.id)+'&version='+d.version+'&sha256='+d.contentSha256),{response,body}=await request(path,{headers:{'X-Massion-Feed':choice.feed},signal:controller.signal,cache:'no-store'});if(!currentDocumentRead(choice))return;if(!response.ok)throw Error(body?.error || 'Document read unavailable.');if(body.missionId!==choice.missionId || body.feedId!==choice.feed || body.revision!==choice.revision || !Number.isSafeInteger(body.cursor) || body.cursor<0)throw Error('Reply does not match current Mission/feed/revision. Refresh and choose exact source.');
  if(mode==='search'){
   const latest=new Map();for(const entry of snapshot.value.documents || [])latest.set(entry.id,entry);if(body.query!==query || body.limit!==20 || !Number.isSafeInteger(body.totalMatches) || body.totalMatches<0 || body.totalMatches>100 || body.totalMatches!==[...latest.values()].filter(d=>d.title.includes(query)||d.content.includes(query)).length || !Array.isArray(body.matches) || body.matches.length!==Math.min(body.totalMatches,20) || new Set(body.matches.map(m=>m.id)).size!==body.matches.length || body.matches.some(m=>{const exact=latest.get(m.id);return !exact || exact.version!==m.version || exact.title!==m.title || exact.source!==m.source || exact.contentSha256!==m.contentSha256 || exact.actorId!==m.actorId || typeof m.excerpt!=='string' || m.excerpt.length>240 || !exact.content.includes(m.excerpt) || !(exact.title.includes(query)||exact.content.includes(query));}))throw Error('Latest search evidence did not match exact stored sources.');
   const area=$('document-search-results');area.append(element('p',body.totalMatches+' latest versions match; showing '+body.matches.length+' (limit 20). Earlier versions remain readable by exact selection.'));
@@ -1179,7 +1182,7 @@ async function readRecordText(choice) {
   const key=recordTextKey(choice),old=recordTextReads.get(key);old?.controller?.abort();const state={choice,sequence:(old?.sequence || 0)+1,controller:new AbortController(),busy:true,content:'',message:'Reading and checking exact accepted text…'},sequence=state.sequence,submittedFocus=document.activeElement;recordTextReads.set(key,state);renderRecordText(choice);const timer=setTimeout(()=>state.controller?.abort(),15000);
   try{
     const path='/missions/'+encodeURIComponent(choice.missionId)+'/record-artifact?work='+encodeURIComponent(choice.workId)+'&record='+encodeURIComponent(choice.recordId)+'&version='+choice.artifactVersion+'&sha256='+choice.artifactSha256;
-    const response=await fetch(path,{headers:{'X-Massion-Feed':choice.feedId},signal:state.controller.signal,cache:'no-store'}),body=await response.json();
+    const {response,body}=await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:state.controller.signal,cache:'no-store'});
     if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
     if(!response.ok)throw new Error(body?.error || 'Exact text read unavailable.');if(!await validRecordText(body,choice))throw new Error('Text reply failed exact Record, feed, UTF-8 byte or SHA-256 checks.');
     if(recordTextReads.get(key)!==state || sequence!==state.sequence || !currentRecordText(choice))return;
@@ -1359,7 +1362,7 @@ async function readStoredBudget(more) {
   const path = '/missions/' + encodeURIComponent(choice.missionId) + '/work-budget-history?work=' + encodeURIComponent(choice.workId) + '&limit=20&after=' + choice.cursor + (choice.through === null ? '' : '&through=' + choice.through);
   const timer = setTimeout(() => controller.abort(),15000);
   try {
-    const response = await fetch(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'}), body = await response.json();
+    const {response,body} = await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'});
     if (sequence !== storedBudgetSequence || !currentStoredBudget(choice)) return;
     if (!response.ok) throw new Error('History read failed.');
     if (!validStoredBudgetPage(body,choice)) throw new Error('History reply did not match the exact Work, feed or page boundary.');
@@ -1431,7 +1434,7 @@ async function readStoredIntervention(more) {
   const path = '/missions/' + encodeURIComponent(choice.missionId) + '/work-intervention-history?work=' + encodeURIComponent(choice.workId) + '&limit=20&after=' + choice.cursor + (choice.through === null ? '' : '&through=' + choice.through);
   const timer = setTimeout(() => controller.abort(),15000);
   try {
-    const response = await fetch(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'}), body = await response.json();
+    const {response,body} = await request(path,{headers:{'X-Massion-Feed':choice.feedId},signal:controller.signal,cache:'no-store'});
     if (sequence !== storedInterventionSequence || !currentStoredIntervention(choice)) return;
     if (!response.ok) throw new Error('History read failed.');
     if (!validStoredInterventionPage(body,choice)) throw new Error('History reply did not match the exact Work, feed or page boundary.');
@@ -1637,11 +1640,34 @@ async function refreshProviders() {
   try { const {response,body} = await request('/providers'); if (!response.ok) throw new Error('Provider read failed'); if (!Array.isArray(body.providers) || !body.selection || !['selected','unavailable'].includes(body.selection.status)) throw new Error('Invalid provider response'); providerSelection = body.selection; runtimeConfiguration = body.runtime && Array.isArray(body.runtime.connections) && Array.isArray(body.runtime.authorizations) ? body.runtime : null; providerKnown = true; return true; }
   catch { providerKnown = false; runtimeConfiguration = null; providerNotice(); if (snapshot) renderMission(); return false; }
 }
+function resumeFeedRecovery(){if(feedRecoveryPending&&!busy&&!loading&&!polling){feedRecoveryPending=false;void Promise.resolve().then(()=>syncFeed());}}
+let feedStop=null,feedStarting=0,feedSyncing=false,feedAgain=false,feedTarget=0,feedReset=false,feedRetry=null;
+function retryFeed(){if(feedRetry===null)feedRetry=setTimeout(()=>{feedRetry=null;void startFeed();},1000);}
+async function syncFeed(){
+ feedAgain=true;if(feedSyncing)return;feedSyncing=true;
+ try{do{feedAgain=false;if(feedReset){feedReset=false;protocol.invalidate();requireReconnect();await refreshReadState(connectionEpoch);feedTarget=cursor;}
+   const before=cursor;await pollEvents();
+   if(!reconnectRequired&&cursor<feedTarget){if(cursor===before)feedReset=true;feedAgain=true;}
+ }while(feedAgain);}catch{requireReconnect();}finally{feedSyncing=false;if(reconnectRequired&&!busy&&!loading)retryFeed();}
+}
+async function startFeed(){
+ clearTimeout(feedRetry);feedRetry=null;const generation=++feedStarting;feedStop?.();feedStop=null;
+ try{const stop=await protocol.subscribe({after:cursor,...(feedId?{feedId}:{})},hint=>{
+   if(generation!==feedStarting)return;
+   if(hint.reason==='connected'){requireReconnect();feedTarget=hint.cursor;}
+   else if(hint.reason==='reset'||feedId&&hint.feedId!==feedId){feedReset=true;feedTarget=hint.cursor;}
+   else feedTarget=Math.max(feedTarget,hint.cursor);
+   void syncFeed();
+ },()=>{if(generation===feedStarting){requireReconnect();protocol.reconnect();void protocol.connection().then(state=>{if(state.state!=='ready')feedStop?.();}).catch(()=>{});}});
+ if(generation!==feedStarting)stop();else feedStop=stop;
+ }catch{requireReconnect();if(!await protocol.connection().then(state=>state.state!=='ready'||!state.features.feedPush,()=>false))retryFeed();}
+}
 async function connect() {
-  requireReconnect();
+  if(connectionEpoch || !reconnectRequired)requireReconnect();
   try { const {response,body} = await request('/health'); if (!response.ok) throw new Error('Host unavailable'); $('health').replaceChildren(element('span',undefined,'dot online'),element('span',body.status === 'ready' ? 'Host ready' : String(body.status || 'Host reachable'))); }
   catch { $('health').textContent = 'Host unavailable'; }
   await pollEvents();
+  await startFeed();
   if (!selectedId && initialReference.present) report('Invalid Mission link. Enter a valid Mission ID to continue.', 'error');
 }
 ${chatClient}
@@ -1670,10 +1696,11 @@ ${expiredClient}
 ${rejectedTextClient}
 ${reflectionTrailClient}
 controls(); void connect();
-setInterval(() => { if (!document.hidden) void pollEvents(); }, 3000);
+
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { void pollEvents(); if (selectedId && !busy && !loading) void loadMission(selectedId,false); } });
 window.addEventListener('online', () => { void connect(); });
-window.addEventListener('offline', requireReconnect);
+window.addEventListener('offline', () => { clearTimeout(feedRetry);feedRetry=null;++feedStarting;feedStop?.();feedStop=null;protocol.reconnect();requireReconnect(); });
+window.addEventListener('pagehide', () => { clearTimeout(feedRetry);++feedStarting;feedStop?.(); });
 function restoreMissionAddress() { window.history.replaceState(null, '', snapshot ? '#mission=' + encodeURIComponent(snapshot.value.id) : window.location.pathname + window.location.search); }
 window.addEventListener('hashchange', () => {
   const reference = missionReference();

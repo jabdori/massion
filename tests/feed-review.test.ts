@@ -34,15 +34,15 @@ for(const polled of [false,true])test(`old fixture acknowledgement ${polled?'aft
  assert.equal(s.app.storage.get('massion.workbench.fixture-pending'),'pending');assert.equal(s.app.node('run-fixture').disabled,true);assert.equal(s.app.calls.filter(c=>c.options.method==='POST').length,1);
 });
 test('paginated reconnect keeps the delivered cursor until every event page is observed',async()=>{
+ let releaseSecond!:()=>void;const secondPage=new Promise<void>(resolve=>releaseSecond=resolve);
  const events=Array.from({length:205},(_,i)=>({cursor:i+1,aggregateId:mission.id,revision:i+1,commandId:'page:'+i,events:[{type:'change-'+(i+1)}]}));
  const app=harness(async path=>{
-  if(path.startsWith('/events')){const after=Number(new URL(path,'http://localhost').searchParams.get('after'));const page=events.filter(e=>e.cursor>after).slice(0,100);return reply({feedId:'feed:a',cursor:page.at(-1)?.cursor??after,events:page});}
+  if(path.startsWith('/events')){const after=Number(new URL(path,'http://localhost').searchParams.get('after'));const page=events.filter(e=>e.cursor>after).slice(0,100);if(after===100)await secondPage;return reply({feedId:'feed:a',cursor:page.at(-1)?.cursor??after,events:page});}
   if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:205,snapshot:{revision:205,value:mission}});
   return reply({},503);
  },{},undefined,{fragment:'#mission=mission%3Areview'});
  await settle();assert.equal(app.storage.get('massion.workbench.cursor'),'100');
- await app.tick();assert.equal(app.storage.get('massion.workbench.cursor'),'200');
- await app.tick();assert.equal(app.storage.get('massion.workbench.cursor'),'205');
+ releaseSecond();await settle();assert.equal(app.storage.get('massion.workbench.cursor'),'205');
  assert.match(app.node('event-list').textContent,/change 205/);
  assert.deepEqual(app.calls.filter(c=>c.path.startsWith('/events')).map(c=>Number(new URL(c.path,'http://localhost').searchParams.get('after'))),[0,100,200]);
  assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);

@@ -1,3 +1,4 @@
+import {protocolConnection} from '../../src/protocol.ts';
 import {webcrypto} from 'node:crypto';
 import {createContext,runInContext} from 'node:vm';
 import {workbenchPage} from '../../src/workbench.ts';
@@ -52,14 +53,21 @@ export function harness(handler:Handler,initial:Record<string,string>={},storage
  const document={activeElement:new Node('body'),getElementById:(id:string)=>nodes.get(id)||all().find(node=>node.id===id),createElement:(tag:string)=>{const node=new Node(tag);node.onFocus=()=>{document.activeElement=node;};return node;},querySelectorAll:()=>all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
  for(const node of nodes.values())node.onFocus=()=>{document.activeElement=node;};
  const windowListeners=new Map<string,()=>unknown>(),location={hash:coordination?.fragment||'',pathname:'/',search:''};
- const context=createContext({navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{location,history:{replaceState:(_state:unknown,_title:string,fragment:string)=>{location.hash=fragment.startsWith('#')?fragment:'';}},addEventListener:(name:string,fn:()=>unknown)=>windowListeners.set(name,fn)},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{subtle:webcrypto.subtle,randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,TextEncoder,structuredClone,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
-  calls.push({path,options});
+ const streams:any[]=[];class FeedSource {onmessage:any;onerror:any;closed=false;url:string;constructor(url:string){this.url=url;streams.push(this);}close(){this.closed=true;}}
+ const context=createContext({URLSearchParams,EventSource:FeedSource,navigator:coordination?.noLocks?{}:{locks:coordination?.locks||new SharedWebLocks()},document,window:{location,history:{replaceState:(_state:unknown,_title:string,fragment:string)=>{location.hash=fragment.startsWith('#')?fragment:'';}},addEventListener:(name:string,fn:()=>unknown)=>windowListeners.set(name,fn)},localStorage:{getItem:(key:string)=>{if(storageFault==='read')throw new Error('Storage denied');return storage.get(key)||null;},setItem:(key:string,value:string)=>{if(storageFault==='write')throw new Error('Storage full');storage.set(key,value);},removeItem:(key:string)=>{if(storageFault==='remove')throw new Error('Storage denied');storage.delete(key);}},crypto:{subtle:webcrypto.subtle,randomUUID:(()=>{let index=0;return()=>`${coordination?.identity||'uuid'}-${++index}`;})()},AbortController,TextEncoder,structuredClone,Date,Map,JSON,Number,console,setTimeout:()=>1,clearTimeout(){},setInterval:(fn:()=>unknown)=>intervals.push(fn),fetch:async(path:string,options:any)=>{
+  const wirePath=path,wireOptions=options,message=path.startsWith('/protocol/')?JSON.parse(options.body):null;
+  if(message&&wirePath==='/protocol/connect')return {ok:true,status:200,json:async()=>({...message,kind:'reply',status:200,payload:protocolConnection(message.supported)})};
+  if(message&&wirePath==='/protocol/request'){path=message.path;options={...options,method:message.kind==='command'?'POST':undefined,headers:{...(message.kind==='command'?{'Content-Type':'application/json'}:{}),...(message.feedId?{'X-Massion-Feed':message.feedId}:{})},...(message.kind==='command'?{body:JSON.stringify(message.payload)}:{body:undefined})};}
+  if(wirePath!=='/protocol/connect')calls.push({path,options});
   const result=coordination?.network?await handler(path,options):path==='/health'?reply({status:'ready'}):path==='/providers'?reply({providers:[],selection:{status:'unavailable',code:'provider_unavailable',reason:'No authorized provider is configured.'}}):await handler(path,options);
-  return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>result.body};
+  const body=message?{...message,kind:'reply',status:result.status,payload:result.body}:result.body;
+  return {ok:result.status>=200&&result.status<300,status:result.status,json:async()=>body};
  }});
  const source=workbenchPage.match(/<script>([\s\S]*)<\/script>/)![1]!;
  runInContext(source,context);
- return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async windowEvent(name:string){windowListeners.get(name)?.();await settle();},async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){intervals[0]!();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
+ return {node:(id:string)=>nodes.get(id)!,all,calls,storage,context,fragment:()=>location.hash,async windowEvent(name:string){windowListeners.get(name)?.();await settle();},async navigateFragment(fragment:string){location.hash=fragment;windowListeners.get('hashchange')?.();await settle();},async tick(){runInContext('void pollEvents()',context);await settle();},intervals,streams,async push(hint:Record<string,unknown>){const stream=streams.at(-1);assertStream(stream);const params=new URL(stream.url,'http://fixture').searchParams;stream.onmessage?.({data:JSON.stringify({version:1,requestId:params.get('requestId'),generation:Number(params.get('generation')),kind:'feed',...hint})});await settle();},async disconnect(){streams.at(-1)?.onerror?.();await settle();},async submit(id:string){await nodes.get(id)!.fire('submit');await settle();}};
 }
+
+function assertStream(stream:any){if(!stream||stream.closed)throw Error('No active feed stream');}
 
 export function selectionField(app:ReturnType<typeof harness>,id:string) {return app.all().find(node=>node.id===id)!;}
