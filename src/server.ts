@@ -262,17 +262,27 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  return Object.assign(server,{drain(){if(drainPromise)return drainPromise;draining=true;clearInterval(scheduler);product.runtime?.beginDrain?.();assistant.beginDrain();for(const chat of memberChats.values())chat.beginDrain();drainPromise=new Promise(resolve=>{let done=false,timedOut=false,httpClosed=false,runtimeSettled=false;const finish=()=>{if(done||!timedOut&&(!httpClosed||!runtimeSettled))return;done=true;clearTimeout(timer);resolve({status:timedOut||unsettled||schedules.unsettled?'unsettled':'drained',timedOut});};const timer=setTimeout(()=>{timedOut=true;server.closeAllConnections();finish();},drainTimeoutMs);void (async()=>{await Promise.all([product.runtime?.drain?.(),assistant.drain(),(async()=>{await ticking;if(schedules.unsettled)throw new Error('A scheduled step is unsettled; inspect durable state before any next action.');})(),...[...memberChats.values()].map(chat=>chat.drain())]);})().then(()=>{runtimeSettled=true;finish();},()=>{unsettled=true;runtimeSettled=true;finish();});server.close(()=>{httpClosed=true;finish();});});return drainPromise;}});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+ const stopping=new AbortController();let server:ReturnType<typeof createWorkbench>|undefined,shutdown:Promise<void>|undefined;
+ for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{
+  if(shutdown)return;stopping.abort();const draining=server?.drain();
+  const timer=setTimeout(()=>{console.error(JSON.stringify({hostShutdown:{status:'unsettled',timedOut:true}}));process.exit(1);},10000);
+  shutdown=(async()=>{try{await startup;const result=await draining??{status:'drained',timedOut:false};console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);}catch(error){console.error('Local host startup/drain unsettled; inspect the stored schema and original durable state. No write retry or remote stop inferred.',error instanceof Error?error.message:String(error));process.exit(1);}finally{clearTimeout(timer);}})();
+ });
+ const startup=(async()=>{
  const hostStartup=await loadHostStartup(process.argv.slice(2));
+ stopping.signal.throwIfAborted();
  const workspaceRoot=resolve('.runtime/workspaces'),artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));
  const artifactReader=hostStartup.restoredArtifacts?await loadRestoredArtifactReader(hostStartup.restoredArtifacts,artifacts):artifacts;
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
  const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});
- await initializeSurrealSchema(transport);
+ await initializeSurrealSchema(transport,stopping.signal);
  const port=Number(process.env.MASSION_PORT??8765);if(!Number.isSafeInteger(port)||port<1024||port>65535)throw new Error('Invalid development port');
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport)});
  await connections.restoreSettings();{const restored=connections.list();if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));}
- const server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
+ stopping.signal.throwIfAborted();
+ server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
- for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{void server.drain().then(result=>{console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);},()=>{console.error('Local host drain failed; inspect original durable state. No remote stop or replay inferred.');process.exit(1);});});
+ })().catch(error=>{if(error!==stopping.signal.reason)throw error;});
+ try{await startup;}catch(error){if(!stopping.signal.aborted)throw error;}
 }

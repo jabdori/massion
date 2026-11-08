@@ -34,7 +34,7 @@ The application fingerprint identifies the authorized command. Storage also hash
 
 ## Transaction boundary and representation
 
-Call `initializeSurrealSchema(transport)` explicitly in the intended database before normal use. Neither reads nor commits silently initialize schema. Version 3.3.0 rejects reads against missing tables; the initializer defines six tables and a version-2 feed metadata record in a transaction, with integer cursor constraints and a unique operation-cursor index. A nonempty legacy database without feed metadata is refused; no historical cursor order is invented. It is not a general migration or compatibility system.
+Call `initializeSurrealSchema(transport)` explicitly in the intended database before normal use. Neither reads nor commits silently initialize schema. The initializer provisions tables and applies the forward storage migration in one transaction, before host admission. The feed's `storageVersion` is independent of its journal `schemaVersion: 2`: absent storage metadata is version 0; version 1 establishes cursor constraints, the unique operation-cursor index, feed identity and host settings table. Current opens are idempotent; malformed and newer storage versions are refused without committed changes. A nonempty legacy database without feed metadata is still refused; no historical cursor order is invented. Drain and stop every old host before upgrading. See [release readiness](release-readiness.md) for startup interruption and compatibility tests.
 
 Every commit is a single HTTP query containing a `BEGIN`, a result-producing block and `COMMIT`. The block checks operation identity first, then expected aggregate revision, and writes all of:
 
@@ -156,7 +156,7 @@ The opt-in crash test now creates a nested owned launcher with a distinct loopba
 - Feed retention, pruning, snapshot/cursor handshake and fallback, production authorization/filtering, and measured counter contention under sustained load. The implemented cursor is database-global and unpruned.
 - Durable outbox claiming, leases/ownership, acknowledgement and effect reconciliation. Retaining an intent atomically does not execute it or make its outcome known.
 - Complete product-scenario restore, graceful host ownership/drain, crash at admission/effect/receipt boundaries and two-client reconstruction.
-- Schema versioning/migrations, bounded retention, indexes and measured load behavior.
+- Further schema migrations, bounded retention, indexes and measured load behavior beyond the version-0-to-1 startup contract.
 - Production least-privilege access, authentication/secret management, backup policy and monitoring.
 - Real provider, isolated VM, supported installation and external assistant integration evidence.
 

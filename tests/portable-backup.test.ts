@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, chmod, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, rm, chmod, writeFile, symlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -86,6 +86,37 @@ test('actual Surreal fresh database restores accepted fixture, command lineage a
  const outbox=await destTransport.query('SELECT status FROM massion_outbox;',{});assert.deepEqual(outbox,[[{status:'restored-held'}]]);
  const journal=await dest.exportJournal();const op=journal.operations.at(-1)!;assert.equal((await dest.lookupOperation({id:op.aggregateId,commandId:op.commandId,fingerprint:op.fingerprint})).status,'replayed');
  await assert.rejects(restorePortableBackup(serialized,dest,join(s.root,'another')));
+});
+
+test('old backup -> legacy database -> startup upgrade -> clean restore loses no history or text',{skip:!process.env.MASSION_TEST_SURREAL_RPC},async t=>{
+ const namespace='upgrade_'+randomUUID().replaceAll('-',''),endpoint=process.env.MASSION_TEST_SURREAL_RPC!;
+ const admin=createHttpRpcTransport({endpoint,namespace:'massion_storage_tests',database:'massion_storage_tests'});
+ await admin.query(`DEFINE NAMESPACE ${namespace}; USE NS ${namespace}; DEFINE DATABASE old; DEFINE DATABASE restored;`,{});
+ const old=createHttpRpcTransport({endpoint,namespace,database:'old'}),target=createHttpRpcTransport({endpoint,namespace,database:'restored'});
+ await old.query(await readFile(new URL('./fixtures/schema-v0.surql',import.meta.url),'utf8'),{feedId:'legacy-feed'});
+ const serialized=(await readFile(new URL('./fixtures/portable-v0.json',import.meta.url),'utf8')).trim(),backup=parsePortableBackup(serialized);
+ const root=await mkdtemp(join(tmpdir(),'massion-upgrade-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const source=new SurrealStore<Mission>(old),destination=new SurrealStore<Mission>(target);
+ const legacy=await restorePortableBackup(serialized,source,join(root,'legacy'));
+ const rows='RETURN {states:(SELECT * FROM massion_state ORDER BY id),operations:(SELECT * FROM massion_operation ORDER BY id),audits:(SELECT * FROM massion_audit ORDER BY id),events:(SELECT * FROM massion_event ORDER BY id),outbox:(SELECT * FROM massion_outbox ORDER BY id)};';
+ const original=await old.query(rows,{}),feed=(await source.readState()).feedId;
+ await initializeSurrealSchema(old);
+ assert.equal((await old.query('RETURN massion_feed:global.storageVersion;',{}))[0],1);
+ assert.equal((await source.readState()).feedId,feed);assert.deepEqual(await old.query(rows,{}),original);
+ assert.equal(await exportPortableBackup(source,legacy.artifacts),serialized);
+ await initializeSurrealSchema(target);
+ const restored=await restorePortableBackup(serialized,destination,join(root,'restored'));
+ await rm(join(root,'legacy'),{recursive:true,force:true});
+ assert.deepEqual(await destination.exportJournal(),backup.journal);
+ assert.deepEqual(await target.query(rows,{}),original);
+ assert.notEqual((await destination.readState()).feedId,feed);
+ assert.equal(await exportPortableBackup(destination,restored.artifacts),serialized);
+ const state=(await destination.load('mission'))!.value;
+ assert.deepEqual(state.works.slice(1).map(w=>w.effects[0]!.status),['pending','unknown']);
+ assert.deepEqual(state.works.slice(1).map(w=>w.budget.reserved),[1,1]);
+ for(const artifact of backup.artifacts)assert.equal(await restored.artifacts.read(artifact),Buffer.from(backup.blobs.find(b=>b.sha256===artifact.sha256)!.base64,'base64').toString());
+ for(const op of backup.journal.operations)assert.deepEqual(await destination.lookupOperation({id:op.aggregateId,commandId:op.commandId,fingerprint:op.fingerprint}),{status:'replayed',revision:op.revision,value:op.value});
+ const {checksum,...record}=state.works[0]!.record!;assert.equal(hash(record),checksum);
 });
 
 
