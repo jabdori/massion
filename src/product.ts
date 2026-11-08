@@ -8,6 +8,7 @@ import {readRecordArtifact} from './record-artifact.ts';
 import {readReflectionTrail} from './reflection-trail.ts';
 import type {ArtifactReader,RecordArtifactInput} from './record-artifact.ts';
 import {Application} from './application.ts';
+import {MEMBERS_ID,isMembersState} from './members.ts';
 import {DomainError,hash,memoryVersionHash} from './domain.ts';
 import {ROUNDING_ORACLE,keys,orderCases,calculationPlan} from './growth-evaluation.ts';
 import {verifyGrowthCalculation} from './execution.ts';
@@ -113,11 +114,19 @@ export class ProductService {
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
  async reflectionTrail(missionId:string,workId:string,revision?:number,feedId?:string){return readReflectionTrail(this.app.store,this.artifacts,missionId,workId,revision,feedId);}
  async readAcceptedText(missionId:string,workId:string,input:RecordArtifactInput) {return readRecordArtifact(this.app.store,this.artifacts,missionId,workId,input);}
- /** A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
- async resolveFresh(mission:Mission):Promise<DefaultResolution>{const local=this.runtime!.resolveDefault!(mission);if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return this.runtime!.resolveDefault!(mission);}
+ /** Unselected Work keeps its pinned member; resolve that member’s group for both preflight and run. A local miss may be stale: another host on the same database may have saved a default. Re-read once, then resolve again; a local hit proceeds and admission blocks if the stored revision changed. */
+ async resolveFresh(mission:Mission,workId?:string):Promise<DefaultResolution>{
+  const source=mission.works.find(w=>w.id===workId)?.assistantSource;let group:string|undefined;
+  if(source?.memberId){const state=(await this.app.store.load(MEMBERS_ID))?.value,member=isMembersState(state)?state.members.find(m=>m.id===source.memberId):undefined;
+   if(!member)return {status:'unresolved',diagnostics:[{code:'member_unknown',message:'The assigned member is unavailable; no other execution route was used.'}]};
+   if(member.modelGroup!=='default'){if(!this.runtime!.resolveGroupWork)return {status:'unresolved',diagnostics:[{code:'model_group_missing',message:'No member group routing is configured on this host.'}]};group=member.modelGroup;}
+  }
+  const resolve=()=>group?this.runtime!.resolveGroupWork!(group,mission,source!.representative):this.runtime!.resolveDefault!(mission),local=resolve();if(local.status==='resolved'||!this.runtime!.refreshStoredSettings)return local;await this.runtime!.refreshStoredSettings();return resolve();
+ }
+
  async preflight(missionId:string,workId:string,expectedRevision:number,choice?:ExecutionChoice):Promise<(SelectionPreflight&{selection?:{source:'default';choice:ExecutionChoice}})|null> {
   const snapshot=await this.app.store.load(missionId);if(!snapshot||!snapshot.value.works.some(w=>w.id===workId))return null;
-  const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value):undefined;
+  const resolved=choice===undefined&&this.runtime?.resolveDefault?await this.resolveFresh(snapshot.value,workId):undefined;
   if(resolved?.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return {...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]};}
   if(resolved)return {...this.runtime!.preflight!(snapshot,workId,expectedRevision,resolved.choice),selection:{source:'default',choice:resolved.choice}};
   if(this.runtime?.preflight)return this.runtime.preflight(snapshot,workId,expectedRevision,choice);
@@ -137,7 +146,7 @@ export class ProductService {
  async run(missionId:string,workId:string,runId:string,expectedRevision:number,choice?:ExecutionChoice,activationActorId?:string,expectedDefault?:ExecutionChoice){if(!this.runtime)throw new Error('No explicitly configured Work runtime');
   if(choice!==undefined||!this.runtime.resolveDefault)return this.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
   const busyAtEntry=this.runtime.hasActiveAdmission?.()??false;
-  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value);
+  const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const resolved=await this.resolveFresh(snapshot.value,workId);
   if(busyAtEntry&&resolved.status==='resolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,resolved.choice.outputTokenCap);return rejectedRun(result.ready?hostBusyPreflight(result):result,snapshot);}
   // An unresolved default admits nothing, so it returns blocked even while draining (HTTP refuses mutations during drain first).
   if(resolved.status==='unresolved'){const result=workAdmissionPreflight(snapshot,workId,expectedRevision);return rejectedRun({...result,ready:false,diagnostics:[...result.diagnostics,...resolved.diagnostics]},snapshot);}

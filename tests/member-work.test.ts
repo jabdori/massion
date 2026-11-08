@@ -371,3 +371,23 @@ test('review 3: a later confirmed steering receipt interrupts the still-owned lo
  assert.equal((await chat.read()).turns[0]!.steer?.status,'unknown');assert.equal(running.signal().aborted,false);
  confirmed=true;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.equal(writes,1);
 });
+
+for(const authorized of [true,false])test(`manual Start preserves a deferred member group (${authorized?'authorized':'revoked grant'})`,async t=>{
+ const f=await setup(t),quill=await f.admit();
+ await f.m.save(()=>f.m.saveModelGroup({id:'analysis',name:'Analysis',description:'Tables',profileIds:[f.profile('google/gemini-a'),f.profile('anthropic/claude-b')],expectedConfigHash:f.m.list().configHash}));
+ await f.grant('grant-analysis','google/gemini-a','anthropic/claude-b');await f.members.setGroup({commandId:'analysis-group',memberId:quill.id,modelGroup:'analysis'},f.m);
+ const occupied=await runningWork(f,t);f.script.push(v2('Quill will take it.','Deferred table','Quill'));const sent=await f.say(f.assistant,'Build another table');
+ assert.equal(sent.turn?.outcome?.work.status,'admitted');assert.equal(sent.turn?.outcome?.run.status,'not_started');assert.equal(sent.turn?.outcome?.run.diagnostics[0]?.code,'host_busy');
+ const work=(await f.intake()).works.at(-1)!;assert.equal(work.runtimeRun,undefined);occupied.release();await f.assistant.idle();
+ if(!authorized)await f.m.save(()=>f.m.revoke({authorizationId:'grant-analysis',expectedConfigHash:f.m.list().configHash}));
+ const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
+ const url='http://127.0.0.1:'+(server.address() as {port:number}).port,revision=(await f.store.load('intake'))!.revision,before=f.calls.length;
+ const post=async(path:string,commandId:string)=>fetch(url+'/missions/intake/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId,workId:work.id,expectedRevision:revision})}).then(r=>r.json()) as Promise<any>;
+ const check=await post('preflight','check-deferred');
+ if(authorized){assert.equal(check.ready,true);assert.equal(check.selection.choice.executorProfileId,f.profile('google/gemini-a'));assert.equal(check.selection.choice.verifierProfileId,f.profile('anthropic/claude-b'));}
+ else{assert.equal(check.ready,false);assert.ok(check.diagnostics.some((d:any)=>d.code==='member_grant_missing'));}
+ const result=await post('run','manual-member-start');assert.equal(result.status,authorized?'settled':'blocked');
+ if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
+ else{assert.equal(f.calls.length,before);assert.equal((await f.intake()).works.find(w=>w.id===work.id)!.runtimeRun,undefined);}
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
