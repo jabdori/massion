@@ -30,16 +30,16 @@
     "errors": 0
   },
   "scopeAfter": {
-    "passed": 468,
+    "passed": 466,
     "required": 576,
-    "failed": 110,
+    "failed": 112,
     "warnings": 6,
     "visual": 4,
     "errors": 0
   },
   "captureInputs": "capture-inputs.sha256",
   "mode": "report-only; contract diagnostics remain; infrastructure errors always fail",
-  "codeCommit": "272bcb6",
+  "codeCommit": "58dd918",
   "captureInputsUnchanged": true,
   "pairsInspected": 20
 }

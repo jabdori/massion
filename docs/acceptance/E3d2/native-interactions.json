@@ -10,6 +10,17 @@
       }
     },
     {
+      "screen": "B12",
+      "theme": "dark",
+      "measured": {
+        "active": "settings-nav-memory",
+        "advancedVisible": false,
+        "magnifier": true,
+        "titleSize": "22px",
+        "width": 640
+      }
+    },
+    {
       "screen": "B17",
       "theme": "dark",
       "measured": {
@@ -37,6 +48,17 @@
         "query": "요일별",
         "rows": 1,
         "searchVisible": true
+      }
+    },
+    {
+      "screen": "B12",
+      "theme": "light",
+      "measured": {
+        "active": "settings-nav-memory",
+        "advancedVisible": false,
+        "magnifier": true,
+        "titleSize": "22px",
+        "width": 640
       }
     },
     {

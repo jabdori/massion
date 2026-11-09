@@ -56,8 +56,8 @@
     {
       "screen": "B10-preview",
       "theme": "dark",
-      "passed": 31,
-      "failed": 1,
+      "passed": 30,
+      "failed": 2,
       "warnings": 3,
       "required": 31,
       "visualFailures": [],
@@ -185,8 +185,8 @@
     {
       "screen": "B10-preview",
       "theme": "light",
-      "passed": 31,
-      "failed": 1,
+      "passed": 30,
+      "failed": 2,
       "warnings": 3,
       "required": 31,
       "visualFailures": [],

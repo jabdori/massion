@@ -18,7 +18,7 @@ without substituting the cycle time for a separately stored next-run instant.
 | A7 | Memory content returns to the artboard's 640px column, 44px top offset and 22/30 heading; row titles use medium weight. | Other settings layouts are untouched. |
 | A8 | Advanced is hidden only while Memory is selected; disabled off toggles retain visible thumbs. | Disabled controls remain disabled. |
 | A9 | New task has a plus glyph and quiet styling even when current. | Singleton admission and cumulative budgets remain. |
-| A10 | Regular detail values, 44px fact-row pitch and Paused chevron; request copy follows the artboard's hover/focus control below the request. | Copy remains accessible; no command changes. |
+| A10 | Regular detail values, artboard fact-row spacing and Paused chevron; request copy follows the artboard's hover/focus control below the request. | Copy remains accessible; no command changes. |
 | A11 | GitHub changes are shown without the invented field label. | Preserve the host counts. |
 | A12 | Zero deletions are omitted in file rows. | Nonzero counts remain visible. |
 | A13 | Per-file add/delete bars use only valid safe integer counts from the existing metadata. | Unparseable metadata stays literal; generic apps and Work app tabs retain their original renderer. |

@@ -1,7 +1,7 @@
 {
   "node": "24.21.0",
   "baseWithE3c": "d435690",
-  "integratedImplementation": "272bcb6",
+  "integratedImplementation": "58dd918",
   "typecheck": {
     "command": "npm run typecheck",
     "exitCode": 0
@@ -13,14 +13,18 @@
     "generatedTokensCurrent": true
   },
   "focused": {
-    "passed": 103,
-    "failed": 0
+    "passed": 100,
+    "failed": 0,
+    "timezone": "UTC"
   },
   "suite": {
-    "command": "TMPDIR=<physical /private/tmp directory> node --test --test-concurrency=4 tests/*.test.ts",
+    "command": "npm run check",
+    "timezone": "UTC",
+    "temporaryDirectory": "physical /private/tmp directory",
+    "testedCommit": "58dd918",
     "exitCode": 1,
-    "tests": 1929,
-    "passed": 1588,
+    "tests": 1932,
+    "passed": 1591,
     "failed": 1,
     "skipped": 340,
     "knownLocalFailure": {
@@ -28,13 +32,12 @@
       "file": "tests/portable-backup.test.ts:137",
       "error": "Text artifact boundary: directory realpath mismatch",
       "documentedInCommonBrief": true
-    },
-    "testedCommit": "6966341"
+    }
   },
   "nativeBrowser": {
     "command": "node scripts/ui-contracts/verify-pages.mjs",
     "exitCode": 0,
-    "checks": 6,
+    "checks": 8,
     "themes": [
       "dark",
       "light"
@@ -49,28 +52,7 @@
     "browser form submission",
     "database integration tests requiring an external database"
   ],
-  "affectedFixtureRecheck": {
-    "command": "node --test tests/ui-contract-fixtures.test.ts",
-    "passed": 13,
-    "failed": 0,
-    "reason": "Final B15 fixture adds the existing unrelated Quill Work without creating browser/form facts"
-  },
   "agentBrowser": "0.41.2",
-  "finalSelectionAndFixtureRecheck": {
-    "passed": 34,
-    "failed": 0,
-    "scope": "Results/Schedules client and fixture integrity"
-  },
-  "finalVisualBatch": {
-    "passed": 76,
-    "failed": 0,
-    "scope": "Results/Schedules, fixture integrity, shell controls"
-  },
-  "finalCssIsolation": {
-    "scope": "App page selectors only; original Work-pane app typography/rows retained",
-    "command": "node --test tests/apps-surface.test.ts",
-    "exitCode": 0
-  },
   "fullUI": {
     "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
     "arguments": [],
@@ -103,16 +85,16 @@
       "errors": 0
     },
     "scopeAfter": {
-      "passed": 468,
+      "passed": 466,
       "required": 576,
-      "failed": 110,
+      "failed": 112,
       "warnings": 6,
       "visual": 4,
       "errors": 0
     },
     "captureInputs": "capture-inputs.sha256",
     "mode": "report-only; contract diagnostics remain; infrastructure errors always fail",
-    "codeCommit": "272bcb6",
+    "codeCommit": "58dd918",
     "captureInputsUnchanged": true,
     "pairsInspected": 20
   },
@@ -123,6 +105,22 @@
       "light"
     ],
     "layout": "artboard left, app right",
-    "result": "All scoped pairs inspected; retained capability/data-boundary differences are recorded in residuals.md"
+    "result": "Re-captured and inspected after A1-A16 and both GLM fixes; data/capability residuals retained"
+  },
+  "ciRegression": {
+    "reportedRun": 42584324473,
+    "reproducedBeforeFix": [
+      "UTC"
+    ],
+    "passedAfterFix": [
+      "UTC",
+      "Asia/Seoul"
+    ],
+    "property": "minute 480, browser offset, active state, daily 08:00 Cycle, cumulative run budget; Next run is a separate instant"
+  },
+  "independentGlmRegressions": {
+    "resultSource": "Representative segment and originating turn, member assignee retained on row",
+    "scheduleFilter": "query preserved across replacement and event reread",
+    "redThenGreen": true
   }
 }
