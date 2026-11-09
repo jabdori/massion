@@ -185,16 +185,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
@@ -248,16 +238,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "work-room-messages",
@@ -302,26 +282,6 @@
       "occurrence": 3,
       "category": "business-procedure",
       "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane chip \"요약\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
     },
     {
@@ -358,16 +318,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 5,
       "category": "business-procedure",
@@ -398,26 +348,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 3,
       "category": "work-room-messages",
@@ -428,40 +358,10 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 4,
       "category": "work-room-messages",
       "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 2,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 8,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
     },
     {
@@ -488,30 +388,10 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -608,30 +488,10 @@
       "screen": "B7-done",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -998,30 +858,10 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1108,30 +948,10 @@
       "screen": "B7-unknown",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -1167,81 +987,11 @@
     {
       "screen": "B8",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1268,111 +1018,11 @@
       "screen": "B8-done",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-done",
@@ -1385,36 +1035,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
       "screen": "B8-fail",
       "theme": "dark",
       "kind": "contract",
@@ -1428,81 +1048,11 @@
       "screen": "B8-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-dark"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-fail",
@@ -1512,16 +1062,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1548,48 +1088,8 @@
       "screen": "B8-unknown",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
       "category": "check-time-and-predicates",
       "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
@@ -1637,61 +1137,11 @@
     {
       "screen": "B8-unknown",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -2608,228 +2058,8 @@
       "screen": "B18-room-b",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "region pane text \"{duration}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane button \"중지\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane heading \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"하나가 넘김 · {time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role pane listitem \"조사\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane listitem \"확인\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"조사\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"기록\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"조사\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
@@ -2907,16 +2137,6 @@
     {
       "screen": "B18-room-b",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
       "occurrence": 1,
@@ -2933,16 +2153,6 @@
       "category": "composition",
       "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B19",
@@ -3545,16 +2755,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
@@ -3608,16 +2808,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "work-room-messages",
@@ -3662,26 +2852,6 @@
       "occurrence": 3,
       "category": "business-procedure",
       "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane chip \"요약\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
     },
     {
@@ -3718,16 +2888,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 5,
       "category": "business-procedure",
@@ -3758,26 +2918,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "work-room-messages",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 3,
       "category": "work-room-messages",
@@ -3788,40 +2928,10 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 4,
       "category": "work-room-messages",
       "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 2,
-      "category": "business-procedure",
-      "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 8,
-      "category": "business-procedure",
-      "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
     },
     {
@@ -3848,30 +2958,10 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -3968,30 +3058,10 @@
       "screen": "B7-done",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -4358,30 +3428,10 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -4468,30 +3518,10 @@
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -4527,81 +3557,11 @@
     {
       "screen": "B8",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -4628,111 +3588,11 @@
       "screen": "B8-done",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-done",
@@ -4745,36 +3605,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
       "screen": "B8-fail",
       "theme": "light",
       "kind": "contract",
@@ -4788,81 +3618,11 @@
       "screen": "B8-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-fail-light"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-fail",
@@ -4872,16 +3632,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -4908,48 +3658,8 @@
       "screen": "B8-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"없음\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
       "category": "check-time-and-predicates",
       "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
@@ -4997,61 +3707,11 @@
     {
       "screen": "B8-unknown",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
-      "category": "check-time-and-predicates",
-      "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -5968,228 +4628,8 @@
       "screen": "B18-room-b",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "region pane text \"{duration}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane button \"중지\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane heading \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"하나가 넘김 · {time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role pane listitem \"조사\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane listitem \"확인\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"조사\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"요약\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"기록\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 4,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"조사\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 5,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 6,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 7,
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
@@ -6267,16 +4707,6 @@
     {
       "screen": "B18-room-b",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
       "occurrence": 1,
@@ -6293,16 +4723,6 @@
       "category": "composition",
       "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B19",
@@ -6725,21 +5145,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "unsupported business-role order cascade",
-      "reason": "The B7-churn snapshot has only root/executor/verifier tasks and no named worker steps or role metadata. Removing the uncounted duplicate root restores the procedure heading/count order. The new role-order occurrence is a strict-order cascade over the still absent business-role sequence; it is not justification for inventing a research role from the Work title.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/work-room-panel.ts:60",
-        "scripts/ui-contracts/fixtures/B7-churn.json"
-      ]
-    },
-    {
       "screen": "B22-room",
       "theme": "dark",
       "kind": "contract",
@@ -6869,108 +5274,6 @@
     {
       "screen": "B22-room-steps",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
       "occurrence": 1,
@@ -6981,21 +5284,6 @@
         "src/assistant-conversation-panel.ts:7",
         "docs/product/screens/contracts/B22-room-steps.json",
         "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "unsupported business-role order cascade",
-      "reason": "The B7-churn snapshot has only root/executor/verifier tasks and no named worker steps or role metadata. Removing the uncounted duplicate root restores the procedure heading/count order. The new role-order occurrence is a strict-order cascade over the still absent business-role sequence; it is not justification for inventing a research role from the Work title.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/work-room-panel.ts:60",
-        "scripts/ui-contracts/fixtures/B7-churn.json"
       ]
     },
     {
@@ -7128,108 +5416,6 @@
     {
       "screen": "B22-room-steps",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported step telemetry and order cascade",
-      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
-      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
-      "sources": [
-        "src/domain.ts:31",
-        "src/internal-teams.ts",
-        "src/work-room-panel.ts:62",
-        "src/work-room-panel.ts:66",
-        "docs/product/screens/contracts/B22-room-steps.json"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
       "occurrence": 1,
@@ -7354,82 +5540,6 @@
       ]
     },
     {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 4,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
@@ -7541,14 +5651,294 @@
       ]
     },
     {
-      "screen": "B7-unknown",
+      "screen": "B16",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "work-room-messages",
+      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "occurrence": 1,
+      "category": "pricing-table-and-memory-proposal",
+      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "work-room-messages",
+      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "occurrence": 1,
+      "category": "pricing-table-and-memory-proposal",
+      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -7561,13 +5951,13 @@
     },
     {
       "screen": "B7-unknown",
-      "theme": "light",
+      "theme": "dark",
       "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -7580,13 +5970,32 @@
     },
     {
       "screen": "B7-unknown",
-      "theme": "light",
+      "theme": "dark",
       "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -7601,11 +6010,11 @@
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 4,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -7617,104 +6026,81 @@
       ]
     },
     {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
+      "screen": "B7-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
     },
     {
-      "screen": "B16-sent",
+      "screen": "B7-unknown",
       "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
     },
     {
       "screen": "B7",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
+      "diagnostic": "These text-only Works have no named business procedure.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Browser read counts and observation timestamps now come from BrowserSessions. Named business procedures and timestamps for their individual steps remain outside this slice.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+      "reason": "This B7 Work has no pinned named business procedure. R-A observations are retained, and R-B now supplies its browser read count; neither creates missing procedure names.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts-and-limits"
     },
     {
       "screen": "B7",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
+      "diagnostic": "These text-only Works have no named business procedure.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Browser read counts and observation timestamps now come from BrowserSessions. Named business procedures and timestamps for their individual steps remain outside this slice.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+      "reason": "This B7 Work has no pinned named business procedure. R-A observations are retained, and R-B now supplies its browser read count; neither creates missing procedure names.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts-and-limits"
     }
   ]
 }

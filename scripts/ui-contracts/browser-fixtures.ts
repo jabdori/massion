@@ -28,7 +28,7 @@ export async function attachBrowserRoute(fixture:ScreenFixture,service:BrowserSe
 export async function browserFixture(template:ScreenFixture){
  const fixture=structuredClone(template),library=fixture.screen==='B15',unknown=fixture.screen==='B5',missionId='intake',store=new InMemoryStore<Mission>();let workId:string;
  if(library||unknown){
-  workId=library?'library':'toner';const app=new Application(store,[{id:'local-owner',roles:['owner']}]);
+  workId=library?'library':'toner';const app=new Application(store,[{id:'local-owner',roles:['owner']}],()=>fixture.now-5*60000);
   const original=(fixture.routes['/read-state?mission=intake']!.body as any).snapshot.value;
   await app.create({id:missionId,purpose:original.purpose,scope:original.scope,constraints:original.constraints,criteria:original.criteria},'local-owner','browser-create');
   await app.dispatch({missionId,expectedRevision:1,commandId:'browser-work',actorId:'local-owner',command:{type:'admit-work',workId,title:library?'스터디룸 신청':original.works.find((w:any)=>w.id===workId).title,budget:8}});
@@ -44,6 +44,6 @@ export async function browserFixture(template:ScreenFixture){
  const conversation=fixture.routes['/assistant/conversation']!.body as any;for(const turn of conversation.turns??[])if(turn.work?.workId===workId){turn.work.browser=browserSummary(read.snapshot.value.works.find((w:any)=>w.id===workId));turn.work.missionRevision=read.snapshot.revision;}
  await attachBrowserRoute(fixture,service,missionId,workId);(fixture.routes['/missions/'+missionId+'/works/'+workId+'/browser']!.body as any).revision=read.snapshot.revision;
  if(library){fixture.steps=[{action:'click',selector:'[id="side-line-intake/library"]',readySelector:'#work-heading-library'},{action:'click',selector:'#work-browser-library',readySelector:'#pane-effect:not([hidden])'}];fixture.gaps=[];}
- else if(!unknown)fixture.gaps=fixture.gaps.map(g=>g.includes('browser/page-read telemetry')?'No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.':g);
+ else if(!unknown)fixture.gaps=fixture.gaps.map(g=>g.replace(' or browser/page-read telemetry',''));
  fixture.reuse.push('scripts/ui-contracts/browser-fixtures.ts: BrowserSessions captures actual adapter read shapes; no network or form submission');return fixture;
 }

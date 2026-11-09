@@ -33,5 +33,5 @@ test('owner intervention interrupts only the originally submitted Work after asy
  const lookup=store.lookupOperation.bind(store);let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),started=new Promise<void>(r=>entered=r);let first=true;
  store.lookupOperation=async identity=>{if(first){first=false;entered();await held;}return lookup(identity);};
  const pending=service.intervene(input.id,submitted);await started;submitted.command.workId='b';submitted.command.instruction='Changed';release();await pending;store.lookupOperation=lookup;
- assert.deepEqual(interrupts,[input.id+'/a']);const snapshot=(await store.load(input.id))!;assert.deepEqual(snapshot.value.works[0]!.instructions,[{actorId:'local-owner',text:'Original instruction'}]);assert.equal(snapshot.value.works[1]!.instructions,undefined);
+ assert.deepEqual(interrupts,[input.id+'/a']);const snapshot=(await store.load(input.id))!;assert.deepEqual(snapshot.value.works[0]!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Original instruction'}]);assert.equal(snapshot.value.works[1]!.instructions,undefined);
 });
