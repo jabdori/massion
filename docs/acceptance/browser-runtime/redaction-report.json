@@ -3,7 +3,9 @@
     "보안 코드",
     "Security code",
     "name=csc",
-    "autocomplete=cc-csc"
+    "autocomplete=cc-csc",
+    "aria-labelledby",
+    "second associated label"
   ],
   "scriptExecuted": false,
   "identicalMaskedPixels": true,
@@ -19,5 +21,5 @@
   "textPseudoPixelsNeutralized": true,
   "trustedFontsOnly": true,
   "displayContentsReflection": true,
-  "pngSha256": "b51120be64b999066daa1297cdfebbbc0a5476ff91d86e67cc9267a2b6ebabb1"
+  "pngSha256": "ca96c6e2fef184880e34593760f3785593667d048077b1475c6deafe5e3e06a6"
 }

@@ -11,7 +11,7 @@ const exec=promisify(execFile);
 function preparePage(){
  window.stop();const nodes=[...document.querySelectorAll('*')];if(nodes.length>20000)throw Error('Browser DOM bound exceeded');
  const controls=[...document.querySelectorAll<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>('input,select,textarea')];if(controls.length>256)throw Error('Browser form bound exceeded');
- const original=controls.map(e=>({label:(e.labels?.[0]?.textContent||e.getAttribute('aria-label')||e.name||'').trim(),type:e.type,name:e.name,value:String(e.value),autocomplete:e.getAttribute('autocomplete')||''}));
+ const original=controls.map(e=>({label:[...[...(e.labels??[])].map(label=>label.textContent),e.getAttribute('aria-label'),...(e.getAttribute('aria-labelledby')??'').split(/\s+/).filter(Boolean).map(id=>document.getElementById(id)?.textContent),e.getAttribute('title'),e.getAttribute('placeholder')].filter(Boolean).join(' ').trim()||e.name||'',type:e.type,name:e.name,value:String(e.value),autocomplete:e.getAttribute('autocomplete')||''}));
  if(original.some(f=>[f.label,f.name,f.type,f.value,f.autocomplete].some(v=>v.length>4000)))throw Error('Browser field bound exceeded');
  const url=new URL(location.href),secrets=[url.username,url.password,url.hash.slice(1),...url.searchParams.values(),...original.filter(maskBrowserField).map(f=>f.value)].filter(Boolean).sort((a,b)=>b.length-a.length),clean=(value:string)=>browserText(value,secrets);
  for(const e of nodes){
