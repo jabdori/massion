@@ -9,7 +9,7 @@ const base=await loadFixture('B7-done'),store=new InMemoryStore<Mission>(),clock
 await app.create({id:'monthly-fixture',purpose:'예산 대기',scope:'local',constraints:[],criteria:{version:1,description:'고정된 텍스트',oracle:'bounded-text-review/v1'}},'local-owner','e8-create');
 await app.dispatch({missionId:'monthly-fixture',commandId:'e8-admit',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'waiting',title:'월말 요약',budget:128}});
 await budget.configure({commandId:'e8-budget',expectedRevision:0,limit:0,timezone:'Asia/Seoul'});
-await budget.admit({missionId:'monthly-fixture',workId:'waiting',runId:'e8-run',amount:128});
+await budget.admit({missionId:'monthly-fixture',workId:'waiting',runId:'e8-run',amount:128,selection:{executorProfileId:'fixture-executor',verifierProfileId:'fixture-verifier',authorizationId:'fixture-grant',outputTokenCap:64}});
 const original=base.routes['/assistant/conversation']!.body as any,feedId=original.feedId;
 const projection=async()=>{const view=await budget.read();return {view:{...view,feedId},conversation:{...original,segment:{...original.segment,messages:[]},turns:[],briefings:[],exceptions:[],decisions:view.decisions}};};
 const save=async(screen:string,fixture:unknown)=>writeFile(new URL('./fixtures/'+screen+'.json',import.meta.url),JSON.stringify(fixture,null,2)+'\n');

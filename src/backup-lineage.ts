@@ -372,6 +372,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'revise-mission-constraints': {required:['constraints','reason']},
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['team','executionGate','correction','conversationSource','assistantSource'] },
+  'fence-monthly-admission':{required:['workId','inputHash']},
   'wait-monthly-budget':{required:['workId','decisionId']},
   'resume-monthly-budget':{required:['workId','decisionId']},
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
