@@ -1,0 +1,77 @@
+{
+  "blocking": true,
+  "rows": [
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 0,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 0,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B26-later.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 0,
+      "warnings": 1,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B14-usage.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 0,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 0,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B26-later.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "light",
+      "passed": 34,
+      "failed": 0,
+      "warnings": 1,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B14-usage.png"
+    }
+  ]
+}

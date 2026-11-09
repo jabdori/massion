@@ -1,0 +1,85 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e6]
+    - generic
+      - button "내 계정" [expanded=false, ref=e7]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기, 확인 필요" [checked=false, ref=e8]
+      - button "검색" [expanded=false, ref=e9]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나 읽지 않음" [ref=e16]
+            - StaticText "하나"
+            - status "읽지 않음"
+          - list "하나의 작업"
+            - listitem [level=2]
+              - button "프린터 토너 주문" [ref=e24]
+                - StaticText "프린터 토너 주문"
+                - status
+                  - StaticText "완료"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e17]
+            - StaticText "퀼"
+            - status "작업 중"
+          - list "퀼의 작업"
+            - listitem [level=2]
+              - button "이탈 원인 조사" [ref=e25]
+                - StaticText "이탈 원인 조사"
+                - status
+                  - StaticText "실행 중"
+            - listitem [level=2]
+              - button "경쟁사 가격" [ref=e26]
+                - StaticText "경쟁사 가격"
+                - status
+                  - StaticText "확인 대기"
+        - listitem [level=1]
+          - button "주노" [ref=e18]
+            - StaticText "주노"
+            - status "읽지 않음"
+          - list "주노의 작업"
+            - listitem [level=2]
+              - button "PR #84 검토" [ref=e27]
+                - StaticText "PR #84 검토"
+                - status
+                  - StaticText "완료"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e10]
+      - heading "하나" [level=1, ref=e11]
+        - button "하나" [ref=e15]
+      - button "작업 공간" [ref=e12]
+      - button "더 보기" [expanded=false, ref=e13]
+    - region "대화" [ref=e14]
+      - generic
+        - log
+          - status
+            - StaticText "예산 대기"
+          - region "이번 달 예산을 다 썼어요. 늘릴까요?" [ref=e19]
+            - strong
+              - StaticText "이번 달 예산을 다 썼어요. 늘릴까요?"
+            - DescriptionList
+              - term "지금"
+              - definition
+                - StaticText "0 출력 토큰"
+              - term "늘린 뒤"
+              - definition
+                - StaticText "128 출력 토큰"
+              - term "멈춘 일"
+              - definition
+                - StaticText "월말 요약"
+            - button "예산 늘리기" [ref=e28]
+            - button "나중에" [ref=e29]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e20]
+          - button "파일 추가" [disabled, ref=e21]
+          - button "기본 권한" [ref=e22]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e23]

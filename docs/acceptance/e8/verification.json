@@ -1,0 +1,28 @@
+{
+  "node": "24.21.0",
+  "relatedTests": {
+    "tests": 329,
+    "passed": 298,
+    "failed": 1,
+    "skipped": 30,
+    "knownLocalFailure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch (case-insensitive macOS filesystem; documented in CODEX-BRIEF)"
+  },
+  "afterScopedUsageSpacing": {
+    "tests": 23,
+    "passed": 23,
+    "failed": 0
+  },
+  "afterUnknownUsageAssertion": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0
+  },
+  "typecheck": "passed",
+  "copyLintFindings": 0,
+  "screenRows": 6,
+  "requiredOccurrencesPassed": 176,
+  "contractFailures": 0,
+  "geometryFailures": 0,
+  "infrastructureErrors": 0,
+  "nativeInteractions": "defer, reopen, raise, Settings change, refresh; production HTTP and InMemoryStore fixture, no provider effects"
+}

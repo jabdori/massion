@@ -1,0 +1,12 @@
+{
+  "src/monthly-budget.ts": "88299924952b580d5d107ceca0c89c1f504feddf9885766753cd987850ad6d8a",
+  "src/configured-runtime.ts": "a3558792bbd8415f1c82e820862ad13baeafd6a836001258698fa9fa3f663f6a",
+  "src/server.ts": "38e074f0d38e167085a852467cbf30531bbb44581de4f4fd20e28c723cfc0c4f",
+  "src/domain.ts": "4487bbf415c1e0054d90c9c0e5683320cb3d5b6b1f9e0bb5d1e6aae066ef5ae1",
+  "src/settings-panel.ts": "8daeeb6f81d273e265c19ec1821eb2544fa3564e2cc121b6b7b4a48aa95b9b0e",
+  "src/assistant-conversation-panel.ts": "9dd78093619ab93ad6f42142af69737de1ca116aa8c2d772ef26e1f323f55158",
+  "src/backup-lineage.ts": "f5150cb91fcc4a200bc6724f8397466a17d015c28ced635eac614e69d10c2ebd",
+  "src/portable-backup.ts": "fea624e860361aa58a7841972e602e1b21c9db9f622086e31b855e588dc66f51",
+  "src/work-inbox.ts": "2b679a06ba28880e7bce4382b98c200aca0d9fb319e7d4b1f383195f64affc35",
+  "scripts/ui-contracts/monthly-budget-fixtures.ts": "c834e7aba39e310734103f7c1cf32376ddd672244b02e2e25ac4d65c94baec6a"
+}

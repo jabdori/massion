@@ -211,9 +211,9 @@ test('B22 evidence setup opens the new Work room inspection before its nested le
  assert.ok(outer>=0&&inner>outer,'the setup must reveal the outer Work room summary first');
 });
 
-test('E3e fixtures never manufacture payment, remote delegation or budget decisions',async()=>{
+test('E3e fixtures never manufacture payment or remote delegation decisions',async()=>{
  const {loadFixture}=await hostModule();
- for(const screen of ['B4','B16','B16-sent','B16-later','B26','B26-later']){
+ for(const screen of ['B4','B16','B16-sent','B16-later']){
   const fixture=await loadFixture(screen);
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
@@ -243,4 +243,9 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
    assert.doesNotMatch(JSON.stringify(view.segment?.messages??[]),/TOTAL: [34] cents|3센트 상품|반올림/);
   }
  }
+});
+
+
+test('E8 monthly decision fixtures carry the production budget read and explicit owner deferral',async()=>{
+ const {loadFixture}=await hostModule();for(const screen of ['B26','B26-later']){const fixture=await loadFixture(screen),conversation=fixture.routes['/assistant/conversation']!.body as any,usage=fixture.routes['/assistant/usage']!.body as any;assert.equal(conversation.decisions.length,1);const d=conversation.decisions[0];assert.ok(d.id.startsWith('monthly-budget:'));assert.equal(d.state,screen==='B26'?'open':'later');assert.equal(d.budget.revision,usage.revision);assert.equal(usage.unit,'output-tokens');assert.equal(usage.cost,null);assert.deepEqual(fixture.gaps,[]);assert.doesNotMatch(JSON.stringify(conversation),/TOTAL: [34] cents/);}
 });

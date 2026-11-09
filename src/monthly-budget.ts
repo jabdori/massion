@@ -19,16 +19,18 @@ export function accountingPeriod(at:number,timezone:string):string {
 interface Reservation {missionId:string;workId:string;runId:string;amount:number;inputHash:string;revision:number;title:string;period:string;at:number;state:'reserved'|'waiting'|'released';decisionId?:string}
 interface BudgetDecision {id:string;period:string;at:number;state:'open'|'later'|'done';limit:number;nextLimit:number;actorId?:string}
 export interface MonthlyBudgetState {kind:'monthly-budget';id:string;limit:number;timezone:string;actorId:string;reservations:Reservation[];decisions:BudgetDecision[]}
-type BudgetCommand={type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
+type BudgetCommand={type:'release-monthly-budget';missionId:string;workId:string;runId:string}|{type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
 export const isMonthlyBudgetState=(v:unknown):v is MonthlyBudgetState=>!!v&&typeof v==='object'&&(v as MonthlyBudgetState).kind==='monthly-budget';
 export function applyMonthlyBudget(current:MonthlyBudgetState|null,command:BudgetCommand,actor:Actor,at:number){
- ensure(count(at)&&id(actor.id),'Invalid budget actor/time');const host=command.type==='reserve-monthly-budget';ensure(actor.id===(host?HOST:OWNER)&&actor.roles.includes(host?'representative':'owner'),'Budget authority denied');
+ ensure(count(at)&&id(actor.id),'Invalid budget actor/time');const host=command.type==='reserve-monthly-budget'||command.type==='release-monthly-budget';ensure(actor.id===(host?HOST:OWNER)&&actor.roles.includes(host?'representative':'owner'),'Budget authority denied');
  ensure(current!==null||command.type==='configure-monthly-budget','Configure a monthly budget first');
  let state=current?structuredClone(current):null;
  if(command.type==='configure-monthly-budget'){
   ensure(exact(command,['type','limit','timezone'])&&count(command.limit)&&typeof command.timezone==='string'&&command.timezone.length<=100,'Invalid monthly budget fields');try{accountingPeriod(at,command.timezone);}catch{throw new DomainError('Invalid accounting timezone');}
   ensure(!state||state.timezone===command.timezone,'Accounting timezone is already pinned');
   if(state){state.limit=command.limit;state.actorId=actor.id;for(const d of state.decisions)if(d.state!=='done'){d.limit=command.limit;d.nextLimit=Math.max(command.limit+1,command.limit+state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}}else state={kind:'monthly-budget',id:MONTHLY_BUDGET_ID,limit:command.limit,timezone:command.timezone,actorId:actor.id,reservations:[],decisions:[]};
+ }else if(command.type==='release-monthly-budget'){
+  ensure(exact(command,['type','missionId','workId','runId'])&&[command.missionId,command.workId,command.runId].every(id),'Invalid reservation release');const r=state!.reservations.find(r=>r.missionId===command.missionId&&r.workId===command.workId&&r.runId===command.runId);ensure(r?.state==='reserved','Exact unused reservation required');r.state='released';
  }else if(command.type==='reserve-monthly-budget'){
   const e=command.entry;ensure(exact(command,['type','entry','used','available'])&&exact(e,['missionId','workId','runId','amount','inputHash','revision','title','period','at'])&&[e.missionId,e.workId,e.runId].every(id)&&count(e.amount)&&e.amount>0&&/^[a-f0-9]{64}$/.test(e.inputHash)&&count(e.revision)&&e.revision>0&&typeof e.title==='string'&&e.title.length<=16000&&e.period===accountingPeriod(at,state!.timezone)&&e.at===at&&count(command.used)&&typeof command.available==='boolean','Invalid run reservation');
   const previous=state!.reservations.find(r=>r.missionId===e.missionId&&r.workId===e.workId);ensure(!previous||previous.state==='released','Work already has a monthly admission');ensure(state!.reservations.length<10000,'Monthly reservation bound reached');
@@ -56,8 +58,8 @@ export class MonthlyBudgetService {
  constructor(store:Store<any>,clock:()=>number=Date.now){this.#store=store;this.#clock=clock;}
  async #state(){return await this.#store.load(MONTHLY_BUDGET_ID) as Snapshot<MonthlyBudgetState>|null;}
  async #account(timezone:string,period:string){
-  const position=await this.#store.readState(),works=new Map<string,AccountWork>(),turns=new Map<string,any>(),callTimes=new Map<string,number>(),calls=new Set<string>(),members=new Map<string|null,{inputTokens:number;outputTokens:number;unknown:boolean}>();let cursor=0,inputTokens=0,outputTokens=0,unknown=false;
-  const add=(key:string,at:number|undefined,usage:any,memberId:string|null)=>{if(calls.has(key))return;calls.add(key);if(at===undefined){unknown=true;return;}if(accountingPeriod(at,timezone)!==period)return;const member=members.get(memberId)??{inputTokens:0,outputTokens:0,unknown:false};for(const unit of ['inputTokens','outputTokens'] as const){if(count(usage?.[unit])){if(unit==='inputTokens')inputTokens+=usage[unit];else outputTokens+=usage[unit];member[unit]+=usage[unit];}else{member.unknown=true;if(unit==='outputTokens')unknown=true;}}members.set(memberId,member);};
+  const position=await this.#store.readState(),works=new Map<string,AccountWork>(),turns=new Map<string,any>(),callTimes=new Map<string,number>(),calls=new Set<string>(),members=new Map<string|null,{inputTokens:number;outputTokens:number;unknown:boolean}>();let cursor=0,inputTokens=0,outputTokens=0,unknown=false,inputUnknown=false;
+  const add=(key:string,at:number|undefined,usage:any,memberId:string|null)=>{if(calls.has(key))return;calls.add(key);if(at===undefined){unknown=true;inputUnknown=true;return;}if(accountingPeriod(at,timezone)!==period)return;const member=members.get(memberId)??{inputTokens:0,outputTokens:0,unknown:false};for(const unit of ['inputTokens','outputTokens'] as const){if(count(usage?.[unit])){if(unit==='inputTokens')inputTokens+=usage[unit];else outputTokens+=usage[unit];member[unit]+=usage[unit];}else{member.unknown=true;if(unit==='outputTokens')unknown=true;else inputUnknown=true;}}members.set(memberId,member);};
   // shortcut: scan the retained feed; add a durable usage index when the journal exceeds the bounded local workload.
   while(cursor<position.cursor){const page=await this.#store.readCatchup(cursor,position.feedId,1000);ensure(page.events.length>0,'Incomplete accounting feed');for(const batch of page.events){if(batch.cursor>position.cursor)break;cursor=batch.cursor;for(const raw of batch.events){const e=raw as any,c=e?.command;if(!c)continue;const key=batch.aggregateId+'\0'+c.workId;
    if(c.type==='admit-work')works.set(key,{missionId:batch.aggregateId,workId:c.workId,title:c.title,memberId:c.assistantSource?.memberId??null,cap:teamCallCount(c.team),consumed:0,unknown:false,terminal:false,pending:new Set()});
@@ -70,7 +72,7 @@ export class MonthlyBudgetService {
    if(['append-assistant-message','open-assistant-segment'].includes(c.type)&&c.turn?.ownership)turns.set(batch.aggregateId+'\0'+c.turn.id,c.turn);
    if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null);}
   }} }
-  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,members,works};
+  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,members,works};
  }
  async read(){
   const before=await this.#store.readState(),s=await this.#state(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,period=accountingPeriod(this.#clock(),timezone),a=await this.#account(timezone,period);
@@ -78,7 +80,7 @@ export class MonthlyBudgetService {
   let reserved=0;for(const r of s?.value.reservations??[]){if(r.state!=='reserved')continue;const w=a.works.get(r.missionId+'\0'+r.workId);if(w?.terminal&&!w.unknown&&!w.pending.size)continue;reserved+=Math.max(0,r.amount-(w?.consumed??0));}
   for(const w of a.works.values())if(w.runId&&(!w.terminal||w.unknown||w.pending.size)&&!s?.value.reservations.some(r=>r.missionId===w.missionId&&r.workId===w.workId))reserved+=Math.max(0,w.cap-w.consumed);
   const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.limit)],[copy('ui.budget.after'),this.#amount(d.nextLimit)],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:d.nextLimit}}));
-  return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,knownOutputTokens:a.outputTokens,inputTokens:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
+  return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
  }
  #amount(n:number){return copy('ui.budget.tokens',{count:n.toLocaleString('ko-KR')});}
  async configure(input:unknown){ensure(exact(input,['commandId','expectedRevision','limit','timezone'])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'configure-monthly-budget',limit:input.limit,timezone:input.timezone},OWNER);}
@@ -98,6 +100,9 @@ export class MonthlyBudgetService {
    const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(w?.execution==='budget-waiting'&&w.monthlyBudgetDecision===r.decisionId)return;ensure(s&&w&&workInputHash(w)===r.inputHash,'Waiting Work input changed');
    const result=await new Application(this.#store,[{id:HOST,roles:['representative']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-wait:'+hash([r.decisionId,r.missionId,r.workId]).slice(0,48),actorId:HOST,command:{type:'wait-monthly-budget',workId:r.workId,decisionId:r.decisionId!}});if(result.status!=='conflict')return;
   }throw new DomainError('Budget waiting admission contention');
+ }
+ async release(missionId:string,workId:string,runId:string){
+  for(let attempt=0;attempt<3;attempt++){const s=await this.#state();if(!s||!s.value.reservations.some(r=>r.missionId===missionId&&r.workId===workId&&r.runId===runId&&r.state==='reserved'))return;const result=await this.#dispatch('monthly-release:'+hash([missionId,workId,runId]).slice(0,48),s.revision,{type:'release-monthly-budget',missionId,workId,runId},HOST);if(result.status!=='conflict')return;}throw new DomainError('Monthly reservation release contention');
  }
  async resume(decisionId:string,run:(r:Reservation,revision:number)=>Promise<unknown>){
   const state=await this.#state(),d=state?.value.decisions.find(d=>d.id===decisionId);ensure(d?.state==='done','An explicit budget increase is required');

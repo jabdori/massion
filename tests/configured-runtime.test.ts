@@ -64,7 +64,7 @@ test('authorization/criteria gates cannot be enabled by ordinary user admission'
  assert.throws(()=>new ConfiguredTextRuntime(s.store,{...s.config,verifier:{...s.config.verifier,identity:s.config.executor.identity}}),/distinct/);
 });
 test('lost HTTP outcome remains unknown and a fresh runtime never blindly invokes again',async t=>{
- const s=await setup(t,{unknownExecutor:true});await s.admit();const result=await s.product.run(s.missionId,s.workId,'run',2);const w=result.snapshot.value.works[0]!;assert.equal(w.effects[0]?.status,'unknown');assert.equal(w.budget.measured,null);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
+ const s=await setup(t,{unknownExecutor:true});await s.admit();const {MonthlyBudgetService}=await import('../src/monthly-budget.ts'),budget=new MonthlyBudgetService(s.store);await budget.configure({commandId:'unknown-monthly-budget',expectedRevision:0,limit:256,timezone:'Asia/Seoul'});const result=await s.product.run(s.missionId,s.workId,'run',2);const w=result.snapshot.value.works[0]!;assert.equal(w.effects[0]?.status,'unknown');assert.equal(w.budget.measured,null);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);const usage=await budget.read();assert.equal(usage.spent,null);assert.equal(usage.reserved,128);
  const restarted=new ConfiguredTextRuntime(s.store,s.config);assert.equal((await restarted.run(s.missionId,s.workId,'run-again',result.snapshot.revision)).status,'already-started');assert.equal(s.calls.length,1);
 });
 test('cancelled in-flight invocation records uncertainty and admits no verifier/artifact effect',async t=>{
@@ -204,4 +204,11 @@ test('monthly admission pauses before any model call and a fresh owner increase 
  const body={commandId:'monthly-raise',decisionId:d.id,answer:'act',expectedRevision:d.budget.revision,limit:d.budget.limit};const post=()=>fetch(origin+'/assistant/decisions',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
  const responses=await Promise.all([post(),post()]);assert.ok(responses.every(r=>r.status===200));assert.equal(s.calls.length,2,JSON.stringify((await s.store.load(s.missionId))!.value.works[0]));assert.equal((await s.store.load(s.missionId))!.value.works[0]!.acceptance,'accepted');
  assert.equal((await post()).status,200);assert.equal(s.calls.length,2);const usage=await budget.read();assert.equal(usage.spent,10);assert.equal(usage.inputTokens,40);assert.equal(usage.reserved,0);assert.equal(usage.cost,null);
+});
+
+test('a definite activation rejection releases only its unused monthly reservation for a later explicit run',async t=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const s=await setup(t);await s.admit();const budget=new MonthlyBudgetService(s.store);await budget.configure({commandId:'monthly-configure',expectedRevision:0,limit:128,timezone:'Asia/Seoul'});
+ const commit=s.store.commit.bind(s.store);s.store.commit=async input=>input.commandId==='rejected-activation'?{status:'conflict',revision:input.expectedRevision,reason:'revision'}:commit(input);
+ assert.equal((await s.runtime.run(s.missionId,s.workId,'rejected-activation',2)).status,'conflict');assert.equal((await budget.read()).reserved,0);assert.equal(s.calls.length,0);
+ assert.equal((await s.runtime.run(s.missionId,s.workId,'explicit-new-run',2)).status,'settled');assert.equal(s.calls.length,2);
 });
