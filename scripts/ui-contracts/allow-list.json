@@ -1125,36 +1125,6 @@
       "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
-      "screen": "B10",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"회의 메모 정리.pdf\"",
-      "occurrence": 1,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B10",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order page status \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B10",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order page status \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
       "screen": "B10-preview",
       "theme": "dark",
       "kind": "contract",
@@ -1403,86 +1373,6 @@
       "category": "capability",
       "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
       "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"주간 지출 정리 {date} · 매주 월요일 {time}\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"{work_title} 다시 보기 {date} · 매주 월요일 {time}\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"노트북 거치대 가격 보기 오늘 {time} · 매일\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"주간 지출 정리 지난주 지출을 항목별로 묶기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"가격 보기 원하는 값 아래로 내려가면 알림\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"월말 구독 점검 이번 달 구독 결제 목록\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"회의 전 자료 모으기 회의 전날 저녁에 자료 모으기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"주말 장보기 목록 금요일마다 장보기 목록 만들기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B18",
@@ -1743,66 +1633,6 @@
       "category": "capability",
       "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"주노가 보는 중\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page link \"{work_title}에서 열기\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page link \"{work_title} 주노 · 실행 중 읽기 {progress}\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page status \"작업 중\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page text \"{time}\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page text \"{time}\"",
-      "occurrence": 2,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B23",
@@ -3005,36 +2835,6 @@
       "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
-      "screen": "B10",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"회의 메모 정리.pdf\"",
-      "occurrence": 1,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B10",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order page status \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B10",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order page status \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "Non-text results",
-      "reason": "Missing PDF/image rows and their additional assignee occurrences need a non-text artifact producer/reader; existing accepted text is preserved.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
       "screen": "B10-preview",
       "theme": "light",
       "kind": "contract",
@@ -3283,86 +3083,6 @@
       "category": "capability",
       "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
       "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"주간 지출 정리 {date} · 매주 월요일 {time}\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"{work_title} 다시 보기 {date} · 매주 월요일 {time}\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar button \"노트북 거치대 가격 보기 오늘 {time} · 매일\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"주간 지출 정리 지난주 지출을 항목별로 묶기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"가격 보기 원하는 값 아래로 내려가면 알림\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"월말 구독 점검 이번 달 구독 결제 목록\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"회의 전 자료 모으기 회의 전날 저녁에 자료 모으기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B17-empty",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"주말 장보기 목록 금요일마다 장보기 목록 만들기\"",
-      "occurrence": 1,
-      "category": "Other schedule kinds",
-      "reason": "Only a singleton morning briefing is admitted by the host; these scheduled Work kinds have no producer.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B18",
@@ -3623,66 +3343,6 @@
       "category": "capability",
       "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"주노가 보는 중\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page link \"{work_title}에서 열기\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page link \"{work_title} 주노 · 실행 중 읽기 {progress}\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page status \"작업 중\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page text \"{time}\"",
-      "occurrence": 1,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B22",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page text \"{time}\"",
-      "occurrence": 2,
-      "category": "GitHub external URL, commits and review binding",
-      "reason": "AppView supplies no external URL, commit history or exact active-review Work identity. A PR title does not prove those facts.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B23",

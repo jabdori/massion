@@ -71,7 +71,7 @@ test('installing waits for the owner: a decision card in the Representative conv
  const {service,store}=await setup();
  await install(service);
  let cards=await service.decisions(null);assert.equal(cards.length,1);const card=cards[0]!;
- assert.deepEqual([card.question,card.detail,card.action,card.state],['Install GitHub app?','GitHub · 1.4.0','Install','open']);
+ assert.deepEqual([card.question,card.detail,card.action,card.state],['Install GitHub app?','GitHub · 1.4.1','Install','open']);
  assert.deepEqual(card.rows,[['Read','Repositories · Pull requests · Check results'],['Write','None'],['Network','api.github.com'],['Token','GitHub token'],['Events','PR opened · PR merged'],['Adds','GitHub page · PR tab']]);
  assert.deepEqual(await service.decisions('member-juno'),[],'a catalog app asks in the Representative conversation');
  assert.equal((await service.read()).apps.length,0,'nothing is installed before the answer');
@@ -80,7 +80,7 @@ test('installing waits for the owner: a decision card in the Representative conv
  await answer(service,card.id,'ask');await answer(service,card.id,'act');
  cards=await service.decisions(null);assert.deepEqual([cards[0]!.state,cards[0]!.line,cards[0]!.remove],['done','GitHub app installed',(await service.read()).apps[0]!.id]);
  const read=await service.read();assert.equal(read.apps.length,1);const app=read.apps[0]!;
- assert.deepEqual([app.name,app.version,app.enabled,app.origin],['GitHub','1.4.0',true,'catalog']);assert.equal(read.catalog.find(c=>c.id==='github')!.installed,true);
+ assert.deepEqual([app.name,app.version,app.enabled,app.origin],['GitHub','1.4.1',true,'catalog']);assert.equal(read.catalog.find(c=>c.id==='github')!.installed,true);
  const view=await service.view({app:app.id,handler:'item',ref:'84'});assert.match(view.title,/#84/);
  await assert.rejects(service.view({app:app.id,handler:'item',ref:'../x'}),/ref/);
  await assert.rejects(answer(service,card.id,'act','c-again'),/open/);
@@ -90,19 +90,19 @@ test('installing waits for the owner: a decision card in the Representative conv
 test('a narrower version applies at once, a wider one waits for the owner, rollback that widens asks again; off, on and remove never ask',async()=>{
  const {service,store}=await setup();
  await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');const appId=(await service.read()).apps[0]!.id;
- const narrower=structuredClone(GITHUB_APP);narrower.manifest.version='1.4.1';narrower.manifest.permissions.events=[];
+ const narrower=structuredClone(GITHUB_APP);narrower.manifest.version='1.4.2';narrower.manifest.permissions.events=[];
  await service.offer({commandId:'assistant-app-update-1',pkg:narrower,origin:'catalog'});
  assert.deepEqual((await service.decisions(null)).map(d=>d.remove),[appId],'an update applied at once keeps Remove on the install card');
- assert.equal((await service.read()).apps[0]!.version,'1.4.1');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,0);
+ assert.equal((await service.read()).apps[0]!.version,'1.4.2');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,0);
  const wider=structuredClone(GITHUB_APP);wider.manifest.version='1.5.0';wider.manifest.permissions.write=['PR comments'];
  await service.offer({commandId:'assistant-app-update-2',pkg:wider,origin:'catalog'});
- assert.equal((await service.read()).apps[0]!.version,'1.4.1','a widening version waits');
- const widen=(await service.decisions(null)).find(d=>d.state==='open')!;assert.deepEqual([widen.question,widen.detail,widen.action],['Update GitHub app?','GitHub · 1.4.1 → 1.5.0','Update']);assert.ok(widen.rows.some(([l,v])=>l==='Write'&&v==='PR comments'));
+ assert.equal((await service.read()).apps[0]!.version,'1.4.2','a widening version waits');
+ const widen=(await service.decisions(null)).find(d=>d.state==='open')!;assert.deepEqual([widen.question,widen.detail,widen.action],['Update GitHub app?','GitHub · 1.4.2 → 1.5.0','Update']);assert.ok(widen.rows.some(([l,v])=>l==='Write'&&v==='PR comments'));
  await answer(service,widen.id,'act','c-widen');assert.equal((await service.read()).apps[0]!.version,'1.5.0');
  assert.deepEqual((await service.decisions(null)).map(d=>[d.action,d.remove]),[['Install',undefined],['Update',appId]],'after an update the newest done card carries Remove');
- // Back to 1.4.0 narrows: applied. Then forward to 1.5.0 widens: a decision.
- await service.act({commandId:'c-rb1',action:'rollback',appId,version:1});assert.equal((await service.read()).apps[0]!.version,'1.4.0');
- await service.act({commandId:'c-rb2',action:'rollback',appId,version:3});assert.equal((await service.read()).apps[0]!.version,'1.4.0');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,1);
+ // Back to 1.4.1 narrows: applied. Then forward to 1.5.0 widens: a decision.
+ await service.act({commandId:'c-rb1',action:'rollback',appId,version:1});assert.equal((await service.read()).apps[0]!.version,'1.4.1');
+ await service.act({commandId:'c-rb2',action:'rollback',appId,version:3});assert.equal((await service.read()).apps[0]!.version,'1.4.1');assert.equal((await service.decisions(null)).filter(d=>d.state==='open').length,1);
  await service.act({commandId:'c-off',action:'disable',appId});assert.equal((await service.read()).apps[0]!.enabled,false);await assert.rejects(service.view({app:appId,handler:'page'}),/off/);
  await service.act({commandId:'c-on',action:'enable',appId});assert.equal((await service.read()).apps[0]!.enabled,true);
  await service.act({commandId:'c-rm',action:'remove',appId});const after=await service.read();assert.equal(after.apps.length,0);assert.equal(after.catalog[0]!.installed,false);
@@ -115,7 +115,7 @@ test('an overlapping resend of every app command replays the first result instea
  const both=async(run:()=>Promise<{status:string;revision:number}>)=>{const r=await Promise.all([run(),run()]);assert.deepEqual(r.map(x=>x.status).sort(),['committed','replayed']);assert.equal(r[0]!.revision,r[1]!.revision);};
  await both(()=>install(service));const decisionId=(await service.decisions(null))[0]!.id;
  await both(()=>answer(service,decisionId,'later'));await both(()=>answer(service,decisionId,'ask'));await both(()=>answer(service,decisionId,'act'));const appId=(await service.read()).apps[0]!.id;
- const next=structuredClone(GITHUB_APP);next.manifest.version='1.4.1';await both(()=>service.offer({commandId:'assistant-app-update-1',pkg:next,origin:'catalog'}));
+ const next=structuredClone(GITHUB_APP);next.manifest.version='1.4.2';await both(()=>service.offer({commandId:'assistant-app-update-1',pkg:next,origin:'catalog'}));
  await both(()=>service.act({commandId:'c-rb',action:'rollback',appId,version:1}));
  for(const action of ['disable','enable','remove'])await both(()=>service.act({commandId:'c-'+action,action,appId}));
  assert.equal(store.inspect().filter(o=>o.aggregateId===APPS_ID).length,9,'each command commits once');
@@ -212,14 +212,14 @@ test('an app the owner turned off stays off through an update and a rollback; an
  await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');const appId=(await service.read()).apps[0]!.id;
  const wider=structuredClone(GITHUB_APP);wider.manifest.version='1.5.0';wider.manifest.permissions.write=['PR comments'];
  await service.offer({commandId:'assistant-app-up-wide',pkg:wider,origin:'catalog'});const wide=(await service.decisions(null)).find(d=>d.state==='open')!;
- const same=structuredClone(GITHUB_APP);same.manifest.version='1.4.1';
+ const same=structuredClone(GITHUB_APP);same.manifest.version='1.4.2';
  await service.offer({commandId:'assistant-app-up-same',pkg:same,origin:'catalog'});
- assert.equal((await state(store)).decisions.find(d=>d.id===wide.id)!.state,'stale','the card was asked about 1.4.0; it does not stay open on 1.4.1');
+ assert.equal((await state(store)).decisions.find(d=>d.id===wide.id)!.state,'stale','the card was asked about 1.4.1; it does not stay open on 1.4.2');
  await service.act({commandId:'c-off',action:'disable',appId});
  const next=structuredClone(GITHUB_APP);next.manifest.version='1.4.2';
  await service.offer({commandId:'assistant-app-up-next',pkg:next,origin:'catalog'});
  let app=(await service.read()).apps[0]!;assert.deepEqual([app.version,app.enabled],['1.4.2',false]);
- await service.act({commandId:'c-rb',action:'rollback',appId,version:1});app=(await service.read()).apps[0]!;assert.deepEqual([app.version,app.enabled],['1.4.0',false]);
+ await service.act({commandId:'c-rb',action:'rollback',appId,version:1});app=(await service.read()).apps[0]!;assert.deepEqual([app.version,app.enabled],['1.4.1',false]);
  await service.act({commandId:'c-rm',action:'remove',appId});await install(service,'c-again');await answer(service,(await service.decisions(null)).find(d=>d.state==='open')!.id,'act','c-again-act');
  assert.equal((await service.read()).apps[0]!.enabled,true,'installing again turns it on');
 });
@@ -267,4 +267,27 @@ test('network diagnostics never reach the app view or HTTP client, and timeouts 
 test('app views cannot send writes even when a manifest declares them',worker,async()=>{
  const source=pkg('massion.handle("page",async()=>{await massion.fetch("https://api.github.com/x",{method:"POST"});return {title:"x",groups:[]};})',{handlers:['page']},{write:['PR comments']});
  let sends=0;await assert.rejects(runHandler({appId:'app-probe',pkg:source,handler:'page',input:{},network:async()=>{sends++;return {status:200,body:'{}'};}}),/durable Work/);assert.equal(sends,0);
+});
+
+test('HTTP app reads reject a database replacement while GitHub is replying',worker,async t=>{
+ const {store,service}=await setup();await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');
+ let replacement=false,release!:()=>void,reached!:()=>void;
+ const held=new Promise<void>(done=>{release=done;}),started=new Promise<void>(done=>{reached=done;});
+ const changing=new Proxy(store,{get(target,key){if(key==='readState')return async(id?:string)=>{const state=await target.readState(id);return replacement?{...state,feedId:'replacement-feed'}:state;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const server=createWorkbench(changing,process.cwd(),{scheduleIntervalMs:0,appNetwork:async request=>{reached();await held;return githubFixture(request.url);}});
+ await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));t.after(()=>server.close());
+ const response=fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps/view',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app:'app-github',handler:'item',ref:'84'})});
+ await started;replacement=true;release();assert.equal((await response).status,409);
+});
+
+test('GitHub item identity must match the selected PR even when provider data is well formed',worker,async()=>{
+ const {service}=await setup(async request=>{const response=githubFixture(request.url);if(request.url.endsWith('/pulls/84')){const p=JSON.parse(response.body);p.number=85;p.html_url='https://github.com/jabdori/massion/pull/85';return {...response,body:JSON.stringify(p)};}return response;});
+ await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');await assert.rejects(service.view({app:'app-github',handler:'item',ref:'84'}),/identity changed/);
+});
+
+test('an installed older GitHub package exposes an update through the existing install command',async()=>{
+ const {service}=await setup();await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');
+ const old=structuredClone(GITHUB_APP);old.manifest.version='1.4.0';await service.offer({commandId:'assistant-app-old-version',origin:'catalog',pkg:old});
+ assert.deepEqual((await service.read()).apps[0]!.update,{catalogId:'github',version:GITHUB_APP.manifest.version});
+ await service.act({commandId:'owner-update',action:'install',catalogId:'github'});assert.equal((await service.read()).apps[0]!.version,GITHUB_APP.manifest.version);assert.equal((await service.read()).apps[0]!.update,undefined);
 });

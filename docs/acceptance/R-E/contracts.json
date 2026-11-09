@@ -1,0 +1,101 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B10",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 0,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 0,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 1,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "light",
+      "passed": 26,
+      "failed": 0,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "light",
+      "passed": 23,
+      "failed": 0,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 1,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22.png"
+    }
+  ]
+}

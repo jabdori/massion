@@ -313,3 +313,21 @@ for a nonexistent command. A post-effect settlement error remains uncertain.
 The HTTP reproduction failed first; 50 affected cache/lifecycle/device/client/HTTP
 checks and typecheck pass. The previous head's E2E passed 14/14 on its second attempt;
 current-head CI and review supersede that historical outcome.
+
+## Schedules, results and GitHub main integration
+
+Merge main `31db09d` / PR #131. Preserve typed schedule producers, bounded binary
+results, exact GitHub review bindings and catalog updates alongside R-C members,
+secret presence, bounded app rereads and owner/drain/feed admission. Compose all
+fixture producers. The ledger preserves both branches' deletions: main 526 entries,
+integrated 426; the 34 new upstream removals stay removed.
+
+The related integration run passed 181 cases and found one assertion still expecting
+the legacy Mission GET. Update it to require the existing feed-bound atomic read
+and the exact retained Mission/Work tab. All 76 app/fixture confirmations then pass,
+including this case. Typecheck passes. Recapture all 22 R-C pairs: 670/708 required,
+zero geometry/token/infrastructure failures and zero new/stale diagnostics. Five
+new main screens in both themes pass their scoped gate as well (302/316 required;
+retained room diagnostics remain listed). See `main-schedules-integration.json`.
+Schedules now have multiple Representative kinds, without member binding; member
+scheduleCount remains zero rather than attributing Representative schedules.

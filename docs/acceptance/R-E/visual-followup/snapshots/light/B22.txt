@@ -1,0 +1,100 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "앱" [ref=e6]
+      - strong
+        - StaticText "GitHub"
+        - button "검색" [expanded=false, ref=e12]
+      - button "jabdori/massion" [ref=e9]
+        - StaticText "jabdori/massion"
+      - paragraph
+        - StaticText "열림"
+      - generic
+        - button "feat(assistant): answer the owner and start Representative Work #84 오늘 10:28" [ref=e13]
+          - strong
+            - StaticText "feat(assistant): answer the owner and start Representative Work #84"
+          - StaticText "오늘 10:28"
+        - status "주노가 보는 중"
+      - button "병합됨" [expanded=false, ref=e10]
+      - button "앱 설정" [ref=e11]
+        - StaticText "앱 설정"
+  - main "GitHub" [ref=e2]
+    - generic
+      - heading "feat(assistant): answer the owner and start Representative Work #84" [level=2, ref=e14]
+        - StaticText "feat(assistant): answer the owner and start Representative Work #84"
+      - link "GitHub에서 열기" [ref=e15]
+      - StaticText "열림"
+      - StaticText "jabdori · 11월 5일 10:28"
+      - StaticText "feat/assistant-conversation-turns → main"
+      - generic
+        - link "PR #84 검토 주노 · 실행 중 읽기 4/11" [ref=e18]
+          - strong
+            - StaticText "PR #84 검토"
+          - StaticText "주노 · 실행 중"
+          - StaticText "읽기 "
+          - StaticText "4/11"
+        - status "작업 중"
+      - paragraph
+        - StaticText "+769 −39"
+      - heading "파일 11" [level=3, ref=e16]
+      - list
+        - listitem [level=1]
+          - StaticText "src/assistant-service.ts"
+          - StaticText "+206"
+        - listitem [level=1]
+          - StaticText "tests/assistant-conversation.test.ts"
+          - StaticText "+370"
+        - listitem [level=1]
+          - StaticText "src/assistant-conversation-panel.ts"
+          - StaticText "+83"
+        - listitem [level=1]
+          - StaticText "docs/architecture/assistant-conversation.md"
+          - StaticText "+31"
+          - StaticText "−3"
+        - listitem [level=1]
+          - StaticText "src/connection-workbench.ts"
+          - StaticText "+30"
+          - StaticText "−12"
+        - listitem [level=1]
+          - StaticText "src/configured-runtime.ts"
+          - StaticText "+15"
+          - StaticText "−9"
+        - listitem [level=1]
+          - StaticText "src/product.ts"
+          - StaticText "+13"
+          - StaticText "−7"
+        - listitem [level=1]
+          - StaticText "src/server.ts"
+          - StaticText "+9"
+          - StaticText "−3"
+        - listitem [level=1]
+          - StaticText "src/workbench.ts"
+          - StaticText "+7"
+          - StaticText "−2"
+        - listitem [level=1]
+          - StaticText "src/selectable-runtime.ts"
+          - StaticText "+3"
+          - StaticText "−3"
+        - listitem [level=1]
+          - StaticText "docs/architecture/default-route-and-persistent-connections.md"
+          - StaticText "+2"
+      - heading "커밋 2" [level=3, ref=e17]
+      - list
+        - listitem [level=1]
+          - code
+            - StaticText "cf2a4b3"
+          - time
+            - StaticText "10:28"
+        - listitem [level=1]
+          - code
+            - StaticText "0c9431d"
+          - StaticText "Merge remote-tracking branch 'origin/feat/assistant-conversation-storag…"
+          - time
+            - StaticText "10:28"

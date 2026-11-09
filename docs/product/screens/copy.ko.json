@@ -1,4 +1,519 @@
 {
+ "ui.rule.question": {
+  "ko": "반올림을 합계에서 한 번으로 바꿀까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.changed": {
+  "ko": "반올림 규칙 바꿈",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.name": {
+  "ko": "반올림 규칙",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.activity-title": {
+  "ko": "반올림 규칙 바꾸기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.activity-summary": {
+  "ko": "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {baseline}, 새 규칙 {candidate}.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.counterevidence": {
+  "ko": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.memory-candidate.saved": {
+  "ko": "{name} 남김",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.discarded": {
+  "ko": "{name} 지움",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.not_saved": {
+  "ko": "{name} 저장 안 됨",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.unknown": {
+  "ko": "저장 결과 미확인",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D uncertain memory candidate receipt"
+ },
+ "ui.memory-candidate.unavailable": {
+  "ko": "후보 변경됨",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D stale memory candidate binding"
+ },
+ "ui.rule.source-work": {
+  "ko": "주문 할인 합계 계산",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.memory-policy.line": {
+  "ko": "줄마다 반올림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:settings"
+  ],
+  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
+ },
+ "ui.memory-policy.aggregate": {
+  "ko": "합계에서 한 번",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:settings"
+  ],
+  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
+ },
+ "ui.rule.after": {
+  "ko": "변경 후",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "ui.rule.baseline-summary": {
+  "ko": "줄마다 반올림 · TOTAL {amount} cents · 사례 {count}/{total} 맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "ui.rule.candidate-summary": {
+  "ko": "합계에서 한 번 · {amount} cents · 사례 {count}/{total} 맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "ui.memory-candidate.line": {
+  "ko": "기억 후보: {content}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B6:conversation",
+   "B7-fail:conversation",
+   "B18-room-b:conversation"
+  ]
+ },
+ "ui.memory-history.line": {
+  "ko": "{name} · 줄마다로 되돌림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "ui.memory-history.aggregate": {
+  "ko": "{name} · 합계에서 한 번으로 바꿈",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "ui.schedules.weekly-expenses-description": {
+  "ko": "지난주 지출을 항목별로 묶기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.price-watch-description": {
+  "ko": "원하는 값 아래로 내려가면 알림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.monthly-subscriptions-description": {
+  "ko": "이번 달 구독 결제 목록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.meeting-preparation-description": {
+  "ko": "회의 전날 저녁에 자료 모으기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.weekend-groceries-description": {
+  "ko": "금요일마다 장보기 목록 만들기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.dispatch": {
+  "ko": "예약한 요청입니다. 기존 작업 생성·확인 절차로 맡겨 주세요.\n{request}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:conversation"
+  ],
+  "provenance": "R-E retained owner schedule request"
+ },
+ "ui.schedules.weekly-expenses-title": {
+  "ko": "주간 지출 정리",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-expenses-request": {
+  "ko": "지난주 제공한 지출을 항목별로 묶고 금액마다 출처를 남겨 주세요. 없는 영수증은 만들지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-review-title": {
+  "ko": "매주 다시 보기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-review-request": {
+  "ko": "이전 작업과 제공한 자료를 다시 보고 달라진 내용을 근거와 함께 정리해 주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.price-watch-title": {
+  "ko": "가격 보기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.price-watch-request": {
+  "ko": "제공한 상품과 기준 가격을 확인하고 관찰한 가격만 알려 주세요. 구매하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.monthly-subscriptions-title": {
+  "ko": "월말 구독 점검",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.monthly-subscriptions-request": {
+  "ko": "제공한 내역에서 이번 달 구독 결제를 출처와 함께 정리해 주세요. 구독을 해지하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.meeting-preparation-title": {
+  "ko": "회의 전 자료 모으기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.meeting-preparation-request": {
+  "ko": "제공한 회의 정보를 바탕으로 자료를 모으고 출처를 남겨 주세요. 부족한 정보는 물어봐 주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekend-groceries-title": {
+  "ko": "주말 장보기 목록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekend-groceries-request": {
+  "ko": "제공한 계획과 선호에 맞춰 장보기 목록을 만들어 주세요. 주문하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-cycle": {
+  "ko": "매주 {weekday} {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.month-end-cycle": {
+  "ko": "매월 마지막 날 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.once-cycle": {
+  "ko": "{date} {time} 한 번",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.work-run": {
+  "ko": "작업 {count}개 맡김",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.work-unavailable": {
+  "ko": "작업을 맡기지 못함",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.not-resent": {
+  "ko": "다시 보내지 않음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.apps.commits": {
+  "ko": "커밋 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "B22 commit history"
+ },
+ "ui.apps.reviewing": {
+  "ko": "{member}가 보는 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ],
+  "provenance": "B22 review binding, parameterized assignee"
+ },
+ "ui.apps.active-review": {
+  "ko": "{work_title} {member} · 실행 중 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "Actual Work progress"
+ },
+ "ui.apps.reading-review": {
+  "ko": "{work_title} {member} · 실행 중 읽기 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "B22 named reading steps"
+ },
+ "ui.apps.bind-review": {
+  "ko": "이 작업에 연결",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ],
+  "provenance": "R-E explicit exact-head source selection"
+ },
+ "ui.apps.review-bound": {
+  "ko": "검토 자료 연결됨",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ],
+  "provenance": "R-E source receipt"
+ },
  "ui.apps.reconcile-done": {"ko":"실행됨","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
  "ui.apps.reconcile-not-done": {"ko":"실행되지 않음","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
  "ui.apps.receipt-time": {"ko":"{content} · {time}","roles":["text"],"used_in":["B24-done:conversation","B25-done:conversation"],"provenance":"Approved app decision receipt rows"},
@@ -17129,202 +17644,28 @@
    "E7:first-experience"
   ]
  },
- "ui.rule.question": {
-  "ko": "반올림을 합계에서 한 번으로 바꿀까요?",
+ "ui.room.next-step": {
+  "ko": "다음 단계",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-D"
-  ]
+   "B18-room-b:pane",
+   "B22-room-steps:pane"
+  ],
+  "provenance": "Approved B18-room-b and B22-room-steps artboard wording."
  },
- "ui.rule.changed": {
-  "ko": "반올림 규칙 바꿈",
+ "ui.room.step-note": {
+  "ko": "절차 고침: {title} · 확인 대기",
   "roles": [
-   "text"
+   "text",
+   "link"
   ],
   "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.name": {
-  "ko": "반올림 규칙",
-  "roles": [
-   "text"
+   "B22-room-steps:pane",
+   "B22-room-steps:conversation"
   ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.activity-title": {
-  "ko": "반올림 규칙 바꾸기",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.activity-summary": {
-  "ko": "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {baseline}, 새 규칙 {candidate}.",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.counterevidence": {
-  "ko": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.memory-candidate.saved": {
-  "ko": "{name} 남김",
-  "roles": [
-   "status",
-   "text"
-  ],
-  "used_in": [
-   "B7-churn:conversation"
-  ],
-  "provenance": "R-D explicit owner memory candidate receipt"
- },
- "ui.memory-candidate.discarded": {
-  "ko": "{name} 지움",
-  "roles": [
-   "status",
-   "text"
-  ],
-  "used_in": [
-   "B7-churn:conversation"
-  ],
-  "provenance": "R-D explicit owner memory candidate receipt"
- },
- "ui.memory-candidate.not_saved": {
-  "ko": "{name} 저장 안 됨",
-  "roles": [
-   "status",
-   "text"
-  ],
-  "used_in": [
-   "B7-churn:conversation"
-  ],
-  "provenance": "R-D explicit owner memory candidate receipt"
- },
- "ui.memory-candidate.unknown": {
-  "ko": "저장 결과 미확인",
-  "roles": [
-   "status",
-   "text"
-  ],
-  "used_in": [
-   "B7-churn:conversation"
-  ],
-  "provenance": "R-D uncertain memory candidate receipt"
- },
- "ui.memory-candidate.unavailable": {
-  "ko": "후보 변경됨",
-  "roles": [
-   "status",
-   "text"
-  ],
-  "used_in": [
-   "B7-churn:conversation"
-  ],
-  "provenance": "R-D stale memory candidate binding"
- },
- "ui.rule.source-work": {
-  "ko": "주문 할인 합계 계산",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.memory-policy.line": {
-  "ko": "줄마다 반올림",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B12:settings"
-  ],
-  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
- },
- "ui.memory-policy.aggregate": {
-  "ko": "합계에서 한 번",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B12:settings"
-  ],
-  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
- },
- "ui.rule.after": {
-  "ko": "변경 후",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B2:conversation",
-   "B9:conversation"
-  ]
- },
- "ui.rule.baseline-summary": {
-  "ko": "줄마다 반올림 · TOTAL {amount} cents · 사례 {count}/{total} 맞음",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B2:conversation",
-   "B9:conversation"
-  ]
- },
- "ui.rule.candidate-summary": {
-  "ko": "합계에서 한 번 · {amount} cents · 사례 {count}/{total} 맞음",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B2:conversation",
-   "B9:conversation"
-  ]
- },
- "ui.memory-candidate.line": {
-  "ko": "기억 후보: {content}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B6:conversation",
-   "B7-fail:conversation",
-   "B18-room-b:conversation"
-  ]
- },
- "ui.memory-history.line": {
-  "ko": "{name} · 줄마다로 되돌림",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B12:page"
-  ]
- },
- "ui.memory-history.aggregate": {
-  "ko": "{name} · 합계에서 한 번으로 바꿈",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B12:page"
-  ]
+  "provenance": "Parameterized equivalent of approved conversation.link.23, with the recorded time rendered separately."
  },
  "ui.budget.title": {
   "ko": "월간 예산",
@@ -17558,29 +17899,6 @@
    "B14-usage:settings"
   ]
  },
- "ui.room.next-step": {
-  "ko": "다음 단계",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18-room-b:pane",
-   "B22-room-steps:pane"
-  ],
-  "provenance": "Approved B18-room-b and B22-room-steps artboard wording."
- },
- "ui.room.step-note": {
-  "ko": "절차 고침: {title} · 확인 대기",
-  "roles": [
-   "text",
-   "link"
-  ],
-  "used_in": [
-   "B22-room-steps:pane",
-   "B22-room-steps:conversation"
-  ],
-  "provenance": "Parameterized equivalent of approved conversation.link.23, with the recorded time rendered separately."
- },
  "ui.settings.device-state-members": {"ko": "{state} · {members}", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
  "ui.settings.device-offline": {"ko": "오프라인", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
  "ui.settings.update-required": {"ko": "업데이트 필요", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
@@ -17601,5 +17919,14 @@
  "ui.settings.key-save": {"ko": "저장", "roles": ["button"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"},
  "ui.settings.devices-empty": {"ko": "연결할 기기 없음", "roles": ["text"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"},
  "ui.settings.decision-required": {"ko": "결정 대기", "roles": ["status"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"},
- "ui.settings.command-unknown": {"ko": "결과 모름 · 확인 필요", "roles": ["status"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"}
+ "ui.settings.command-unknown": {
+  "ko": "결과 모름 · 확인 필요",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "R-C:settings"
+  ],
+  "provenance": "Settings lifecycle commands and authoritative read metadata"
+ }
 }

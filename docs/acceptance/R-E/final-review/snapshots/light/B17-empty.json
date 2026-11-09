@@ -1,0 +1,30 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e7]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e8]\n  - complementary \"구성원과 작업\"\n    - navigation \"예약\" [ref=e6]\n      - StaticText \"예약\"\n      - button \"검색\" [expanded=false, ref=e9]\n      - button \"새 작업\" [ref=e10]\n        - StaticText \"새 작업\"\n  - main \"예약\" [ref=e2]\n    - generic\n      - generic\n        - heading \"작업 예약하기\" [level=2, ref=e11]\n        - button \"아침 브리핑 어제 맡긴 일을 아침마다 정리\" [ref=e12]\n          - strong\n            - StaticText \"아침 브리핑\"\n          - StaticText \"어제 맡긴 일을 아침마다 정리\"\n        - button \"주간 지출 정리 지난주 지출을 항목별로 묶기\" [ref=e13]\n          - strong\n            - StaticText \"주간 지출 정리\"\n          - StaticText \"지난주 지출을 항목별로 묶기\"\n        - button \"가격 보기 원하는 값 아래로 내려가면 알림\" [ref=e14]\n          - strong\n            - StaticText \"가격 보기\"\n          - StaticText \"원하는 값 아래로 내려가면 알림\"\n        - button \"월말 구독 점검 이번 달 구독 결제 목록\" [ref=e15]\n          - strong\n            - StaticText \"월말 구독 점검\"\n          - StaticText \"이번 달 구독 결제 목록\"\n        - button \"회의 전 자료 모으기 회의 전날 저녁에 자료 모으기\" [ref=e16]\n          - strong\n            - StaticText \"회의 전 자료 모으기\"\n          - StaticText \"회의 전날 저녁에 자료 모으기\"\n        - button \"주말 장보기 목록 금요일마다 장보기 목록 만들기\" [ref=e17]\n          - strong\n            - StaticText \"주말 장보기 목록\"\n          - StaticText \"금요일마다 장보기 목록 만들기\""
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "sidebar": [
+      "예약",
+      "새 작업"
+    ],
+    "page": [
+      "작업 예약하기",
+      "아침 브리핑",
+      "어제 맡긴 일을 아침마다 정리",
+      "주간 지출 정리",
+      "지난주 지출을 항목별로 묶기",
+      "가격 보기",
+      "원하는 값 아래로 내려가면 알림",
+      "월말 구독 점검",
+      "이번 달 구독 결제 목록",
+      "회의 전 자료 모으기",
+      "회의 전날 저녁에 자료 모으기",
+      "주말 장보기 목록",
+      "금요일마다 장보기 목록 만들기"
+    ]
+  }
+}

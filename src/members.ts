@@ -125,7 +125,7 @@ export class MembersService {
     const members:MemberRead[]=(v?.members??[]).map(m=>{
      const own=works.filter(w=>w.assistantSource?.memberId===m.id),chat=activity.get(m.id)!;let lastActiveAt:number|null=chat.lastActiveAt;
      for(const work of own)for(const at of [work.runtimeRun?.ownership?.startedAt,work.endedAt])if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);
-     // Current Schedule has no member binding: its only kind is the Representative's briefing.
+     // Schedules dispatch through the Representative, without a member binding.
      return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,completedWorkCount:own.filter(w=>w.acceptance==='accepted').length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:0};
     });
     await load(MEMBERS_ID);
