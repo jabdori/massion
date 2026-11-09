@@ -231,3 +231,11 @@ test('an owner steering wait is not relabelled as independent checking',async()=
  const {app,state,open}=fixture();state.work.execution='waiting';state.work.tasks.filter(t=>t.step).forEach(t=>t.status='settled');await open();
  const status=app.all().find(n=>n.className==='room-status')!;assert.match(status.textContent,/대기 중/);assert.doesNotMatch(status.textContent,/확인 대기/);
 });
+
+test('a pending step note changes to the room presentation only when a real room arrives',async()=>{
+ const {app,state,open}=fixture();state.conversations=[{workId:'w1',messages:[{id:'note',role:'owner',text:'Tests first',at:1,stepNote:{taskId:'summary',title:'Tests first'}}]}];await open();
+ assert.ok(app.all().find(n=>n.className==='chat-step-notes'));assert.equal(app.all().find(n=>n.className==='room-transcript'),undefined);
+ Object.assign(state.work,{room:{messages:[{ordinal:1,kind:'proposal',text:'Recorded artifact',quote:'',inferred:true,status:'admitted',at:2}],issue:null}});state.revision++;
+ await runInContext('loadMission("intake",false)',app.context);await settle();
+ assert.equal(!!app.all().find(n=>n.className==='chat-step-notes'),false);assert.match(app.all().find(n=>n.className==='room-transcript')!.textContent,/Recorded artifact/);
+});

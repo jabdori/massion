@@ -83,6 +83,12 @@ observed failing before their fixes. Tests cover duplicate commands, drain,
 unknown outcomes, journal replay, stale/feed/deadline behavior, late reads,
 literal rendering and exact Work binding. Full tests and all screens run in CI.
 
+CI follow-up: completed execution no longer retains a minute poll, while active
+steps and owner waits keep their existing clocks. Note-only and actual room
+presentations use distinct cached nodes. The affected member/room/UI batch passed
+121 tests, with no failures or skips. These fixes do not change the captured
+active-room initial states.
+
 ```sh
 node scripts/ui-contracts/regenerate-work-telemetry.ts
 UI_CONTRACTS_OUTPUT=docs/acceptance/work-telemetry/rooms node scripts/ui-contracts/verify-member-rooms.mjs
