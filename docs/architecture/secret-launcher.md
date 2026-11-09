@@ -135,3 +135,34 @@ no keychain API calls or mutations, create no keychain and trigger no GUI prompt
 Actual macOS keychain/IPC enforcement and signed host interoperability remain
 unverified. Any future live test must use a disposable explicit keychain, suppress
 all interaction, and delete it; never use the login keychain.
+
+
+### Existing-slot migration decision
+
+Do not enumerate or rewrite `massion:*` items automatically on host startup in
+this increment. Startup binds exact configured slots lazily; SecretSlots has no
+inventory or ACL-only migration operation. The current `security -U -T` path
+updates content before applying the ACL and can prompt during the access change
+([Apple implementation](https://github.com/apple-oss-distributions/Security/blob/main/SecurityTool/macOS/keychain_add.c#L124-L143)). A background bulk rewrite would
+therefore require reading/re-submitting credentials, could interrupt startup with
+approval dialogs, and has no implemented per-item verification/resume mechanism.
+There is also no configured dedicated native host identity at normal startup;
+replacing every ACL with the default empty list would remove unattended access
+without providing the intended trusted reader. This is a deliberate deferral,
+not evidence that existing items have been secured.
+
+**Residual risk:** old items retain their previous permissive ACL until explicitly
+remediated. The new launcher denies their keychain IPC/CLI access, but it does not
+revoke access from unsandboxed local processes already trusted by those ACLs.
+Operators of an existing installation must not treat upgrade/restart as migration;
+keep credential-dependent deployment disabled until the owner has approved and
+verified ACL replacement or credential rotation/re-enrollment. Do not dump secrets
+or grant trust to generic security/Node executables as a workaround.
+
+The dedicated native host integration must provide an owner-approved, ACL-only
+migration: identify exact service/account/keychain items without retrieving their
+values, replace and read back the ACL, retain per-item completion only after
+verification, and resume safely after a denied approval or interruption. Its test
+must create and delete its own temporary keychain, disable interaction, and cover
+an old permissive ACL; it must never access the login keychain. No migration or
+live keychain operation was run for the ordering-test change.

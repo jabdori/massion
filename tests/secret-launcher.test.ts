@@ -95,10 +95,12 @@ test('generated CLI sandbox denies keychain IPC and security execution even with
  const empty=cliSandboxProfile(policy(),'/private/tmp/massion-cli-fixture','/Users/fixture');
  assert.ok(empty.includes('(deny default)'));assert.ok(!empty.includes('(allow mach-lookup)'));
  assert.ok(!empty.includes('(allow mach-lookup '),'no service is implicitly allowed');
- const profile=cliSandboxProfile({...policy(),machServices:['com.apple.fixture.required']},'/private/tmp/massion-cli-fixture','/Users/fixture');
+ const profile=cliSandboxProfile({...policy(),machServices:['com.apple.fixture.required','com.apple.fixture.other']},'/private/tmp/massion-cli-fixture','/Users/fixture');
  assert.ok(profile.includes('(allow mach-lookup (global-name "com.apple.fixture.required"))'));
  assert.ok(profile.includes('(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))'));
  assert.ok(profile.includes('(deny process-exec (literal "/usr/bin/security"))'));
+ assert.ok(profile.indexOf('(deny process-exec (literal "/usr/bin/security"))')>profile.lastIndexOf('(allow process-exec'),'security exec denial follows every process-exec allow');
+ for(const allow of profile.matchAll(/\(allow mach-lookup\b/g))assert.ok(profile.indexOf('(deny mach-lookup')>allow.index,'keychain Mach denial follows every Mach allow');
  for(const name of ['com.apple.securityd','com.apple.securityd.xpc','com.apple.SecurityServer','com.apple.SecurityServer.test','com.apple.*','bad"service'])assert.throws(()=>cliSandboxProfile({...policy(),machServices:[name]},'/private/tmp/massion-cli-fixture','/Users/fixture'));
 });
 
