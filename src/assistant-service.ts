@@ -201,7 +201,7 @@ export class AssistantService {
  }
  #memoryOperation(c:MemoryCandidate){const command={type:'save-memory' as const,memory:candidateMemory(c)};return {command,identity:{id:c.missionId,commandId:'assistant-memory-save:'+c.turnId,fingerprint:hash({actorId:OWNER,command,expectedRevision:c.missionRevision})}};}
  async #memoryView(c:MemoryCandidate,feedId:string){
-  const view={...c,hash:memoryCandidateHash(c)};if(c.state==='discarded')return {...view,status:'discarded',missionRevision:0};
+  const view={...c,hash:memoryCandidateHash(c)};if(c.state==='not_saved')return {...view,status:'not_saved'};if(c.state==='discarded')return {...view,status:'discarded',missionRevision:0};
   if(c.state==='saving'){const {identity}=this.#memoryOperation(c),result=await this.#store.lookupOperation(identity).catch(()=>({status:'unknown' as const}));return {...view,status:result.status==='committed'||result.status==='replayed'?'saved':result.status==='conflict'?'not_saved':'unknown'};}
   const state=await this.#store.readState(c.missionId),mission=state.snapshot?.value as Mission|undefined;let valid=state.feedId===feedId&&mission?.scope===c.scope;
   try{if(mission)validateMemoryMetadata(candidateMemory(c),mission);}catch{valid=false;}
@@ -227,8 +227,9 @@ export class AssistantService {
   const saved=intent.value.turns.find(t=>t.id===c.turnId)!.memoryCandidate!;
   if(intent.status!=='committed'||saved.state==='discarded')return this.#memoryView(saved,state.feedId);
   const {command:save,identity}=this.#memoryOperation(saved),app=new Application(this.#ownerStore,[{id:OWNER,roles:['owner']}],this.#clock);
-  try{const result=await app.dispatch({missionId:identity.id,commandId:identity.commandId,expectedRevision:saved.missionRevision!,actorId:OWNER,command:save});if(result.status==='conflict')return {status:'not_saved'};}
-  catch(error){if(refused(error))return {status:'not_saved'};this.#note(error);}
+  const notSaved=async()=>{await this.#write(n,'assistant-memory-outcome:'+c.turnId,ASSISTANT_ACTOR_ID,{type:'record-assistant-memory-failure',turnId:c.turnId,candidateId:c.id,version:c.version,hash:memoryCandidateHash(c)});const current=(await this.#load(n))?.value.turns.find(t=>t.id===c.turnId)?.memoryCandidate;return current?this.#memoryView(current,state.feedId):{status:'unknown'};};
+  try{const result=await app.dispatch({missionId:identity.id,commandId:identity.commandId,expectedRevision:saved.missionRevision!,actorId:OWNER,command:save});if(result.status==='conflict')return notSaved();}
+  catch(error){if(refused(error))return notSaved();this.#note(error);}
   return this.#memoryView(saved,state.feedId);
  }
  async #prepareSteer(missionId:string,workId:string):Promise<AssistantSteer>{

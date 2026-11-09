@@ -489,7 +489,7 @@ function replaySegment(operation: Operation<AssistantSegment>, previous: Map<str
   const command = event.command as AssistantCommand; ensure(event.type === command.type, 'event and command type mismatch');
   ensure(operation.fingerprint === hash({ actorId: event.actor, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
   requireAssistantCommandIdentity(operation.commandId, command, thread);
-  const step = command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome' || command.type === 'record-assistant-steer';
+  const step = command.type === 'record-assistant-memory-failure' || command.type === 'settle-assistant-turn' || command.type === 'record-assistant-outcome' || command.type === 'record-assistant-steer';
   ensure((event.actor === ASSISTANT_ACTOR_ID) === step, 'segment step actor mismatch');
   if (!prior && command.type === 'open-assistant-segment' && command.segment > 1) {
     const before = previous.get(segmentId(command.segment - 1, thread))?.value;

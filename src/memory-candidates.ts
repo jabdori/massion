@@ -3,7 +3,7 @@ import type {Memory,Mission,Work} from './domain.ts';
 
 export interface MemorySourceWork {missionId:string;workId:string;title:string;inputHash:string;criteriaHash:string}
 export interface MemoryProposal {name:string;content:string;sourceWorkId:string|null}
-export interface MemoryCandidate {id:string;version:1;name:string;content:string;missionId:string;scope:string;memberId:string;segmentId:string;turnId:string;messageHash:string;sourceWork?:MemorySourceWork;state:'proposed'|'saving'|'discarded';missionRevision?:number}
+export interface MemoryCandidate {id:string;version:1;name:string;content:string;missionId:string;scope:string;memberId:string;segmentId:string;turnId:string;messageHash:string;sourceWork?:MemorySourceWork;state:'proposed'|'saving'|'discarded'|'not_saved';missionRevision?:number}
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const id=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v),sha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 function ensure(v:unknown,message:string):asserts v {if(!v)throw new DomainError(message);}
@@ -19,8 +19,8 @@ export function validateMemoryMetadata(memory:Memory,mission?:Mission):void {
 export const memoryCandidateId=(segmentId:string,turnId:string)=>'memory-'+hash([segmentId,turnId]).slice(0,24);
 export function memoryCandidateHash(candidate:MemoryCandidate):string {const {state,missionRevision,...proposal}=candidate;return hash(proposal);}
 export function validateMemoryCandidate(candidate:MemoryCandidate,segmentId:string,turnId:string,messageHash:string,thread:string):void {
- const c=candidate;ensure(exact(c,['id','version','name','content','missionId','scope','memberId','segmentId','turnId','messageHash','state',...(Object.hasOwn(c,'sourceWork')?['sourceWork']:[]),...(Object.hasOwn(c,'missionRevision')?['missionRevision']:[])])&&c.id===memoryCandidateId(segmentId,turnId)&&c.version===1&&c.segmentId===segmentId&&c.turnId===turnId&&c.messageHash===messageHash&&sha(c.messageHash)&&id(c.memberId)&&thread==='member:'+c.memberId&&id(c.missionId)&&memoryText(c.scope,16000)&&memoryText(c.name,512,true)&&memoryText(c.content,4096)&&['proposed','saving','discarded'].includes(c.state),'Invalid exact member memory candidate');
- ensure(c.state==='saving'?Number.isSafeInteger(c.missionRevision)&&c.missionRevision!>=1:!Object.hasOwn(c,'missionRevision'),'Invalid memory save intent revision');validateMemoryMetadata(candidateMemory(c));
+ const c=candidate;ensure(exact(c,['id','version','name','content','missionId','scope','memberId','segmentId','turnId','messageHash','state',...(Object.hasOwn(c,'sourceWork')?['sourceWork']:[]),...(Object.hasOwn(c,'missionRevision')?['missionRevision']:[])])&&c.id===memoryCandidateId(segmentId,turnId)&&c.version===1&&c.segmentId===segmentId&&c.turnId===turnId&&c.messageHash===messageHash&&sha(c.messageHash)&&id(c.memberId)&&thread==='member:'+c.memberId&&id(c.missionId)&&memoryText(c.scope,16000)&&memoryText(c.name,512,true)&&memoryText(c.content,4096)&&['proposed','saving','discarded','not_saved'].includes(c.state),'Invalid exact member memory candidate');
+ ensure((c.state==='saving'||c.state==='not_saved')?Number.isSafeInteger(c.missionRevision)&&c.missionRevision!>=1:!Object.hasOwn(c,'missionRevision'),'Invalid memory save intent revision');validateMemoryMetadata(candidateMemory(c));
  ensure(!c.sourceWork||c.sourceWork.missionId===c.missionId,'Memory source Mission mismatch');
 }
 export function candidateMemory(c:MemoryCandidate):Memory {return {id:c.id,version:c.version,name:c.name,scope:c.scope,authority:'explicit',content:c.content,source:c.segmentId+'/'+c.turnId,effective:true,...(c.sourceWork?{sourceWork:structuredClone(c.sourceWork)}:{})};}

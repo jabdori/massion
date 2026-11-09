@@ -107,13 +107,13 @@ function chatMemoryCard(turn){const c=turn?.memoryCandidate;if(!c||!chatThread||
  const binding=chatMemoryBinding(turn),key=chatMemoryKey(binding),pending=chatMemoryAttempts.get(key),settled=['saved','discarded','not_saved'].includes(c.status);
  if(settled){chatMemoryAttempts.delete(key);storage.remove(chatMemoryReceipt(binding));return chatSystem('memory-'+turn.id,copy('ui.memory-candidate.'+c.status,{name:c.name}));}
  const uncertain=c.status==='unknown'||storage.get(chatMemoryReceipt(binding))!==null&&!pending?.busy;
- return chatKeyed('memory-'+turn.id,'p','chat-memory',JSON.stringify([binding,c.status,c.name,c.content,!!pending,uncertain]),()=>{const main=element('span',copy('ui.memory-candidate.line',{content:c.content})),actions=element('span',undefined,'chat-memory-actions');
+ return chatKeyed('memory-'+turn.id,'p','chat-memory',JSON.stringify([binding,c.status,c.name,c.content,!!pending,uncertain,chatSending,chatDisconnected,storage.readable]),()=>{const main=element('span',copy('ui.memory-candidate.line',{content:c.content})),actions=element('span',undefined,'chat-memory-actions');
   if(uncertain){main.append(element('span',copy('ui.memory-candidate.unknown')));actions.append(chatButton(copy('settings.chip.02'),()=>readChat()));}
   else if(c.status==='proposed'){for(const [action,label] of [['save','conversation.button.05'],['discard','conversation.button.14']]){const button=chatButton(copy(label),()=>chatMemoryAct(binding,action,button),'chat-memory-action');button.disabled=!!pending||!storage.readable||chatDisconnected||chatSending;actions.append(button);}}
   else main.append(element('span',copy('ui.memory-candidate.unavailable')));return [main,actions];});
 }
 async function chatMemoryAct(binding,action,button){
- if(!chatMemoryCurrent(binding)||$('page-chat').hidden||!$('chat-log').contains(button)||button.disabled||chatDisconnected||chatView.turns.find(t=>t.id===binding.turnId)?.memoryCandidate?.status!=='proposed')return;
+ if(!chatMemoryCurrent(binding)||$('page-chat').hidden||!$('chat-log').contains(button)||button.disabled||chatDisconnected||chatSending||chatView.turns.find(t=>t.id===binding.turnId)?.memoryCandidate?.status!=='proposed')return;
  const key=chatMemoryKey(binding),receipt=chatMemoryReceipt(binding);if(chatMemoryAttempts.has(key)||storage.get(receipt)!==null)return;
  const attempt={busy:true,generation:binding.generation,receipt:crypto.randomUUID()};if(!storage.set(receipt,attempt.receipt))return;chatMemoryAttempts.set(key,attempt);renderChat();
  const {generation,selection,...choice}=binding;let outcome=null;
@@ -328,7 +328,7 @@ async function chatDecide(decisionId,answer,binding){
 async function sendChat(){
  const text=$('chat-input').value;if(chatSending||!text.trim())return;
  if(new TextEncoder().encode(text).length>4096){chatShow(copy('ui.too-long'));return;}
- chatHideMentions();const key=chatDraftKey;chatSending=true;chatSendFailed=false;chatShow('');chatControls();
+ chatHideMentions();const key=chatDraftKey;chatSending=true;chatSendFailed=false;chatShow('');chatControls();renderChat();
  try{
   const prepared=await withRecoveryLock(()=>{if(chatDraftKey!==key||$('chat-input').value!==text)return null;
    const draft=chatDraft(),edit=chatDraftEdits.get(key),same=draft.text===text&&!!draft.commandId;if(same&&draft.delivery==='unknown')return {unknown:true};
@@ -354,7 +354,7 @@ async function sendChat(){
    await readChat();if(refused&&response.status===409&&attempt===0&&!feed&&!/^answer_in_progress/.test(body.error||''))continue;
    if(refused&&/^answer_in_progress/.test(body.error||''))chatShow(copy('ui.answer-in-progress'));else if(refused)chatFailed(failed);else chatShow(copy('conversation.text.01'));return;
   }
- }catch{chatShow(copy('conversation.text.01'));await readChat();}finally{chatSending=false;chatControls();}
+ }catch{chatShow(copy('conversation.text.01'));await readChat();}finally{chatSending=false;chatControls();renderChat();}
 }
 
 function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='string'&&(event.aggregateId.startsWith('assistant-conversation:')||shellWorks.some(w=>w.missionId===event.aggregateId)||chatView&&chatView.turns.some(turn=>turn.work&&turn.work.missionId===event.aggregateId))))void readChat();}

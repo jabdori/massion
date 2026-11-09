@@ -4,7 +4,7 @@
 
 Stored host-rounding Growth evaluations produce exact owner decision cards and activity rows. Owner act/later/ask use the existing decision path; act retains independent improvement and current-baseline checks. Unknown deliveries never resend. Both memory and rule endpoints identify definite pre-intent refusals so a fresh owner review remains possible.
 
-Member turns may propose one named memory instruction separately from Work steering. Candidates pin the member, owner message, segment, ID/version/hash, Mission and optional source Work. Save records a durable owner intent before one original Mission write; discard writes no memory. Restart reconciliation is read-only. Memories retain names and exact source input/criteria hashes.
+Member turns may propose one named memory instruction separately from Work steering. Candidates pin the member, owner message, segment, ID/version/hash, Mission and optional source Work. Save records a durable owner intent before one original Mission write; discard writes no memory. Restart reconciliation is read-only. A definite post-intent save rejection is recorded as terminal host bookkeeping, so later reads remain `not_saved`; uncertain outcomes stay locked. Memories retain names and exact source input/criteria hashes.
 
 ## Visual-gate corrections
 
@@ -16,7 +16,7 @@ Member turns may propose one named memory instruction separately from Work steer
 
 ## Verification
 
-Related tests cover the four recurring failure classes, strict candidate input, backup lineage, source navigation, dated and legacy history, native-hash completion, approved case navigation and briefing references. `npm run typecheck` and copy lint pass. The final related local run passed 164 tests with 16 actual-DB cases skipped (180 total). Real DB/provider/payment execution is not local visual evidence.
+A production fixture Workbench browser walk also verified Send → new member candidate → enabled save/discard → saved receipt without reload. Related tests cover the four recurring failure classes, strict candidate input, backup lineage, source navigation, dated and legacy history, native-hash completion, approved case navigation and briefing references. `npm run typecheck` and copy lint pass. The final related local run passed 167 tests with 16 actual-DB cases skipped (183 total). Real DB/provider/payment execution is not local visual evidence.
 
 Affected browser captures cover B2 and offline variants, B9 and variants, B12, B16 and variants, B7 detail variants, B6, B18 and B18-room-b in both themes. B12 passes 26/26 required elements; B16 passes 22/22; B16-later passes 21/21; offline variants pass 20/20 and 22/22. Every measured remaining diagnostic matches an existing scoped exception, with no new or stale entries. Six B9 briefing exceptions were removed in this correction, reducing the original 804-entry allow-list to 734.
 

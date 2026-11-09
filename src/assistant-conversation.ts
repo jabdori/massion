@@ -31,6 +31,7 @@ export type AssistantCommand =
  | {type:'settle-assistant-turn';recordMessageTime?:true;turnId:string;status:'answered';usage:AssistantUsage;receipt:string;reply:string;proposal:AssistantProposal|null;steer?:AssistantSteer;memoryCandidate?:MemoryCandidate}
  | {type:'settle-assistant-turn';turnId:string;status:'failed'|'unknown';usage:AssistantUsage;receipt:string}
  | {type:'decide-assistant-memory';turnId:string;candidateId:string;version:number;hash:string;action:'save'|'discard';missionRevision:number}
+ | {type:'record-assistant-memory-failure';turnId:string;candidateId:string;version:number;hash:string}
  | {type:'confirm-assistant-steer';turnId:string;workRevision:number}
  | {type:'record-assistant-steer';turnId:string;status:Exclude<AssistantSteer['status'],'proposed'>}
  | {type:'record-assistant-outcome';turnId:string;missionId?:string;work:AssistantOutcome['work'];run:AssistantOutcome['run']};
@@ -103,6 +104,9 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
    const turn=state.turns.find(t=>t.id===command.turnId),message=state.messages.find(m=>m.id===turn?.messageId),candidate=turn?.memoryCandidate;ensure(turn?.status==='answered'&&candidate&&message?.actorId===actor.id,'Only the message owner decides its memory candidate');validateMemoryCandidate(candidate,state.id,turn.id,hash(message),thread);
    ensure(candidate.state==='proposed'&&command.candidateId===candidate.id&&command.version===candidate.version&&command.hash===memoryCandidateHash(candidate),'Exact proposed memory identity/version required');observe(state,time);candidate.state=command.action==='save'?'saving':'discarded';if(command.action==='save')candidate.missionRevision=command.missionRevision;break;
   }
+  case 'record-assistant-memory-failure': {
+   role(actor,'assistant');ensure(exact(command,['type','turnId','candidateId','version','hash']),'Exact memory failure fields required');const turn=state.turns.find(t=>t.id===command.turnId),candidate=turn?.memoryCandidate;ensure(turn?.status==='answered'&&candidate?.state==='saving'&&command.candidateId===candidate.id&&command.version===candidate.version&&command.hash===memoryCandidateHash(candidate),'Only the original save intent takes a definite failure');validateMemoryCandidate(candidate,state.id,turn.id,hash(state.messages.find(m=>m.id===turn.messageId)),thread);const at=observe(state,time);candidate.state='not_saved';if(!state.closed)expire(state,at);break;
+  }
   case 'confirm-assistant-steer': {
    role(actor,'owner');ensure(thread!==''&&exact(command,['type','turnId','workRevision'])&&count(command.workRevision,1),'Exact steering confirmation fields required');const t=observe(state,time),turn=state.turns.find(x=>x.id===command.turnId);ensure(turn?.status==='answered'&&turn.steer?.status==='proposed'&&state.messages.find(m=>m.id===turn.messageId)?.actorId===actor.id,'Only the message owner confirms its proposed target');turn.steer={...turn.steer,status:'unknown',expectedRevision:command.workRevision,confirmedBy:actor.id};if(!state.closed)expire(state,t);break;
   }
@@ -123,7 +127,7 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
 export function requireAssistantCommandIdentity(commandId:string,command:AssistantCommand,thread=''):void {
  ensure(typeof commandId==='string'&&commandId.length>0,'Missing command identity');
  if(command.type==='append-assistant-message'||command.type==='open-assistant-segment'){ensure(!commandId.startsWith('assistant-'),'Command IDs starting with assistant- are reserved for host steps');ensure(command.messageId===ownerMessageId(commandId),'Owner message ID must derive from the command ID');return;}
- const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:command.type==='record-assistant-steer'?'assistant-steer-outcome:'+command.turnId:command.type==='confirm-assistant-steer'?'assistant-confirm-steer:'+command.turnId:command.type==='decide-assistant-memory'?'assistant-memory-decision:'+command.turnId:null;
+ const expected=command.type==='close-assistant-segment'?closeCommandId(command.segment,thread):command.type==='settle-assistant-turn'?'assistant-settle:'+command.turnId:command.type==='record-assistant-outcome'?'assistant-outcome:'+command.turnId:command.type==='record-assistant-memory-failure'?'assistant-memory-outcome:'+command.turnId:command.type==='record-assistant-steer'?'assistant-steer-outcome:'+command.turnId:command.type==='confirm-assistant-steer'?'assistant-confirm-steer:'+command.turnId:command.type==='decide-assistant-memory'?'assistant-memory-decision:'+command.turnId:null;
  ensure(expected!==null&&commandId===expected,`Command ID must be ${expected}`);
 }
 /** Command IDs are global in the store, so a member thread's close names its thread. */

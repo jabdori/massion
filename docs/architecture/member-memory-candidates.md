@@ -23,3 +23,5 @@ The lead owns `server.ts`: route POST `/assistant/memory-candidates` through the
 ## Verification
 
 Write meaningful failing tests before implementation: strict member JSON, no automatic save, exact identity/version/hash and source validation, save/discard and cross-thread refusal, overlapping commands, ownerStore drain between reads and commit, ambiguous commit/restart with read-only reconciliation, expired responses, stale feed/thread/cached settings links, and late response generation fencing. Run related local tests and typecheck only; no external models, network tests, commits or pushes. Screen-contract integration belongs to the lead.
+
+Definite post-intent Mission-save failures append a typed host-only `record-assistant-memory-failure` outcome to the original segment. The terminal `not_saved` state survives subsequent reads and restart, without resending the memory write. Uncertain intent/save/outcome commits remain read-only and unresolved until their original identity is observed. Candidate action rendering includes sending, connection and storage availability in its keyed state and refreshes when Send settles.
