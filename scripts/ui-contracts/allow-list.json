@@ -7401,49 +7401,9 @@
     {
       "screen": "B14-restart",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings button \"다시 시작\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings button \"다시 시작\" (text exists without the required role)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "A trusted host produces restart-required state; no restart executor is installed.",
       "occurrence": 1,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings button \"다시 시작\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings button \"다시 시작\" (text exists without the required role)",
-      "occurrence": 2,
       "category": "capability",
       "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
       "ledger": "docs/acceptance/rc/README.md#remaining"
@@ -7456,6 +7416,46 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
+      "ledger": "docs/acceptance/rc/README.md#remaining"
+    },
+    {
+      "screen": "B19",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
+      "ledger": "docs/acceptance/rc/README.md#remaining"
+    },
+    {
+      "screen": "B19",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
+      "ledger": "docs/acceptance/rc/README.md#remaining"
+    },
+    {
+      "screen": "B19",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
+      "ledger": "docs/acceptance/rc/README.md#remaining"
+    },
+    {
+      "screen": "B19",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
       "ledger": "docs/acceptance/rc/README.md#remaining"
     }
   ]

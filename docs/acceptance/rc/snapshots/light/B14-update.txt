@@ -69,14 +69,12 @@
         - heading "구독 로그인" [level=3, ref=e27]
         - strong
           - StaticText "Claude Code"
-        - StaticText "연결됨"
+        - StaticText "업데이트 필요"
         - button "다시 확인" [ref=e28]
-        - StaticText "업데이트 있음"
         - strong
           - StaticText "Codex"
-        - StaticText "연결됨"
+        - StaticText "업데이트 필요"
         - button "다시 확인" [ref=e29]
-        - StaticText "업데이트 있음"
         - heading "API 키" [level=3, ref=e30]
         - strong
           - StaticText "Z.ai GLM Coding Plan"

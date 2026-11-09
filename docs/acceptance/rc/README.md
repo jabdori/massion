@@ -37,8 +37,8 @@ ADRs 0001–0005 and the existing owner decision path from PR #120.
   errors**. Both themes were compared with all 11 artboards using the committed
   PNG pairs. These are fixture observations, not live-provider evidence.
 - [Browser interaction](interaction/report.json), against the actual local host:
-  recheck, masked key storage, member archive/restore, app binding and token
-  reconnect. Six screenshots are retained in `interaction/`. No outside network
+  recheck, masked key storage, member archive/restore, bound app display and token
+  reconnect. Eight state/theme screenshots are retained in `interaction/`. No outside network
   adapter is installed and secret bytes are absent from the operation journal.
 - The HTTP regression exercises external admission, overlapping device connects
   and disconnect while preserving the original arrival-only unknown Work.
@@ -50,17 +50,17 @@ node scripts/ui-contracts/verify-settings-lifecycle.mjs
 ```
 
 The approved screen contracts, matching algorithm, geometry and text budgets were
-not relaxed. The allow-list loses **100 resolved occurrences**. Six remaining
-restart occurrences change diagnostic identity because restart text now exists
-without an executor; they retain the explicit capability limitation.
+not relaxed. The allow-list loses **100 resolved occurrences**. Two remaining restart-gap occurrences describe a host-observed requirement
+without an executor. Its matching action is disabled; missing member-bound
+producers retain their capability diagnostics instead of placeholder cards.
 
 ## Remaining
 
 | Screen | Retained evidence and follow-up |
 | --- | --- |
 | B13 | The recorded background has no active Juno Work. Actual metadata and archive exist; a working status is not fabricated. Regenerated members use host-assigned IDs and palette order. |
-| B14-restart | Host observation produces the required state. Executing an update/restart needs an actual maintenance adapter; no enabled placeholder is shown. |
-| B19, B19-juno | Skill records lack builtin provenance. Mission memory and the current Representative-only briefing have no member binding. Member memory editing and member schedules need their own producers; empty capability sections show unavailable. The earlier missing memory occurrences retain the dependent recent-improvement order diagnostic. Explicit member app bindings and archive are implemented. |
+| B14-restart | Host observation produces the required state. Executing an update/restart needs an actual maintenance adapter; the matching action is disabled until a restart executor exists. |
+| B19, B19-juno | Skill records lack builtin provenance. Mission memory and the current Representative-only briefing have no member binding. Member memory editing and member schedules need their own producers; sections without a member-bound producer are omitted. The earlier missing memory occurrences retain the dependent recent-improvement order diagnostic. Explicit member app bindings and archive are implemented. |
 | B23 | GitHub is the only bundled installable recommendation and is already installed. The six other packages do not exist; no fake catalog or install controls are added. |
 
 Real keychain access, providers, remote devices, payments, deployments and merges
@@ -106,3 +106,22 @@ outcome tag. The server now emits the explicit rejection signal already recogniz
 by Settings, preserving deliberate retries without treating ambiguous writes as
 failures. The HTTP regression failed before the fix; 31 related lifecycle, HTTP
 and client tests then passed, including post-write uncertainty and reload behavior.
+
+## Owner visual gate
+
+Correct the devices title/action alignment, device icons/status dots, maintenance
+subline/action pairs, member identity/metadata grouping, archived avatar/date/
+accepted-Work count and weekday formatting. Fixture member names are Korean.
+Remove the uncontracted native-checkbox app editor, expose reconnect only for
+missing/expired storage, and show actual approved version history/rollback.
+The real uninstalled catalog remains the only recommendation source.
+
+Recapture all 11 affected screens in both themes. Measurements have zero token/
+geometry or infrastructure failures. The actual-host interaction report now
+records eight states/theme checks. Reconnect foreground/background contrast is
+16.46:1 in dark and 17.50:1 in light, above 4.5:1. No secret bytes enter the journal.
+
+The existing B19 fixture Mission memory arrays are empty; MembersService.read()
+provides no member memory binding, and SkillsService.read() distinguishes owner
+from member authors without builtin provenance. These residuals remain documented
+instead of reclassifying owner instructions or unrelated Mission memory.

@@ -26,7 +26,9 @@ contract B14-restart (B14 설정 · 연결 · 개선) vs /Users/code/orca/worksp
   ok    settings     link     "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 {count}" -> button "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 2곳"
   ok    settings     heading  "구독 로그인" -> heading "구독 로그인"
   ok    settings     text     "다시 시작 필요" -> statictext "다시 시작 필요"
+  ok    settings     button   "다시 시작" -> button "다시 시작"
   ok    settings     text     "다시 시작 필요" -> statictext "다시 시작 필요"
+  ok    settings     button   "다시 시작" -> button "다시 시작"
   ok    settings     heading  "API 키" -> heading "API 키"
   ok    settings     button   "키 변경" -> button "키 변경"
   ok    settings     text     "없음" -> statictext "없음"
@@ -35,7 +37,5 @@ contract B14-restart (B14 설정 · 연결 · 개선) vs /Users/code/orca/worksp
   ok    settings     button   "키 추가" -> button "키 추가"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":335,"strings":47,"sentences":2,"longest":22} proto {"chars":323,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
-  FAIL  role   settings     button   "다시 시작" (text exists without the required role)
-  FAIL  role   settings     button   "다시 시작" (text exists without the required role)
-FAIL: 2 failures, 0 warnings, 36 required elements
+  budget settings     app {"chars":329,"strings":45,"sentences":2,"longest":22} proto {"chars":323,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
+PASS: 0 failures, 0 warnings, 36 required elements

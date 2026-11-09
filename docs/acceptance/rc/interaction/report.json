@@ -4,8 +4,24 @@
     "key-stored",
     "member-archived",
     "member-restored",
-    "app-member-bound",
+    "app-bindings-visible",
+    "reconnect-dark",
+    "reconnect-light",
     "app-token-stored"
+  ],
+  "reconnectContrast": [
+    {
+      "theme": "dark",
+      "background": "rgb(21, 23, 26)",
+      "foreground": "rgb(244, 245, 247)",
+      "ratio": 16.462554168020095
+    },
+    {
+      "theme": "light",
+      "background": "rgb(248, 248, 248)",
+      "foreground": "rgb(19, 19, 19)",
+      "ratio": 17.4951185594331
+    }
   ],
   "externalNetworkCalls": 0,
   "secretValuesInJournal": false

@@ -22,7 +22,7 @@ export async function memberLifecycleFixture(template:ScreenFixture):Promise<Scr
   const prior=await store.load(MEMBERS_ID) as Snapshot<MembersState>|null,{value,events}=applyMembers(prior?.value??null,command,actor,{observedAt:now});
   assert.equal((await store.commit({id:MEMBERS_ID,expectedRevision:prior?.revision??0,commandId,fingerprint:hash({actorId:actor.id,command}),value,events,outbox:[]})).status,'committed');
  };
- const archived={id:'member-archive-sample',name:'River',look:{shape:'round',color:'agent-3'},modelGroup:'default'};
+ const archived={id:'member-archive-sample',name:'하람',look:{shape:'round',color:'agent-3'},modelGroup:'default'};
  for(const member of [...conversation.members,archived]){
   const proposalId=PROPOSAL_PREFIX+hash(member.id),decisionId=proposalDecisionId(proposalId),commandId='fixture-admit-'+member.id,memberId=admittedMemberId(commandId);mapping.set(member.id,memberId);
   await dispatch(proposalId,{type:'propose-member',decisionId,topic:member.name,works:titles.slice(0,2),count:titles.length},host);

@@ -21,5 +21,5 @@ contract B13-devices (B13 설정 · 기기) vs /Users/code/orca/workspaces/massi
   ok    settings     button   "다시 연결" -> button "다시 연결"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":66,"strings":10,"sentences":0,"longest":17} proto {"chars":86,"strings":10,"sentences":0,"longest":25} source visibleTextBudget
+  budget settings     app {"chars":77,"strings":10,"sentences":0,"longest":17} proto {"chars":86,"strings":10,"sentences":0,"longest":25} source visibleTextBudget
 PASS: 0 failures, 0 warnings, 20 required elements

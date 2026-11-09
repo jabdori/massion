@@ -138,19 +138,15 @@ function settingsAppView(a){
  if(a.credential){
   const credential=a.credential,status=['saved','expired','missing'].includes(credential.state)?copy('ui.apps.credential-'+credential.state):copy('conversation.text.01'),token=permissions[3];
   token.children[1].textContent=appsJoin((p.secrets||[]).map(s=>s.label+(s.slot===credential.slot?' · '+status:'')));
-  const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;const memberId=a.origin==='self-made'?a.memberId:'';chatOpenThread(memberId||'',chatMembers().find(m=>m.id===memberId)?.name||'');await readChat();},'set-side');
-  reconnect.id='settings-app-reconnect';reconnect.disabled=settingsLifecycleLocked('app:'+a.id)||credential.state==='unknown'||!current();token.append(reconnect);
+  if(['expired','missing'].includes(credential.state)){
+   const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;const memberId=a.origin==='self-made'?a.memberId:'';chatOpenThread(memberId||'',chatMembers().find(m=>m.id===memberId)?.name||'');await readChat();},'secondary set-side');
+   reconnect.id='settings-app-reconnect';reconnect.disabled=settingsLifecycleLocked('app:'+a.id)||!current();token.append(reconnect);
+  }
  }
  const adds=[[copy('ui.panel.member-templates'),appsJoin(c.templates)],[copy('settings.heading.07'),appsJoin(c.skills)],[copy('settings.heading.09'),appsJoin(c.procedures)],[copy('ui.panel.tools'),appsJoin(c.tools)],[copy('ui.panel.screens'),appsJoin(screens)]].map(([l,v])=>settingsPair(l,v));
  for(const [index,key] of ['templates','skills','procedures','tools'].entries())if(c[key]?.length&&a.members?.length)adds[index].append(element('span',a.members.map(m=>m.name).join(' · '),'set-side'));
  if(c.page&&a.enabled)adds.at(-1).append(chatButton(copy('settings.link.06'),()=>appOpen(a.id),'set-app-open'));
  const versions=(a.versions||[]).slice().sort((x,y)=>y.index-x.index).map(v=>{const row=element('div',undefined,'set-row');row.append(element('span',v.version,'set-version'),element('span',v.current?copy('ui.panel.current-version',{date:day(v.at)}):day(v.at),'set-text'));if(!v.current)row.append(chatButton(copy('settings.button.13'),()=>post({action:'rollback',version:v.index})));return row;});
- const bindings=[];
- if(Array.isArray(settingsApps?.availableMembers)){
-  const fields=settingsApps.availableMembers.map(m=>{const row=element('label',undefined,'set-row'),input=element('input');input.type='checkbox';input.id='settings-app-member-'+m.id;input.checked=(a.memberIds||[]).includes(m.id);input.disabled=settingsLifecycleLocked('app:'+a.id)||!current();row.setAttribute('for',input.id);row.append(input,element('span',m.name,'set-text'));return {row,input,id:m.id};});
-  const save=chatButton(copy('ui.apps.bind-members'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||save.disabled)return;save.disabled=true;await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'bind-members',appId:a.id,memberIds:fields.filter(f=>f.input.checked).map(f=>f.id)});});save.id='settings-app-bind-members';save.disabled=settingsLifecycleLocked('app:'+a.id)||!current();
-  const row=element('div',undefined,'set-row');row.append(save);bindings.push(...settingsCard(copy('ui.apps.members'),[...fields.map(f=>f.row),row]));
- }
- return [back,head,...settingsCard(copy('sidebar.heading.01'),permissions),...settingsCard(copy('settings.heading.12'),adds),...bindings,...settingsCard(copy('settings.heading.04'),versions)];
+ return [back,head,...settingsCard(copy('sidebar.heading.01'),permissions),...settingsCard(copy('settings.heading.12'),adds),...(versions.length?settingsCard(copy('settings.heading.04'),versions):[])];
 }
 `;

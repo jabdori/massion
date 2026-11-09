@@ -95,7 +95,7 @@ test('member reads derive counts and activity from stored Work and all conversat
  const representative=segment(1,'');representative.turns[0]!.proposal={title:'Old Work'};representative.turns[0]!.outcome={missionId:'old-intake',work:{status:'admitted',diagnostics:[]},run:{status:'not_started',diagnostics:[]}};await save(representative.id,representative);
  for(let n=1;n<=2;n++){const s=segment(n,memberThread(f.memberId));await save(s.id,s);}
  const scheduled=applySchedules(null,{type:'create-schedule',scheduleId:'briefing',kind:'briefing',minute:540,offset:0,budget:{runs:2}},owner,{observedAt:T0}).value;await save(SCHEDULES_ID,scheduled);
- const before=(f.store as InMemoryStore<any>).inspect().length,view=await f.service.read(),m=view.members[0]!;
+ const before=(f.store as InMemoryStore<any>).inspect().length,view=await f.service.read(),m=view.members[0]!;assert.equal(m.completedWorkCount,0);
  assert.deepEqual({workCount:m.workCount,openWorkCount:m.openWorkCount,unknownWorkCount:m.unknownWorkCount,messageCount:m.messageCount,scheduleCount:m.scheduleCount,lastActiveAt:m.lastActiveAt,archivedAt:m.archivedAt,admittedAt:m.admittedAt},
   {workCount:4,openWorkCount:2,unknownWorkCount:1,messageCount:4,scheduleCount:0,lastActiveAt:T0+40,archivedAt:null,admittedAt:T0});
  assert.doesNotMatch(JSON.stringify(view),/Private conversation|Private answer|Not member memory/);

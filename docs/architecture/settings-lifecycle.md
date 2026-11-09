@@ -36,3 +36,13 @@ verification budget; fixture success is not live integration evidence.
 
 The bounded delivery and remaining producers are recorded in
 [the acceptance ledger](../acceptance/rc/README.md#remaining).
+
+## Owner visual-gate correction
+
+Follow the existing B13/B14/B19/B23 artboards and tokens: a devices title/action
+row, icon/status rows, lifecycle problems in connection sublines, member metadata
+beside the avatar, canonical skill provenance, archived identity/details and app
+versions. Remove the uncontracted app member-checkbox editor. Display member
+memory only with an explicit host binding and use its actual removal command;
+never reinterpret unrelated Mission memory as member memory. Keep capability
+residuals for unavailable producers/executors. Fixture member names are Korean.

@@ -10,9 +10,9 @@ Element passes count required matches. Failures also include forbidden strings a
 | B13-devices | dark | 20 / 20 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B13-devices.png) |
 | B14 | dark | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B14.png) |
 | B14-expired | dark | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B14-expired.png) |
-| B14-restart | dark | 34 / 36 | 2 | 0 | 0 | 1 | 0 | [PNG](pairs/dark/B14-restart.png) |
+| B14-restart | dark | 36 / 36 | 0 | 0 | 0 | 1 | 0 | [PNG](pairs/dark/B14-restart.png) |
 | B14-update | dark | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B14-update.png) |
-| B19 | dark | 36 / 43 | 7 | 1 | 0 | 0 | 0 | [PNG](pairs/dark/B19.png) |
+| B19 | dark | 34 / 43 | 9 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B19.png) |
 | B19-juno | dark | 35 / 37 | 2 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B19-juno.png) |
 | B23 | dark | 22 / 29 | 7 | 0 | 0 | 1 | 0 | [PNG](pairs/dark/B23.png) |
 | B23-github | dark | 32 / 32 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B23-github.png) |
@@ -21,9 +21,9 @@ Element passes count required matches. Failures also include forbidden strings a
 | B13-devices | light | 20 / 20 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B13-devices.png) |
 | B14 | light | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B14.png) |
 | B14-expired | light | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B14-expired.png) |
-| B14-restart | light | 34 / 36 | 2 | 0 | 0 | 1 | 0 | [PNG](pairs/light/B14-restart.png) |
+| B14-restart | light | 36 / 36 | 0 | 0 | 0 | 1 | 0 | [PNG](pairs/light/B14-restart.png) |
 | B14-update | light | 34 / 34 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B14-update.png) |
-| B19 | light | 36 / 43 | 7 | 1 | 0 | 0 | 0 | [PNG](pairs/light/B19.png) |
+| B19 | light | 34 / 43 | 9 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B19.png) |
 | B19-juno | light | 35 / 37 | 2 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B19-juno.png) |
 | B23 | light | 22 / 29 | 7 | 0 | 0 | 1 | 0 | [PNG](pairs/light/B23.png) |
 | B23-github | light | 32 / 32 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B23-github.png) |

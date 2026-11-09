@@ -1,4 +1,9 @@
 {
+ "ui.settings.device-state-members": {"ko": "{state} · {members}", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
+ "ui.settings.device-offline": {"ko": "오프라인", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
+ "ui.settings.update-required": {"ko": "업데이트 필요", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
+ "ui.settings.archived-meta": {"ko": "{date} 보관 · 완료한 일 {count}개", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
+ "ui.settings.archived-date": {"ko": "{date} 보관", "roles": ["text"], "used_in": ["R-C:visual-gate"], "provenance": "Owner visual gate for B13/B14/B19, 2026-11-10"},
  "ui.settings.update-available": {"ko":"업데이트 있음","roles":["text","status"],"used_in":["B14-update:settings"],"provenance":"Trusted host connection lifecycle observation"},
  "ui.apps.members": {"ko": "사용 구성원", "roles": ["heading"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"},
  "ui.apps.bind-members": {"ko": "구성원 연결", "roles": ["button"], "used_in": ["R-C:settings"], "provenance": "Settings lifecycle commands and authoritative read metadata"},

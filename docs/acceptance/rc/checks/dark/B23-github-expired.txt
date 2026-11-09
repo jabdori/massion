@@ -34,5 +34,5 @@ contract B23-github-expired (B23 설정 · GitHub 토큰 만료됨) vs /Users/co
   ok    settings     button   "이 버전으로 되돌리기" -> button "이 버전으로 되돌리기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":244,"strings":43,"sentences":0,"longest":17} proto {"chars":224,"strings":38,"sentences":0,"longest":26} source visibleTextBudget
+  budget settings     app {"chars":229,"strings":39,"sentences":0,"longest":17} proto {"chars":224,"strings":38,"sentences":0,"longest":26} source visibleTextBudget
 PASS: 0 failures, 0 warnings, 33 required elements

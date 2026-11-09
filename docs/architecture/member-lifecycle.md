@@ -27,8 +27,8 @@ against an archive racing after the roster was read.
 Current schedules are Representative-only briefings, with no member binding;
 member schedule counts are zero. Mission memory has no member binding either;
 member memory is unavailable, not a guessed association from source text or name.
-The B19 surface must render these empty/unavailable states and must not synthesize
-member schedules or memory. Conversation links use the retained member ID.
+B19 omits sections without member-bound producers and records the missing
+capability in the ledger; it never synthesizes member schedules or memory. Conversation links use the retained member ID.
 
 Verification: focused reducer/service and existing member/Work tests, then static
 typecheck, all under Node 24. No external provider, model, payment or secret access.
@@ -46,7 +46,7 @@ await members.act({commandId, action: 'archive', memberId}); // 'unarchive' rest
 {members: () => members.roster()}
 ```
 
-`MemberRead` is exported by `src/members.ts`. Count fields are `workCount`,
+`MemberRead` is exported by `src/members.ts`. Count fields are `workCount`, `completedWorkCount` (accepted Work only),
 `openWorkCount`, `unknownWorkCount`, `messageCount` and `scheduleCount`.
 `lastActiveAt` is null without recorded Work/message activity. Counts follow
 the stored member ID, never the displayed name; unresolved effects remain unknown.

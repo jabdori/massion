@@ -51,5 +51,6 @@
           - StaticText "코딩 ›"
         - heading "보관됨 1" [level=3, ref=e25]
         - strong
-          - StaticText "River"
+          - StaticText "하람"
+        - StaticText "11월 5일 보관 · 완료한 일 0개"
         - button "보관 해제" [ref=e26]

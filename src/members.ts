@@ -12,7 +12,7 @@ import {representativeName} from './surface-shell.ts';
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const MEMBERS_ID=ASSISTANT_CONVERSATION_PREFIX+'members',MEMBER_SHAPES=['round','square','drop','hex','diamond','cloud','clover','tri'] as const,MAX_MEMBERS=32,MAX_DECISIONS=32,LATER_MS=30*86400000;
 export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number;archivedAt?:number}
-export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number}
+export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;completedWorkCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number}
 export interface MemberDecision {id:string;at:number;topic:string;works:{title:string}[];count:number;handoff?:string;modelGroup:'default';state:'open'|'later'|'done';answeredAt?:number;memberId?:string}
 export interface MembersState {kind:'members';id:string;members:Member[];decisions:MemberDecision[]}
 export type MembersCommand =
@@ -122,7 +122,7 @@ export class MembersService {
      const own=works.filter(w=>w.assistantSource?.memberId===m.id),chat=activity.get(m.id)!;let lastActiveAt:number|null=chat.lastActiveAt;
      for(const work of own)for(const at of [work.runtimeRun?.ownership?.startedAt,work.endedAt])if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);
      // Current Schedule has no member binding: its only kind is the Representative's briefing.
-     return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:0};
+     return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,completedWorkCount:own.filter(w=>w.acceptance==='accepted').length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:0};
     });
     await load(MEMBERS_ID);
     return {feedId,revision:s?.revision??0,members:members.filter(m=>m.archivedAt===null),archived:members.filter(m=>m.archivedAt!==null),decisions:v?v.decisions.map(d=>card(v,d)):[]};
