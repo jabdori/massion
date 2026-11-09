@@ -1,16 +1,18 @@
-# End-to-end journeys (E9a)
+# End-to-end journeys (E9a, E9a2)
 
 ## Outcome and scope
 
 One opt-in suite drives the actual workbench in headless agent-browser against a
 separate daemon process, real SurrealDB and deterministic, credential-free model
 adapters. It checks accessibility snapshots and durable state together. CI must
-execute it without skips, within ten minutes, and retain failure evidence.
+execute it without skips, within twelve minutes, and retain failure evidence.
 No production behavior, provider authority or UI copy changes are needed.
 
 Use the existing disposable database launcher, host connection manager, conversation
 and member services, correction admission, app decisions, drain and portable backup.
-Only model replies and local login detection are fixtures. HTTP/protocol routes,
+Model replies, local login detection, payment/remote delivery and MCP adapters
+are fixtures. Test-only IPC stages effect proposals through real application
+commands and the host effect service; it does not add a public producer route. HTTP/protocol routes,
 reducers, event feeds, artifact verification and storage remain real. Fixtures
 must refuse unrecognized model requests. Browser traffic is loopback-only; no
 user credential, login process or real account is used.
@@ -27,32 +29,52 @@ user credential, login process or real account is used.
 4. Write the English owner guide and link it from README. Run typecheck and related
    checks only, per the brief's verification budget; CI owns the aggregate suite.
 
-## Explicit capability gaps
+## Decisions, apps and desktop coverage (E9a2)
 
-Payment execution, external-member delegation, monthly budget decisions and MCP
-reconciliation have no current producers/routes. Existing server tests and E3e
-fixtures explicitly refuse invented decisions. Assert rejection and unchanged
-storage for the unsupported decision kinds; MCP has no route to exercise. Do not
-manufacture successful journeys or implement these products here.
-The desktop smoke currently uses a separate canned daemon; this suite uses the
-brief's workbench fallback. Running these journeys through the authenticated
-Electron bridge remains follow-up, not evidence supplied by the separate smoke.
+The same suite now checks payment checkout, Later, Ask again and approval with
+one stored dispatch/receipt; a lost payment reply stays unknown. Remote admission
+shows the in-flight sent state and arrival receipt without accepting the Work.
+Lost payment and remote receipts survive daemon restart and replay without a new
+adapter call. Every state has an accessibility snapshot and screenshot.
+
+An MCP app waits for install approval. Its write timeout persists unknown; a
+replayed call and a distinct next write cannot resend it. The existing app page
+requires owner evidence to reconcile that exact call before a new write succeeds.
+The page script executes in a separate document with an opaque sandbox origin,
+resizes through the existing bridge, and cannot mutate the parent DOM.
+
+Linux Xvfb runs the actual Electron shell against a fresh real database and the
+same fixture daemon, through the production private supervisor, authentication
+handshake and protocol bridge. The unchanged payment journey runs there too,
+including Later/Ask/approval, persisted receipt and a lost reply that stays unknown
+without resend after reload. Explicit quit must drain the
+supervisor. Missing Electron, Xvfb, database or browser fails rather than skips;
+never launch a visible desktop window on the owner's Mac.
+
+Monthly budget remains excluded until #117 merges. No real money, remote device,
+MCP network server, provider inference or release is exercised. The fixtures stage
+effect-ready Work because there is no general checkout/handoff producer in the
+runtime. They do not establish autonomous shopping or remote execution quality.
 
 ## Evidence and delivery
 
 Keep run artifacts under `.runtime/e2e/`, upload in CI on success or failure.
 Guide images, when retained, come from this run and are labeled fixture evidence.
-Commit to `test/e2e-journeys`, open the requested PR, request `@codex review`, and
+Commit E9a2 to `test/e2e-journeys-2`, open the requested PR, request `@codex review`, and
 leave merging to the owner. No release, signing, publication or deployment.
 
 ## Run and inspect
 
-Install `agent-browser@0.41.2` and its headless browser (`agent-browser install
---with-deps` on Linux), then from the checkout:
+Install `agent-browser@0.41.2`, its headless browser (`agent-browser install
+--with-deps` on Linux), Xvfb and xauth. Build the existing desktop shell from the
+checkout (CI also enables Electron's existing sandbox helper):
 
 ```sh
+npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+npm run install:electron --prefix desktop
+npm run build --prefix desktop
 MASSION_SURREAL_BINARY=/absolute/path/to/surreal \
-  python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
+  xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
 ```
 
 This suite requires Linux process-ownership evidence and fails, rather than skips,
