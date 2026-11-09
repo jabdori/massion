@@ -1,0 +1,29 @@
+Disposable SurrealDB ready: {"pid_in_this_exec_namespace": 22, "url": "http://127.0.0.1:18080", "runtime": "/tmp/disposable-jgrppq9b", "binary": "/opt/massion-surreal/surreal", "version": "3.3.0", "server_args": ["/opt/massion-surreal/surreal", "start", "surrealkv:///tmp/disposable-jgrppq9b/data", "--bind", "127.0.0.1:18080", "--unauthenticated", "--no-banner", "--log", "info", "--temporary-directory", "/tmp/disposable-jgrppq9b/tmp", "--default-namespace", "massion_storage_tests", "--default-database", "massion_storage_tests", "--deny-net", "--deny-scripting"]}
+✖ actual SurrealDB replacement feed clears relation confirmation and keeps original private source/CAS until explicit review (1531.235043ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3499.25668
+
+✖ failing tests:
+
+test at tests/owner-relations-panel.test.ts:48:35
+✖ actual SurrealDB replacement feed clears relation confirmation and keeps original private source/CAS until explicit review (1531.235043ms)
+  AssertionError [ERR_ASSERTION]: [{"path":"/assistant/works"}]
+
+  17 !== 16
+
+      at TestContext.<anonymous> (file:///massion/tests/owner-relations-panel.test.ts:54:388)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 17,
+    expected: 16,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

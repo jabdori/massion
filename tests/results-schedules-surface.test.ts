@@ -10,9 +10,9 @@ const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*
 
 // docs/architecture/results-and-schedules.md, Surface: Results (B10, B10-preview) and Schedules (B17, B17-empty), and schedule exceptions in the conversation.
 const T0=Date.UTC(2026,10,5,23,0),sha='a'.repeat(64);
-const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',title:'River summary',at:T0,segment:1,turnId:'turn:1'};
+const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',memberId:null,title:'River summary',at:T0,segment:1,turnId:'turn:1'};
 const turn={id:'turn:1',messageId:'m:1',status:'answered',displayStatus:'answered',at:T0-60000,proposal:{title:'River summary'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:'work:a',title:'River summary',execution:'settled',acceptance:'accepted',started:true}};
-const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:'Conversation with 하나',active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
+const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:copy('ui.panel.member-conversation',{member:'하나'}),active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
 function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number;runDeadlineAt?:number;head?:number}={}){
  const state={results:[result],schedules:[] as any[],exceptions:[] as any[],artifact:200,events:[] as any[],cursor:1,head:2,feed:'feed:a',hold:null as null|Promise<void>,posted:[] as {path:string;body:any}[],...initial};
  const app=harness(async(path,options)=>{
@@ -32,14 +32,75 @@ const staticText=(id:string)=>new RegExp('<[a-z]+[^>]*id="'+id+'"[\\s\\S]*?</(di
 const byId=(app:ReturnType<typeof harness>,id:string)=>app.all().find(n=>n.id===id);
 const button=(node:Node,label:string)=>{const found:Node[]=[];const visit=(n:Node)=>{if(n.tagName==='BUTTON'&&n.textContent===label)found.push(n);n.children.forEach(visit);};visit(node);return found[0];};
 
+test('Results search and kind filters keep exact accepted identities and send no commands',async()=>{
+ const {app,state}=fixture({results:[result,{...result,workId:'work:b',title:'Valley notes'}]});await settle();
+ await app.node('rail-results').fire('click');await settle();
+ app.node('results-query').value='valley';await app.node('results-query').fire('input');
+ assert.equal(app.node('results-rows').children.length,1);assert.equal(app.node('results-rows').children[0]!.id,'result-row-intake/work:b');
+ runInContext('void readChat()',app.context);await settle();assert.equal(app.node('results-query').value,'valley');assert.equal(app.node('results-rows').children.length,1);
+ await byId(app,'result-filter-images')!.fire('click');assert.equal(app.node('results-rows').children.length,0);
+ await byId(app,'result-filter-all')!.fire('click');assert.equal(app.node('results-rows').children.length,1);
+ assert.deepEqual(state.posted,[]);assert.match(workbenchPage,/id="results-table"[^>]*aria-label="결과물"/);
+ assert.doesNotMatch(workbenchPage,/id="results-(?:grid|list)"[^>]*role="radio"/);
+});
+
+test('background page resets keep conversation search visible and malformed result kinds never enter the list',async()=>{
+ const {app}=fixture({results:[result,{...result,workId:'bad',kind:{}}]});await settle();
+ await app.node('rail-chat').fire('click');
+ runInContext('resultsReset();schedulesReset();renderAppSide()',app.context);
+ assert.equal(app.node('sidebar-search').parentElement?.id,'sidebar-controls');
+ await app.node('rail-results').fire('click');await settle();assert.equal(app.node('results-rows').children.length,1);
+});
+
+test('a past run opens its recorded Representative segment',async()=>{
+ const {app,state}=fixture({schedules:[{...schedule,runs:[{...schedule.runs[0],segment:1}]}]});await settle();
+ await app.node('rail-schedules').fire('click');await settle();await button(app.node('schedule-runs'),copy('ui.panel.view-conversation'))!.fire('click');await settle();
+ assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?segment=1'));assert.deepEqual(state.posted,[]);
+});
+
+test('a member-assigned result retains its assignee but opens the originating Representative turn at its source segment',async()=>{
+ const ownerId='m:'+'1'.repeat(32),turnId='assistant-turn:'+ownerId,source={...result,memberId:'member-a',segment:2,turnId},members=[{id:'member-a',name:'퀼',look:{shape:'square',color:'agent-1'}}];
+ const sourceTurn={...turn,id:turnId,messageId:ownerId,proposal:{title:source.title,member:'퀼'},work:{...turn.work,memberId:'member-a',unknown:false}};
+ const app=harness(async(path)=>{
+  if(path==='/assistant/results')return reply({feedId:'feed:a',results:[source]});
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  if(path.startsWith('/assistant/conversation')){const member=path.includes('member='),origin=!member&&path==='/assistant/conversation?segment=2';return reply({feedId:'feed:a',cursor:1,head:3,members,segment:{number:origin?2:3,revision:1,closed:origin,full:origin,previous:null,messages:origin?[{id:ownerId,role:'owner',turnId:null,text:'Original Representative request'},{id:'reply:origin',role:'representative',turnId,text:'Original Representative reply'}]:[{id:'other',role:'owner',turnId:null,text:member?'Unrelated member turn':'Current Representative head'}]},turns:origin?[sourceTurn]:[]});}
+  if(path.startsWith('/missions/intake/record-artifact'))return reply({content:'Accepted result'});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:0,snapshot:null});
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ },{'massion.workbench.feed':'feed:a'});
+ await settle();runInContext("chatOpenThread('member-a','퀼')",app.context);await settle();
+ await app.node('rail-results').fire('click');await settle();const row=byId(app,'result-row-intake/work:a')!;assert.match(row.textContent,/퀼/);
+ const before=app.calls.length;await row.fire('click');await settle();const reads=app.calls.slice(before).filter(c=>c.path.startsWith('/assistant/conversation'));
+ assert.ok(reads.some(c=>c.path==='/assistant/conversation?segment=2'));assert.equal(reads.some(c=>c.path.includes('member=')),false);
+ assert.equal(runInContext('chatThread',app.context),'');assert.equal(runInContext('chatView.segment.number',app.context),2);assert.equal(runInContext('chatView.turns[0].id',app.context),turnId);
+ assert.match(app.node('chat-log').textContent,/Original Representative request.*Original Representative reply/);assert.doesNotMatch(app.node('chat-log').textContent,/Unrelated member turn/);
+});
+
+test('schedule sidebar filtering survives a render and a schedule event reread',async()=>{
+ const {app,state}=fixture({schedules:[schedule]});await settle();await app.node('rail-schedules').fire('click');await settle();
+ const row=()=>app.node('side-schedules').children.find(n=>n.className==='side-sched')!;
+ app.node('sidebar-query').value='no matching schedule';await app.node('sidebar-query').fire('input');assert.equal(row().hidden,true);
+ runInContext('renderSchedules()',app.context);assert.equal(row().hidden,true);
+ state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:2,type:'pause-schedule'}];state.cursor=2;await app.tick();await settle();assert.equal(row().hidden,true);assert.deepEqual(state.posted,[]);
+});
+
+test('schedule request copy and New task are local controls; New task never creates a second schedule',async()=>{
+ const {app,state}=fixture({schedules:[schedule]});await settle();await app.node('rail-schedules').fire('click');await settle();
+ (app.context as any).navigator.clipboard={writeText:(text:string)=>{assert.equal(text,copy('ui.panel.briefing-request'));}};
+ await app.node('schedule-copy').fire('click');await byId(app,'schedule-new')!.fire('click');
+ assert.equal(app.node('schedules-empty').hidden,false);assert.equal(app.node('schedule-detail').hidden,true);assert.equal(app.node('schedule-example-briefing').disabled,true);assert.deepEqual(state.posted,[]);
+});
+
 test('Results lists accepted results with name, source Work, assignee and time, switches between list and grid, and uses its own sidebar',async()=>{
  const {app}=fixture();await settle();
  await app.node('rail-results').fire('click');await settle();
  assert.equal(app.node('page-results').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(app.node('page-heading').textContent,copy('rail.link.01'));
  assert.equal(app.node('side-results').hidden,false);assert.equal(app.node('side-people').hidden,true);assert.match(app.node('side-results').textContent,sequence(copy('page.button.14'),copy('sidebar.button.06'),'River summary'));
  const row=byId(app,'result-row-intake/work:a')!;assert.ok(row);assert.match(row.textContent,sequence('River summary','River summary','하',new Date(T0).getMonth()+1+'월',new Date(T0).getDate()+'일'));
- assert.equal(app.node('results-list').attributes.get('aria-checked'),'true');await app.node('results-grid').fire('click');await settle();
- assert.equal(app.node('results-grid').attributes.get('aria-checked'),'true');assert.equal(app.node('results-table').hidden,true);assert.equal(app.node('results-tiles').hidden,false);assert.ok(byId(app,'result-tile-intake/work:a'));
+ assert.equal(app.node('results-list').attributes.get('aria-pressed'),'true');await app.node('results-grid').fire('click');await settle();
+ assert.equal(app.node('results-grid').attributes.get('aria-pressed'),'true');assert.equal(app.node('results-table').hidden,true);assert.equal(app.node('results-tiles').hidden,false);assert.ok(byId(app,'result-tile-intake/work:a'));
  await app.node('rail-chat').fire('click');await settle();assert.equal(app.node('side-people').hidden,false);assert.equal(app.node('side-results').hidden,true);
 });
 
@@ -70,14 +131,17 @@ test('Schedules empty state offers the morning briefing; choosing it creates it 
  const {app,state}=fixture();await settle();
  await app.node('rail-schedules').fire('click');await settle();
  assert.equal(app.node('side-schedules').hidden,false);assert.equal(app.node('schedules-empty').hidden,false);assert.equal(app.node('schedule-detail').hidden,true);
+ assert.doesNotMatch(app.node('side-schedules').textContent,new RegExp(copy('sidebar.button.12')));
  assert.match(staticText('schedules-empty'),sequence(copy('page.heading.09'),copy('settings.combobox.01'),copy('ui.panel.briefing-description')),'B17-empty: icon, title, one example card');
  await app.node('schedule-example-briefing').fire('click');await settle();
- const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.ok(Number.isSafeInteger(sent.body.offset));
+ const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.equal(sent.body.offset+new Date().getTimezoneOffset(),0);
  assert.equal(app.node('schedules-empty').hidden,true);assert.equal(app.node('schedule-detail').hidden,false);
- assert.equal(app.node('schedule-title').textContent,'Morning briefing');const detail=app.node('schedule-rows').textContent+app.node('schedule-request').textContent+app.node('schedule-runs').textContent;
- for(const label of [copy('page.columnheader.01'),'하나',copy('ui.panel.next-run'),copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:'08:00'}),copy('ui.panel.destination'),'Conversation with 하나',copy('ui.panel.budget'),copy('ui.panel.run-budget',{used:1,count:30}),'Sum up yesterday','1 Work item',copy('ui.panel.view-conversation')])assert.ok(detail.includes(label),label);
+ assert.equal(app.node('schedule-title').textContent,copy('settings.combobox.01'));const detail=app.node('schedule-rows').textContent+app.node('schedule-request').textContent+app.node('schedule-runs').textContent+app.node('schedule-budget').textContent;
+ for(const label of [copy('page.columnheader.01'),'하나',copy('ui.panel.next-run'),copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:copy('ui.pages.am',{time:'8:00'})}),copy('ui.panel.destination'),copy('ui.panel.member-conversation',{member:'하나'}),copy('ui.panel.budget'),copy('ui.panel.run-budget',{used:1,count:30}),copy('ui.panel.briefing-request'),copy('ui.pages.briefing-run',{count:1}),copy('ui.panel.view-conversation')])assert.ok(detail.includes(label),label);
  assert.match(staticText('schedule-detail'),sequence(copy('page.button.17'),copy('ui.panel.request'),copy('ui.panel.past-runs')));
- assert.match(app.node('side-schedules').textContent,sequence(copy('sidebar.text.03'),'Morning briefing',copy('ui.panel.daily-cycle',{time:'08:00'})));
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');
+ assert.match(app.node('schedule-rows').textContent,sequence(copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:copy('ui.pages.am',{time:'8:00'})})));
+ assert.match(app.node('side-schedules').textContent,sequence(copy('sidebar.text.03'),copy('settings.combobox.01'),copy('ui.pages.daily')));
 });
 
 test('the Active switch pauses and resumes, Run now runs once, View in conversation opens the conversation',async()=>{
@@ -113,7 +177,7 @@ test('a host-run schedule rereads the Schedules page while it shows',async()=>{
  assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');
  state.schedules=[{...schedule,active:false,budget:{runs:30,used:30}}];state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:3,type:'skip-run'}];state.cursor=2;
  await app.tick();await settle();
- assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-rows').textContent,sequence(copy('ui.panel.run-budget',{used:30,count:30})));
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'false');assert.match(app.node('schedule-budget').textContent,sequence(copy('ui.panel.run-budget',{used:30,count:30})));
 });
 
 test('a schedule run still in time has the conversation read again just after its deadline, so its unknown card shows without another event',async()=>{

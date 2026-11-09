@@ -1,0 +1,45 @@
+{
+  "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+  "arguments": [],
+  "exitCode": 0,
+  "contracts": 75,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "captures": 150,
+  "infrastructureErrors": 0,
+  "scope": [
+    "B9",
+    "B9-restart",
+    "B9-update",
+    "B10",
+    "B10-preview",
+    "B12",
+    "B15",
+    "B17",
+    "B17-empty",
+    "B22"
+  ],
+  "scopeBefore": {
+    "passed": 354,
+    "required": 576,
+    "failed": 228,
+    "warnings": 6,
+    "visual": 14,
+    "errors": 0
+  },
+  "scopeAfter": {
+    "passed": 466,
+    "required": 576,
+    "failed": 112,
+    "warnings": 6,
+    "visual": 4,
+    "errors": 0
+  },
+  "captureInputs": "capture-inputs.sha256",
+  "mode": "report-only; contract diagnostics remain; infrastructure errors always fail",
+  "codeCommit": "58dd918",
+  "captureInputsUnchanged": true,
+  "pairsInspected": 20
+}

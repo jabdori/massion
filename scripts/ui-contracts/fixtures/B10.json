@@ -8,6 +8,22 @@
       "selector": "#rail-results",
       "action": "click",
       "readySelector": "#results-rows .result-name"
+    },
+    {
+      "action": "fill",
+      "selector": "#results-query",
+      "value": "no matching fixture result",
+      "readySelector": "#results-empty:not([hidden])"
+    },
+    {
+      "action": "fill",
+      "selector": "#results-query",
+      "value": "",
+      "readySelector": "#results-rows .result-name"
+    },
+    {
+      "action": "click",
+      "selector": "#results-title"
     }
   ],
   "gaps": [],
@@ -29,7 +45,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -38,13 +54,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -250,7 +274,7 @@
             "missionId": "intake",
             "missionRevision": 3,
             "workId": "weekly",
-            "title": "요일별 할인 합계 표",
+            "title": "요일별 할인 합계",
             "memberId": "member-quill",
             "execution": "settled",
             "acceptance": "accepted",
@@ -733,7 +757,7 @@
               },
               {
                 "id": "weekly",
-                "title": "요일별 할인 합계 표",
+                "title": "요일별 할인 합계",
                 "missionVersion": 1,
                 "missionSnapshot": {
                   "version": 1,
@@ -1240,7 +1264,7 @@
             },
             {
               "id": "weekly",
-              "title": "요일별 할인 합계 표",
+              "title": "요일별 할인 합계",
               "missionVersion": 1,
               "missionSnapshot": {
                 "version": 1,
@@ -1451,7 +1475,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -1460,13 +1484,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -1775,7 +1807,8 @@
             "title": "이탈 원인 조사",
             "at": 1793851920000,
             "segment": 1,
-            "turnId": "assistant-turn:m:churn"
+            "turnId": "assistant-turn:m:churn",
+            "memberId": "member-quill"
           },
           {
             "missionId": "intake",
@@ -1784,10 +1817,11 @@
             "version": 1,
             "sha256": "2b3b1c29de7bf408142237924c3aa983eb79c329cbe7600577822bc1d654b63d",
             "kind": "text",
-            "title": "요일별 할인 합계 표",
+            "title": "요일별 할인 합계",
             "at": 1793851920000,
             "segment": 1,
-            "turnId": "assistant-turn:m:churn"
+            "turnId": "assistant-turn:m:weekly",
+            "memberId": "member-quill"
           }
         ]
       }

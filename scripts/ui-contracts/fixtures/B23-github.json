@@ -25,7 +25,10 @@
       "readySelector": "#settings-apps-body .set-head"
     }
   ],
-  "gaps": [],
+  "gaps": [
+    "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred."
+  ],
   "reuse": [
     "tests/apps-surface.test.ts",
     "tests/surface-shell.test.ts",

@@ -3,7 +3,6 @@
   "extends": "B9",
   "description": "Profile device needs an update.",
   "gaps": [
-    "The header member popover in the contract has no corresponding production control.",
-    "The production header has no member profile/device-status popover or update state."
+    "The host has no device updater or update version state."
   ]
 }
