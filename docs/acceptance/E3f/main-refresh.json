@@ -1,0 +1,30 @@
+{
+  "source": {
+    "commit": "e6cd313b16def56dcc596878cadbdcf56876d6e1",
+    "run": "https://github.com/jabdori/massion/actions/runs/42653256831",
+    "artifact": 13690982174
+  },
+  "capture": {
+    "rows": 150,
+    "contract": 826,
+    "visual": 16,
+    "gaps": 136,
+    "infrastructure": 0
+  },
+  "previousEntries": 982,
+  "removedStaleEntries": 30,
+  "retainedRoomLedgerEntries": 36,
+  "addedPaneLedgerEntries": 22,
+  "currentEntries": 978,
+  "allowed": {
+    "contract": 826,
+    "visual": 16,
+    "gaps": 136,
+    "copy": 0
+  },
+  "pendingSliceEntries": 156,
+  "unclassified": 0,
+  "stale": 0,
+  "gateExit": 0,
+  "addedE5bPendingEntries": 4
+}
