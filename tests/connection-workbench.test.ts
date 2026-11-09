@@ -8,8 +8,8 @@ import type {Mission} from '../src/domain.ts';
 import {InMemoryHostSettings,InMemoryStore} from '../src/storage.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 
-function fixture(){
- const settings=new InMemoryHostSettings(),store=new InMemoryStore<Mission>();
+function fixture(store=new InMemoryStore<Mission>()){
+ const settings=new InMemoryHostSettings();
  const hooks:{replace?:()=>Promise<void>}={};let requests=0,writes=0;
  const host=()=>new ConnectionWorkbench(store,new TextArtifactStore(tmpdir()),{
   settings,hostBindings:{revision:'fixture-v1',bindingHash:'fixture-binding',connections:['account','other'].map(id=>({input:{id,label:id,providerType:'compatible',baseUrl:'https://fixture.example/v1/',mode:'https',secretRef:id},models:['fixture-model']}))},
@@ -86,4 +86,12 @@ test('key replacement waits for an old discovery cache write and discards its la
  try{await new Promise(r=>setImmediate(r));assert.equal(f.writes(),0,'old metadata must settle before invalidation and the credential write');}finally{release();}
  assert.equal((await discovery).status,'stale');assert.equal((await replacing).status,'completed');assert.equal(f.writes(),1);
  const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().connections[0]!.models,[]);
+});
+
+test('database replacement during cache invalidation cannot write a key for the previous feed',async()=>{
+ const original=new InMemoryStore<Mission>(),replacement=new InMemoryStore<Mission>();let active=original;
+ const store=new Proxy(original,{get(_target,key){const value=Reflect.get(active,key);return typeof value==='function'?value.bind(active):value;}}),f=fixture(store),save=f.settings.saveDiscovery.bind(f.settings);
+ await f.discover();f.settings.saveDiscovery=async(...args)=>{await save(...args);active=replacement;};
+ await new ConnectionLifecycle(store,f.connections).replaceKey(f.command).catch(()=>undefined);
+ assert.equal(f.writes(),0);assert.equal(replacement.inspect().length,0);
 });

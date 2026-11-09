@@ -120,7 +120,7 @@ export class ConnectionLifecycle {
   let observation:ConnectionObservation|null=null,status:'completed'|'unknown'|'rejected'='completed',rejection:DomainError|undefined,keyStored=false;
   try{
    await check();
-   if(kind==='replace-key'){await this.#connections.replaceKey(target.id,target.configHash,apiKey);keyStored=true;}
+   if(kind==='replace-key'){await this.#connections.replaceKey(target.id,target.configHash,apiKey,feedId);keyStored=true;}
    else {const observed=await callTool(signal=>this.#observe(target,signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:15000});const observedAt=(this.#options.clock??Date.now)();ensure(Number.isSafeInteger(observedAt)&&observedAt>=0,'Invalid host observation time');observation={...facts(observed),observedAt};}
    await check();
   }catch(error){rejection=kind==='replace-key'&&!keyStored&&error instanceof DomainError?error:undefined;status=rejection?'rejected':'unknown';observation=null;}finally{apiKey='';}

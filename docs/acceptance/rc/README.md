@@ -341,3 +341,12 @@ failed before this change; 38 relevant HTTP/login/device/CLI/lifecycle checks pa
 with one actual-DB case skipped locally. Typecheck passes. The global bounded
 shutdown deadline and device uncertainty remain unchanged; cleanup is never
 reported finished merely because another subsystem rejected.
+
+## Cache-wait feed fence
+
+A targeted feed-replacement check reproduced a key write after the database was
+replaced during cache invalidation. Pass the original lifecycle feed through the
+workbench and recheck it immediately before the secret adapter. The regression
+failed with one stale key write; after the fix, writes and replacement-database
+operations are both zero. All 35 affected cache/lifecycle/HTTP checks and typecheck
+pass. No credential bytes are added to durable command identity or metadata.

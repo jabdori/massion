@@ -155,8 +155,8 @@ export class ConnectionWorkbench implements WorkRuntime {
    return this.#connections.get(connectionId)===c&&c.generation===generation&&['saved','missing','unknown'].includes(status)?status:'unknown';
   }catch{return 'unknown';}
  }
- async replaceKey(connectionId:string,expectedConfigHash:string,apiKey:string){
-  return this.save(async()=>{const c=this.#connections.get(connectionId);ensure(!this.#draining,'Connection host is draining');ensure(c&&c.configHash===expectedConfigHash,'Connection changed; refresh before key replacement');ensure(this.canReplaceKey(connectionId),'Connection has no editable secret slot');
+ async replaceKey(connectionId:string,expectedConfigHash:string,apiKey:string,expectedFeed?:string){
+  return this.save(async()=>{const feedId=expectedFeed??(await this.#store.readState()).feedId,c=this.#connections.get(connectionId);ensure(!this.#draining,'Connection host is draining');ensure(c&&c.configHash===expectedConfigHash,'Connection changed; refresh before key replacement');ensure(this.canReplaceKey(connectionId),'Connection has no editable secret slot');
    ensure(typeof apiKey==='string'&&apiKey.length>0&&apiKey.length<=1024&&!/[^\x21-\x7e]/.test(apiKey),'Invalid API key');
    c.generation=++this.#generation;
    await Promise.allSettled([...this.#discoveryWrites].filter(write=>write.connectionId===connectionId).map(write=>write.promise));
@@ -164,6 +164,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    const settings=this.settingsStore();
    // Clear cached metadata before a credential write whose outcome may be unknown.
    if(settings)try{await settings.saveDiscovery(this.#scope!,{connectionId,configHash:expectedConfigHash,models:[],hasMore:false});}catch{throw new DomainError('Model metadata could not be cleared; key replacement was not attempted.');}
+   if((await this.#store.readState()).feedId!==feedId)throw new DomainError('Database changed before key replacement','conflict');
    ensure(!this.#draining,'Connection host is draining');
    c.models=[];c.discovery='not-requested';
    try{await this.#options.replaceCredential!(connectionId,apiKey);}catch{throw new Error('Key replacement outcome is unknown');}

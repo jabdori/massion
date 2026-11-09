@@ -91,3 +91,8 @@ after the claim retain uncertainty.
 Host drain awaits all cleanup promises even when one rejects. Record any rejection
 as unsettled only after the other cleanup tasks have completed; the existing
 bounded shutdown timer still governs a task that never finishes.
+
+Carry the lifecycle's original feed into key replacement and check it again after
+cache waits, immediately before the secret write. A database replacement during
+cache invalidation refuses the write without admitting any replacement-database
+operation; pre-call and post-call checks alone cannot guard this asynchronous gap.
