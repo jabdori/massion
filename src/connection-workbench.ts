@@ -1,7 +1,8 @@
+import {DiscriminatorService} from './discriminator-service.ts';
 import type {CliLauncher} from './cli-launcher.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import {httpDiscriminator} from './discriminator-adapters.ts';
-import {DISCRIMINATOR_POLICY} from './discriminator.ts';
+import {DISCRIMINATOR_POLICY,workDiscriminatorPolicy} from './discriminator.ts';
 import type {DiscriminatorResolution} from './discriminator-service.ts';
 /** User connection setup. Manifest-scoped settings persist without secret values; credentials remain exclusively in the host resolver. */
 import {randomUUID} from 'node:crypto';
@@ -102,7 +103,13 @@ export class ConnectionWorkbench implements WorkRuntime {
  private catalog(){// One catalog per transport mode avoids protocol aliasing between fixture and live.
   const profiles=[...this.#profiles.values()].map(v=>v.profile);const modes=new Set([...this.#profiles.values()].map(v=>this.#connections.get(v.connectionId)!.input.mode));ensure(modes.size<=1,'Fixture and live profiles cannot share a session');return new ConnectionCatalog(profiles,this.factories([...modes][0]??'https'));
  }
- private router(store=this.#store){return new SelectableTextRuntime(store,this.catalog(),this.#grants.filter(g=>g.mode==='mock-http'||this.#options.allowLiveExecution===true),this.#artifacts,(producers,cap)=>this.#differentFamilyAvailable(producers,cap));}
+ private router(store=this.#store){return new SelectableTextRuntime(store,this.catalog(),this.#grants.filter(g=>g.mode==='mock-http'||this.#options.allowLiveExecution===true),this.#artifacts,(producers,cap)=>this.#differentFamilyAvailable(producers,cap),async(missionId,input)=>{
+  const group=this.#groups.find(g=>g.role==='discriminator');if(!group)return;
+  const work=(await store.load(missionId))?.value.works.find(w=>w.id===input.workId);if(!work)return;
+  const remaining=4-(work.room?.messages.length??1);if(work.budget.reserved+workDiscriminatorPolicy(work).outputTokenReserve+remaining*(work.runtimeRun?.outputTokenCap??0)>work.budget.limit)return;
+  const moderator=new DiscriminatorService(store,async id=>{const resolved=await this.resolveDiscriminator(id);if(resolved&&work.assignments.some(a=>a.model.provider===resolved.adapter.pin.provider&&a.model.model===resolved.adapter.pin.model)){resolved.release();return null;}return resolved;});
+  return moderator.ask(missionId,group.id,input);
+ });}
  /** ADR 0003 §7: any group, the derived default included, holding an available different-family checker within the cap. */
  #differentFamilyAvailable(producers:readonly {provider:string;model:string}[],outputTokenCap:number){return [DEFAULT_GROUP,...this.#groups.filter(g=>g.role!=='discriminator').map(g=>g.id)].some(id=>{const c=this.#choose(id,{outputTokenCap,producers});return c.status==='chosen'&&c.relation==='different-family';});}
  configuration(){const defaultRoutes=this.#routeViews();return {...this.router().configuration(),defaultRoutes,modelGroups:structuredClone(this.#groups),representative:structuredClone(this.#representative),selectionRequired:!defaultRoutes.some(r=>r.status==='active')};}

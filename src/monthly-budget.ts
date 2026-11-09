@@ -43,7 +43,7 @@ export function applyMonthlyBudget(current:MonthlyBudgetState|null,command:Budge
   ensure(exact(command,['type','decisionId','answer',...(command.limit!==undefined?['limit']:[])])&&id(command.decisionId)&&['act','later','ask'].includes(command.answer),'Invalid budget decision');
   const d=state!.decisions.find(d=>d.id===command.decisionId);ensure(d,'Unknown budget decision');
   if(command.answer==='ask'){ensure(d.state==='later','Only a deferred budget decision can reopen');d.state='open';}
-  else{ensure(d.state==='open','Only an open budget decision can be answered');if(command.answer==='later')d.state='later';else{ensure(state!.limit!==null&&count(command.limit)&&command.limit===proposalLimit(state!,d)&&command.limit>state!.limit,'Monthly limit must increase to the reviewed limit');d.nextLimit=command.limit;state!.limit=command.limit;state!.actorId=actor.id;d.state='done';for(const r of state!.reservations)if(r.decisionId===d.id&&r.state==='waiting')r.state='released';}d.actorId=actor.id;}
+  else{ensure(d.state==='open','Only an open budget decision can be answered');if(command.answer==='later')d.state='later';else{ensure(state!.limit!==null&&count(command.limit)&&(command.limit===d.nextLimit||command.limit===proposalLimit(state!,d))&&command.limit>state!.limit,'Monthly limit must increase to the reviewed limit');d.nextLimit=command.limit;state!.limit=command.limit;state!.actorId=actor.id;d.state='done';for(const r of state!.reservations)if(r.decisionId===d.id&&r.state==='waiting')r.state='released';}d.actorId=actor.id;}
  }
  return {value:state!,events:[{type:command.type,actor:actor.id,command:structuredClone(command),time:{observedAt:at}}]};
 }
@@ -53,36 +53,36 @@ export function replayMonthlyBudget(operation:Operation<MonthlyBudgetState>,prio
  ensure(operation.fingerprint===hash({actorId:event.actor,command:event.command,expectedRevision:operation.expectedRevision}),'Monthly budget fingerprint mismatch');
  const derived=applyMonthlyBudget(prior?.value??null,event.command,{id:event.actor,roles:[event.actor===HOST?'representative':'owner']},event.time.observedAt);ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'Monthly budget transition mismatch');
 }
-interface AccountWork {missionId:string;workId:string;title:string;memberId:string|null;runId?:string;at?:number;cap:number;consumed:number;unknown:boolean;terminal:boolean;pending:Set<string>}
+interface AccountWork {missionId:string;workId:string;title:string;memberId:string|null;runId?:string;at?:number;cap:number;roomCalls:number;consumed:number;unknown:boolean;terminal:boolean;pending:Set<string>}
 export class MonthlyBudgetService {
  readonly #store:Store<any>;readonly #clock:()=>number;
  constructor(store:Store<any>,clock:()=>number=Date.now){this.#store=store;this.#clock=clock;}
  async #state(){return await this.#store.load(MONTHLY_BUDGET_ID) as Snapshot<MonthlyBudgetState>|null;}
  async #account(timezone:string,period:string){
-  const position=await this.#store.readState(),works=new Map<string,AccountWork>(),turns=new Map<string,any>(),callTimes=new Map<string,number>(),calls=new Set<string>(),members=new Map<string|null,{inputTokens:number;outputTokens:number;unknown:boolean}>();let cursor=0,inputTokens=0,outputTokens=0,unknown=false,inputUnknown=false;
-  const add=(key:string,at:number|undefined,usage:any,memberId:string|null)=>{if(calls.has(key))return;calls.add(key);if(at===undefined){unknown=true;inputUnknown=true;return;}if(accountingPeriod(at,timezone)!==period)return;const member=members.get(memberId)??{inputTokens:0,outputTokens:0,unknown:false};for(const unit of ['inputTokens','outputTokens'] as const){if(count(usage?.[unit])){if(unit==='inputTokens')inputTokens+=usage[unit];else outputTokens+=usage[unit];member[unit]+=usage[unit];}else{member.unknown=true;if(unit==='outputTokens')unknown=true;else inputUnknown=true;}}members.set(memberId,member);};
+  const position=await this.#store.readState(),works=new Map<string,AccountWork>(),turns=new Map<string,any>(),callTimes=new Map<string,number>(),calls=new Set<string>(),members=new Map<string|null,{inputTokens:number;outputTokens:number;unknown:boolean}>();let cursor=0,inputTokens=0,outputTokens=0,unknown=false,inputUnknown=false,usageBounded=true;
+  const add=(key:string,at:number|undefined,usage:any,memberId:string|null,covered:boolean)=>{if(calls.has(key))return;calls.add(key);if((at===undefined||!count(usage?.outputTokens))&&!covered)usageBounded=false;if(at===undefined){unknown=true;inputUnknown=true;return;}if(accountingPeriod(at,timezone)!==period)return;const member=members.get(memberId)??{inputTokens:0,outputTokens:0,unknown:false};for(const unit of ['inputTokens','outputTokens'] as const){if(count(usage?.[unit])){if(unit==='inputTokens')inputTokens+=usage[unit];else outputTokens+=usage[unit];member[unit]+=usage[unit];}else{member.unknown=true;if(unit==='outputTokens')unknown=true;else inputUnknown=true;}}members.set(memberId,member);};
   // shortcut: scan the retained feed; add a durable usage index when the journal exceeds the bounded local workload.
   while(cursor<position.cursor){const page=await this.#store.readCatchup(cursor,position.feedId,1000);ensure(page.events.length>0,'Incomplete accounting feed');for(const batch of page.events){if(batch.cursor>position.cursor)break;cursor=batch.cursor;for(const raw of batch.events){const e=raw as any,c=e?.command;if(!c)continue;const key=batch.aggregateId+'\0'+c.workId;
-   if(c.type==='admit-work')works.set(key,{missionId:batch.aggregateId,workId:c.workId,title:c.title,memberId:c.assistantSource?.memberId??null,cap:teamCallCount(c.team),consumed:0,unknown:false,terminal:false,pending:new Set()});
+   if(c.type==='admit-work')works.set(key,{missionId:batch.aggregateId,workId:c.workId,title:c.title,memberId:c.assistantSource?.memberId??null,cap:teamCallCount(c.team),roomCalls:teamCallCount(c.team,true),consumed:0,unknown:false,terminal:false,pending:new Set()});
    const w=works.get(key);
-   if(c.type==='activate-runtime'&&w){w.runId=c.run.id;w.at=c.run.ownership?.startedAt;w.cap*=c.run.outputTokenCap;}
+   if(c.type==='activate-runtime'&&w){w.runId=c.run.id;w.at=c.run.ownership?.startedAt;w.cap=(c.run.roomVersion===1?w.roomCalls:w.cap)*c.run.outputTokenCap;}
    if(c.type==='claim-provider-dispatch'&&count(c.claim?.claimedAt))callTimes.set(key+'\0'+c.effectId,c.claim.claimedAt);
    if(c.type==='admit-effect'&&w)w.pending.add(c.effect.id);
-   if(c.type==='receipt'&&w){w.pending.delete(c.effectId);let receipt;try{receipt=JSON.parse(c.receipt);}catch{}if(receipt?.provider&&receipt?.usage&&receipt.binding?.runId===w.runId){add(key+'\0'+c.effectId,callTimes.get(key+'\0'+c.effectId)??w.at,receipt.usage,w.memberId);if(count(receipt.usage.outputTokens))w.consumed+=receipt.usage.outputTokens;else w.unknown=true;}else if(c.outcome==='unknown')w.unknown=true;}
+   if(c.type==='receipt'&&w){w.pending.delete(c.effectId);let receipt;try{receipt=JSON.parse(c.receipt);}catch{}if(receipt?.provider&&receipt?.usage&&receipt.binding?.runId===w.runId){const at=callTimes.get(key+'\0'+c.effectId)??w.at;add(key+'\0'+c.effectId,at,receipt.usage,w.memberId,!!w.runId&&count(w.cap));if(at!==undefined&&count(receipt.usage.outputTokens))w.consumed+=receipt.usage.outputTokens;else w.unknown=true;}else if(c.outcome==='unknown')w.unknown=true;}
    if(w&&['accept','verify','cancel','block-work','expire-runtime','stop-owned-runtime','quarantine-runtime'].includes(c.type))w.terminal=true;
    if(['append-assistant-message','open-assistant-segment'].includes(c.type)&&c.turn?.ownership)turns.set(batch.aggregateId+'\0'+c.turn.id,c.turn);
-   if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);if(t){t.status=c.status;t.usage=c.usage;}add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null);}
+   if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);if(t){t.status=c.status;t.usage=c.usage;}add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null,!!t?.route&&count(t.route.outputTokenCap));}
   }} }
-  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,members,works,turns};
+  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,usageBounded,members,works,turns};
  }
  async read(){
   const before=await this.#store.readState(),s=await this.#state(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,period=accountingPeriod(this.#clock(),timezone),a=await this.#account(timezone,period);
   ensure(before.feedId===a.feedId,'Accounting database changed');
   let reserved=0;for(const r of s?.value.reservations??[]){if(r.state!=='reserved')continue;const w=a.works.get(r.missionId+'\0'+r.workId);if(w?.terminal&&!w.unknown&&!w.pending.size)continue;reserved+=Math.max(0,r.amount-(w?.consumed??0));}
-  for(const w of a.works.values())if(w.runId&&(!w.terminal||w.unknown||w.pending.size)&&!s?.value.reservations.some(r=>r.missionId===w.missionId&&r.workId===w.workId))reserved+=Math.max(0,w.cap-w.consumed);
+  for(const w of a.works.values())if(w.runId&&(!w.terminal||w.unknown||w.pending.size)&&!s?.value.reservations.some(r=>r.missionId===w.missionId&&r.workId===w.workId&&r.state==='reserved'))reserved+=Math.max(0,w.cap-w.consumed);
   for(const t of a.turns.values())if(t.route&&(!t.usage||t.status==='unknown'||!count(t.usage.outputTokens)))reserved+=Math.max(0,t.route.outputTokenCap-(count(t.usage?.outputTokens)?t.usage.outputTokens:0));
   const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.state==='done'?d.limit:s!.value.limit??0)],[copy('ui.budget.after'),this.#amount(proposalLimit(s!.value,d))],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:proposalLimit(s!.value,d)}}));
-  return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
+  return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,usageBounded:a.usageBounded,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
  }
  #amount(n:number){return n.toLocaleString('ko-KR');}
  async configure(input:unknown){ensure(exact(input,['commandId','expectedRevision','limit','timezone'])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'configure-monthly-budget',limit:input.limit,timezone:input.timezone},OWNER);}
@@ -91,9 +91,9 @@ export class MonthlyBudgetService {
   for(let attempt=0;attempt<5;attempt++){
    const s=await this.#state();
    const old=s?.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId);if(old){if(old.state==='waiting'){await this.#pause(old);return 'waiting';}if(old.state==='reserved')return 'replayed';}
-   const view=s&&s.value.limit!==null?await this.read():{knownOutputTokens:0,reserved:0,spent:0},snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution),'Only fresh Work can reserve monthly budget');
+   const view=s&&s.value.limit!==null?await this.read():{knownOutputTokens:0,reserved:0,usageBounded:true},snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution),'Only fresh Work can reserve monthly budget');
    const at=this.#clock(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,entry={...input,inputHash:workInputHash(w),revision:snapshot.revision,title:w.title,period:accountingPeriod(at,timezone),at};
-   const result=await this.#dispatch('monthly-reserve:'+hash(input).slice(0,48),s?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.spent!==null,...(!s?{timezone}:{})},HOST,at);
+   const result=await this.#dispatch('monthly-reserve:'+hash(input).slice(0,48),s?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.usageBounded,...(!s?{timezone}:{})},HOST,at);
    if(result.status==='conflict')continue;if(result.status==='replayed')return 'replayed';const r=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(r.state==='waiting'){await this.#pause(r);return 'waiting';}return 'reserved';
   }throw new DomainError('Monthly budget admission contention');
  }
@@ -110,14 +110,18 @@ export class MonthlyBudgetService {
  async resume(decisionId:string,run:(r:Reservation,revision:number)=>Promise<unknown>){
   const state=await this.#state(),d=state?.value.decisions.find(d=>d.id===decisionId);ensure(d?.state==='done','An explicit budget increase is required');
   const errors:unknown[]=[];for(const r of state!.value.reservations.filter(r=>r.decisionId===decisionId&&r.state==='released')){try{
-   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(!s||!w||w.execution!=='budget-waiting'||workInputHash(w)!==r.inputHash)continue;
+   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(!s||!w||w.execution!=='budget-waiting'||w.runtimeRun||w.runtimeRecovery||w.effects.length||w.assignments.length||w.artifact||workInputHash(w)!==r.inputHash)continue;
    const result=await new Application(this.#store,[{id:OWNER,roles:['owner']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-resume:'+hash([decisionId,r.missionId,r.workId]).slice(0,48),actorId:OWNER,command:{type:'resume-monthly-budget',workId:r.workId,decisionId}});
    if(result.status==='committed')await run(r,result.revision);
   }catch(error){errors.push(error);}}if(errors.length)throw errors[0];
  }
+ async resumeReleased(run:(r:Reservation,revision:number)=>Promise<unknown>){
+  const state=await this.#state(),errors:unknown[]=[];for(const d of state?.value.decisions??[])if(d.state==='done'){try{await this.resume(d.id,run);}catch(error){errors.push(error);}}if(errors.length)throw errors[0];
+ }
  async #dispatch(commandId:string,expectedRevision:number,command:BudgetCommand,actorId:string,at=this.#clock()):Promise<CommitResult<MonthlyBudgetState>>{
   const identity={id:MONTHLY_BUDGET_ID,commandId,fingerprint:hash({actorId,command,expectedRevision})},s=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
   if((s?.revision??0)!==expectedRevision)return {status:'conflict',revision:s?.revision??0,reason:'revision'};
+  if(command.type==='decide-monthly-budget'&&command.answer==='act'){const d=s?.value.decisions.find(d=>d.id===command.decisionId);if(d&&command.limit!==proposalLimit(s!.value,d))throw new DomainError('Monthly limit must match the current reviewed proposal');}
   const {value,events}=applyMonthlyBudget(s?.value??null,command,{id:actorId,roles:[actorId===OWNER?'owner':'representative']},at),result=await this.#store.commit({...identity,expectedRevision,value,events,outbox:[]});
   if(result.status==='conflict'&&result.reason==='idempotency'){const saved=await this.#store.lookupOperation(identity);if(saved.status!=='unknown')return saved;}return result;
  }

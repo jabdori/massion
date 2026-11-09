@@ -16757,5 +16757,101 @@
   "used_in": [
    "B14-usage:settings"
   ]
+ },
+ "ui.room.proposal": {
+  "ko": "제안",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.challenge": {
+  "ko": "반박",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.answer": {
+  "ko": "답변",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.concede": {
+  "ko": "인정",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.inferred": {
+  "ko": "추론",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.returned": {
+  "ko": "반려",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.escalated": {
+  "ko": "확인에 전달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.moderation": {
+  "ko": "판별 기록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
  }
 }

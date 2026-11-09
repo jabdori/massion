@@ -74,7 +74,7 @@ test('pending, crashed and unknown Representative/member calls retain their cap 
   if(status==='unknown'||status==='settled')await chat.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:1,actorId:ASSISTANT_ACTOR_ID,command:status==='unknown'?{type:'settle-assistant-turn',turnId,status:'unknown',usage:{inputTokens:null,outputTokens:null},receipt:'Unresolved fixture call'}:{type:'settle-assistant-turn',turnId,status:'answered',usage:{inputTokens:2,outputTokens:7},receipt:'Known fixture usage',reply:'Fixture answer',proposal:null}});
   const restarted=new MonthlyBudgetService(store,()=>status==='crashed'?now+3600000:now),view=await restarted.read();assert.equal(view.reserved,status==='settled'?0:60,thread+' '+status);
   assert.equal(await restarted.admit({missionId:'mission',workId:'one',runId:'run',amount:50}),status==='settled'?'reserved':'waiting',thread+' '+status);
-  assert.equal((await service.read()).cost,null);
+  assert.equal((await service.read()).cost,null);assert.equal(await restarted.admit({missionId:'mission',workId:'two',runId:'within-remaining-bound',amount:30}),'reserved','only the outstanding cap, not the entire monthly budget, is held');
  }
 });
 
@@ -92,9 +92,10 @@ test('fresh owner-steered Work retains its inputs through both sufficient and ex
 });
 
 test('a deferred old-period decision offers a current increase after another period raised the shared limit',async()=>{
- const {store,service}=await fixture(0);await service.admit({missionId:'mission',workId:'one',runId:'old-run',amount:80});const old=await service.read(),oldId=old.decisions[0]!.id;await service.decide({commandId:'defer-old',decisionId:oldId,answer:'later',expectedRevision:old.revision});
+ const {store,service}=await fixture(0);await service.admit({missionId:'mission',workId:'one',runId:'old-run',amount:150});const old=await service.read(),oldId=old.decisions[0]!.id;await service.decide({commandId:'defer-old',decisionId:oldId,answer:'later',expectedRevision:old.revision});
  const next=new MonthlyBudgetService(store,()=>Date.parse('2026-12-01T10:00:00Z'));await next.admit({missionId:'mission',workId:'two',runId:'new-run',amount:80});const current=await next.read(),newDecision=current.decisions.find(d=>d.id!==oldId)!;await next.decide({commandId:'raise-new',decisionId:newDecision.id,answer:'act',expectedRevision:current.revision,limit:newDecision.budget.limit});
  const raised=await next.read();await next.decide({commandId:'reopen-old',decisionId:oldId,answer:'ask',expectedRevision:raised.revision});const reopened=await next.read(),proposal=reopened.decisions.find(d=>d.id===oldId)!;assert.ok(proposal.budget.limit>reopened.limit!);assert.equal(proposal.rows[0]![1],'80');
+ const {applyMonthlyBudget}=await import('../src/monthly-budget.ts'),legacy=(await store.load(MONTHLY_BUDGET_ID))!.value as any;assert.equal(applyMonthlyBudget(legacy,{type:'decide-monthly-budget',decisionId:oldId,answer:'act',limit:150},{id:'local-owner',roles:['owner']},now).value.limit,150,'older accepted command values still replay');await assert.rejects(next.decide({commandId:'stale-old-proposal',decisionId:oldId,answer:'act',expectedRevision:reopened.revision,limit:150}),/reviewed proposal/);
  assert.equal((await next.decide({commandId:'raise-old',decisionId:oldId,answer:'act',expectedRevision:reopened.revision,limit:proposal.budget.limit})).status,'committed');assert.equal((await store.load('mission'))!.value.works[0]!.execution,'budget-waiting');
 });
 

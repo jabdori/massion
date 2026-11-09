@@ -1,5 +1,6 @@
 import {isMonthlyBudgetState,replayMonthlyBudget} from './monthly-budget.ts';
 import type {MonthlyBudgetState} from './monthly-budget.ts';
+import {validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
@@ -133,13 +134,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['team','assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['room','team','assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
   if(work.runtimeRun?.ownership)equal(record.runtimeOwnership,work.runtimeRun.ownership,'Record exact runtime ownership');else ensure(!Object.hasOwn(record,'runtimeOwnership'),'Legacy Record has runtime ownership');
+  if(work.room)equal(record.room,work.room,'Record room provenance');else ensure(!Object.hasOwn(record,'room'),'Record has room without Work');
   if(work.team)equal(record.team,work.team,'Record team procedure');else ensure(!Object.hasOwn(record,'team'),'Record has team without Work pin');
   if(work.assistantSource)equal(record.assistantSource,work.assistantSource,'Record assistant source');else ensure(!Object.hasOwn(record,'assistantSource'),'Record has assistant source without its Work pin');
   if(work.questions){requireAnswered(work);equal(record.questions,clarificationInput(work),'Record original owner clarification');}else ensure(!Object.hasOwn(record,'questions'),'Legacy Record has owner clarification');
@@ -166,14 +168,14 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['monthlyBudgetDecision','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+    ['monthlyBudgetDecision','room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
   if(Object.hasOwn(item,'monthlyBudgetDecision'))text(item.monthlyBudgetDecision,'monthly budget decision');
   ensure(item.execution!=='budget-waiting'||typeof item.monthlyBudgetDecision==='string','Missing monthly budget decision');
   if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
   clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
-  validateProviderDispatchClaims(value as Work);validateModeration(value as Work);
+  validateProviderDispatchClaims(value as Work);validateModeration(value as Work);validateRoom(value as Work);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
@@ -201,7 +203,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings','ownership','toolTimeoutVersion']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
+    if(Object.hasOwn(run,'roomVersion'))ensure(run.roomVersion===1&&!!item.team,'Invalid room runtime version');
     if(Object.hasOwn(run,'toolTimeoutVersion'))ensure(run.toolTimeoutVersion==='tool-timeouts/v1','unsupported tool timeout policy');
     if(Object.hasOwn(run,'ownership'))validateRuntimeOwnership(run.ownership as import('./domain.ts').RuntimeOwnership);
     text(run.id, 'run ID'); text(run.authorizationId, 'run authorization identity'); sha(run.criteriaHash, 'run criteria hash'); sha(run.inputHash, 'run input hash');
@@ -347,6 +350,8 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'open-room':{required:['workId','content','producerAssignmentId','challengerAssignmentId']},
+  'record-room-turn':{required:['workId','effectId']},
   'reserve-moderation':{required:['workId','entry'],optional:['hostVersion']},
   'record-moderation':{required:['workId','questionId','result'],optional:['hostVersion']},
   'ask-work-question':{required:['workId','questionId','text']},

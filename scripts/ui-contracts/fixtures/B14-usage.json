@@ -32,6 +32,7 @@
         "unit": "output-tokens",
         "limit": null,
         "spent": 0,
+        "usageBounded": true,
         "knownOutputTokens": 0,
         "inputTokens": 0,
         "cost": null,
