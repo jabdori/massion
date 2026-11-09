@@ -1,4 +1,6 @@
 import {browserFixture} from './browser-fixtures.ts';
+import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
+import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
 import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
 import type {ProtocolHeader} from '../../src/protocol.ts';
 import {createHash} from 'node:crypto';
@@ -15,6 +17,7 @@ export interface ScreenFixture {
  now:number;
  readySelector:string;
  steps:FixtureStep[];
+ captureScroll?:{selector:string;top:number};
  gaps:string[];
  reuse:string[];
  routes:Record<string,{status:number;body:unknown}>;
@@ -36,12 +39,13 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
   !Array.isArray(fixture.gaps)||!fixture.gaps.every(text)||!Array.isArray(fixture.reuse)||!fixture.reuse.every(text)||
   !Array.isArray(fixture.steps)||!fixture.steps.every((s:FixtureStep)=>s&&(s.action==='offline'?['true','false'].includes(s.value):text(s.selector)&&['click','fill'].includes(s.action)&&(s.action!=='fill'||typeof s.value==='string'))&&(s.readySelector===undefined||text(s.readySelector)))||
   !fixture.routes||typeof fixture.routes!=='object'||Array.isArray(fixture.routes))throw new Error('Invalid fixture: '+screen);
+ if(fixture.captureScroll&&(!text(fixture.captureScroll.selector)||!Number.isSafeInteger(fixture.captureScroll.top)||fixture.captureScroll.top<0))throw new Error('Invalid capture scroll: '+screen);
  for(const [path,response] of Object.entries(fixture.routes) as [string,{status:number;body:unknown}][]){
   if(!path.startsWith('/')||path.startsWith('//')||path.includes('#')||path.includes('\\')||new URL(path,'http://fixture').pathname.includes('..')||
    !response||!Number.isInteger(response.status)||response.status<200||response.status>599||!Object.hasOwn(response,'body'))throw new Error('Invalid fixture route: '+path);
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
- return parents.length===0&&EFFECT_SCREENS.includes(screen)?effectFixture(fixture):parents.length===0&&['B15','B5','B7'].includes(screen)?browserFixture(fixture):fixture;
+ if(parents.length!==0)return fixture;const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;const observed=['B15','B5','B7'].includes(screen)?await browserFixture(produced):produced;const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;return MEMORY_SCREENS.includes(screen)?memoryFixture(growth):growth;
 }
 
 const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'");

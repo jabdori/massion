@@ -72,9 +72,10 @@ export class ProductService {
  async reviseMission(missionId:string,input:{commandId:string;expectedRevision:number;purpose:string;criteria:Mission['criteria']}) {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-mission',purpose:input.purpose,criteria:{version:input.criteria.version,description:input.criteria.description,oracle:input.criteria.oracle}}});
  }
- async saveMemory(missionId:string,input:{commandId:string;expectedRevision:number;memory:{id:string;version:number;content:string;source:string}}) {
+ async saveMemory(missionId:string,input:{commandId:string;expectedRevision:number;memory:Pick<import('./domain.ts').Memory,'id'|'version'|'content'|'source'|'name'|'sourceWork'>}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','memory']);keys(input.memory,['id','version','content','source','name','sourceWork']);
   const {commandId,expectedRevision}=input;
-  const memory={id:input.memory.id,version:input.memory.version,content:input.memory.content,source:input.memory.source};
+  const memory={...input.memory};
   const current=await this.app.store.load(missionId);if(!current)throw new DomainError('Unknown Mission');
   return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'save-memory',memory:{...memory,scope:current.value.scope,authority:'explicit',effective:true}}});
  }
@@ -91,10 +92,11 @@ export class ProductService {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-budget',workId:input.workId,limit:input.limit,reason:input.reason}});
  }
  async adoptGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string}) {
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'adopt-growth',growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}});
+  const envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'adopt-growth' as const,recordChangeTime:true as const,growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}},result=await this.app.dispatch(envelope);
+  if(result.status==='conflict'&&result.reason==='idempotency'){const {recordChangeTime,...command}=envelope.command;return this.app.dispatch({...envelope,command});}return result;
  }
- async proposeGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:{id:string;version:number;content:string;source:string};counterevidence:string}) {
-  input=structuredClone(input);keys(input,['commandId','expectedRevision','growthId','baseline','candidate','counterevidence']);keys(input.candidate,['id','version','content','source']);
+ async proposeGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:Pick<import('./domain.ts').Memory,'id'|'version'|'content'|'source'|'name'|'sourceWork'>;counterevidence:string}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','growthId','baseline','candidate','counterevidence']);keys(input.candidate,['id','version','content','source','name','sourceWork']);
   const snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
   const service=new Application(this.app.store,[{id:'local-owner',roles:['representative']}]);
   return service.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'propose-growth',candidateMemory:{...input.candidate,scope:snapshot.value.scope,authority:'learned',effective:false},proposal:{id:input.growthId,proposer:'local-owner',target:'memory',baseline:input.baseline,candidate:input.candidate.id+'@'+input.candidate.version,counterevidence:input.counterevidence,status:'proposed'}}});
@@ -102,13 +104,14 @@ export class ProductService {
  async evaluateGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string;oracle:string;cases:OrderCase[]}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','growthId','baseline','candidate','oracle','cases']);if(input.oracle!==ROUNDING_ORACLE)throw new DomainError('Unsupported Growth oracle; only rounding-calculation/v1 is enabled. No provider invocation.');const cases=orderCases(input.cases),snapshot=await this.app.store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');const g=snapshot.value.growth.find(g=>g.id===input.growthId);if(!g||g.baseline!==input.baseline||g.candidate!==input.candidate)throw new DomainError('Exact Growth memory versions mismatch');
   const baseline=snapshot.value.memories.find(m=>m.id+'@'+m.version===g.baseline),candidate=snapshot.value.memories.find(m=>m.id+'@'+m.version===g.candidate);if(!baseline||!candidate)throw new DomainError('Exact scoped memories required');
-  const plan=calculationPlan(baseline,candidate,cases),actorId='host-rounding-oracle/v1',command:Command={type:'evaluate-growth',growthId:g.id,baseline:plan.baseline,candidate:plan.candidate,heldOut:plan.heldOut,binding:{baseline:g.baseline,candidate:g.candidate,baselineHash:memoryVersionHash(baseline),candidateHash:memoryVersionHash(candidate)}},envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId,command},service=new Application(this.app.store,[{id:actorId,roles:['evaluator']}]);
-  const prior=await this.app.store.lookupOperation({id:missionId,commandId:input.commandId,fingerprint:hash({actorId,command,expectedRevision:input.expectedRevision})});if(prior.status!=='unknown')return prior;
+  const plan=calculationPlan(baseline,candidate,cases),actorId='host-rounding-oracle/v1',command:Command={type:'evaluate-growth',ownerDecision:true,growthId:g.id,baseline:plan.baseline,candidate:plan.candidate,heldOut:plan.heldOut,binding:{baseline:g.baseline,candidate:g.candidate,baselineHash:memoryVersionHash(baseline),candidateHash:memoryVersionHash(candidate)}},envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId,command},service=new Application(this.app.store,[{id:actorId,roles:['evaluator']}]);
+  const prior=await this.app.store.lookupOperation({id:missionId,commandId:input.commandId,fingerprint:hash({actorId,command,expectedRevision:input.expectedRevision})});if(prior.status==='conflict'&&prior.reason==='idempotency'){const {ownerDecision,...legacy}=command,replay=await this.app.store.lookupOperation({id:missionId,commandId:input.commandId,fingerprint:hash({actorId,command:legacy,expectedRevision:input.expectedRevision})});if(replay.status==='committed'||replay.status==='replayed')return replay;}if(prior.status!=='unknown')return prior;
   if(snapshot.revision!==input.expectedRevision)return service.dispatch(envelope);if(g.status!=='proposed'||g.proposer===actorId||baseline.scope!==snapshot.value.scope||candidate.scope!==snapshot.value.scope||!baseline.effective||candidate.effective)throw new DomainError('Independent proposed Growth with current scoped baseline required');
   await verifyGrowthCalculation(baseline,candidate,cases);return service.dispatch(envelope);
  }
  async revertGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string}) {
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revert-growth',growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}});
+  const envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revert-growth' as const,recordChangeTime:true as const,growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}},result=await this.app.dispatch(envelope);
+  if(result.status==='conflict'&&result.reason==='idempotency'){const {recordChangeTime,...command}=envelope.command;return this.app.dispatch({...envelope,command});}return result;
  }
  async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}
