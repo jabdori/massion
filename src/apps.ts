@@ -227,15 +227,21 @@ export class AppsService {
  }
  /** Settings > Apps: installed apps with permissions, contributions and approved versions; the catalog with what is installed. */
  async read(){
-  await this.#recoverPending();const state=await this.#store.readState(APPS_ID),s=state.snapshot as Snapshot<AppsState>|null,v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState,availableMembers=await this.#availableMembers();
+  await this.#recoverPending();let feedId:string|undefined;
+  for(let attempt=0;;attempt++){
+  const state=await this.#store.readState(APPS_ID);feedId??=state.feedId;if(state.feedId!==feedId)throw new FeedAdmissionError();
+  const s=state.snapshot as Snapshot<AppsState>|null,v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState,availableMembers=await this.#availableMembers();
   const apps=await Promise.all(v.apps.filter(a=>a.current!==null).map(async a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest;
    const slot=connectionSlot(m),pending=v.decisions.find(d=>d.appId===a.id&&d.connection?.state==='pending');let credential:{slot:string;state:'saved'|'expired'|'unknown'|'missing';at?:number;connectionId?:string}|null=slot?(pending?{slot,state:'unknown',connectionId:pending.connection!.commandId}:a.credential?.slot===slot?structuredClone(a.credential):{slot,state:'missing'}):null;
    if(slot&&!pending&&this.#secrets?.has){try{const present=await boundedCall(signal=>this.#secrets!.has!({owner:a.id,slot},signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:5000});ensure(typeof present==='boolean','Secret slot presence unavailable');if(!present)credential={slot,state:'missing'};else if(credential?.state==='missing')credential={slot,state:'saved'};}catch{credential={slot,state:'unknown'};}}
    return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,memberIds:[...a.memberIds??[]],members:(a.memberIds??[]).flatMap(id=>availableMembers.filter(m=>m.id===id)),credential,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};}));
   const catalog=CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)}));
-  const fresh=await this.#store.readState(APPS_ID);if(fresh.feedId!==state.feedId)throw new FeedAdmissionError();ensure((fresh.snapshot?.revision??0)===(s?.revision??0),'App state changed during settings read','conflict');
+  const fresh=await this.#store.readState(APPS_ID);if(fresh.feedId!==feedId)throw new FeedAdmissionError();
+  if((fresh.snapshot?.revision??0)!==(s?.revision??0)&&attempt<2)continue;
+  ensure((fresh.snapshot?.revision??0)===(s?.revision??0),'App state changed during settings read','conflict');
   return {revision:s?.revision??0,apps,catalog,availableMembers};
+  }
  }
  /** Enabled apps for the rail and Work room tabs. */
  async rail(){await this.#recoverPending();const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null,...(m.kind==='mcp'?{unresolved:unresolvedCalls(v!,a.id)}:{})};});}

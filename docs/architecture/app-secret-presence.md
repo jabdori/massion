@@ -15,6 +15,9 @@ After pending-tool recovery, `readState(APPS_ID)` atomically captures the app
 snapshot and its database feed. After asynchronous member and presence reads,
 another atomic read must match both feed and app revision. A mismatch rejects
 the result rather than mixing metadata with a replaced database or app source.
+Within the original feed, a changed revision restarts the read up to twice, so
+an overlapping install can settle without exposing stale metadata or a transient
+HTTP conflict. Continued churn still rejects; feed replacement never retries.
 The server may additionally fence the whole GET against its original feed.
 
 Presence uses the existing bounded read-only call wrapper: timeout is five seconds,

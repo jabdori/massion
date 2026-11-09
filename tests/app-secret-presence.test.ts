@@ -81,11 +81,23 @@ test('delayed presence cannot return an old snapshot after database feed replace
  await assert.rejects(reading,FeedAdmissionError);
 });
 
-test('delayed presence cannot return metadata for an app source changed in the same feed',{timeout:1000},async()=>{
+test('delayed presence rereads an app source changed in the same feed',{timeout:1000},async()=>{
  const f=await setup(),entered=deferred(),release=deferred();
  const secrets={set:f.slots.set.bind(f.slots),has:async()=>{entered.resolve();await release.promise;return false;}},service=new AppsService(f.store,{secrets});
  const reading=service.read();await entered.promise;await f.service.act({commandId:'disable-during-read',action:'disable',appId:ref.owner});release.resolve();
- await assert.rejects(reading,/App state changed/i);
+ const view=await reading;assert.equal(view.apps[0]!.enabled,false);assert.equal(view.revision,(await f.store.load(APPS_ID))!.revision);
+});
+
+test('app revision churn bounds the metadata rereads without returning stale data',async()=>{
+ const f=await setup();let probes=0;
+ const service=new AppsService(f.store,{secrets:{set:f.slots.set.bind(f.slots),has:async()=>{probes++;await f.service.act({commandId:'churn-'+probes,action:probes%2?'disable':'enable',appId:ref.owner});return true;}}});
+ await assert.rejects(service.read(),/App state changed/i);assert.equal(probes,3);
+});
+
+test('an install overlapping the empty catalog read returns the settled installed app',async()=>{
+ const store=new InMemoryStore<any>(),installer=new AppsService(store);let memberReads=0;
+ const service=new AppsService(store,{members:async()=>{if(++memberReads===1){await installer.act({commandId:'install-overlap',action:'install',catalogId:'github'});await installer.decide({commandId:'approve-overlap',decisionId:(await installer.decisions(null))[0]!.id,answer:'act'});}return [];}});
+ const view=await service.read();assert.equal(view.apps[0]!.id,ref.owner);assert.equal(view.apps[0]!.enabled,true);assert.equal(memberReads,2);
 });
 
 test('drain interrupts a presence adapter that ignores cancellation without accepting its late answer',{timeout:1000},async t=>{

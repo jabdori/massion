@@ -191,3 +191,16 @@ slot presence to show saved storage; deletion still shows missing. Expired
 receipts and unresolved claims keep priority. The regression failed with missing
 before the fix; 57 related app/MCP/fixture checks and typecheck pass afterward.
 No journal rewrite or token read/write is introduced by this projection.
+
+## Concurrent app-read e2e correction
+
+The integrated e2e run exposed a real HTTP 409 while app installation overlapped
+an empty catalog read. Restart the projection at most twice when its app revision
+changes within the original feed. Feed replacement still rejects immediately;
+continued revision churn remains bounded and returns conflict. Metadata-only
+reads never retry an app command or secret effect.
+
+The delayed-source and bounded-churn regressions failed before the correction;
+60 related app/MCP/lifecycle HTTP tests then passed. An additional exact overlapping
+install regression passes (61 checks combined), and typecheck passes. The E2E
+assertion remains HTTP 200; no browser or network policy was relaxed.
