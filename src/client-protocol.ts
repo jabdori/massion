@@ -35,18 +35,18 @@ export function createProtocolClient(transport:ProtocolTransport,supported:Proto
   const current=()=>kind==='command'||started===epoch&&generations.get(scope)===generation;
   const controller=new AbortController(),abort=()=>controller.abort();
   options.signal?.addEventListener('abort',abort,{once:true});if(options.signal?.aborted)abort();
-  const timer=setTimeout(abort,timeout);
+  const timer=setTimeout(abort,timeout);let attempted=false;
   try{
    const info=await connection();if(!current())throw stale();
    if(info.state!=='ready'||!info.features[kind==='command'?'commands':'queries'])throw new Error('Protocol feature requires update or restart');
    if(controller.signal.aborted)throw Object.assign(new Error('Request aborted'),{name:'AbortError'});
    const feedId=options.headers?.['X-Massion-Feed']??options.headers?.['x-massion-feed'];
    const message:ProtocolRequest={...header(),generation,kind,path,...(kind==='command'?{payload:JSON.parse((options as ClientCommandOptions).body??'{}')}:{}),...(feedId?{feedId}:{})};
-   const reply=await transport.request(message,controller.signal);
+   attempted=true;const reply=await transport.request(message,controller.signal);
    if(!current())throw stale();if(controller.signal.aborted)throw Object.assign(new Error('Request aborted'),{name:'AbortError'});check(reply,message);
    if(reply.status===426&&state)state={...state,state:(reply.payload as {state?:string})?.state==='restart-needed'?'restart-needed':'update-needed'};
    return {response:{ok:reply.status>=200&&reply.status<300,status:reply.status},body:reply.payload as any};
-  }catch(error){if(!current())throw stale();throw error;}finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(kind==='query'&&generations.get(scope)===generation)generations.delete(scope);}
+  }catch(error){if(!current())throw stale();if(kind==='command'&&!attempted)throw Object.assign(new Error(error instanceof Error?error.message:'Command was not sent',{cause:error}),{name:(error as Error)?.name??'Error',commandNotSent:true});throw error;}finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(kind==='query'&&generations.get(scope)===generation)generations.delete(scope);}
  }
  const query=(path:string,options:ClientQueryOptions,timeout=15000)=>send(path,options,timeout,'query');
  const dispatch=(path:string,options:ClientCommandOptions={},timeout=15000)=>send(path,options,timeout,'command');

@@ -125,3 +125,22 @@ The existing B19 fixture Mission memory arrays are empty; MembersService.read()
 provides no member memory binding, and SkillsService.read() distinguishes owner
 from member authors without builtin provenance. These residuals remain documented
 instead of reclassifying owner instructions or unrelated Mission memory.
+
+## Monthly-budget main integration
+
+Merge main `18c6558` (PR #117) after the owner update. Resolve the shared Settings,
+server, portable-backup and lineage boundaries by preserving both features. The
+semantic allow-list merge retains all 20 E8 removals, keeps the R-C producer
+reasons, and has 684 unique entries. No resolved budget exception is resurrected.
+Keep the monthly reconciliation task in host drain/startup and decision/usage
+routes alongside connection/device ownership and archived-member admission fences.
+
+Use actual started Work for the working indicator, so budget-waiting Work is not
+called active. Honor the protocol's explicit unsent marker without unlocking
+ambiguous effects. Both regressions failed before their minimal integration fixes.
+Related integration checks: 70 passed, 0 failed, 3 DB cases skipped; runtime/drain/
+member checks: 134 passed, 0 failed, 10 environment skips. Typecheck passed. The
+three E8 screens recaptured in both themes pass 176/176 required matches with
+zero geometry, gaps or infrastructure errors. Actual-host interaction assertions
+still pass, including both reconnect contrast measurements and secret redaction.
+See `main-budget-integration.json`; full-suite and all-screen checks remain CI-owned.

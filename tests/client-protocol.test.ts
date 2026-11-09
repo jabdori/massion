@@ -58,3 +58,8 @@ test('queries require an explicit nonempty scope before negotiation or delivery'
  for(const options of [undefined,{}, {scope:''}])await assert.rejects(Reflect.apply(client.query,client,['/read-state',options]),/scope/i);
  assert.equal(calls,0);
 });
+
+test('only a failure before command transport is proven unsent, never a lost reply',async()=>{
+ for(const stage of ['connect','request']){let commands=0;const client=createProtocolClient({connect:async m=>{if(stage==='connect')throw new Error('Handshake unavailable');return {...m,kind:'reply',status:200,payload:protocolConnection(m.supported)};},request:async()=>{commands++;throw new Error('Response lost');},subscribe(){return ()=>{};}});
+  await assert.rejects(client.request('/assistant/usage',{method:'POST',body:'{}'}),e=>Boolean((e as any).commandNotSent)===(stage==='connect'));assert.equal(commands,stage==='connect'?0:1);}
+});

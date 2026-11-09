@@ -141,6 +141,7 @@ test('1:1 conversation: one thread per member through its model group, the membe
  const id=segmentId(1,memberThread(member.id));assert.equal(id,'assistant-conversation:member:'+member.id+':1');assert.ok(await f.store.load(id));
  const read=await chat.read();assert.equal(read.segment?.messages.length,2);
  const main=await f.assistant.read();assert.ok(!main.segment?.messages.some(m=>m.text==='Use won for amounts from now on.'),'the Representative thread is separate');
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const usage=await new MonthlyBudgetService(f.store).read();assert.equal(usage.members.find(m=>m.memberId===member.id)?.outputTokens,1,'member conversation tokens retain the exact member identity');
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 

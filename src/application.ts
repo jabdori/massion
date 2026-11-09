@@ -36,6 +36,7 @@ export class Application {
     if(snapshot.revision!==envelope.expectedRevision) {
       return {status:'conflict',revision:snapshot.revision,reason:'revision'};
     }
+    if(envelope.command.type==='steer'){const workId=envelope.command.workId;if(snapshot.value.works.find(w=>w.id===workId)?.monthlyBudgetDecision)throw new DomainError('Resolve the monthly budget decision before steering budget-paused Work');}
     const {value,events}=apply(snapshot.value,envelope.command,actor,endsWork(envelope.command.type)?{observedAt:this.clock(),workEndVersion:2}:requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock()}:undefined);
     const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
     const result=await this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});

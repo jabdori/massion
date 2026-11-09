@@ -63,3 +63,9 @@ test('an explicit pre-write refusal keeps lifecycle controls usable after a fres
  await runInContext('settingsLoad("devices")',app.context);assert.equal(runInContext("settingsLifecycleLocked('connection:api')",app.context),false);
  const second=start();await settle();assert.equal(state.posted.length,2);state.pending!(reply({status:'completed'}));assert.equal(await second,true);
 });
+
+test('a protocol-confirmed unsent lifecycle command does not become an unknown effect',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'devices');const start=()=>runInContext("settingsLifecyclePost('connection:api','/connections/api/key',{expectedConfigHash:'hash',apiKey:'fixture-key'})",app.context);
+ const first=start();await settle();state.pending!(Promise.reject(Object.assign(Error('Transport was not attempted'),{commandNotSent:true})));assert.equal(await first,false);assert.equal(runInContext("settingsLifecycleLocked('connection:api')",app.context),false);
+ const second=start();await settle();assert.equal(state.posted.length,2);state.pending!(reply({status:'completed'}));assert.equal(await second,true);
+});
