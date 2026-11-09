@@ -1,0 +1,98 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e6]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기, 확인 필요" [checked=false, ref=e7]
+      - button "검색" [expanded=false, ref=e8]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나 읽지 않음" [ref=e28]
+            - StaticText "하나"
+            - status "읽지 않음"
+          - list "하나의 작업"
+            - listitem [level=2]
+              - button "요일별 할인 합계 표" [ref=e37]
+                - StaticText "요일별 할인 합계 표"
+                - status
+                  - StaticText "완료"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e29]
+            - StaticText "퀼"
+            - status "작업 중"
+          - list "퀼의 작업"
+            - listitem [level=2]
+              - button "이탈 원인 조사" [ref=e38]
+                - StaticText "이탈 원인 조사"
+                - status
+                  - StaticText "실행 중"
+        - listitem [level=1]
+          - button "주노" [ref=e30]
+            - StaticText "주노"
+          - list "주노의 작업"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e9]
+      - heading "하나" [level=1, ref=e10]
+        - button "하나" [ref=e19]
+      - button "작업 공간" [ref=e11]
+      - button "더 보기" [expanded=false, ref=e12]
+    - region "대화" [ref=e13]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "지난달 주문 데이터로 요일별 할인 합계 뽑아 줘."
+          - generic
+            - paragraph
+              - StaticText "요일별 할인 합계 표를 만들었어요."
+            - button "복사" [ref=e39]
+          - button "3분 동안 작업 ›" [ref=e31]
+          - region "데이터 분석 일이 이번 달 4번 있었어요. 맡을 구성원을 추가할까요?" [ref=e32]
+            - strong
+              - StaticText "데이터 분석 일이 이번 달 4번 있었어요. 맡을 구성원을 추가할까요?"
+            - StaticText "14:12"
+            - DescriptionList
+              - term "이번 달"
+              - definition
+                - StaticText "요일별 할인 합계 외 3개"
+              - term "맡길 일"
+              - definition
+                - StaticText "표 계산 · 합계 확인"
+              - term "모델 그룹"
+              - definition
+                - StaticText "기본"
+            - button "구성원 추가" [ref=e40]
+            - button "나중에" [ref=e41]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e33]
+          - button "파일 추가" [disabled, ref=e34]
+          - button "기본 권한" [ref=e35]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e36]
+    - dialog "새 구성원 만들기"
+      - heading "새 구성원 만들기" [level=2, ref=e14]
+      - button "닫기" [ref=e15]
+      - LabelText
+        - StaticText "이름"
+      - textbox "이름" [ref=e16]: 셈
+        - StaticText "셈"
+      - group "모양"
+        - button "동그라미" [ref=e20]
+        - button "네모" [ref=e21]
+        - button "물방울" [ref=e22]
+        - button "육각" [ref=e23]
+        - button "마름모" [ref=e24]
+        - button "구름" [ref=e25]
+        - button "세 잎" [ref=e26]
+        - button "세모" [ref=e27]
+      - button "취소" [ref=e17]
+      - button "만들기" [ref=e18]

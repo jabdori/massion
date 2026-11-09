@@ -2,16 +2,16 @@
   "screen": "B16",
   "description": "External-member delegation decision. Fixed API data; freeze browser Date to now.",
   "now": 1793855520000,
-  "readySelector": "#chat-decision-delegate",
+  "readySelector": "#chat-log",
   "steps": [
     {
       "action": "click",
       "selector": "#activity-toggle",
-      "readySelector": "#activity-head:not([hidden])"
+      "readySelector": "#side-activity:not([hidden])"
     }
   ],
   "gaps": [
-    "The external-device detail link and remote execution progress are not exposed by the production conversation."
+    "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
   ],
   "reuse": [
     "tests/apps-surface.test.ts",
@@ -70,51 +70,7 @@
           ]
         },
         "turns": [],
-        "decisions": [
-          {
-            "id": "delegate",
-            "at": 1793837520000,
-            "title": "깨지는 테스트 고치기",
-            "question": "노트북의 Claude Code에게 처음 맡길까요?",
-            "rows": [
-              [
-                "받는 곳",
-                "Claude Code · 내 노트북"
-              ],
-              [
-                "보낼 내용",
-                "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
-              ],
-              [
-                "보내지 않는 것",
-                "기억 · 다른 일 · 연결 키"
-              ]
-            ],
-            "detail": "보낸 요청은 거둘 수 없어요.",
-            "action": "맡기기",
-            "state": "open",
-            "line": "노트북의 Claude Code에게 맡겼어요."
-          },
-          {
-            "id": "rounding",
-            "at": 1793848320000,
-            "title": "반올림 규칙 바꾸기",
-            "question": "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.",
-            "rows": [
-              [
-                "지금",
-                "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
-              ],
-              [
-                "변경 후",
-                "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
-              ]
-            ],
-            "detail": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
-            "action": "바꾸기",
-            "state": "open"
-          }
-        ],
+        "decisions": [],
         "briefings": []
       }
     },
@@ -695,32 +651,7 @@
           ]
         },
         "turns": [],
-        "decisions": [
-          {
-            "id": "delegate",
-            "at": 1793837520000,
-            "title": "외부 구성원",
-            "question": "노트북의 Claude Code에게 처음 맡길까요?",
-            "rows": [
-              [
-                "받는 곳",
-                "Claude Code · 내 노트북"
-              ],
-              [
-                "보낼 내용",
-                "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
-              ],
-              [
-                "보내지 않는 것",
-                "기억 · 다른 일 · 연결 키"
-              ]
-            ],
-            "detail": "보낸 요청은 거둘 수 없어요.",
-            "action": "맡기기",
-            "state": "open",
-            "line": "노트북의 Claude Code에게 맡겼어요."
-          }
-        ],
+        "decisions": [],
         "briefings": []
       }
     },

@@ -68,3 +68,26 @@ for(const projected of [false,true])for(const change of ['thread','pane','run','
  if(change==='run')for(const path of ['/missions/intake','/read-state?mission=intake']){const body=scene.routes[path]!.body as any;(body.value??body.snapshot.value).works.find((w:any)=>w.id==='toner').runtimeRun.id='replacement-run';}
  app.node('chat-input').focus();release();await settle();assert.equal(app.context.document.activeElement.id,'chat-input');assert.equal(posted.length,0);
 });
+
+test('a member conversation projects its source-bound failed Work without requiring an open pane',async()=>{
+ const scene=await loadFixture('B6'),posted:string[]=[];
+ const app=harness(async(path,options)=>{
+  if(options?.method==='POST'){posted.push(path);return reply({error:'Read-only fixture'},405);}
+  const r=scene.routes[path]??(path.startsWith('/events?')?scene.routes['/events']:undefined);
+  return r?reply(structuredClone(r.body),r.status):reply({},503);
+ });await settle();runInContext("chatOpenThread('member-quill')",app.context);await settle();
+ const source=(scene.routes['/assistant/conversation']!.body as any).turns.find((t:any)=>t.work?.acceptance==='failed');
+ const card=app.all().find(n=>n.id==='chat-card-'+source.id),exception=app.all().find(n=>n.id==='chat-exception-'+source.id);
+ assert.ok(card&&app.node('chat-log').contains(card));assert.ok(exception&&app.node('chat-log').contains(exception));
+ assert.equal(app.node('work-pane').hidden,true);
+ assert.equal(app.node('chat-log').children.find(n=>n.className==='chat-date')?.textContent,runInContext('chatDay('+source.at+')',app.context));
+ const all=(n:Node):Node[]=>[n,...n.children.flatMap(all)];
+ await all(exception).find(n=>n.tagName==='BUTTON'&&n.textContent==='다시 시도')!.fire('click');await settle();
+ assert.equal(app.node('chat-input').value,(scene.routes['/assistant/conversation']!.body as any).segment.messages.find((m:any)=>m.id===source.messageId).text);
+ assert.equal(posted.length,0);
+ runInContext("shellWorksFeed='replaced-feed';renderChat()",app.context);
+ assert.equal(app.node('chat-log').children.some(n=>n.id===card.id),false);
+ runInContext('shellWorksFeed=chatView.feedId;renderChat()',app.context);
+ await all(exception).find(n=>n.tagName==='BUTTON'&&n.textContent==='닫기')!.fire('click');await settle();
+ assert.deepEqual(posted,['/missions/'+source.work.missionId+'/commands']);
+});

@@ -411,7 +411,7 @@ test('a Work tab presents the exact room state, task progress and criteria inste
  const {app}=fixture([{workId:'work:a',title:'Current request',execution:'active',acceptance:'pending',started:true,startedAt:Date.now()-60000,stored:{tasks:[{id:'root',parentId:null,status:'active'},{id:'child',parentId:'root',status:'settled',result:'Recorded result'}]}}]);
  await settle();await openTurn(app,0).fire('click');await settle();
  const room=app.all().find(n=>n.id==='work-card-work:a')!;
- assert.match(room.className,/work-room/);assert.match(room.textContent,/절차/);assert.match(room.textContent,/1\/2/);assert.match(room.textContent,/Recorded result/);
+ assert.match(room.className,/work-room/);assert.match(room.textContent,/절차/);assert.match(room.textContent,/1\/1/);assert.match(room.textContent,/Recorded result/);
  assert.ok(app.all().some(n=>n.id==='work-room-stop-work:a'&&n.textContent==='중지'));
  await app.node('pane-widen').fire('click');assert.equal(app.node('pane-widen').attributes.get('aria-label'),'좁히기');
  assert.match(room.textContent,/Answer the owner request/);assert.equal(app.node('mission-panel').className,'panel room');

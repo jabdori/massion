@@ -1,0 +1,87 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e4]\n    - button \"결과물\" [ref=e5]\n    - button \"예약\" [ref=e6]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e9]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e10]\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 보기\" [expanded=false, ref=e11]\n      - heading \"하나\" [level=1, ref=e12]\n        - button \"하나\" [expanded=false, ref=e19]\n      - button \"작업 공간\" [ref=e13]\n      - button \"더 보기\" [expanded=false, ref=e14]\n    - region \"대화\" [ref=e15]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 5일 (목)\"\n          - paragraph\n            - StaticText \"PR #84 검토\"\n          - generic\n            - paragraph\n              - StaticText \"PR #84 검토\"\n            - button \"복사\" [ref=e27]\n          - button \"4분 동안 작업 ›\" [ref=e20]\n          - paragraph\n            - StaticText \"경쟁사 가격도 확인해 줘.\"\n          - generic\n            - paragraph\n              - StaticText \"가격 표를 정리하고 확인을 기다리고 있어요.\"\n            - button \"복사\" [ref=e28]\n          - paragraph\n            - StaticText \"하나가 넘김: 경쟁사 가격 · 14:08\"\n          - button \"경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 0/2\" [ref=e29]\n            - strong\n              - StaticText \"경쟁사 가격\"\n            - StaticText \"확인 대기\"\n            - status \"작업 중\"\n              - StaticText \"퀼\"\n            - StaticText \"퀼\"\n            - StaticText \"4분\"\n            - StaticText \"작성\"\n            - StaticText \"확인\"\n            - StaticText \"0/2\"\n          - paragraph\n            - StaticText \"지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\"\n          - generic\n            - paragraph\n              - StaticText \"지난 90일 해지 건부터 볼게요.\"\n            - button \"복사\" [ref=e30]\n          - paragraph\n            - StaticText \"하나가 넘김: 이탈 원인 조사 · 14:08\"\n          - button \"이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 0/2\" [ref=e31]\n            - strong\n              - StaticText \"이탈 원인 조사\"\n            - StaticText \"실행 중\"\n            - status \"작업 중\"\n              - StaticText \"퀼\"\n            - StaticText \"퀼\"\n            - StaticText \"4분\"\n            - StaticText \"작성\"\n            - StaticText \"확인\"\n            - StaticText \"0/2\"\n          - paragraph\n            - StaticText \"프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.\"\n          - generic\n            - paragraph\n              - StaticText \"지난 주문과 같은 토너를 찾았어요.\"\n            - button \"복사\" [ref=e32]\n          - button \"프린터 토너 주문 실행 중 작업 중 하나 4분 작성 확인 0/2\" [ref=e33]\n            - strong\n              - StaticText \"프린터 토너 주문\"\n            - StaticText \"실행 중\"\n            - status \"작업 중\"\n              - StaticText \"하\"\n            - StaticText \"하나\"\n            - StaticText \"4분\"\n            - StaticText \"작성\"\n            - StaticText \"확인\"\n            - StaticText \"0/2\"\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e21]\n          - button \"파일 추가\" [disabled, ref=e22]\n          - button \"기본 권한\" [ref=e23]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e24]\n  - region \"작업\" [ref=e3]\n    - tablist \"열린 작업\"\n      - tab \"프린터 토너 주문\" [selected, ref=e16]\n      - button \"프린터 토너 주문 닫기\" [ref=e17]\n        - StaticText \"×\"\n    - button \"좁히기\" [ref=e7]\n    - button \"작업 공간 닫기\" [ref=e8]\n    - tabpanel\n      - region \"미션\" [ref=e18]\n        - generic\n          - article\n            - StaticText \"실행 중\"\n            - time\n              - StaticText \"4분\"\n            - heading \"프린터 토너 주문\" [level=3, ref=e25]\n            - button \"중지\" [ref=e26]\n            - StaticText \"만든 쪽\"\n            - strong\n              - StaticText \"claude-sonnet-5-5\"\n            - StaticText \"확인한 쪽\"\n            - strong\n              - StaticText \"gpt-6.1-terra\"\n            - StaticText \"연결\"\n            - strong\n              - StaticText \"알 수 없음\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"기준\"\n              - DescriptionList\n                - term \"기준 내용\"\n                - definition\n                  - StaticText \"요청한 결과와 근거 확인\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"확인\"\n                - StaticText \"대기\"\n              - DescriptionList\n                - term \"요청한 결과와 근거 확인\"\n                - definition\n                  - StaticText \"확인 대기\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"전송 1회 보장\"\n              - DescriptionList\n                - term \"작성\"\n                - definition\n                  - StaticText \"완료\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"기록\"\n                - StaticText \"없음\"\n              - DescriptionList\n                - term \"결과물\"\n                - definition\n                  - StaticText \"아직 없음\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"흐름\"\n              - list\n                - listitem [level=1]\n                  - time\n                    - StaticText \"14:08\"\n                  - StaticText \"프린터 토너 주문\"\n            - group\n              - button \"확인 대기 요청한 결과와 근거 확인\" [expanded=false, ref=e34]\n                - strong\n                  - StaticText \"확인 대기\"\n                - StaticText \"요청한 결과와 근거 확인\""
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "11월 5일 (목)",
+      "PR #84 검토",
+      "PR #84 검토",
+      "4분 동안 작업 ›",
+      "경쟁사 가격도 확인해 줘.",
+      "가격 표를 정리하고 확인을 기다리고 있어요.",
+      "하나가 넘김: 경쟁사 가격 · 14:08",
+      "경쟁사 가격",
+      "확인 대기",
+      "퀼",
+      "4분",
+      "작성",
+      "확인",
+      "0/2",
+      "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.",
+      "지난 90일 해지 건부터 볼게요.",
+      "하나가 넘김: 이탈 원인 조사 · 14:08",
+      "이탈 원인 조사",
+      "실행 중",
+      "퀼",
+      "4분",
+      "작성",
+      "확인",
+      "0/2",
+      "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.",
+      "지난 주문과 같은 토너를 찾았어요.",
+      "프린터 토너 주문",
+      "실행 중",
+      "하나",
+      "4분",
+      "작성",
+      "확인",
+      "0/2"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ],
+    "pane": [
+      "프린터 토너 주문",
+      "×",
+      "실행 중",
+      "4분",
+      "프린터 토너 주문",
+      "중지",
+      "만든 쪽",
+      "claude-sonnet-5-5",
+      "확인한 쪽",
+      "gpt-6.1-terra",
+      "연결",
+      "알 수 없음",
+      "기준",
+      "기준 내용",
+      "요청한 결과와 근거 확인",
+      "확인",
+      "대기",
+      "요청한 결과와 근거 확인",
+      "확인 대기",
+      "전송 1회 보장",
+      "작성",
+      "완료",
+      "기록",
+      "없음",
+      "결과물",
+      "아직 없음",
+      "흐름",
+      "14:08",
+      "프린터 토너 주문",
+      "확인 대기",
+      "요청한 결과와 근거 확인"
+    ]
+  }
+}
