@@ -146,22 +146,22 @@ test('a new conversation feed clears old Work even when the replacement list can
  assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');
 });
 
-test('a waiting Work remains inspectable and stops minute polling, including in member chat',async()=>{
+test('a waiting Work remains inspectable and keeps minute polling, including in member chat',async()=>{
  const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
  assert.deepEqual(memberLines(app),['Churn causes실행 중']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
  state.works=[{...state.works[0]!,execution:'waiting'}];await runInContext('readChat()',app.context);await settle();
- assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.match(app.node('activity-list').textContent,/Churn causes.*확인 대기/);assert.equal(runInContext('chatPendingTimer',app.context),0);
- await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.match(app.node('activity-list').textContent,/Churn causes.*확인 대기/);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
 });
 
-test('card polling requires active execution while elapsed time remains visible during a check wait',async()=>{
+test('card polling follows active execution and check waits while start-in-flight keeps the short clock',async()=>{
  const work={...row({workId:'w1',title:'Churn causes',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true}),starting:false};
  const turn={id:work.turnId,messageId:'m:card',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
  const {app,state}=fixture({turns:[turn],messages:[{id:'reply',role:'representative',turnId:turn.id,text:'On it.'}]});await settle();
  const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!;
- assert.match(card.textContent,/확인 대기/);assert.match(card.textContent,/\d+분/);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ assert.match(card.textContent,/확인 대기/);assert.match(card.textContent,/\d+분/);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
  const timers=new Map<number,number>();let next=0;app.context.setTimeout=(_run:()=>void,delay:number)=>{timers.set(++next,delay);return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
- for(const [execution,starting,delay] of [['active',false,60000],['waiting',false,0],['queued',false,0],['blocked',false,0],['settled',false,0],['queued',true,10000]] as const){
+ for(const [execution,starting,delay] of [['active',false,60000],['waiting',false,60000],['queued',false,0],['blocked',false,0],['settled',false,0],['queued',true,10000]] as const){
   state.turns[0].work={...work,execution,starting};await runInContext('readChat()',app.context);await settle();
   assert.equal(timers.get(runInContext('chatPendingTimer',app.context))??0,delay,execution+(starting?' starting':''));
  }
@@ -360,4 +360,17 @@ test('a late global Work list activates a recorded steering link without another
  state.works=[row({workId:'w1',title:'Finished result',memberId:'member-q',execution:'settled',acceptance:'accepted',started:true})];
  let release=()=>{};state.hold=new Promise<void>(resolve=>{release=resolve;});const pending=runInContext('shellWorksLoad()',app.context);await settle();assert.equal(line.children[0]!.tagName,'SPAN');release();await pending;await settle();
  assert.equal(line.children[0]!.tagName,'BUTTON');assert.equal(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,reads);assert.equal(runInContext('chatPendingTimer',app.context),0);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+for(const projection of ['turn','shell'] as const)test('a fake clock refreshes an eventless waiting Work from '+projection,async()=>{
+ const work=row({workId:'clocked',title:'Clocked check',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true}),turn={id:work.turnId,messageId:'m:clocked',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
+ const {app,state}=fixture(projection==='turn'?{turns:[turn],messages:[{id:'r:clocked',role:'representative',turnId:turn.id,text:'Checking.'}]}:{works:[work]});await settle();
+ let now=T0+60000;app.context.Date=class extends Date{static now(){return now;}};
+ const timers=new Map<number,{run:()=>void;delay:number}>();let sequence=0;app.context.setTimeout=(run:()=>void,delay:number)=>{const id=++sequence;timers.set(id,{run,delay});return id;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ await runInContext('readChat()',app.context);await settle();const timer=timers.get(runInContext('chatPendingTimer',app.context));assert.equal(timer?.delay,60000,'waiting has the same minute clock as active execution');
+ const reads=app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,lists=state.worksCalls;
+ if(projection==='turn')assert.match(app.all().find(n=>n.id==='chat-card-'+turn.id)!.textContent,/1분/);else state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted',endedAt:T0+180000}];
+ now+=120000;timer!.run();await settle();assert.ok(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length>reads);assert.ok(state.worksCalls>lists);
+ if(projection==='turn'){assert.match(app.all().find(n=>n.id==='chat-card-'+turn.id)!.textContent,/3분/);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))?.delay,60000);}else{assert.deepEqual(memberLines(app),['Clocked check완료']);assert.equal(runInContext('chatPendingTimer',app.context),0);}
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });

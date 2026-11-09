@@ -92,8 +92,8 @@
     {
       "screen": "B5",
       "theme": "dark",
-      "passed": 14,
-      "failed": 3,
+      "passed": 15,
+      "failed": 2,
       "warnings": 0,
       "required": 17,
       "visualFailures": [],
@@ -132,10 +132,10 @@
     {
       "screen": "B11",
       "theme": "dark",
-      "passed": 22,
+      "passed": 21,
       "failed": 0,
       "warnings": 0,
-      "required": 22,
+      "required": 21,
       "visualFailures": [],
       "gaps": [],
       "errors": [],
@@ -224,18 +224,6 @@
       "pair": "pairs/dark/B21.png"
     },
     {
-      "screen": "B21-name",
-      "theme": "dark",
-      "passed": 33,
-      "failed": 0,
-      "warnings": 1,
-      "required": 33,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/dark/B21-name.png"
-    },
-    {
       "screen": "B21-done",
       "theme": "dark",
       "passed": 20,
@@ -262,6 +250,18 @@
       ],
       "errors": [],
       "pair": "pairs/dark/B21-done-hana.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "dark",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21-name.png"
     },
     {
       "screen": "B26",
@@ -382,8 +382,8 @@
     {
       "screen": "B5",
       "theme": "light",
-      "passed": 14,
-      "failed": 3,
+      "passed": 15,
+      "failed": 2,
       "warnings": 0,
       "required": 17,
       "visualFailures": [],
@@ -422,10 +422,10 @@
     {
       "screen": "B11",
       "theme": "light",
-      "passed": 22,
+      "passed": 21,
       "failed": 0,
       "warnings": 0,
-      "required": 22,
+      "required": 21,
       "visualFailures": [],
       "gaps": [],
       "errors": [],
@@ -514,18 +514,6 @@
       "pair": "pairs/light/B21.png"
     },
     {
-      "screen": "B21-name",
-      "theme": "light",
-      "passed": 33,
-      "failed": 0,
-      "warnings": 1,
-      "required": 33,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/light/B21-name.png"
-    },
-    {
       "screen": "B21-done",
       "theme": "light",
       "passed": 20,
@@ -552,6 +540,18 @@
       ],
       "errors": [],
       "pair": "pairs/light/B21-done-hana.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "light",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21-name.png"
     },
     {
       "screen": "B26",
@@ -585,11 +585,11 @@
   "stats": {
     "captured": 44,
     "matched": 1012,
-    "required": 1060,
-    "failed": 54,
+    "required": 1058,
+    "failed": 52,
     "laterB7": 12,
-    "unsupported": 42,
-    "axFallbackFailures": 78,
+    "unsupported": 40,
+    "axFallbackFailures": 76,
     "visual": 0,
     "infrastructure": 0
   }

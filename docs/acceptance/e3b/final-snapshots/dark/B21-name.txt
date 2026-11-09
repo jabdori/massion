@@ -75,6 +75,7 @@
           - textbox "하나에게 메시지 보내기" [ref=e33]
           - button "파일 추가" [disabled, ref=e34]
           - button "기본 권한" [ref=e35]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e36]
     - dialog "새 구성원 만들기"
       - heading "새 구성원 만들기" [level=2, ref=e14]

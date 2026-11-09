@@ -39,7 +39,7 @@
           - generic
             - paragraph
               - StaticText "TOTAL: 4 cents"
-            - button "복사" [ref=e26]
+            - button "복사" [ref=e25]
       - generic
         - listbox "구성원" [ref=e17]
           - paragraph
@@ -50,10 +50,11 @@
           - option "주노" [ref=e19]
             - StaticText "주노"
           - button "구성원 관리" [ref=e20]
+            - StaticText "구성원 관리"
         - form
           - textbox "하나에게 메시지 보내기" [ref=e21]: @
             - StaticText "@"
-          - button "복사" [ref=e22]
-          - button "파일 추가" [disabled, ref=e23]
-          - button "기본 권한" [ref=e24]
-          - button "보내기" [ref=e25]
+          - button "파일 추가" [disabled, ref=e22]
+          - button "기본 권한" [ref=e23]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e24]

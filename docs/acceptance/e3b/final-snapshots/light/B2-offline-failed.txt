@@ -85,6 +85,7 @@
             - StaticText "이어서 할인 합계 확인해 줘."
           - button "파일 추가" [disabled, ref=e19]
           - button "기본 권한" [ref=e20]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e21]
         - status
           - StaticText "보내지 못함 · "

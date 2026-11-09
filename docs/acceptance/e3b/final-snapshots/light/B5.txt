@@ -23,20 +23,22 @@
             - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
           - generic
             - paragraph
-              - StaticText "지난 주문과 같은 토너를 찾았어요."
+              - StaticText "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
             - button "복사" [ref=e19]
-          - button "작업함 ›" [ref=e14]
+          - button "4분 동안 작업 ›" [ref=e14]
           - generic
             - paragraph
               - strong
                 - StaticText "프린터 토너 주문"
-              - StaticText "결과 모름"
+              - StaticText "결과 모름14:12"
             - paragraph
-              - StaticText "다시 보내지 않음"
+              - StaticText "결제 요청에 응답 없음 · 다시 보내지 않음"
             - button "확인" [ref=e20]
+            - button "닫기" [ref=e21]
       - generic
         - form
           - textbox "하나에게 메시지 보내기" [ref=e15]
           - button "파일 추가" [disabled, ref=e16]
           - button "기본 권한" [ref=e17]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e18]

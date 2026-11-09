@@ -53,4 +53,5 @@
           - textbox "셈에게 메시지 보내기" [ref=e19]
           - button "파일 추가" [disabled, ref=e20]
           - button "기본 권한" [ref=e21]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e22]

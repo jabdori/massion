@@ -104,6 +104,7 @@
           - textbox "하나에게 메시지 보내기" [ref=e32]
           - button "파일 추가" [disabled, ref=e33]
           - button "기본 권한" [ref=e34]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e35]
   - region "작업" [ref=e3]
     - tablist "열린 작업"

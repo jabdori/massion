@@ -1,0 +1,634 @@
+[
+  {
+    "screen": "B1-signin",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(220, 222, 227)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "emptyLog": {
+        "children": 0,
+        "display": "flex",
+        "exists": true,
+        "flexGrow": "1",
+        "height": 710,
+        "viewportHeight": 752
+      }
+    }
+  },
+  {
+    "screen": "B2",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(227, 153, 218)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(220, 222, 227)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        },
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none"
+    }
+  },
+  {
+    "screen": "B5",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(227, 153, 218)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(220, 222, 227)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "unknown": {
+        "buttons": [
+          "확인",
+          "닫기"
+        ],
+        "fact": "결제 요청에 응답 없음 · 다시 보내지 않음",
+        "lead": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요.",
+        "time": "14:12"
+      },
+      "review": {
+        "ack": false,
+        "closed": false,
+        "focus": "quarantine-reason-toner",
+        "unknown": true
+      }
+    }
+  },
+  {
+    "screen": "B11",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(227, 153, 218)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(220, 222, 227)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        },
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(227, 153, 218)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "popup": {
+        "border": "1px",
+        "icon": true,
+        "radius": "0px",
+        "shadow": "none",
+        "visible": true
+      },
+      "keyboard": {
+        "active": "chat-input",
+        "color": "rgb(131, 137, 147)",
+        "ring": "2px",
+        "visible": true
+      }
+    }
+  },
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(63, 200, 203)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "keyboard": {
+        "active": "chat-input",
+        "color": "rgb(131, 137, 147)",
+        "ring": "2px",
+        "visible": true
+      }
+    }
+  },
+  {
+    "screen": "B21-name",
+    "theme": "dark",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(227, 153, 218)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(220, 222, 227)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "modal": {
+        "shortcutsBlocked": true,
+        "directCallerBlocked": true,
+        "draftsPreserved": true,
+        "shortcutResumesAfterClose": true
+      }
+    }
+  },
+  {
+    "screen": "B1-signin",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(48, 48, 48)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "emptyLog": {
+        "children": 0,
+        "display": "flex",
+        "exists": true,
+        "flexGrow": "1",
+        "height": 710,
+        "viewportHeight": 752
+      }
+    }
+  },
+  {
+    "screen": "B2",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(186, 67, 122)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(48, 48, 48)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        },
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none"
+    }
+  },
+  {
+    "screen": "B5",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(186, 67, 122)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(48, 48, 48)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "unknown": {
+        "buttons": [
+          "확인",
+          "닫기"
+        ],
+        "fact": "결제 요청에 응답 없음 · 다시 보내지 않음",
+        "lead": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요.",
+        "time": "14:12"
+      },
+      "review": {
+        "ack": false,
+        "closed": false,
+        "focus": "quarantine-reason-toner",
+        "unknown": true
+      }
+    }
+  },
+  {
+    "screen": "B11",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(186, 67, 122)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(48, 48, 48)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        },
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(186, 67, 122)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "popup": {
+        "border": "1px",
+        "icon": true,
+        "radius": "0px",
+        "shadow": "rgba(0, 0, 0, 0.533) 0px 8px 28px 0px",
+        "visible": true
+      },
+      "keyboard": {
+        "active": "chat-input",
+        "color": "rgb(93, 93, 93)",
+        "ring": "2px",
+        "visible": true
+      }
+    }
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(0, 79, 153)",
+          "letter": "퀼",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "keyboard": {
+        "active": "chat-input",
+        "color": "rgb(93, 93, 93)",
+        "ring": "2px",
+        "visible": true
+      }
+    }
+  },
+  {
+    "screen": "B21-name",
+    "theme": "light",
+    "measured": {
+      "activeHints": [
+        "0"
+      ],
+      "avatars": [
+        {
+          "background": "rgb(186, 67, 122)",
+          "letter": "주",
+          "mask": "none",
+          "radius": "6px",
+          "shape": "square"
+        },
+        {
+          "background": "rgb(48, 48, 48)",
+          "letter": "하",
+          "mask": "none",
+          "radius": "6px",
+          "shape": null
+        }
+      ],
+      "dates": [
+        {
+          "after": "none",
+          "align": "center",
+          "before": "none"
+        }
+      ],
+      "draftCopy": false,
+      "permission": {
+        "background": "rgba(0, 0, 0, 0)",
+        "icons": 2,
+        "text": "기본 권한"
+      },
+      "pointerRing": "none",
+      "modal": {
+        "shortcutsBlocked": true,
+        "directCallerBlocked": true,
+        "draftsPreserved": true,
+        "shortcutResumesAfterClose": true
+      }
+    }
+  }
+]

@@ -16151,5 +16151,19 @@
    "reference": "artboards/dark/B21.png",
    "contract": "contracts/B21.json"
   }
+ },
+ "ui.payment-response-unknown": {
+  "ko": "결제 요청에 응답 없음 · 다시 보내지 않음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B5:conversation"
+  ],
+  "evidence": {
+   "artboard": "B5",
+   "reference": "artboards/dark/B5.png",
+   "contract": "contracts/B5.json"
+  }
  }
 }

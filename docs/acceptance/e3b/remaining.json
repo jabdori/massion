@@ -59,7 +59,7 @@
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "scope": "unsupported product capability",
-    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
     "evidence": [
       "src/assistant-service.ts",
       "src/configured-runtime.ts",
@@ -144,7 +144,7 @@
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "scope": "unsupported product capability",
-    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
     "evidence": [
       "src/assistant-service.ts",
       "src/configured-runtime.ts",
@@ -165,19 +165,6 @@
   },
   {
     "id": "R014",
-    "screen": "B5",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
-    "scope": "unsupported product capability",
-    "reason": "The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.",
-    "evidence": [
-      "src/domain.ts:283",
-      "src/expired-run-panel.ts",
-      "src/assistant-conversation-panel.ts"
-    ]
-  },
-  {
-    "id": "R015",
     "screen": "B6",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
@@ -191,7 +178,7 @@
     ]
   },
   {
-    "id": "R016",
+    "id": "R015",
     "screen": "B6",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -205,7 +192,7 @@
     ]
   },
   {
-    "id": "R017",
+    "id": "R016",
     "screen": "B6",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -218,7 +205,7 @@
     ]
   },
   {
-    "id": "R018",
+    "id": "R017",
     "screen": "B6",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -231,7 +218,7 @@
     ]
   },
   {
-    "id": "R019",
+    "id": "R018",
     "screen": "B16-later",
     "theme": "dark",
     "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
@@ -244,7 +231,7 @@
     ]
   },
   {
-    "id": "R020",
+    "id": "R019",
     "screen": "B16-sent",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
@@ -257,7 +244,7 @@
     ]
   },
   {
-    "id": "R021",
+    "id": "R020",
     "screen": "B16-sent",
     "theme": "dark",
     "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
@@ -270,7 +257,7 @@
     ]
   },
   {
-    "id": "R022",
+    "id": "R021",
     "screen": "B18",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
@@ -284,7 +271,7 @@
     ]
   },
   {
-    "id": "R023",
+    "id": "R022",
     "screen": "B18",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -298,7 +285,7 @@
     ]
   },
   {
-    "id": "R024",
+    "id": "R023",
     "screen": "B18",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -311,7 +298,7 @@
     ]
   },
   {
-    "id": "R025",
+    "id": "R024",
     "screen": "B18",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -324,7 +311,7 @@
     ]
   },
   {
-    "id": "R026",
+    "id": "R025",
     "screen": "B21-done-hana",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
@@ -336,7 +323,7 @@
     ]
   },
   {
-    "id": "R027",
+    "id": "R026",
     "screen": "B26-later",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",
@@ -349,7 +336,7 @@
     ]
   },
   {
-    "id": "R028",
+    "id": "R027",
     "screen": "B2",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"사례 보기\"",
@@ -362,7 +349,7 @@
     ]
   },
   {
-    "id": "R029",
+    "id": "R028",
     "screen": "B2",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
@@ -376,7 +363,7 @@
     ]
   },
   {
-    "id": "R030",
+    "id": "R029",
     "screen": "B3-run",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
@@ -390,7 +377,7 @@
     ]
   },
   {
-    "id": "R031",
+    "id": "R030",
     "screen": "B4",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
@@ -403,16 +390,28 @@
     ]
   },
   {
-    "id": "R032",
+    "id": "R031",
     "screen": "B4",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "scope": "unsupported product capability",
-    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
     "evidence": [
       "src/assistant-service.ts",
       "src/configured-runtime.ts",
       "src/domain.ts:29"
+    ]
+  },
+  {
+    "id": "R032",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "scope": "later B7 pane",
+    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
+    "evidence": [
+      "src/workbench.ts",
+      "docs/architecture/surface-skeleton.md"
     ]
   },
   {
@@ -443,7 +442,7 @@
     "id": "R035",
     "screen": "B4",
     "theme": "light",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
     "scope": "later B7 pane",
     "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
     "evidence": [
@@ -455,7 +454,7 @@
     "id": "R036",
     "screen": "B4",
     "theme": "light",
-    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
     "scope": "later B7 pane",
     "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
     "evidence": [
@@ -467,18 +466,6 @@
     "id": "R037",
     "screen": "B4",
     "theme": "light",
-    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
-    "scope": "later B7 pane",
-    "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
-    "evidence": [
-      "src/workbench.ts",
-      "docs/architecture/surface-skeleton.md"
-    ]
-  },
-  {
-    "id": "R038",
-    "screen": "B4",
-    "theme": "light",
     "diagnostic": "FAIL  budget pane         chars 685 > 203",
     "scope": "later B7 pane",
     "reason": "The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout.",
@@ -488,12 +475,12 @@
     ]
   },
   {
-    "id": "R039",
+    "id": "R038",
     "screen": "B5",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "scope": "unsupported product capability",
-    "reason": "There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work.",
+    "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
     "evidence": [
       "src/assistant-service.ts",
       "src/configured-runtime.ts",
@@ -501,7 +488,7 @@
     ]
   },
   {
-    "id": "R040",
+    "id": "R039",
     "screen": "B5",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
@@ -513,20 +500,7 @@
     ]
   },
   {
-    "id": "R041",
-    "screen": "B5",
-    "theme": "light",
-    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
-    "scope": "unsupported product capability",
-    "reason": "The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment.",
-    "evidence": [
-      "src/domain.ts:283",
-      "src/expired-run-panel.ts",
-      "src/assistant-conversation-panel.ts"
-    ]
-  },
-  {
-    "id": "R042",
+    "id": "R040",
     "screen": "B6",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
@@ -540,7 +514,7 @@
     ]
   },
   {
-    "id": "R043",
+    "id": "R041",
     "screen": "B6",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -554,7 +528,7 @@
     ]
   },
   {
-    "id": "R044",
+    "id": "R042",
     "screen": "B6",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -567,7 +541,7 @@
     ]
   },
   {
-    "id": "R045",
+    "id": "R043",
     "screen": "B6",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -580,7 +554,7 @@
     ]
   },
   {
-    "id": "R046",
+    "id": "R044",
     "screen": "B16-later",
     "theme": "light",
     "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
@@ -593,7 +567,7 @@
     ]
   },
   {
-    "id": "R047",
+    "id": "R045",
     "screen": "B16-sent",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
@@ -606,7 +580,7 @@
     ]
   },
   {
-    "id": "R048",
+    "id": "R046",
     "screen": "B16-sent",
     "theme": "light",
     "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
@@ -619,7 +593,7 @@
     ]
   },
   {
-    "id": "R049",
+    "id": "R047",
     "screen": "B18",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
@@ -633,7 +607,7 @@
     ]
   },
   {
-    "id": "R050",
+    "id": "R048",
     "screen": "B18",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -647,7 +621,7 @@
     ]
   },
   {
-    "id": "R051",
+    "id": "R049",
     "screen": "B18",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -660,7 +634,7 @@
     ]
   },
   {
-    "id": "R052",
+    "id": "R050",
     "screen": "B18",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -673,7 +647,7 @@
     ]
   },
   {
-    "id": "R053",
+    "id": "R051",
     "screen": "B21-done-hana",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
@@ -685,7 +659,7 @@
     ]
   },
   {
-    "id": "R054",
+    "id": "R052",
     "screen": "B26-later",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",

@@ -102,4 +102,5 @@
           - textbox "하나에게 메시지 보내기" [ref=e25]
           - button "파일 추가" [disabled, ref=e26]
           - button "기본 권한" [ref=e27]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e28]

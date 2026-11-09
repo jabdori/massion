@@ -23,4 +23,5 @@
           - textbox "답변을 입력하거나 다른 이야기를 하세요" [ref=e12]
           - button "파일 추가" [disabled, ref=e13]
           - button "기본 권한" [ref=e14]
+            - StaticText "기본 권한"
           - button "보내기" [ref=e15]

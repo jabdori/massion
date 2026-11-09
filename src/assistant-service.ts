@@ -33,6 +33,10 @@ const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
 /** The root task only contains the steps, so it is not counted (conversation-cards.md). */
 const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+export function workException(work:Mission['works'][number]):{at:number|null;runId:string|null;fact:'payment-response-unknown'|null}{
+ const unknown=work.effects.filter(effect=>effect.status==='unknown');
+ return {at:work.runtimeInterruption?.observedAt??null,runId:work.runtimeRun?.id??null,fact:unknown.length===1&&unknown[0]!.target==='결제 요청'&&unknown[0]!.receipt==='응답 없음 · 다시 보내지 않음'?'payment-response-unknown':null};
+}
 /** Count only assigned child tasks; a retried assignment never counts the same task twice. */
 function progress(work:Mission['works'][number]){
  const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>t.parentId!==null&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
@@ -280,7 +284,7 @@ export class AssistantService {
    return {id:t.id,messageId:t.messageId,status:t.status,displayStatus:t.status==='pending'&&now>=t.ownership!.deadlineAt?'unknown':t.status,...(t.ownership?{at:t.ownership.startedAt}:{}),...(t.diagnostics?{diagnostics:t.diagnostics}:{}),...(t.proposal?{proposal:t.proposal}:{}),...(t.outcome?{outcome:t.outcome}:{}),...(t.steer?{steer:{...steering.get(t.id),title:missions.get(t.steer.missionId)?.value.works.find(w=>w.id===t.steer!.workId)?.title??null}}:{}),
     ...(work&&intake?{work:{missionId:intake.value.id,missionRevision:intake.revision,workId:work.id,title:work.title,execution:work.execution,acceptance:work.acceptance,started:!!work.runtimeRun||this.#starting.has(work.id),starting:!work.runtimeRun&&this.#starting.has(work.id),
      // Card facts (conversation-cards.md): the durable run start, settled steps under the root task (the check is one), and an unknown effect outcome not yet answered by quarantine; a plain cancel is not that answer (ADR 0002 §8).
-     startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null}}:{})};
+     startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),exception:workException(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null}}:{})};
   });
   return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
  }
@@ -297,7 +301,7 @@ export class AssistantService {
   const intake=this.#connections?.list().representative?.intakeMissionId,state=await this.#store.readState(),ids=new Set<string>();if(intake&&!intake.startsWith(ASSISTANT_CONVERSATION_PREFIX))ids.add(intake);
   const head=await headSegment(this.#store);for(let n=head;n>Math.max(0,head-32);n--){const segment=await this.#store.load(segmentId(n)) as Snapshot<AssistantSegment>|null;for(const t of segment?.value.turns??[])if(t.outcome?.missionId&&!t.outcome.missionId.startsWith(ASSISTANT_CONVERSATION_PREFIX))ids.add(t.outcome.missionId);}
   const rows=[];for(const id of ids){const read=await this.#store.readState(id);if(read.feedId!==state.feedId)return {feedId:read.feedId,works:[]};const mission=read.snapshot?.value as Mission|undefined;
-   for(const w of mission?.works??[])if(w.assistantSource)rows.push({missionId:id,missionRevision:read.snapshot!.revision,workId:w.id,title:w.title,memberId:w.assistantSource.memberId??null,execution:w.execution,acceptance:w.acceptance,unknown:!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown'),started:!!w.runtimeRun||this.#starting.has(w.id),startedAt:w.runtimeRun?.ownership?.startedAt??null,endedAt:w.endedAt??null,turnId:w.assistantSource.turnId,segment:Number(w.assistantSource.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),ordinal:w.assistantSource.message.ordinal});
+   for(const w of mission?.works??[])if(w.assistantSource)rows.push({missionId:id,missionRevision:read.snapshot!.revision,workId:w.id,title:w.title,memberId:w.assistantSource.memberId??null,execution:w.execution,acceptance:w.acceptance,unknown:!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown'),exception:workException(w),started:!!w.runtimeRun||this.#starting.has(w.id),startedAt:w.runtimeRun?.ownership?.startedAt??null,endedAt:w.endedAt??null,turnId:w.assistantSource.turnId,segment:Number(w.assistantSource.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),ordinal:w.assistantSource.message.ordinal});
   }
   return {feedId:state.feedId,works:rows.sort((a,b)=>b.segment-a.segment||b.ordinal-a.ordinal).slice(0,200).map(({ordinal,...row})=>row)};
 

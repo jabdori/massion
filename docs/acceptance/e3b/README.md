@@ -2,20 +2,23 @@
 
 PR 106 above E3a (`1595710`), completed against the same 22 scoped states in
 both browser system themes. Screen verification uses isolated **headless
-agent-browser** only. Contracts, artboards, visual tokens and thresholds remain
-unchanged. The approved missing copy was added with artboard evidence.
+agent-browser** only. Artboards, visual tokens and thresholds remain unchanged. The B11 generated
+editor Copy requirement was withdrawn under the owner visual-gate item 3; the
+required reply Copy remains. This is recorded on that contract element and
+changes the both-theme denominator from 1,060 to 1,058. New visible copy has
+approved artboard evidence.
 
 ## Result
 
 | Measurement across 44 captures | E3a baseline | Initial PR (`829ab57`) | Updated PR |
 | --- | ---: | ---: | ---: |
-| Required elements matched | 504 | 764 | 1,012 / 1,060 |
-| Contract failures | 596 | 370 | **54** |
+| Required elements matched | 504 | 764 | 1,012 / 1,058 |
+| Contract failures | 596 | 370 | **52** |
 | Geometry/palette failures | 42 | 0 | **0** |
 | Infrastructure errors | 0 | 0 | **0** |
 
 The remaining **12 diagnostics belong to the later B7 Work-pane layout** and
-**42 require a missing producing product capability**. Each occurrence has a
+**40 require a missing producing product capability**. Each occurrence has a
 reason and code evidence in [remaining.json](remaining.json) and the readable
 [residual ledger](after-failures.md). There are no retained UI-code, fixture-gap
 or checker exemptions. This does not claim that unavailable product scenes have
@@ -34,18 +37,64 @@ explained in the final residual ledger rather than represented by fake UI data.
 [all final raw and structured snapshots](final-snapshots/) ·
 [capture sources](capture-sources.json).
 
+## Visual gate verification
+
+All six review items are checked in both themes by
+`node scripts/ui-contracts/verify-conversation-visual.mjs`.
+[Eight visual cases, two modal-safety cases and two empty-surface checks](visual-gate.json) and the updated pairs below record:
+
+1. Unfilled shield + `기본 권한` + chevron.
+2. Approved square Quill/Juno example identities; the production owner-selected
+   shape system stays intact. The reference busy marks remain for active work.
+3. No active sidebar shortcut ornament or composer-edge copy control. Pointer
+   and programmatic composer focus has no outline; keyboard focus uses
+   `:focus-visible` and the existing 2px token. Text inputs can receive native
+   focus indication even with pointer/programmatic focus, so the navigation
+   modality marker is deliberate ([MDN focus](https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus)).
+4. Management icon/divider and a soft light-theme popup shadow.
+5. Plain centered date text with no side rules.
+6. B5 uses committed local interruption time `14:12`, the approved payment
+   fact and lead text, and Close opens the existing exact-run quarantine review.
+   It submits nothing, checks no acknowledgement and leaves the outcome unknown.
+   Order-history inspection remains a residual capability gap.
+
+The follow-up send regressions cover held successful and unknown responses:
+the popup closes as sending starts, stays hidden on both outcomes and loses its
+active descendant. An unknown delivery keeps its draft/identity and cannot resend.
+The composer copy ornament is absent rather than merely left hidden in the DOM.
+
+The shared thread-opening guard also blocks Cmd/Ctrl+1–9, Alt+Arrow and direct
+callers while any visible `aria-modal` owns focus. Hidden dialogs/ancestors do
+not block navigation. Real B21-name browser cases verify the name input/draft key
+stays put and normal shortcuts resume after close. Fake-clock regressions cover
+an eventless check wait advancing from one to three minutes and a global-only
+wait observing completion without an event; neither path dispatches commands.
+
+[Before this visual gate: 54 diagnostics / 1,060 required](pre-visual-gate.json).
+The new measurement is 52 diagnostics / 1,058 required: two B5 Close diagnostics
+are resolved and the owner-withdrawn B11 editor control changes the denominator.
+
+## CI infrastructure regression
+
+B1-signin is still an unavailable sign-in capability, but its real empty log
+must render stably. The PR's new scroll wrapper had removed the old log flex
+sizing: the node existed at 0px height, so the 5s visible-element wait correctly
+failed in both themes. The wrapper is now a flex column and the empty log fills
+its viewport. No timeout or infrastructure-error rule changed.
+[Cause, local reproduction and full CI-command proof](ci-layout-fix.md).
+
 ## What changed
 
 - One accessible composer label, approved first-screen prompt, `맨 아래로`,
-  interrupted-answer copy, and the missing B11 draft-copy control. Copy remains
-  keyed; new entries carry B2/B11/B21 artboard provenance.
+  interrupted-answer copy; the owner-rejected B11 editor copy ornament is removed. Copy remains
+  keyed; new entries carry approved artboard provenance, including B5.
 - Correct member/Work state names and busy marks, retained waiting/failed/recent
   completed Work, header sidebar-name updates and workspace access, explicit
   priority control, and local unread state acknowledged only by explicit opens.
 - Card heading order matches the reference: state, assignee and elapsed time
   before role chips and summary. A member's own card omits redundant identity;
-  elapsed time remains visible while awaiting a check, without introducing
-  waiting-state polling. Failed Work keeps its inspection card; recovery actions
+  elapsed time remains visible while awaiting a check, with minute refresh for
+  both active and waiting states in displayed turns and the global Work list. Failed Work keeps its inspection card; recovery actions
   follow the latest reply. Verdict evidence counts come from stored verdicts.
 - Recorded steering is a timed, read-only link to its exact stored Work. A late
   global Work-list response now activates that link without another conversation
@@ -65,12 +114,12 @@ explained in the final residual ledger rather than represented by fake UI data.
 - Node 24.21.0, existing dependencies, and the brief's physical macOS `TMPDIR`.
 - `npm run typecheck`: passed.
 - `node scripts/check.mjs`: passed; copy lint zero findings; generated tokens current.
-- `npm test`: **1,536 passed, 340 skipped, one known local failure**:
+- `npm test`: **1,550 passed, 340 skipped, one known local failure**:
   `portable inventory order is stable across English and Turkish process locales`
   (`Text artifact boundary: directory realpath mismatch`). No inventory code changed.
 - Existing overlapping-command, drain-aware ownerStore, feed/deadline refresh,
   cached-thread and stale-generation guards remain covered. Unknown outcomes
-  are never resent. Read-only links, member selection and draft copying issue no
+  are never resent. Read-only links, member selection and reply copying issue no
   owner commands. Independent review's delayed-Work-link finding was reproduced
   with a failing test and fixed in the shared read path.
 - Both-theme real-browser assertions: 200px editor cap with 770px scroll height,
@@ -85,8 +134,8 @@ explained in the final residual ledger rather than represented by fake UI data.
   upload, release or deployment was exercised. No merge. Two existing failed-pane fixtures received selector-only repairs after the shared
   failed-card markup changed; [headless smoke results](pane-fixture-smoke.json)
   show zero infrastructure errors in both themes. Their B7/pane contract and
-  geometry drift remains outside this slice. Other 51 artboard states were not
-  recaptured; all 75 fixture data/inheritance checks were run.
+  geometry drift remains outside this slice. The final CI capture covers all 75 states in both themes; all 75 fixture
+  data/inheritance checks were also run.
 
 ## Measurement integrity
 
@@ -102,21 +151,19 @@ and forbidden-copy checks remain independent and mandatory**, and no budget
 threshold changed. Invalid/incomplete visible-text evidence fails closed.
 [Harness contract](../../architecture/ui-contract-harness.md#visible-text-budgets-and-accessibility-evidence).
 For transparency, the final candidate's old AX-budget fallback is also retained:
-[78 diagnostics](final-ax-fallback.json), versus **54** using rendered-text
+[76 diagnostics](final-ax-fallback.json), versus **52** using rendered-text
 budget evidence. The reduction from 370 includes UI fixes, supported fixture
 repairs and these verified measurement corrections; it is not a pure pixel score.
 
 ## Reproduce
 
 ```sh
-UI_CONTRACTS_OUTPUT=.runtime/e3b-delivery node scripts/ui-contracts/run.mjs B1 B2 B2-offline B2-offline-failed B3 B3-run B4 B5 B6 B6-token B11 B11-quill B16 B16-later B16-sent B18 B21 B21-name B21-done B21-done-hana B26 B26-later
+UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs B1 B2 B2-offline B2-offline-failed B3 B3-run B4 B5 B6 B6-token B11 B11-quill B16 B16-later B16-sent B18 B21 B21-name B21-done B21-done-hana B26 B26-later
 ```
 
-The final B4 close-name correction and three gap-note updates were captured in
-`.runtime/e3b-delivery-rerun`. Those eight real capture rows replace their earlier
-rows; [capture-sources.json](capture-sources.json) records this composition. The
-rest of the candidate's rendered states are unchanged. Original E3a baseline,
-initial PR and final evidence are all preserved.
+The final CI-command run re-captured all 75 states in both themes into
+`.runtime/ui-contracts`; the 44 scoped rows are extracted without changing their
+measurements. [Capture sources](capture-sources.json) records that provenance. Original E3a, initial PR and pre-visual-gate reports are preserved.
 
 ## Requested pairs
 
@@ -143,19 +190,19 @@ and infrastructure failures are zero in every row.
 | B3 | 19 / 4 | 22 / 0 | 19 / 4 | 22 / 0 |
 | B3-run | 19 / 5 | 22 / 1 | 19 / 5 | 22 / 1 |
 | B4 | 21 / 19 | 30 / 8 | 21 / 19 | 30 / 8 |
-| B5 | 11 / 7 | 14 / 3 | 11 / 7 | 14 / 3 |
+| B5 | 11 / 7 | 15 / 2 | 11 / 7 | 15 / 2 |
 | B6 | 17 / 19 | 30 / 4 | 17 / 19 | 30 / 4 |
 | B6-token | 17 / 13 | 28 / 0 | 17 / 13 | 28 / 0 |
-| B11 | 17 / 7 | 22 / 0 | 17 / 7 | 22 / 0 |
+| B11 | 17 / 7 | 21 / 0 | 17 / 7 | 21 / 0 |
 | B11-quill | 16 / 4 | 17 / 0 | 16 / 4 | 17 / 0 |
 | B16 | 18 / 5 | 22 / 0 | 18 / 5 | 22 / 0 |
 | B16-later | 17 / 5 | 20 / 1 | 17 / 5 | 20 / 1 |
 | B16-sent | 16 / 6 | 19 / 2 | 16 / 6 | 19 / 2 |
 | B18 | 19 / 17 | 30 / 4 | 19 / 17 | 30 / 4 |
 | B21 | 18 / 5 | 21 / 0 | 18 / 5 | 21 / 0 |
-| B21-name | 22 / 13 | 33 / 0 | 22 / 13 | 33 / 0 |
 | B21-done | 17 / 4 | 20 / 0 | 17 / 4 | 20 / 0 |
 | B21-done-hana | 18 / 5 | 21 / 1 | 18 / 5 | 21 / 1 |
+| B21-name | 22 / 13 | 33 / 0 | 22 / 13 | 33 / 0 |
 | B26 | 17 / 12 | 27 / 0 | 17 / 12 | 27 / 0 |
 | B26-later | 15 / 14 | 26 / 1 | 15 / 14 | 26 / 1 |
 
@@ -172,11 +219,10 @@ produce. File-add remains disabled because message attachment transport is absen
 | B2 | 2 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
 | B3-run | 2 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
 | B4 | 2 | unsupported product capability | The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title. |
-| B4 | 2 | unsupported product capability | There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work. |
+| B4 | 2 | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
 | B4 | 12 | later B7 pane | The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout. |
-| B5 | 2 | unsupported product capability | There is no producing browser-work runtime/page-read telemetry for a completed browser attempt. A stored end time and page count cannot be inferred from a still-waiting or unknown text-effect Work. |
+| B5 | 2 | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
 | B5 | 2 | unsupported product capability | No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated. |
-| B5 | 2 | unsupported product capability | The immediate unknown-payment closure flow has no original payment/runtime binding. Existing expired-run/quarantine handling requires an original run ID, reason and explicit uncertainty acknowledgement; this fixture has no runtime identity. A plain cancel must not hide or settle an unknown payment. |
 | B6 | 4 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
 | B6 | 4 | unsupported product capability | The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text. |
 | B16-later | 2 | unsupported product capability | The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated. |

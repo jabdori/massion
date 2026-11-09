@@ -11,6 +11,7 @@ export class Node {
  attributes=new Map<string,string>(); listeners=new Map<string,((event:any)=>unknown)[]>();
  private text=''; resets=0; onFocus?:()=>void;
  focus(){this.onFocus?.();}
+ checkVisibility():boolean{return !this.hidden&&(!this.parentElement||this.parentElement.checkVisibility());}
  contains(node:Node):boolean{return this===node||this.children.some(child=>child.contains(node));}
  constructor(tag='div'){this.tagName=tag.toUpperCase();}
  set textContent(value:string){this.text=String(value);this.children=[];}
@@ -45,12 +46,12 @@ export class SharedWebLocks {
 export async function settle(){for(let i=0;i<12;i++)await new Promise<void>(resolve=>setImmediate(resolve));}
 export function harness(handler:Handler,initial:Record<string,string>={},storageFault?:'read'|'write'|'remove',coordination?:{storage?:Map<string,string>;locks?:SharedWebLocks;noLocks?:boolean;identity?:string;network?:boolean;fragment?:string}) {
  const nodes=new Map<string,Node>();
- for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');nodes.set(node.id,node);}
+ for(const match of workbenchPage.matchAll(/<([a-z-]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Node(match[1]);node.id=match[2]!;node.hidden=match[0].includes(' hidden');const modal=/aria-modal="([^"]+)"/.exec(match[0]);if(modal)node.setAttribute('aria-modal',modal[1]!);nodes.set(node.id,node);}
  nodes.get('work-budget')!.value='0';
  const storage=coordination?.storage || new Map(Object.entries(initial)); const calls:{path:string;options:any}[]=[]; const intervals:(()=>unknown)[]=[];
  const all=():Node[]=>{const output:Node[]=[];const visit=(node:Node)=>{output.push(node);node.children.forEach(visit);};nodes.forEach(visit);return output;};
  const listeners=new Map<string,()=>unknown>();
- const document={activeElement:new Node('body'),getElementById:(id:string)=>nodes.get(id)||all().find(node=>node.id===id),createElement:(tag:string)=>{const node=new Node(tag);node.onFocus=()=>{document.activeElement=node;};return node;},querySelectorAll:()=>all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
+ const document={activeElement:new Node('body'),getElementById:(id:string)=>nodes.get(id)||all().find(node=>node.id===id),createElement:(tag:string)=>{const node=new Node(tag);node.onFocus=()=>{document.activeElement=node;};return node;},querySelectorAll:(selector:string)=>selector==='[aria-modal="true"]'?all().filter(node=>node.attributes.get('aria-modal')==='true'):all().filter(node=>node.hasAttribute('data-write')),hidden:false,addEventListener:(name:string,fn:()=>unknown)=>listeners.set(name,fn)};
  for(const node of nodes.values())node.onFocus=()=>{document.activeElement=node;};
  const windowListeners=new Map<string,()=>unknown>(),location={hash:coordination?.fragment||'',pathname:'/',search:''};
  const streams:any[]=[];class FeedSource {onmessage:any;onerror:any;closed=false;url:string;constructor(url:string){this.url=url;streams.push(this);}close(){this.closed=true;}}
