@@ -69,19 +69,22 @@
             - StaticText "0/2"
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실행 중 4분 작성 확인 2/4" [ref=e35]
+          - button "이탈 원인 조사 실행 중 4분 조사 분류 요약 확인 2/4" [ref=e35]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실행 중"
             - StaticText "4분"
-            - StaticText "작성"
+            - StaticText "조사"
+            - StaticText "분류"
+            - StaticText "요약"
             - StaticText "확인"
             - StaticText "2/4"
           - paragraph
             - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
             - button "복사" [ref=e36]
@@ -89,7 +92,8 @@
             - StaticText "기업 고객은 따로 봐 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
             - button "복사" [ref=e37]
@@ -97,27 +101,18 @@
             - StaticText "앞으로 표 금액은 원 단위로 써 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:12"
+            - time
+              - StaticText "14:12"
             - paragraph
               - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             - button "복사" [ref=e38]
-          - generic
-            - heading "이탈 원인 조사" [level=3, ref=e39]
-            - article
-              - StaticText "조사"
-              - strong
-                - StaticText "퀼"
-              - time
-                - StaticText "14:08"
-              - paragraph
-                - StaticText "지난 90일 해지 41건을 정리했습니다."
-            - article
-              - strong
-                - StaticText "나"
-              - time
-                - StaticText "14:08"
-              - paragraph
-                - StaticText "기업 고객은 따로 봐 줘."
+          - article
+            - strong
+              - StaticText "나"
+            - time
+              - StaticText "14:08"
+            - paragraph
+              - StaticText "기업 고객은 따로 봐 줘."
       - generic
         - form
           - textbox "퀼에게 메시지 보내기" [ref=e25]
@@ -144,13 +139,12 @@
             - paragraph
               - StaticText "하나가 넘김 · 14:08"
             - list
-              - listitem "퀼" [level=1, ref=e40]
+              - listitem "퀼" [level=1, ref=e39]
                 - StaticText "퀼"
-              - listitem "조사" [level=1, ref=e41]
-              - listitem "분류" [level=1, ref=e42]
-              - listitem "설문" [level=1, ref=e43]
-              - listitem "요약" [level=1, ref=e44]
-              - listitem "확인" [level=1, ref=e45]
+              - listitem "조사" [level=1, ref=e40]
+              - listitem "분류" [level=1, ref=e41]
+              - listitem "요약" [level=1, ref=e42]
+              - listitem "확인" [level=1, ref=e43]
                 - StaticText "확인"
             - generic
               - sectionheader
@@ -158,29 +152,29 @@
                   - StaticText "절차"
                 - StaticText "2/4"
               - list "절차"
-                - listitem "해지 내역 수집 · 퀼 · 조사 · 완료" [level=1, ref=e47]
+                - listitem "해지 내역 수집 · 퀼 · 조사 · 완료" [level=1, ref=e45]
                   - StaticText "해지 내역 수집"
                   - time
-                    - StaticText "14:08 – 14:08"
-                - listitem "고객 분류 · 퀼 · 분류 · 실행 중" [level=1, ref=e48]
+                    - StaticText "14:08"
+                - listitem "고객 분류 · 퀼 · 분류 · 실행 중" [level=1, ref=e46]
                   - StaticText "고객 분류"
+                  - StaticText "실행 중"
                   - time
                     - StaticText "14:08"
-                - listitem "설문 발송 · 퀼 · 설문 · 건너뜀 · 기존 설문 활용" [level=1, ref=e49]
+                - listitem "설문 발송 · 퀼 · 설문 · 건너뜀 · 기존 설문 활용" [level=1, ref=e47]
                   - StaticText "설문 발송"
                   - StaticText "건너뜀 · 기존 설문 활용"
                   - time
                     - StaticText "14:08"
-                - listitem "원인 요약 · 퀼 · 요약 · 대기 중" [level=1, ref=e50]
+                - listitem "원인 요약 · 퀼 · 요약 · 대기 중" [level=1, ref=e48]
                   - StaticText "원인 요약"
-                  - StaticText "선행 단계 · 고객 분류"
+                  - StaticText "다음 단계"
                 - listitem [level=1]
                   - StaticText "확인"
                   - StaticText "0/1"
                 - listitem [level=1]
                   - StaticText "기록"
             - group
-              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e46]
+              - button "확인 대기" [expanded=false, ref=e44]
                 - strong
                   - StaticText "확인 대기"
-                - StaticText "요청한 결과와 근거 확인"

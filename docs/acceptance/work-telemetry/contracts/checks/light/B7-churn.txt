@@ -42,6 +42,7 @@ contract B7-churn (B7 업무 방 · 퀼 · 이탈 원인 조사) vs /Users/code/
   ok    pane         text     "{member}" -> listitem "퀼"
   ok    pane         text     "{time}" -> statictext "14:08"
   ok    pane         text     "{time}" -> statictext "14:08"
+  ok    pane         text     "{time}" -> statictext "14:08"
   ok    pane         chip     "요약" -> statictext "원인 요약"
   ok    pane         text     "{member}" -> listitem "퀼"
   ok    pane         text     "{member}" -> listitem "요약"
@@ -54,10 +55,10 @@ contract B7-churn (B7 업무 방 · 퀼 · 이탈 원인 조사) vs /Users/code/
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":29,"strings":7,"sentences":0,"longest":9} proto {"chars":28,"strings":6,"sentences":0,"longest":9} source visibleTextBudget
   budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget conversation app {"chars":314,"strings":38,"sentences":8,"longest":36} proto {"chars":301,"strings":38,"sentences":5,"longest":27} source visibleTextBudget
+  budget conversation app {"chars":280,"strings":35,"sentences":7,"longest":36} proto {"chars":301,"strings":38,"sentences":5,"longest":27} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":154,"strings":30,"sentences":0,"longest":14} proto {"chars":333,"strings":56,"sentences":5,"longest":33} source visibleTextBudget
-  warn  budget conversation sentences 8 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+  budget pane         app {"chars":127,"strings":29,"sentences":0,"longest":14} proto {"chars":333,"strings":56,"sentences":5,"longest":33} source visibleTextBudget
+  warn  budget conversation sentences 7 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
   warn  budget conversation longest string 36 > 34 chars
   FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"
   FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
@@ -65,7 +66,6 @@ contract B7-churn (B7 업무 방 · 퀼 · 이탈 원인 조사) vs /Users/code/
   FAIL  missing conversation button   "남기기"
   FAIL  missing conversation button   "지우기"
   FAIL  order  pane         chip     "조사" (occurrence already consumed or found earlier)
-  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "조사" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  region pane         button   "복사" (found in conversation)
@@ -81,4 +81,4 @@ contract B7-churn (B7 업무 방 · 퀼 · 이탈 원인 조사) vs /Users/code/
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  region pane         button   "복사" (found in conversation)
   FAIL  missing pane         button   "확인 대기 원인 정리 후 시작"
-FAIL: 22 failures, 2 warnings, 74 required elements
+FAIL: 21 failures, 2 warnings, 74 required elements

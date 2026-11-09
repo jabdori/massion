@@ -163,7 +163,6 @@
                     - StaticText "14:08"
                   - StaticText "프린터 토너 주문"
             - group
-              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e34]
+              - button "확인 대기" [expanded=false, ref=e34]
                 - strong
                   - StaticText "확인 대기"
-                - StaticText "요청한 결과와 근거 확인"

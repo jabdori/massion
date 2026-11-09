@@ -42,7 +42,7 @@ contract B7 (B7 업무 방 · 프린터 토너 주문 실행 중) vs /Users/code
   budget sidebar      app {"chars":38,"strings":8,"sentences":0,"longest":9} proto {"chars":28,"strings":6,"sentences":0,"longest":9} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":64,"strings":16,"sentences":0,"longest":13} proto {"chars":140,"strings":22,"sentences":0,"longest":23} source visibleTextBudget
+  budget pane         app {"chars":51,"strings":15,"sentences":0,"longest":9} proto {"chars":140,"strings":22,"sentences":0,"longest":23} source visibleTextBudget
   budget conversation app {"chars":291,"strings":33,"sentences":6,"longest":36} proto {"chars":60,"strings":4,"sentences":1,"longest":29} source visibleTextBudget
   warn  budget conversation sentences 6 > 1: "경쟁사 가격도 확인해 줘."
   warn  budget conversation chars 291 > 98

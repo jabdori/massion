@@ -34,7 +34,7 @@ test('started Work snapshots have assigned executors and consistent task, attemp
  const {loadFixture}=await hostModule();
  for(const screen of screens){
   const f=await loadFixture(screen);
-  assert.equal(f.now,screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
+  assert.equal(f.now,screen==='B22-room-steps'?Date.UTC(2026,10,5,1,44):screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
   const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean}>}).works;

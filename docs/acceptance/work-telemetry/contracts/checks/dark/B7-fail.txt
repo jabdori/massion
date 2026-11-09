@@ -43,7 +43,7 @@ contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/o
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":55,"strings":16,"sentences":0,"longest":9} proto {"chars":179,"strings":12,"sentences":4,"longest":42} source visibleTextBudget
   budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget conversation app {"chars":325,"strings":39,"sentences":7,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
+  budget conversation app {"chars":317,"strings":38,"sentences":7,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   budget pane         app {"chars":106,"strings":18,"sentences":0,"longest":14} proto {"chars":392,"strings":61,"sentences":5,"longest":33} source visibleTextBudget
   warn  budget conversation sentences 7 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."

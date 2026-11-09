@@ -1,7 +1,9 @@
 {
   "screen": "B22-room-steps",
   "extends": "B22-room",
-  "description": "Juno pull request steps in the B7 Work room pane. Fixed API data; freeze browser Date to now.",
+  "description": "Selected room observations produced by domain commands; no injected challenge transcript or external calls.",
+  "now": 1793843040000,
+  "readySelector": "#side-member-member-juno",
   "steps": [
     {
       "selector": "#side-member-member-juno",
@@ -9,9 +11,1502 @@
       "readySelector": "#chat-log .chat-reply"
     },
     {
-      "selector": "[id=\"chat-card-assistant-turn:m:pr84\"] .chat-card-open",
+      "selector": "[id=\"chat-card-assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32\"] .chat-card-open",
       "action": "click",
-      "readySelector": "#work-heading-pr84"
+      "readySelector": "#work-heading-assistant-cac79b1a06e9356c6fcd4aad"
     }
-  ]
+  ],
+  "gaps": [],
+  "reuse": [
+    "scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793842800000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "assistant-cac79b1a06e9356c6fcd4aad",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793842800000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "segment": 1,
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 2
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              }
+            }
+          }
+        ],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/works": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "works": [
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "assistant-cac79b1a06e9356c6fcd4aad",
+            "title": "PR #84 검토",
+            "memberId": "member-juno",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793842800000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "segment": 1,
+            "steps": {
+              "done": 0,
+              "total": 2
+            },
+            "progress": {
+              "make": {
+                "done": 0,
+                "total": 2
+              },
+              "check": {
+                "done": 0,
+                "total": 1
+              }
+            }
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "churn",
+            "title": "이탈 원인 조사",
+            "memberId": "member-quill",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:churn",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 5
+            }
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "pricing",
+            "title": "경쟁사 가격",
+            "memberId": "member-quill",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:pricing",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 3
+            }
+          }
+        ]
+      }
+    },
+    "/read-state?mission=intake": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "snapshot": {
+          "revision": 3,
+          "value": {
+            "constraints": [],
+            "conversations": [
+              {
+                "id": "conversation:55739e8ab268b4cf3824253196523c474406d2da",
+                "messages": [
+                  {
+                    "actorId": "local-owner",
+                    "at": 1793843040000,
+                    "id": "procedure-note",
+                    "ordinal": 1,
+                    "replyTo": null,
+                    "role": "owner",
+                    "stepNote": {
+                      "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                      "title": "테스트 먼저 돌리기"
+                    },
+                    "text": "이번에도 테스트부터 돌려 줘."
+                  }
+                ],
+                "workId": "assistant-cac79b1a06e9356c6fcd4aad"
+              }
+            ],
+            "criteria": {
+              "description": "요청한 결과와 근거 확인",
+              "oracle": "bounded-text-review/v1",
+              "version": 1
+            },
+            "growth": [],
+            "id": "intake",
+            "memories": [],
+            "purpose": "맡긴 일",
+            "relations": [],
+            "scope": "local",
+            "version": 1,
+            "works": [
+              {
+                "acceptance": "pending",
+                "admittedAt": 1793842800000,
+                "appliedMemoryVersions": [],
+                "assignments": [
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "fixture-v1",
+                    "id": "executor",
+                    "model": {
+                      "configVersion": "v1",
+                      "evidenceClass": "fixture",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "reason": "Controlled fixture, no provider invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:executor"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "fixture-v1",
+                    "id": "verifier",
+                    "model": {
+                      "configVersion": "v1",
+                      "evidenceClass": "fixture",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "reason": "Controlled fixture, no provider invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:verifier"
+                  },
+                  {
+                    "actorId": "worker-0",
+                    "extensionVersion": "fixture-v1",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "model": {
+                      "configVersion": "v1",
+                      "evidenceClass": "fixture",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "reason": "Controlled fixture, no provider invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  },
+                  {
+                    "actorId": "worker-1",
+                    "extensionVersion": "fixture-v1",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                    "model": {
+                      "configVersion": "v1",
+                      "evidenceClass": "fixture",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "reason": "Controlled fixture, no provider invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:1"
+                  }
+                ],
+                "assistantSource": {
+                  "memberId": "member-juno",
+                  "message": {
+                    "actorId": "local-owner",
+                    "at": 1793842800000,
+                    "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                    "ordinal": 1,
+                    "role": "owner",
+                    "text": "PR #84 검토해 줘.",
+                    "turnId": null
+                  },
+                  "messageHash": "8a8d80c7ea22d8cc02c39e1408c2f141ccc1ee95d011324d3960f578a1cb9fb8",
+                  "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                  "representative": {
+                    "model": "fixture-representative",
+                    "provider": "fixture"
+                  },
+                  "segmentId": "assistant-conversation:1",
+                  "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                },
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:attempt:1",
+                    "modelVersions": [
+                      "v1",
+                      "v1",
+                      "v1",
+                      "v1"
+                    ],
+                    "number": 1,
+                    "status": "active"
+                  }
+                ],
+                "budget": {
+                  "limit": 64,
+                  "measured": 0,
+                  "reserved": 0,
+                  "unit": "output-tokens"
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "fixture-only",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:effect",
+                    "status": "pending",
+                    "target": "controlled fixture units",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  }
+                ],
+                "execution": "active",
+                "id": "assistant-cac79b1a06e9356c6fcd4aad",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "runtimeRun": {
+                  "authorizationId": "fixture-only",
+                  "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                  "id": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                  "inputHash": "cfbf8e011ffab97a3ca0a89cfb684e1979bcb40901afc62ad64272917261829a",
+                  "mode": "mock-http",
+                  "outputTokenCap": 1,
+                  "ownership": {
+                    "deadlineAt": 1793843100000,
+                    "dispatchId": "fixture-coding",
+                    "hostSessionId": "fixture-room",
+                    "startedAt": 1793842800000
+                  }
+                },
+                "tasks": [
+                  {
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                    "parentId": null,
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                    "parentId": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:verifier",
+                    "parentId": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                    "progress": {
+                      "at": 1793842800000,
+                      "done": 4,
+                      "total": 11
+                    },
+                    "startedAt": 1793842800000,
+                    "status": "active",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "읽기",
+                      "title": "읽기"
+                    }
+                  },
+                  {
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                    "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                    "status": "queued",
+                    "step": {
+                      "dependsOn": [
+                        "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                      ],
+                      "role": "테스트",
+                      "title": "테스트 돌리기"
+                    }
+                  }
+                ],
+                "team": {
+                  "memberId": "member-juno",
+                  "procedures": [
+                    {
+                      "body": {
+                        "description": "PR #84 검토",
+                        "steps": [
+                          "읽기",
+                          "테스트 돌리기"
+                        ],
+                        "verify": "요청한 결과와 근거 확인"
+                      },
+                      "hash": "70ac7d790c809d37db94c3a8abb25c605347d2ffffc8028217b8cde8b0d9cb37",
+                      "id": "skill-0eac0685edf21f9a",
+                      "version": 1
+                    }
+                  ],
+                  "skillsRevision": 1
+                },
+                "title": "PR #84 검토"
+              },
+              {
+                "acceptance": "pending",
+                "appliedMemoryVersions": [],
+                "assignments": [
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "fixture-v1",
+                    "id": "churn:executor",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "churn:root"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "fixture-v1",
+                    "id": "churn:verifier",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "churn:root"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "churn:attempt:1",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "number": 1,
+                    "status": "active"
+                  }
+                ],
+                "budget": {
+                  "limit": 8,
+                  "measured": 1,
+                  "reserved": 1
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "소유자가 맡긴 일",
+                    "id": "churn:effect",
+                    "receipt": "고정된 화면 검증 데이터",
+                    "status": "succeeded",
+                    "target": "이탈 원인 조사",
+                    "taskId": "churn:root"
+                  }
+                ],
+                "execution": "active",
+                "id": "churn",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "tasks": [
+                  {
+                    "id": "churn:root",
+                    "parentId": null,
+                    "status": "active"
+                  }
+                ],
+                "title": "이탈 원인 조사"
+              },
+              {
+                "acceptance": "pending",
+                "appliedMemoryVersions": [],
+                "assignments": [
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "fixture-v1",
+                    "id": "pricing:executor",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "pricing:root"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "fixture-v1",
+                    "id": "pricing:verifier",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "pricing:root"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "pricing:attempt:1",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "number": 1,
+                    "status": "active"
+                  }
+                ],
+                "budget": {
+                  "limit": 8,
+                  "measured": 1,
+                  "reserved": 1
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "소유자가 맡긴 일",
+                    "id": "pricing:effect",
+                    "receipt": "고정된 화면 검증 데이터",
+                    "status": "succeeded",
+                    "target": "경쟁사 가격",
+                    "taskId": "pricing:root"
+                  }
+                ],
+                "execution": "active",
+                "id": "pricing",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "tasks": [
+                  {
+                    "id": "pricing:root",
+                    "parentId": null,
+                    "status": "active"
+                  },
+                  {
+                    "id": "pricing:executor",
+                    "parentId": "pricing:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "pricing:step:0",
+                    "parentId": "pricing:executor",
+                    "status": "settled",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "조사",
+                      "title": "출처 고르기"
+                    }
+                  },
+                  {
+                    "id": "pricing:step:1",
+                    "parentId": "pricing:executor",
+                    "status": "settled",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "조사",
+                      "title": "가격 모으기"
+                    }
+                  },
+                  {
+                    "id": "pricing:step:2",
+                    "parentId": "pricing:executor",
+                    "status": "active",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "표 정리",
+                      "title": "표 만들기"
+                    }
+                  },
+                  {
+                    "id": "pricing:verifier",
+                    "parentId": "pricing:root",
+                    "status": "queued"
+                  }
+                ],
+                "title": "경쟁사 가격"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "/missions/intake": {
+      "status": 200,
+      "body": {
+        "revision": 3,
+        "value": {
+          "constraints": [],
+          "conversations": [
+            {
+              "id": "conversation:55739e8ab268b4cf3824253196523c474406d2da",
+              "messages": [
+                {
+                  "actorId": "local-owner",
+                  "at": 1793843040000,
+                  "id": "procedure-note",
+                  "ordinal": 1,
+                  "replyTo": null,
+                  "role": "owner",
+                  "stepNote": {
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                    "title": "테스트 먼저 돌리기"
+                  },
+                  "text": "이번에도 테스트부터 돌려 줘."
+                }
+              ],
+              "workId": "assistant-cac79b1a06e9356c6fcd4aad"
+            }
+          ],
+          "criteria": {
+            "description": "요청한 결과와 근거 확인",
+            "oracle": "bounded-text-review/v1",
+            "version": 1
+          },
+          "growth": [],
+          "id": "intake",
+          "memories": [],
+          "purpose": "맡긴 일",
+          "relations": [],
+          "scope": "local",
+          "version": 1,
+          "works": [
+            {
+              "acceptance": "pending",
+              "admittedAt": 1793842800000,
+              "appliedMemoryVersions": [],
+              "assignments": [
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "fixture-v1",
+                  "id": "executor",
+                  "model": {
+                    "configVersion": "v1",
+                    "evidenceClass": "fixture",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "reason": "Controlled fixture, no provider invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:executor"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "fixture-v1",
+                  "id": "verifier",
+                  "model": {
+                    "configVersion": "v1",
+                    "evidenceClass": "fixture",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "reason": "Controlled fixture, no provider invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:verifier"
+                },
+                {
+                  "actorId": "worker-0",
+                  "extensionVersion": "fixture-v1",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                  "model": {
+                    "configVersion": "v1",
+                    "evidenceClass": "fixture",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "reason": "Controlled fixture, no provider invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                },
+                {
+                  "actorId": "worker-1",
+                  "extensionVersion": "fixture-v1",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                  "model": {
+                    "configVersion": "v1",
+                    "evidenceClass": "fixture",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "reason": "Controlled fixture, no provider invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:1"
+                }
+              ],
+              "assistantSource": {
+                "memberId": "member-juno",
+                "message": {
+                  "actorId": "local-owner",
+                  "at": 1793842800000,
+                  "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                  "ordinal": 1,
+                  "role": "owner",
+                  "text": "PR #84 검토해 줘.",
+                  "turnId": null
+                },
+                "messageHash": "8a8d80c7ea22d8cc02c39e1408c2f141ccc1ee95d011324d3960f578a1cb9fb8",
+                "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                "representative": {
+                  "model": "fixture-representative",
+                  "provider": "fixture"
+                },
+                "segmentId": "assistant-conversation:1",
+                "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+              },
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:attempt:1",
+                  "modelVersions": [
+                    "v1",
+                    "v1",
+                    "v1",
+                    "v1"
+                  ],
+                  "number": 1,
+                  "status": "active"
+                }
+              ],
+              "budget": {
+                "limit": 64,
+                "measured": 0,
+                "reserved": 0,
+                "unit": "output-tokens"
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "fixture-only",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:effect",
+                  "status": "pending",
+                  "target": "controlled fixture units",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                }
+              ],
+              "execution": "active",
+              "id": "assistant-cac79b1a06e9356c6fcd4aad",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "runtimeRun": {
+                "authorizationId": "fixture-only",
+                "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                "id": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+                "inputHash": "cfbf8e011ffab97a3ca0a89cfb684e1979bcb40901afc62ad64272917261829a",
+                "mode": "mock-http",
+                "outputTokenCap": 1,
+                "ownership": {
+                  "deadlineAt": 1793843100000,
+                  "dispatchId": "fixture-coding",
+                  "hostSessionId": "fixture-room",
+                  "startedAt": 1793842800000
+                }
+              },
+              "tasks": [
+                {
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                  "parentId": null,
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                  "parentId": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:verifier",
+                  "parentId": "assistant-cac79b1a06e9356c6fcd4aad:root",
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                  "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                  "progress": {
+                    "at": 1793842800000,
+                    "done": 4,
+                    "total": 11
+                  },
+                  "startedAt": 1793842800000,
+                  "status": "active",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "읽기",
+                    "title": "읽기"
+                  }
+                },
+                {
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
+                  "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                  "status": "queued",
+                  "step": {
+                    "dependsOn": [
+                      "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                    ],
+                    "role": "테스트",
+                    "title": "테스트 돌리기"
+                  }
+                }
+              ],
+              "team": {
+                "memberId": "member-juno",
+                "procedures": [
+                  {
+                    "body": {
+                      "description": "PR #84 검토",
+                      "steps": [
+                        "읽기",
+                        "테스트 돌리기"
+                      ],
+                      "verify": "요청한 결과와 근거 확인"
+                    },
+                    "hash": "70ac7d790c809d37db94c3a8abb25c605347d2ffffc8028217b8cde8b0d9cb37",
+                    "id": "skill-0eac0685edf21f9a",
+                    "version": 1
+                  }
+                ],
+                "skillsRevision": 1
+              },
+              "title": "PR #84 검토"
+            },
+            {
+              "acceptance": "pending",
+              "appliedMemoryVersions": [],
+              "assignments": [
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "fixture-v1",
+                  "id": "churn:executor",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "churn:root"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "fixture-v1",
+                  "id": "churn:verifier",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "churn:root"
+                }
+              ],
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "churn:attempt:1",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "number": 1,
+                  "status": "active"
+                }
+              ],
+              "budget": {
+                "limit": 8,
+                "measured": 1,
+                "reserved": 1
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "소유자가 맡긴 일",
+                  "id": "churn:effect",
+                  "receipt": "고정된 화면 검증 데이터",
+                  "status": "succeeded",
+                  "target": "이탈 원인 조사",
+                  "taskId": "churn:root"
+                }
+              ],
+              "execution": "active",
+              "id": "churn",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "tasks": [
+                {
+                  "id": "churn:root",
+                  "parentId": null,
+                  "status": "active"
+                }
+              ],
+              "title": "이탈 원인 조사"
+            },
+            {
+              "acceptance": "pending",
+              "appliedMemoryVersions": [],
+              "assignments": [
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "fixture-v1",
+                  "id": "pricing:executor",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "pricing:root"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "fixture-v1",
+                  "id": "pricing:verifier",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "pricing:root"
+                }
+              ],
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "pricing:attempt:1",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "number": 1,
+                  "status": "active"
+                }
+              ],
+              "budget": {
+                "limit": 8,
+                "measured": 1,
+                "reserved": 1
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "소유자가 맡긴 일",
+                  "id": "pricing:effect",
+                  "receipt": "고정된 화면 검증 데이터",
+                  "status": "succeeded",
+                  "target": "경쟁사 가격",
+                  "taskId": "pricing:root"
+                }
+              ],
+              "execution": "active",
+              "id": "pricing",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "tasks": [
+                {
+                  "id": "pricing:root",
+                  "parentId": null,
+                  "status": "active"
+                },
+                {
+                  "id": "pricing:executor",
+                  "parentId": "pricing:root",
+                  "status": "active"
+                },
+                {
+                  "id": "pricing:step:0",
+                  "parentId": "pricing:executor",
+                  "status": "settled",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "조사",
+                    "title": "출처 고르기"
+                  }
+                },
+                {
+                  "id": "pricing:step:1",
+                  "parentId": "pricing:executor",
+                  "status": "settled",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "조사",
+                    "title": "가격 모으기"
+                  }
+                },
+                {
+                  "id": "pricing:step:2",
+                  "parentId": "pricing:executor",
+                  "status": "active",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "표 정리",
+                    "title": "표 만들기"
+                  }
+                },
+                {
+                  "id": "pricing:verifier",
+                  "parentId": "pricing:root",
+                  "status": "queued"
+                }
+              ],
+              "title": "경쟁사 가격"
+            }
+          ]
+        }
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793842800000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "assistant-cac79b1a06e9356c6fcd4aad",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793842800000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "segment": 1,
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 2
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              }
+            }
+          }
+        ],
+        "decisions": [],
+        "briefings": []
+      }
+    },
+    "/assistant/conversation?member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793842800000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "assistant-cac79b1a06e9356c6fcd4aad",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793842800000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "segment": 1,
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 2
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              }
+            }
+          }
+        ],
+        "decisions": [],
+        "briefings": [],
+        "member": {
+          "id": "member-juno",
+          "name": "주노",
+          "look": {
+            "shape": "round",
+            "color": "agent-6"
+          },
+          "modelGroup": "coding"
+        }
+      }
+    },
+    "/assistant/conversation?segment=1&member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 1,
+        "head": 1,
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
+            },
+            {
+              "id": "r:pr84",
+              "role": "representative",
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "messageId": "m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793842800000,
+            "proposal": {
+              "title": "PR #84 검토"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "assistant-cac79b1a06e9356c6fcd4aad",
+              "title": "PR #84 검토",
+              "memberId": "member-juno",
+              "execution": "active",
+              "acceptance": "pending",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793842800000,
+              "endedAt": null,
+              "turnId": "assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
+              "segment": 1,
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 2
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              }
+            }
+          }
+        ],
+        "decisions": [],
+        "briefings": [],
+        "member": {
+          "id": "member-juno",
+          "name": "주노",
+          "look": {
+            "shape": "round",
+            "color": "agent-6"
+          },
+          "modelGroup": "coding"
+        }
+      }
+    }
+  }
 }

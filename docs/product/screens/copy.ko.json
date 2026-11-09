@@ -17118,5 +17118,17 @@
   "used_in": [
    "E7:first-experience"
   ]
+ },
+ "ui.room.next-step": {
+  "ko": "다음 단계",
+  "roles": ["text"],
+  "used_in": ["B18-room-b:pane", "B22-room-steps:pane"],
+  "provenance": "Approved B18-room-b and B22-room-steps artboard wording."
+ },
+ "ui.room.step-note": {
+  "ko": "절차 고침: {title} · 확인 대기",
+  "roles": ["text", "link"],
+  "used_in": ["B22-room-steps:pane", "B22-room-steps:conversation"],
+  "provenance": "Parameterized equivalent of approved conversation.link.23, with the recorded time rendered separately."
  }
 }

@@ -1,6 +1,6 @@
 import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
-import {validatePredicates} from './work-telemetry.ts';
+import {validatePredicates,validateStepProgress} from './work-telemetry.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
@@ -241,7 +241,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
-    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt']);
+    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt','progress']);if(Object.hasOwn(task,'progress')){validateStepProgress(task.progress);ensure(!!task.step,'Progress must bind a worker step');}
     for(const key of ['startedAt','endedAt'])if(Object.hasOwn(task,key))integer(task[key],'task time',0);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
     if (task.parentId !== null) text(task.parentId, 'parent task ID'); oneOf(task.status, ['queued', 'active', 'settled'], 'task status');
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
@@ -363,7 +363,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'ask-work-question':{required:['workId','questionId','text']},
   'answer-work-question':{required:['workId','questionId','text']},
   'append-mission-message':{required:['messageId','replyTo','text']},
-  'append-work-message':{required:['workId','messageId','replyTo','text']},
+  'append-work-message':{required:['workId','messageId','replyTo','text'],optional:['stepNote']},
   'claim-provider-dispatch': {required:['workId','effectId','claim']},
   'expire-runtime': {required:['workId','runId','dispatchId','observedAt']},
   'stop-owned-runtime': {required:['workId','runId','dispatchId','hostSessionId','observedAt']},
@@ -380,6 +380,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
   'block-work': { required: ['workId', 'blocker'] },
   delegate: { required: ['workId', 'taskId', 'parentId'], optional:['step'] },
+  'record-step-progress':{required:['workId','taskId','progress']},
   'settle-task': { required: ['workId', 'taskId', 'result'] },
   'admit-effect': { required: ['workId', 'effect', 'reserve'] },
   receipt: { required: ['workId', 'effectId', 'outcome', 'receipt', 'usage'],optional:['providerDispatchId'] },

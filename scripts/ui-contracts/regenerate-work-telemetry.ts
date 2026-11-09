@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {apply,hash,canonical,workInputHash,observesWork,endsWork} from '../../src/domain.ts';
 import type {Actor,Command,Mission,Work,Task} from '../../src/domain.ts';
+import {regenerateRoomScreens} from './room-telemetry-fixtures.ts';
 import {Application} from '../../src/application.ts';
 import {InMemoryStore} from '../../src/storage.ts';
 import {parseTeamPlan,teamCallCount} from '../../src/internal-teams.ts';
@@ -101,6 +102,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  await regenerateException();
  for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown'])await regenerate(screen);
  const alias=(await json(new URL('./work-telemetry-inputs.json',import.meta.url)))['B18-room-b'].template;alias.gaps=alias.gaps.map((gap:string)=>gap.replace('business procedure steps, per-step timestamps, typed pricing table','business procedure steps, typed pricing table'));await writeFile(new URL('B18-room-b.json',directory),JSON.stringify(alias,null,2)+'\n');
+ await regenerateRoomScreens();
  // Inherited readers must still name each descendant's own retained Record.
  for(const file of await readdir(directory))if(file.endsWith('.json')){
   const path=new URL(file,directory),raw=await json(path),fixture=await loadFixture(raw.screen),mission=(fixture.routes['/missions/intake']?.body as any)?.value;let changed=false;

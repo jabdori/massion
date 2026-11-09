@@ -14,7 +14,8 @@ async function scene(screen:string,rejectStatus=405){
   const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);
   return r?reply(structuredClone(r.body),r.status):reply({},503);
  });await settle();
- const work=(fixture.routes['/missions/intake']!.body as any).value.works[0],turn=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id);
+ const selected=fixture.steps.map(s=>'readySelector' in s?s.readySelector:undefined).findLast(s=>s?.startsWith('#work-heading-'))??fixture.readySelector,works=(fixture.routes['/missions/intake']!.body as any).value.works;
+ const work=works.find((w:any)=>selected==='#work-heading-'+w.id)??works[0],turn=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id);
  await runInContext('shellOpenWork('+JSON.stringify(turn.turnId)+')',app.context);await settle();
  const card=()=>app.all().find(n=>n.id==='work-card-'+work.id)!,nodes=()=>descendants(card());
  return {app,work,posted,card,nodes,fixture};
@@ -74,10 +75,10 @@ test('a rejected Stop reports the revision conflict while the Work stays running
 });
 
  test('B22 room steps use the B7 pane and never embed the legacy Work inspector',async()=>{
- const {nodes,card}=await scene('B22-room-steps');
+ const {nodes,card,work}=await scene('B22-room-steps');
  assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 돌리기','확인','기록']);
- assert.ok(nodes().some(n=>n.id==='work-room-stop-pr84'));
- assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-pr84'));
+ assert.ok(nodes().some(n=>n.id==='work-room-stop-'+work.id));
+ assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
  assert.doesNotMatch(card().textContent,/실행: active|검증: pending|시도 \/ 예산|측정 사용량|기준·기억·근거|선택한 원문 문서|원래 조직 역할/);
  });
 
@@ -128,7 +129,7 @@ test('room participants expose member and independent Check as list items and us
  assert.equal(people.tagName,'UL');assert.ok(people.children.every(n=>n.tagName==='LI'));
  assert.equal(people.children[0]!.children.at(-1)!.textContent,'주노');assert.equal(people.children.at(-1)!.textContent,'확인');
  const check=nodes().find(n=>hasClass(n,'room-steps'))!.children.find(n=>n.children[1]?.textContent==='확인')!;
- assert.equal(check.children.at(-1)!.textContent,'0/1');
+ assert.equal(check.children.find(n=>hasClass(n,'room-step-count'))?.textContent,'0/1');
  const handoff=nodes().find(n=>hasClass(n,'room-handoff'))!;
  assert.ok(handoff);assert.equal(handoff.hidden,false);assert.match(handoff.textContent,/^하나가 넘김 · \d{1,2}:\d{2}$/);
  assert.equal(posted.length,0);
@@ -154,4 +155,52 @@ test('bound check predicates and admission, check and steering times render lite
  assert.equal(nodes().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(text(),/"checks"/);assert.ok(text().includes(work.verdict.evidence[0].detail));
  runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='old';renderMission()`,app.context);
  assert.doesNotMatch(text(),/일치 <b>|아님누락/);
+});
+
+
+test('pending rooms omit the generic check caption while failed and unknown evidence stays visible',async()=>{
+ const pending=await scene('B22-room-steps'),summary=pending.nodes().find(n=>n.id==='work-room-check-'+pending.work.id)!;
+ assert.doesNotMatch(summary.textContent,/요청한 결과와 근거 확인/);
+ assert.equal(pending.nodes().find(n=>hasClass(n,'room-progress')),undefined);
+ for(const screen of ['B7-fail','B7-unknown']){
+  const current=await scene(screen),check=current.nodes().find(n=>n.id==='work-room-check-'+current.work.id)!;
+  assert.ok(check.children.find(n=>hasClass(n,'room-check-detail'))!.textContent.length>0);
+ }
+});
+
+test('pending completed production shows check waiting and an elapsed duration even when the run has an end time',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps'),at=Date.UTC(2026,10,5,1,30);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.execution='settled';w.acceptance='pending';w.runtimeRun={ownership:{startedAt:${at}}};w.endedAt=${at+22*60000};renderMission()}`,app.context);
+ const status=nodes().find(n=>hasClass(n,'room-status'))!;
+ assert.equal(status.children[1]!.textContent,'확인 대기');assert.equal(status.children.find(n=>n.tagName==='TIME')?.textContent,'22분');
+});
+
+
+test('room step roles already expressed by titles disappear from participants and observed counts reach the chat card',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps');
+ assert.deepEqual(nodes().find(n=>hasClass(n,'room-people'))!.children.map(n=>n.children.at(-1)?.textContent??n.textContent),['주노','확인']);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step&&t.step.title==='읽기').progress={done:4,total:11,at:Date.now()};renderMission();renderChat()}`,app.context);
+ const card=app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(work.title))!;
+ assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/읽기 4\/11.*확인 0\/1/);
+ assert.equal(nodes().find(n=>hasClass(n,'room-worker-results')),undefined,'progress without an instruction does not create a transcript');
+});
+
+
+test('all settled workers await the independent check while the Work stays active and its elapsed clock keeps running',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps');
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});for(const t of w.tasks.filter(t=>t.step))t.status='settled';w.execution='active';w.runtimeRun={ownership:{startedAt:Date.now()-22*60000}};delete w.endedAt;renderMission()}`,app.context);
+ const status=nodes().find(n=>hasClass(n,'room-status'))!;
+ assert.equal(status.children[1]!.textContent,'확인 대기');assert.equal(status.children.find(n=>n.tagName==='TIME')?.textContent,'22분');
+ assert.equal(runInContext('snapshot.value.works.find(w=>w.id==='+JSON.stringify(work.id)+').execution',app.context),'active');
+});
+
+test('observed coding-step cards omit duplicate role chips and keep actual step counts',async()=>{
+ const {app}=await scene('B22-room-steps'),card=app.all().find(n=>hasClass(n,'chat-card'))!;
+ assert.ok(descendants(card).find(n=>hasClass(n,'chat-chips'))!.hidden);
+ assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/읽기 4\/11.*확인 0\/1/);
+});
+
+test('the sidebar and pane agree when all producing steps await the independent check',async()=>{
+ const {app,work}=await scene('B18-room-b'),line=app.all().find(n=>n.id==='side-line-intake/'+work.id)!;
+ assert.equal(descendants(line).find(n=>n.attributes.get('role')==='status')!.textContent,'확인 대기');
 });

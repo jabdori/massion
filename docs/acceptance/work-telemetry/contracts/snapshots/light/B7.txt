@@ -164,7 +164,6 @@
                 - listitem "확인 · 대기 중" [level=1, ref=e47]
                   - StaticText "확인"
             - group
-              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e45]
+              - button "확인 대기" [expanded=false, ref=e45]
                 - strong
                   - StaticText "확인 대기"
-                - StaticText "요청한 결과와 근거 확인"

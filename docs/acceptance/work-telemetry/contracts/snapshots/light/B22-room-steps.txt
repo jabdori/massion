@@ -60,21 +60,28 @@
           - paragraph
             - StaticText "PR #84 검토해 줘."
           - paragraph
-            - StaticText "하나가 넘김: PR #84 검토 · 14:08"
-          - button "PR #84 검토 실행 중 4분 작성 확인 1/5" [ref=e36]
+            - StaticText "하나가 넘김: PR #84 검토 · 10:40"
+          - button "PR #84 검토 실행 중 4분 읽기 4/11 확인 0/1" [ref=e36]
             - strong
               - StaticText "PR #84 검토"
             - StaticText "실행 중"
             - StaticText "4분"
-            - StaticText "작성"
-            - StaticText "확인"
-            - StaticText "1/5"
+            - StaticText "읽기 4/11 확인 0/1"
           - generic
             - StaticText "주노"
-            - StaticText "14:08"
+            - time
+              - StaticText "10:40"
             - paragraph
               - StaticText "테스트부터 확인할게요."
             - button "복사" [ref=e37]
+          - generic
+            - article
+              - paragraph
+                - StaticText "이번에도 테스트부터 돌려 줘."
+            - button "절차 고침: 테스트 먼저 돌리기 · 확인 대기" [ref=e38]
+            - StaticText "·"
+            - time
+              - StaticText "10:44"
       - generic
         - form
           - textbox "주노에게 메시지 보내기" [ref=e27]
@@ -94,39 +101,39 @@
     - button "작업 공간 닫기" [ref=e8]
     - tabpanel
       - region "미션" [ref=e22]
-        - article
-          - StaticText "실행 중"
-          - time
-            - StaticText "4분"
-          - button "중지" [ref=e31]
-          - heading "PR #84 검토" [level=3, ref=e32]
-          - paragraph
-            - StaticText "하나가 넘김 · 14:08"
-          - list
-            - listitem "주노" [level=1, ref=e38]
-              - StaticText "주노"
-            - listitem "읽기" [level=1, ref=e39]
-            - listitem "테스트" [level=1, ref=e40]
-            - listitem "확인" [level=1, ref=e41]
-              - StaticText "확인"
-          - generic
-            - sectionheader
-              - strong
-                - StaticText "절차"
-              - StaticText "0/2"
+        - generic
+          - article
+            - StaticText "실행 중"
+            - time
+              - StaticText "4분"
+            - button "중지" [ref=e31]
+            - heading "PR #84 검토" [level=3, ref=e32]
+            - paragraph
+              - StaticText "하나가 넘김 · 10:40"
+            - list
+              - listitem "주노" [level=1, ref=e39]
+                - StaticText "주노"
+              - listitem "확인" [level=1, ref=e40]
+                - StaticText "확인"
             - list "절차"
-              - listitem "읽기 · 주노 · 읽기 · 실행 중" [level=1, ref=e43]
+              - listitem "읽기 · 주노 · 읽기 · 실행 중" [level=1, ref=e42]
                 - StaticText "읽기"
-              - listitem "테스트 돌리기 · 주노 · 테스트 · 대기 중" [level=1, ref=e44]
+                - StaticText "4/11"
+                - StaticText "실행 중"
+                - time
+                  - StaticText "10:40"
+              - listitem "테스트 돌리기 · 주노 · 테스트 · 대기 중" [level=1, ref=e43]
                 - StaticText "테스트 돌리기"
-                - StaticText "선행 단계 · 읽기"
+                - StaticText "다음 단계"
+                - StaticText "절차 고침: 테스트 먼저 돌리기 · 확인 대기"
+                - time
+                  - StaticText "10:44"
               - listitem [level=1]
                 - StaticText "확인"
                 - StaticText "0/1"
               - listitem [level=1]
                 - StaticText "기록"
-          - group
-            - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e42]
-              - strong
-                - StaticText "확인 대기"
-              - StaticText "요청한 결과와 근거 확인"
+            - group
+              - button "확인 대기" [expanded=false, ref=e41]
+                - strong
+                  - StaticText "확인 대기"

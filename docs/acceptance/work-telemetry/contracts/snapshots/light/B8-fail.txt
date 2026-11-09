@@ -45,7 +45,8 @@
             - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
             - button "복사" [ref=e27]
@@ -53,7 +54,8 @@
             - StaticText "기업 고객은 따로 봐 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
             - button "복사" [ref=e28]
@@ -61,7 +63,8 @@
             - StaticText "앞으로 표 금액은 원 단위로 써 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:12"
+            - time
+              - StaticText "14:12"
             - paragraph
               - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             - button "복사" [ref=e29]
@@ -74,15 +77,13 @@
               - StaticText "확인 실패"
             - button "다시 시도" [ref=e30]
             - button "닫기" [ref=e31]
-          - generic
-            - heading "이탈 원인 조사" [level=3, ref=e32]
-            - article
-              - strong
-                - StaticText "나"
-              - time
-                - StaticText "14:08"
-              - paragraph
-                - StaticText "기업 고객은 따로 봐 줘."
+          - article
+            - strong
+              - StaticText "나"
+            - time
+              - StaticText "14:08"
+            - paragraph
+              - StaticText "기업 고객은 따로 봐 줘."
       - generic
         - form
           - textbox "퀼에게 메시지 보내기" [ref=e20]
@@ -203,7 +204,7 @@
                     - StaticText "14:08"
                   - StaticText "실패"
             - group
-              - button "확인 실패 근거 1건" [expanded=false, ref=e33]
+              - button "확인 실패 근거 1건" [expanded=false, ref=e32]
                 - strong
                   - StaticText "확인 실패"
                 - StaticText "근거 1건"

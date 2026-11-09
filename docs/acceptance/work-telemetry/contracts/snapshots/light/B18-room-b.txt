@@ -58,30 +58,34 @@
           - paragraph
             - StaticText "11월 5일 (목)"
           - paragraph
-            - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
-          - button "경쟁사 가격 확인 대기 4분 작성 확인 0/2" [ref=e34]
+            - StaticText "하나가 넘김: 경쟁사 가격 · 13:50"
+          - button "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1" [ref=e34]
             - strong
               - StaticText "경쟁사 가격"
             - StaticText "확인 대기"
-            - StaticText "4분"
-            - StaticText "작성"
+            - StaticText "22분"
+            - StaticText "조사"
+            - StaticText "표 정리"
             - StaticText "확인"
-            - StaticText "0/2"
+            - StaticText "출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1"
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실행 중 4분 작성 확인 2/4" [ref=e35]
+          - button "이탈 원인 조사 실행 중 4분 조사 분류 요약 확인 2/4" [ref=e35]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실행 중"
             - StaticText "4분"
-            - StaticText "작성"
+            - StaticText "조사"
+            - StaticText "분류"
+            - StaticText "요약"
             - StaticText "확인"
             - StaticText "2/4"
           - paragraph
             - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
             - button "복사" [ref=e36]
@@ -89,7 +93,8 @@
             - StaticText "기업 고객은 따로 봐 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
             - button "복사" [ref=e37]
@@ -97,7 +102,8 @@
             - StaticText "앞으로 표 금액은 원 단위로 써 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:12"
+            - time
+              - StaticText "14:12"
             - paragraph
               - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             - button "복사" [ref=e38]
@@ -119,32 +125,89 @@
       - region "미션" [ref=e20]
         - generic
           - article
-            - StaticText "대기 중"
+            - StaticText "확인 대기"
             - time
-              - StaticText "14:08 – 14:08"
+              - StaticText "22분"
             - button "중지" [ref=e29]
             - heading "경쟁사 가격" [level=3, ref=e30]
             - paragraph
-              - StaticText "하나가 넘김 · 14:08"
+              - StaticText "하나가 넘김 · 13:50"
             - list
               - listitem "퀼" [level=1, ref=e39]
                 - StaticText "퀼"
-              - listitem "확인" [level=1, ref=e40]
+              - listitem "조사" [level=1, ref=e40]
+              - listitem "표 정리" [level=1, ref=e41]
+              - listitem "확인" [level=1, ref=e42]
                 - StaticText "확인"
-            - generic
-              - sectionheader
-                - strong
-                  - StaticText "절차"
-                - StaticText "0/2"
-              - list "절차"
-                - listitem "작성 · 실행 중" [level=1, ref=e42]
-                  - StaticText "작성"
-                  - time
-                    - StaticText "14:08"
-                - listitem "확인 · 대기 중" [level=1, ref=e43]
-                  - StaticText "확인"
+            - list "절차"
+              - listitem "출처 고르기 · 퀼 · 조사 · 완료" [level=1, ref=e44]
+                - StaticText "출처 고르기"
+                - StaticText "3/3"
+                - time
+                  - StaticText "13:52"
+              - listitem "가격 모으기 · 퀼 · 조사 · 완료" [level=1, ref=e45]
+                - StaticText "가격 모으기"
+                - StaticText "3/3"
+                - StaticText "조사"
+                - time
+                  - StaticText "14:00"
+                - StaticText "C사"
+                - StaticText "연간 요금만 공개"
+              - listitem "요약 · 퀼 · 요약 · 건너뜀 · 표만 요청" [level=1, ref=e46]
+                - StaticText "요약"
+                - StaticText "건너뜀 · 표만 요청"
+                - time
+                  - StaticText "14:00"
+              - listitem "표 만들기 · 퀼 · 표 정리 · 완료" [level=1, ref=e47]
+                - StaticText "표 만들기"
+                - StaticText "1/1"
+                - StaticText "표 정리"
+                - time
+                  - StaticText "14:07"
+              - listitem [level=1]
+                - StaticText "확인"
+                - StaticText "0/1"
+                - StaticText "대기"
+              - listitem [level=1]
+                - StaticText "기록"
+                - StaticText "다음 단계"
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "조사"
+              - time
+                - StaticText "13:52"
+              - paragraph
+                - StaticText "세 곳 요금제 페이지에서 월 요금만 모아 줘."
+            - article
+              - StaticText "조사"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:00"
+              - paragraph
+                - StaticText "A사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요."
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "표 정리"
+              - time
+                - StaticText "14:02"
+              - paragraph
+                - StaticText "C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로."
+            - article
+              - StaticText "표 정리"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:07"
+              - paragraph
+                - StaticText "표 1개, 요금제 6개예요."
             - group
-              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e41]
+              - button "확인 대기" [expanded=false, ref=e43]
                 - strong
                   - StaticText "확인 대기"
-                - StaticText "요청한 결과와 근거 확인"

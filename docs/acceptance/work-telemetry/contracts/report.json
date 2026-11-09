@@ -19,8 +19,8 @@
     {
       "screen": "B7-churn",
       "theme": "dark",
-      "passed": 52,
-      "failed": 22,
+      "passed": 53,
+      "failed": 21,
       "warnings": 2,
       "required": 74,
       "visualFailures": [],
@@ -140,10 +140,24 @@
       "pair": "pairs/dark/B8-unknown.png"
     },
     {
+      "screen": "B18",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18.png"
+    },
+    {
       "screen": "B18-room-b",
       "theme": "dark",
-      "passed": 33,
-      "failed": 36,
+      "passed": 56,
+      "failed": 13,
       "warnings": 2,
       "required": 69,
       "visualFailures": [
@@ -151,7 +165,7 @@
         "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
       ],
       "gaps": [
-        "Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported."
+        "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text."
       ],
       "errors": [],
       "pair": "pairs/dark/B18-room-b.png"
@@ -173,8 +187,8 @@
     {
       "screen": "B22-room-steps",
       "theme": "dark",
-      "passed": 42,
-      "failed": 7,
+      "passed": 48,
+      "failed": 1,
       "warnings": 0,
       "required": 49,
       "visualFailures": [
@@ -202,8 +216,8 @@
     {
       "screen": "B7-churn",
       "theme": "light",
-      "passed": 52,
-      "failed": 22,
+      "passed": 53,
+      "failed": 21,
       "warnings": 2,
       "required": 74,
       "visualFailures": [],
@@ -323,10 +337,24 @@
       "pair": "pairs/light/B8-unknown.png"
     },
     {
+      "screen": "B18",
+      "theme": "light",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18.png"
+    },
+    {
       "screen": "B18-room-b",
       "theme": "light",
-      "passed": 33,
-      "failed": 36,
+      "passed": 56,
+      "failed": 13,
       "warnings": 2,
       "required": 69,
       "visualFailures": [
@@ -334,7 +362,7 @@
         "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
       ],
       "gaps": [
-        "Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported."
+        "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text."
       ],
       "errors": [],
       "pair": "pairs/light/B18-room-b.png"
@@ -356,8 +384,8 @@
     {
       "screen": "B22-room-steps",
       "theme": "light",
-      "passed": 42,
-      "failed": 7,
+      "passed": 48,
+      "failed": 1,
       "warnings": 0,
       "required": 49,
       "visualFailures": [

@@ -35,12 +35,12 @@ contract B8-fail (B8 자세히 보기 · 이탈 원인 조사 실패) vs /Users/
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget conversation app {"chars":325,"strings":39,"sentences":7,"longest":36} proto {"chars":56,"strings":6,"sentences":0,"longest":18} source visibleTextBudget
+  budget conversation app {"chars":317,"strings":38,"sentences":7,"longest":36} proto {"chars":56,"strings":6,"sentences":0,"longest":18} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   budget pane         app {"chars":254,"strings":53,"sentences":0,"longest":13} proto {"chars":359,"strings":50,"sentences":0,"longest":19} source visibleTextBudget
   warn  budget conversation sentences 7 > 0: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
   warn  budget conversation longest string 36 > 24 chars
-  warn  budget conversation chars 325 > 93
+  warn  budget conversation chars 317 > 93
   FAIL  order  pane         text     "기록" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "기록" (occurrence already consumed or found earlier)
 FAIL: 2 failures, 3 warnings, 36 required elements

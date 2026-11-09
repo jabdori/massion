@@ -550,6 +550,8 @@ test('Q13 member procedure becomes nested workers with retained skips and indepe
  assert.equal(steps[1]!.startedAt,undefined);assert.ok(Number.isSafeInteger(steps[1]!.endedAt));
  for(const task of [steps[0]!,steps[2]!])assert.ok(Number.isSafeInteger(task.startedAt)&&task.endedAt!>=task.startedAt!);
  assert.ok(steps.every(task=>task.status==='settled'));
+ for(const task of steps.filter(t=>!t.step?.skipReason)){assert.equal(task.progress?.done,1);assert.equal(task.progress?.total,1);}
+ await f.product.appendWorkMessage('intake',{commandId:'procedure-note',expectedRevision:(await f.store.load('intake'))!.revision,workId:w.id,messageId:'procedure-note',replyTo:null,text:'Use tests first next time',stepNote:{taskId:steps[0]!.id,title:'Tests first'}});
  assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict!.check!.producers.length,2);
  assert.ok(w.assignments.filter(a=>steps.some(s=>s.id===a.taskId)).every(a=>a.actorId!==w.assignments.find(a=>a.role==='verifier')!.actorId));
  validateMissionJournalLineage(f.store.inspect() as any);

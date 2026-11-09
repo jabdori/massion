@@ -1,13 +1,13 @@
 # UI contracts
 
-Mode: **REPORT-ONLY**. 0/24 screen/theme runs pass all measured checks; 24 have drift, gaps or errors.
+Mode: **REPORT-ONLY**. 0/26 screen/theme runs pass all measured checks; 26 have drift, gaps or errors.
 
 Element passes count required matches. Failures also include forbidden strings and hard text budgets; they are not required-minus-passed. Visual checks cover tokens and region rectangles, not pixel similarity. Missing state interactions and artboards are gaps. Infrastructure errors fail either mode.
 
 | Screen | Theme | Elements passed / required | Contract failures | Warnings | Visual failures | Gaps | Errors | Pair |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | B7 | dark | 39 / 40 | 1 | 2 | 0 | 2 | 0 | [PNG](pairs/dark/B7.png) |
-| B7-churn | dark | 52 / 74 | 22 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7-churn.png) |
+| B7-churn | dark | 53 / 74 | 21 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7-churn.png) |
 | B7-done | dark | 34 / 47 | 13 | 2 | 0 | 2 | 0 | [PNG](pairs/dark/B7-done.png) |
 | B7-fail | dark | 41 / 78 | 37 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7-fail.png) |
 | B7-unknown | dark | 35 / 46 | 11 | 2 | 0 | 2 | 0 | [PNG](pairs/dark/B7-unknown.png) |
@@ -15,11 +15,12 @@ Element passes count required matches. Failures also include forbidden strings a
 | B8-done | dark | 33 / 36 | 3 | 2 | 0 | 2 | 0 | [PNG](pairs/dark/B8-done.png) |
 | B8-fail | dark | 34 / 36 | 2 | 3 | 0 | 3 | 0 | [PNG](pairs/dark/B8-fail.png) |
 | B8-unknown | dark | 30 / 36 | 6 | 2 | 0 | 2 | 0 | [PNG](pairs/dark/B8-unknown.png) |
-| B18-room-b | dark | 33 / 69 | 36 | 2 | 2 | 1 | 0 | [PNG](pairs/dark/B18-room-b.png) |
+| B18 | dark | 30 / 34 | 4 | 2 | 0 | 1 | 0 | [PNG](pairs/dark/B18.png) |
+| B18-room-b | dark | 56 / 69 | 13 | 2 | 2 | 1 | 0 | [PNG](pairs/dark/B18-room-b.png) |
 | B22-room | dark | 34 / 40 | 6 | 0 | 1 | 0 | 0 | [PNG](pairs/dark/B22-room.png) |
-| B22-room-steps | dark | 42 / 49 | 7 | 0 | 1 | 0 | 0 | [PNG](pairs/dark/B22-room-steps.png) |
+| B22-room-steps | dark | 48 / 49 | 1 | 0 | 1 | 0 | 0 | [PNG](pairs/dark/B22-room-steps.png) |
 | B7 | light | 39 / 40 | 1 | 2 | 0 | 2 | 0 | [PNG](pairs/light/B7.png) |
-| B7-churn | light | 52 / 74 | 22 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7-churn.png) |
+| B7-churn | light | 53 / 74 | 21 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7-churn.png) |
 | B7-done | light | 34 / 47 | 13 | 2 | 0 | 2 | 0 | [PNG](pairs/light/B7-done.png) |
 | B7-fail | light | 41 / 78 | 37 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7-fail.png) |
 | B7-unknown | light | 35 / 46 | 11 | 2 | 0 | 2 | 0 | [PNG](pairs/light/B7-unknown.png) |
@@ -27,9 +28,10 @@ Element passes count required matches. Failures also include forbidden strings a
 | B8-done | light | 33 / 36 | 3 | 2 | 0 | 2 | 0 | [PNG](pairs/light/B8-done.png) |
 | B8-fail | light | 34 / 36 | 2 | 3 | 0 | 3 | 0 | [PNG](pairs/light/B8-fail.png) |
 | B8-unknown | light | 30 / 36 | 6 | 2 | 0 | 2 | 0 | [PNG](pairs/light/B8-unknown.png) |
-| B18-room-b | light | 33 / 69 | 36 | 2 | 2 | 1 | 0 | [PNG](pairs/light/B18-room-b.png) |
+| B18 | light | 30 / 34 | 4 | 2 | 0 | 1 | 0 | [PNG](pairs/light/B18.png) |
+| B18-room-b | light | 56 / 69 | 13 | 2 | 2 | 1 | 0 | [PNG](pairs/light/B18-room-b.png) |
 | B22-room | light | 34 / 40 | 6 | 0 | 1 | 0 | 0 | [PNG](pairs/light/B22-room.png) |
-| B22-room-steps | light | 42 / 49 | 7 | 0 | 1 | 0 | 0 | [PNG](pairs/light/B22-room-steps.png) |
+| B22-room-steps | light | 48 / 49 | 1 | 0 | 1 | 0 | 0 | [PNG](pairs/light/B22-room-steps.png) |
 
 ## B7 (dark)
 
@@ -88,10 +90,15 @@ Element passes count required matches. Failures also include forbidden strings a
 - Gap: These text-only Works have no named business procedure or browser/page-read telemetry.
 - Gap: No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.
 
+## B18 (dark)
+
+[Snapshot](snapshots/dark/B18.txt) · [Checker](checks/dark/B18.txt) · [Screenshot](screenshots/dark/B18.png) · [Visual measurements](visual/dark/B18.json)
+- Gap: Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.
+
 ## B18-room-b (dark)
 
 [Snapshot](snapshots/dark/B18-room-b.txt) · [Checker](checks/dark/B18-room-b.txt) · [Screenshot](screenshots/dark/B18-room-b.png) · [Visual measurements](visual/dark/B18-room-b.json)
-- Gap: Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.
+- Gap: The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.
 - Visual: region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)
 - Visual: region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)
 
@@ -162,10 +169,15 @@ Element passes count required matches. Failures also include forbidden strings a
 - Gap: These text-only Works have no named business procedure or browser/page-read telemetry.
 - Gap: No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.
 
+## B18 (light)
+
+[Snapshot](snapshots/light/B18.txt) · [Checker](checks/light/B18.txt) · [Screenshot](screenshots/light/B18.png) · [Visual measurements](visual/light/B18.json)
+- Gap: Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.
+
 ## B18-room-b (light)
 
 [Snapshot](snapshots/light/B18-room-b.txt) · [Checker](checks/light/B18-room-b.txt) · [Screenshot](screenshots/light/B18-room-b.png) · [Visual measurements](visual/light/B18-room-b.json)
-- Gap: Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.
+- Gap: The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.
 - Visual: region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)
 - Visual: region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)
 

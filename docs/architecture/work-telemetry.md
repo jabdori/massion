@@ -62,3 +62,30 @@ recaptured after the final UI changes. The scoped diagnostic gate reports zero
 new, stale or infrastructure diagnostics after removing 94 resolved occurrences
 and remapping 30 existing residuals. Eight room interaction flows passed.
 [Screen evidence and remaining limitations](../acceptance/work-telemetry/README.md).
+
+## Visual gate correction (2026-11-10)
+
+The review found that the room evidence driver injected an unrelated challenge
+transcript and that selected room fixtures lacked observations. Replace that
+injection with actual command-produced selected Work states. Keep R-E's PR/file
+view and R-D's memory proposal outside this change; the pricing table remains a
+separate unsupported producer.
+
+Add bounded assigned-worker progress observations (`Task.progress`: done, total,
+host time and optional literal detail), using the existing command/CAS/journal
+boundary. Runtime worker calls report their actual one-call progress; tool hosts
+may report finer units without granting execution or acceptance. Retain the
+actual worker instruction in the validated plan. Worker instruction/result
+messages project from that plan and Task start/end, not fabricated room turns.
+
+An optional `stepNote` on the existing owner Work message names an exact step and
+a proposed procedure title. It is discussion awaiting checking, never adoption,
+current-plan mutation or a new decision kind. Existing ownerStore/drain and
+conversation provenance rules apply. The pane and chat show its recorded time.
+
+Verify row status/time/count, skipped and waiting states, note rows, participant
+chips, duration, and direction-labelled worker messages against the supplied
+B18/B22 artboards, in both themes and mobile. New data gets boundary/replay tests;
+the existing delayed-read and feed tests cover the new projections. Recapture
+without synthetic challenge injection, remove newly resolved allowances and run
+the PR's CI/current-head Codex loop again.

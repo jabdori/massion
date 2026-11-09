@@ -87,7 +87,8 @@
             - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
             - button "복사" [ref=e37]
@@ -95,7 +96,8 @@
             - StaticText "기업 고객은 따로 봐 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:11"
+            - time
+              - StaticText "14:11"
             - paragraph
               - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
             - button "복사" [ref=e38]
@@ -103,7 +105,8 @@
             - StaticText "앞으로 표 금액은 원 단위로 써 줘."
           - generic
             - StaticText "퀼"
-            - StaticText "14:12"
+            - time
+              - StaticText "14:12"
             - paragraph
               - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             - button "복사" [ref=e39]
@@ -116,15 +119,13 @@
               - StaticText "확인 실패"
             - button "다시 시도" [ref=e40]
             - button "닫기" [ref=e41]
-          - generic
-            - heading "이탈 원인 조사" [level=3, ref=e42]
-            - article
-              - strong
-                - StaticText "나"
-              - time
-                - StaticText "14:08"
-              - paragraph
-                - StaticText "기업 고객은 따로 봐 줘."
+          - article
+            - strong
+              - StaticText "나"
+            - time
+              - StaticText "14:08"
+            - paragraph
+              - StaticText "기업 고객은 따로 봐 줘."
       - generic
         - form
           - textbox "퀼에게 메시지 보내기" [ref=e30]
@@ -150,9 +151,9 @@
             - paragraph
               - StaticText "하나가 넘김 · 14:08"
             - list
-              - listitem "퀼" [level=1, ref=e43]
+              - listitem "퀼" [level=1, ref=e42]
                 - StaticText "퀼"
-              - listitem "확인" [level=1, ref=e44]
+              - listitem "확인" [level=1, ref=e43]
                 - StaticText "확인"
             - generic
               - sectionheader
@@ -160,17 +161,17 @@
                   - StaticText "절차"
                 - StaticText "1/2"
               - list "절차"
-                - listitem "작성 · 완료" [level=1, ref=e46]
+                - listitem "작성 · 완료" [level=1, ref=e45]
                   - StaticText "작성"
                   - time
                     - StaticText "14:08 – 14:08"
-                - listitem "확인 · 확인 실패" [level=1, ref=e47]
+                - listitem "확인 · 확인 실패" [level=1, ref=e46]
                   - StaticText "확인"
                   - StaticText "해지 사유 7건 누락"
                   - time
                     - StaticText "14:08 – 14:08"
             - group
-              - button "확인 실패 근거 1건" [expanded=false, ref=e45]
+              - button "확인 실패 근거 1건" [expanded=false, ref=e44]
                 - strong
                   - StaticText "확인 실패"
                 - StaticText "근거 1건"
