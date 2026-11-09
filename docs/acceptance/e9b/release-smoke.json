@@ -1,0 +1,81 @@
+{
+  "startedAt": "2026-11-09T16:06:19.668Z",
+  "finishedAt": "2026-11-09T16:06:42.439Z",
+  "durationMs": 22771,
+  "status": "passed",
+  "stage": "complete",
+  "callCap": 8,
+  "capReached": false,
+  "calls": [
+    {
+      "number": 1,
+      "role": "representative",
+      "model": "gpt-6.1-terra",
+      "modelIdentity": "requested",
+      "startedAt": "2026-11-09T16:06:20.958Z",
+      "durationMs": 4193,
+      "status": "completed",
+      "inputTokens": 18451,
+      "outputTokens": 13,
+      "reason": "bounded_text_completion",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "number": 2,
+      "role": "representative",
+      "model": "gpt-6.1-terra",
+      "modelIdentity": "requested",
+      "startedAt": "2026-11-09T16:06:25.214Z",
+      "durationMs": 4448,
+      "status": "completed",
+      "inputTokens": 18488,
+      "outputTokens": 48,
+      "reason": "bounded_text_completion",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "number": 3,
+      "role": "executor",
+      "model": "gpt-6.1-terra",
+      "modelIdentity": "requested",
+      "startedAt": "2026-11-09T16:06:29.825Z",
+      "durationMs": 3946,
+      "status": "completed",
+      "inputTokens": 18550,
+      "outputTokens": 7,
+      "reason": "bounded_text_completion",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "number": 4,
+      "role": "checker",
+      "model": "zai/glm-5.3",
+      "modelIdentity": "requested",
+      "startedAt": "2026-11-09T16:06:33.943Z",
+      "durationMs": 7993,
+      "status": "completed",
+      "inputTokens": 19949,
+      "outputTokens": 172,
+      "reason": "bounded_text_completion",
+      "exitCode": 0,
+      "diagnostic": null
+    }
+  ],
+  "verdicts": [
+    {
+      "status": "passed",
+      "relation": "different-family"
+    }
+  ],
+  "directAnswer": true,
+  "readback": {
+    "recordId": "assistant-run:assistant-turn:m:62064ff110e755018f4ffe6d00d4a001:record",
+    "sha256": "7f2f0b973e7609b76cc531fa80b6cc710ede65779dd311637f5698cd6db8153f",
+    "byteLength": 8
+  },
+  "drain": "drained",
+  "unknownOutcomes": []
+}

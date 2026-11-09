@@ -45,3 +45,12 @@ test('non-loopback routers and models outside the approved pair are refused befo
  const run=createSmokeRunner(report,async()=>{},fixtureRunner,Date.now,'http://127.0.0.1:10100/v1');
  await assert.rejects(run({...invocation,args:['exec','-m','anthropic/forbidden','-']}),/refused/);assert.equal(calls,0);assert.equal(report.calls.length,0);
 });
+
+test('evaluation explicitly selects 120 calls while smoke stays at eight',async()=>{
+ assert.equal(newReport().callCap,8);
+ const report=newReport(120);let calls=0;
+ const run=createSmokeRunner(report,async()=>{},async()=>{calls++;return fixture;},Date.now,'http://127.0.0.1:10100/v1');
+ for(let i=0;i<120;i++)await run(invocation);
+ await assert.rejects(run(invocation),/cap/);assert.equal(calls,120);assert.equal(report.capReached,true);
+ assert.throws(()=>createSmokeRunner({...newReport(),callCap:121},async()=>{},async()=>fixture,Date.now,'http://127.0.0.1:10100/v1'));
+});
