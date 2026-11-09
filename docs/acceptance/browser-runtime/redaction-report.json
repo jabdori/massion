@@ -16,7 +16,8 @@
   "generatedContentSuppressed": true,
   "closedShadowRefused": true,
   "uninspectablePixelsNeutralized": true,
+  "textPseudoPixelsNeutralized": true,
   "trustedFontsOnly": true,
   "displayContentsReflection": true,
-  "pngSha256": "88066d46b26b5156b61ffeff2a5b8610867a194cbe2b9d6ae4a8b53ddd6cb8f2"
+  "pngSha256": "b51120be64b999066daa1297cdfebbbc0a5476ff91d86e67cc9267a2b6ebabb1"
 }

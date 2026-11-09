@@ -42,7 +42,7 @@
       "width": 584,
       "height": 764,
       "file": "library-availability.png",
-      "sha256": "a74d24be186e9c4dfb9eb2941d1b8b28790fa9b5918661bb65c1288c23c6c786"
+      "sha256": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c"
     },
     "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
   },
@@ -106,7 +106,7 @@
       "width": 584,
       "height": 764,
       "file": "library-form.png",
-      "sha256": "266fdbb645914324318e622f868fc9a1a7da6b58b4c3c29182de2928a35a5f77"
+      "sha256": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58"
     },
     "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
   },
@@ -145,7 +145,7 @@
       "width": 584,
       "height": 764,
       "file": "checkout.png",
-      "sha256": "d67d9f0a239fe296167dcf05d18b7633f40bdec27caf716cb204f37e24ba3964"
+      "sha256": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551"
     },
     "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
   }
