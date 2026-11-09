@@ -21,7 +21,7 @@ import {SkillsService} from '../src/skills.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 
 // docs/architecture/member-work.md: the Representative hands Work to a member, the member's group runs it, the 1:1 conversation steers it, the host lists Works with their end time. Fixture-class only.
-const MODELS=['openai/gpt-rep','openai/gpt-exec','anthropic/claude-check','google/gemini-a','anthropic/claude-b'];
+const MODELS=['openai/gpt-rep','openai/gpt-exec','anthropic/claude-check','google/gemini-a','anthropic/claude-b','jev-fixture'];
 const manifest=parseHostManifest({version:1,revision:'fixture-v1',mode:'local-http-mock',connections:[{id:'fixture',label:'Fixture',providerType:'openrouter',baseUrl:'http://127.0.0.1:9999/v1/',models:MODELS}]});
 const v1=(reply:string,title?:string)=>JSON.stringify({reply,work:title===undefined?null:{title}});
 const v2=(reply:string,title:string,member:string|null)=>JSON.stringify({reply,work:{title,member}});
@@ -29,13 +29,14 @@ const steer=(reply:string,workId:string|null)=>JSON.stringify({reply,work:null,s
 
 async function setup(t:test.TestContext,providerType='openrouter'){
  const root=await mkdtemp(join(tmpdir(),'massion-member-work-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
+ const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let roomTurn:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
-  const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
+  const body=JSON.parse(String(init!.body));if(body.questions){const q=body.questions.moderation,keys=Object.keys(q.criteria),answer=q.type==='noul'?{type:'noul',noul:1}:{type:'choice',choice:keys[0],probabilities:Object.fromEntries(keys.map((k,i)=>[k,i?0:1])),confidence:1};return new Response(JSON.stringify({model:body.model,answers:{moderation:answer},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
   if(Object.hasOwn(prompt,'currentMessage')){prompts.push({model:body.model,prompt});return completion(body.model,script.shift()??v1('Hello.'));}
   calls.push(body.model);
   if(prompt.teamPlanning)return completion(body.model,JSON.stringify(plan?plan(prompt.teamPlanning.steps):{steps:prompt.teamPlanning.steps.map((title:string,i:number)=>({role:i===0?'Research':'Writing',title,dependsOn:i?[i-1]:[],...(title==='Optional comparison'?{skipReason:'No comparison requested'}:{})}))}));
+  if(prompt.roomTurn)return completion(body.model,roomTurn?await roomTurn(prompt,init!.signal as AbortSignal):JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:prompt.roomTurn==='challenge'?'The result needs concrete evidence':'The evidence is incomplete',quote:prompt.roomTurn==='challenge'?'Answer bounded':''}));
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Answer bounded',reason:'Controlled fixture'}]}));
   if(prompt.step&&worker)return completion(body.model,await worker(prompt,init!.signal as AbortSignal));
   if(onExecute)await onExecute(init!.signal as AbortSignal);
@@ -61,7 +62,7 @@ async function setup(t:test.TestContext,providerType='openrouter'){
   return (await members.read()).members.find(x=>x.name===name)!;
  };
  const chatFor=(member:{id:string;name:string;modelGroup:string},ownerStore?:Store<any>)=>new AssistantService(store,product,m,{clock,member:{id:member.id,name:member.name,modelGroup:member.modelGroup},...(ownerStore?{ownerStore}:{})});
- return {setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
+ return {setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
 }
 
 async function runningWork(f:Awaited<ReturnType<typeof setup>>,t:test.TestContext){
@@ -130,7 +131,7 @@ test('a member in an owner group runs on that group: executor first, a different
  f.script.push(v2('Quill will take it.','Price table','Quill'));sent=await f.say(f.assistant,'Build the price table');await f.assistant.idle();
  assert.equal(sent.turn?.outcome?.run.status,'requested');
  const work=(await f.intake()).works.find(w=>w.title==='Price table')!;assert.equal(work.acceptance,'accepted',JSON.stringify({blocker:work.blocker,verdict:work.verdict}));assert.equal(work.runtimeRun?.authorizationId,'grant-analysis');
- assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);
+ assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);
  assert.equal(work.verdict?.check?.relation,'different-family');assert.deepEqual(work.verdict?.check?.producers.map(p=>p.model),['google/gemini-a','openai/gpt-rep']);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
@@ -141,7 +142,7 @@ test('with no different family in the group the checker comes from another group
  await f.members.setGroup({commandId:'g-1',memberId:quill.id,modelGroup:'solo'},f.m);
  await f.grant('grant-solo','google/gemini-a','anthropic/claude-check');const calls=f.calls.length;
  f.script.push(v2('Quill will take it.','Price table','Quill'));await f.say(f.assistant,'Build the price table');await f.assistant.idle();
- assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-check']);
+ assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-check']);
  const work=(await f.intake()).works.find(w=>w.title==='Price table')!;assert.equal(work.verdict?.check?.relation,'different-family');
 });
 
@@ -248,7 +249,7 @@ test('member routing checks with the same model in a separate identity when no f
  await f.grant('grant-solo','google/gemini-a','google/gemini-a');const before=f.calls.length;
  f.script.push(v2('On it.','Solo task','Quill'));await f.say(f.assistant,'Check a table');await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict?.check?.relation,'same-family');
- assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a']);assert.notEqual(w.assignments.find(a=>a.role==='executor')!.actorId,w.assignments.find(a=>a.role==='verifier')!.actorId);
+ assert.deepEqual(f.calls.slice(before),Array(7).fill('google/gemini-a'));assert.notEqual(w.assignments.find(a=>a.role==='executor')!.actorId,w.assignments.find(a=>a.role==='verifier')!.actorId);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -393,7 +394,7 @@ for(const authorized of [true,false])test(`manual Start preserves a deferred mem
  if(authorized){assert.equal(check.ready,true);assert.equal(check.selection.choice.executorProfileId,f.profile('google/gemini-a'));assert.equal(check.selection.choice.verifierProfileId,f.profile('anthropic/claude-b'));}
  else{assert.equal(check.ready,false);assert.ok(check.diagnostics.some((d:any)=>d.code==='member_grant_missing'));}
  const result=await post('run','manual-member-start');assert.equal(result.status,authorized?'settled':'blocked');
- if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
+ if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
  else{assert.equal(f.calls.length,before);assert.equal((await f.intake()).works.find(w=>w.id===work.id)!.runtimeRun,undefined);}
  validateMissionJournalLineage(f.store.inspect() as any);
 });
@@ -404,7 +405,7 @@ test('selection-less sequence resolves each deferred Work through its own member
  occupied.release();await f.assistant.idle();const current=(await f.store.load('intake'))!,{hash,workInputHash}=await import('../src/domain.ts'),works=current.value.works.slice(-2).map((w:any)=>({workId:w.id,inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}));
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const before=f.calls.length;
  const result=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/missions/intake/run-sequence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'member-sequence',expectedRevision:current.revision,works})}).then(r=>r.json()) as any;
- assert.equal(result.status,'completed');assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b','openai/gpt-exec','anthropic/claude-check']);validateMissionJournalLineage(f.store.inspect() as any);
+ assert.equal(result.status,'completed');assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b','openai/gpt-exec','anthropic/claude-check']);validateMissionJournalLineage(f.store.inspect() as any);
 });
 
 test('a model-selected steering target is only proposed until the owner explicitly applies it',async t=>{
@@ -571,7 +572,7 @@ test('Q13 ready workers overlap, dependencies wait, and each provider claim runs
  let w=(await f.intake()).works.at(-1)!;assert.equal(w.effects.filter(e=>e.status==='pending').length,2);assert.ok(w.effects.filter(e=>e.status==='pending').every(e=>e.providerDispatch));
  release();await f.assistant.idle();w=(await f.intake()).works.at(-1)!;
  assert.deepEqual(seen,['Read first','Read second','Compare both']);assert.equal(w.acceptance,'accepted');
- assert.equal(new Set(w.effects.map(e=>e.providerDispatch?.id).filter(Boolean)).size,6);
+ assert.equal(new Set(w.effects.map(e=>e.providerDispatch?.id).filter(Boolean)).size,8);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -657,3 +658,35 @@ test('Q13 workers receive pinned constraints, memory and source contents after n
  }
  validateMissionJournalLineage(f.store.inspect() as any);
 });
+
+ test('Q14 member Work retains a challenge and concession before its separate checking seat',async t=>{
+ const f=await setup(t);await f.admit();f.script.push(v2('On it.','Challenge evidence','Quill'));await f.say(f.assistant,'Challenge evidence');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.runtimeRun?.roomVersion,1);assert.equal(w.runtimeRun?.toolTimeoutVersion,'tool-timeouts/v1');assert.ok(w.room,JSON.stringify({tasks:w.tasks,blocker:w.blocker,effects:w.effects.map(e=>({id:e.id,status:e.status}))}));assert.deepEqual(w.room.messages.map(m=>m.kind),['proposal','challenge','concede']);
+ assert.equal(w.room.issue?.status,'escalated');assert.equal(w.room.sameModel,true);assert.equal(w.acceptance,'accepted');assert.deepEqual(w.record!.room,w.room);
+ const checker=w.assignments.find(a=>a.role==='verifier')!.actorId;assert.ok(w.room.messages.every(m=>m.authorId!==checker&&m.inferred));
+ validateMissionJournalLineage(f.store.inspect() as any);
+ });
+
+ test('Q14 unknown challenge is never resent and does not reach the independent checker',async t=>{
+ const f=await setup(t);await f.admit();let challenges=0;f.setRoomTurn(async()=>{challenges++;throw new Error('lost response');});
+ f.script.push(v2('On it.','Uncertain challenge','Quill'));await f.say(f.assistant,'Uncertain challenge');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(challenges,1);assert.equal(w.room!.messages.length,1);assert.ok(w.effects.some(e=>e.id.endsWith(':challenge')&&e.status==='unknown'));assert.equal(w.verdict,undefined);
+ await f.product.run('intake',w.id,'retry',(await f.store.load('intake'))!.revision);assert.equal(challenges,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+ });
+ test('Q14 host drain during a room turn fences late answers and checking',async t=>{
+ const f=await setup(t);await f.admit();let entered=()=>{},release=()=>{};const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ t.after(async()=>{release();await f.assistant.idle();});f.setRoomTurn(async(_p,signal)=>{entered();signal.addEventListener('abort',release,{once:true});await gate;return JSON.stringify({kind:'challenge',text:'Late',quote:'Answer bounded'});});
+ f.script.push(v2('On it.','Drain room','Quill'));await f.say(f.assistant,'Drain room');await started;f.m.beginDrain();release();await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.room!.messages.length,1);assert.equal(w.verdict,undefined);assert.ok(w.runtimeInterruption);assert.ok(w.effects.some(e=>e.status==='unknown'));validateMissionJournalLineage(f.store.inspect() as any);
+ });
+
+for(const mode of ['shadow','same-model','tight-budget'])test('Q14 discriminator '+mode,async t=>{
+ const sameModel=mode==='same-model';
+ const f=await setup(t,'compatible');await f.admit();
+ await f.m.save(()=>f.m.saveModelGroup({id:'moderator',name:'Moderator',description:'Typed decisions',role:'discriminator',profileIds:[f.profile(sameModel?'openai/gpt-exec':'jev-fixture')],expectedConfigHash:f.m.list().configHash}));
+ const run=f.m.run.bind(f.m);f.m.run=async(missionId,workId,runId,expectedRevision,choice,actor)=>{await f.product.reviseBudget(missionId,{commandId:'shadow-budget',expectedRevision,workId,limit:mode==='tight-budget'?4123:20000,reason:'Fixture shadow calls'});return run(missionId,workId,runId,expectedRevision+1,choice,actor);};
+ f.script.push(v2('On it.','Moderated room','Quill'));await f.say(f.assistant,'Moderated room');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({blocker:w.blocker,effects:w.effects.map(e=>({status:e.status,receipt:e.receipt?.slice(-500)})),moderation:w.moderation}));if(sameModel){assert.equal(w.moderation,undefined);return;}if(mode==='tight-budget'){assert.ok((w.moderation??[]).every(e=>e.input.turnOrdinal>1));return;}assert.equal(w.moderation?.length,3);assert.deepEqual(w.moderation!.map(e=>e.input.moment),[2,3,4]);
+ assert.ok(w.moderation!.every(e=>e.model.model==='jev-fixture'&&e.result?.applied===false));assert.equal(w.room!.issue!.status,'escalated');validateMissionJournalLineage(f.store.inspect() as any);
+ });
