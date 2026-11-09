@@ -11,7 +11,7 @@
     - navigation "설정" [ref=e6]
       - button "설정" [ref=e9]
       - LabelText
-        - searchbox "설정 검색" [ref=e21]
+        - searchbox "설정 검색" [ref=e20]
       - button "일반" [ref=e10]
         - StaticText "일반"
       - button "기억" [ref=e11]
@@ -30,24 +30,23 @@
         - StaticText "개선"
       - button "권한" [ref=e18]
         - StaticText "권한"
-      - button "고급" [ref=e19]
   - main "설정" [ref=e2]
-    - region "연결" [ref=e20]
-      - heading "연결" [level=2, ref=e22]
+    - region "연결" [ref=e19]
+      - heading "연결" [level=2, ref=e21]
       - generic
-        - heading "모델 그룹" [level=3, ref=e23]
+        - heading "모델 그룹" [level=3, ref=e22]
         - strong
           - StaticText "기본"
         - StaticText "하나"
         - strong
           - StaticText "만들기"
-        - StaticText "claude-sonnet-5-5"
-        - button "Claude Code" [disabled, ref=e24]
+        - StaticText "구독 · claude-sonnet-5-5"
+        - button "Claude Code" [disabled, ref=e23]
         - strong
           - StaticText "확인"
-        - StaticText "gpt-6.1-terra"
-        - button "Codex" [disabled, ref=e25]
-        - button "조사 퀼 출처를 찾아 읽고 근거와 함께 요약해요 claude-sonnet-5-5 Anthropic glm-5.3 Z.ai 제공사 2곳" [ref=e26]
+        - StaticText "구독 · gpt-6.1-terra"
+        - button "Codex" [disabled, ref=e24]
+        - button "조사 퀼 출처를 찾아 읽고 근거와 함께 요약해요 claude-sonnet-5-5 Anthropic glm-5.3 Z.ai 제공사 2곳" [ref=e25]
           - strong
             - StaticText "조사"
           - StaticText "퀼"
@@ -57,7 +56,7 @@
           - StaticText "glm-5.3"
           - StaticText " Z.ai"
           - StaticText "제공사 2곳"
-        - button "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 2곳" [ref=e27]
+        - button "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 2곳" [ref=e26]
           - strong
             - StaticText "코딩"
           - StaticText "주노"
@@ -67,14 +66,14 @@
           - StaticText "claude-sonnet-5-5"
           - StaticText " Anthropic"
           - StaticText "제공사 2곳"
-        - heading "구독 로그인" [level=3, ref=e28]
+        - heading "구독 로그인" [level=3, ref=e27]
         - strong
           - StaticText "Claude Code"
         - StaticText "확인 전"
         - strong
           - StaticText "Codex"
         - StaticText "확인 전"
-        - heading "API 키" [level=3, ref=e29]
+        - heading "API 키" [level=3, ref=e28]
         - strong
           - StaticText "Z.ai GLM Coding Plan"
         - StaticText "시험 연결"

@@ -11,7 +11,7 @@
     - navigation "설정" [ref=e6]
       - button "설정" [ref=e9]
       - LabelText
-        - searchbox "설정 검색" [ref=e21]
+        - searchbox "설정 검색" [ref=e20]
       - button "일반" [ref=e10]
         - StaticText "일반"
       - button "기억" [ref=e11]
@@ -30,21 +30,20 @@
         - StaticText "개선"
       - button "권한" [ref=e18]
         - StaticText "권한"
-      - button "고급" [ref=e19]
   - main "설정" [ref=e2]
-    - region "구성원" [ref=e20]
-      - heading "구성원" [level=2, ref=e22]
-      - button "하나 기본 ›" [ref=e23]
+    - region "구성원" [ref=e19]
+      - heading "구성원" [level=2, ref=e21]
+      - button "하나 기본 ›" [ref=e22]
         - strong
           - StaticText "하나"
         - StaticText "기본 ›"
-      - button "작업 중 퀼 조사 ›" [ref=e24]
+      - button "작업 중 퀼 조사 ›" [ref=e23]
         - status "작업 중"
           - StaticText "퀼"
         - strong
           - StaticText "퀼"
         - StaticText "조사 ›"
-      - button "주노 코딩 ›" [ref=e25]
+      - button "주노 코딩 ›" [ref=e24]
         - strong
           - StaticText "주노"
         - StaticText "코딩 ›"

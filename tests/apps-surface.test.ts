@@ -33,7 +33,7 @@ const open=async(app:ReturnType<typeof harness>)=>{await app.node('me-settings')
 
 test('Settings > Apps lists installed apps and the catalog; Install asks in the Representative conversation',async()=>{
  const {app,posted}=fixture(false);await settle();await open(app);
- const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.panel.installed-count',{count:0}),copy('settings.text.03'),copy('settings.heading.13'),'GitHub','Pull requests',copy('settings.link.04')));
+ const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.settings.installed-count',{count:0}),copy('settings.text.03'),copy('settings.heading.13'),'GitHub','Pull requests',copy('settings.link.04')));
  await button(body,copy('settings.link.04'))[0]!.fire('click');await settle();
  assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.action,posted.at(-1)!.body.catalogId],['/assistant/apps','install','github']);
  assert.equal(app.node('page-chat').hidden,false,'the card is answered in the conversation');
@@ -41,7 +41,7 @@ test('Settings > Apps lists installed apps and the catalog; Install asks in the 
 
 test('an installed app opens its page: permissions, what it adds, versions with roll back, and turn off',async()=>{
  const {app,posted}=fixture();await settle();await open(app);
- const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.panel.installed-count',{count:1}),'GitHub','1.4.0',copy('ui.panel.on')));assert.doesNotMatch(body.textContent,sequence(copy('settings.heading.13')),'nothing left to recommend');
+ const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.settings.installed-count',{count:1}),'GitHub','1.4.0',copy('ui.panel.on')));assert.doesNotMatch(body.textContent,sequence(copy('settings.heading.13')),'nothing left to recommend');
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  const detail=app.node('settings-apps-body');
  assert.match(detail.textContent,sequence('‹ '+copy('ui.apps'),'GitHub','1.4.0 · ',copy('settings.link.05'),copy('settings.button.04')));
@@ -82,7 +82,8 @@ test('an installed app adds a rail icon; its page lists the app view in the side
 test('self-made apps are listed apart with their maker and source Work',async()=>{
  const made={...github,id:'app-made',name:'PR list fetcher',origin:'self-made',memberId:'member-juno',version:'0.1.0',source:{missionId:'intake',workId:'pr84',title:'PR #84 review'},contributes:{templates:[],skills:[],procedures:[],tools:['pr-list']}};
  const {app}=fixture(true,[],[made],[{id:'member-juno',name:'주노',shape:'round'}]);await settle();await open(app);
- assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.panel.installed-count',{count:1}),'GitHub',copy('ui.panel.self-made-count',{count:1}),'PR list fetcher','0.1.0 · '+copy('ui.panel.made-by',{member:'주노'})+' · PR #84 review',copy('ui.panel.on')));
+ assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.settings.installed-count',{count:1}),'GitHub',copy('ui.settings.self-made-count',{count:1}),'PR list fetcher','0.1.0 · '+copy('ui.panel.made-by',{member:'주노'})+' · PR #84 review',copy('ui.panel.on')));
+ const headings=app.node('settings-apps-body').children.filter(n=>n.tagName==='H3');assert.deepEqual(headings.map(n=>n.textContent),['설치됨 1','직접 만든 앱 1']);assert.ok(headings.every(n=>n.children.length===1),'counts are separate spans for approved spacing');assert.deepEqual(headings.map(n=>n.children[0]!.textContent),['1','1']);
  const source=button(app.node('settings-apps-body'),'PR #84 review ›')[0];assert.ok(source,'the recorded source Work is navigable');
  for(let parent=source.parentElement;parent;parent=parent.parentElement)assert.notEqual(parent.tagName,'BUTTON','source actions are never nested in an app button');
  await source.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);

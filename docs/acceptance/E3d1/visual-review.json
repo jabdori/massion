@@ -94,5 +94,38 @@
         "light"
       ]
     ]
-  }
+  },
+  "reviewRound": "PR109 visual gate A1-A9 and group unknown reconciliation",
+  "measurements": {
+    "B13CardBorders": [
+      94,
+      159,
+      224,
+      289
+    ],
+    "B19JunoSupportedCardBorders": [
+      172,
+      215,
+      258,
+      301,
+      358,
+      403,
+      460,
+      523
+    ],
+    "B20CardBorders": [
+      120,
+      175,
+      230,
+      287,
+      348,
+      409,
+      454,
+      511,
+      560
+    ]
+  },
+  "allFinalPairsRecapturedAndInspected": true,
+  "approvedCopyCorrection": "A2: two B23 heading strings gain the space before count; no role/order/occurrence/budget change",
+  "A9": "No host expiry/update producer; evidence in ci-follow-up.md"
 }

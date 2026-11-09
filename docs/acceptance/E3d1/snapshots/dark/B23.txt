@@ -11,7 +11,7 @@
     - navigation "설정" [ref=e6]
       - button "설정" [ref=e9]
       - LabelText
-        - searchbox "설정 검색" [ref=e21]
+        - searchbox "설정 검색" [ref=e20]
       - button "일반" [ref=e10]
         - StaticText "일반"
       - button "기억" [ref=e11]
@@ -30,22 +30,25 @@
         - StaticText "개선"
       - button "권한" [ref=e18]
         - StaticText "권한"
-      - button "고급" [ref=e19]
   - main "설정" [ref=e2]
-    - region "앱" [ref=e20]
+    - region "앱" [ref=e19]
       - generic
-        - heading "앱" [level=2, ref=e22]
-        - searchbox "앱 검색" [ref=e23]
-        - heading "설치됨1" [level=3, ref=e24]
-        - button "GitHub 1.4.0 켜짐" [ref=e25]
+        - heading "앱" [level=2, ref=e21]
+        - searchbox "앱 검색" [ref=e22]
+        - heading "설치됨 1" [level=3, ref=e23]
+          - StaticText "설치됨"
+          - StaticText "1"
+        - button "GitHub 1.4.0 켜짐" [ref=e24]
           - strong
             - StaticText "GitHub"
           - StaticText "1.4.0"
           - StaticText "켜짐"
-        - heading "직접 만든 앱1" [level=3, ref=e26]
+        - heading "직접 만든 앱 1" [level=3, ref=e25]
+          - StaticText "직접 만든 앱"
+          - StaticText "1"
         - generic
-          - button "PR 목록 가져오기" [ref=e27]
+          - button "PR 목록 가져오기" [ref=e26]
           - StaticText "0.1.0 · 주노가 만듦"
           - StaticText " · "
-          - button "PR #84 검토 ›" [ref=e28]
+          - button "PR #84 검토 ›" [ref=e27]
           - StaticText "켜짐"

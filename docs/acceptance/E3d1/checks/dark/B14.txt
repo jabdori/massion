@@ -30,7 +30,7 @@ contract B14 (B14 설정 · 연결 · 개선) vs /Users/code/orca/workspaces/mas
   ok    settings     text     "없음" -> statictext "없음"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":289,"strings":38,"sentences":2,"longest":21} proto {"chars":323,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
+  budget settings     app {"chars":301,"strings":40,"sentences":2,"longest":22} proto {"chars":323,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
   FAIL  missing settings     button   "다시 확인"
   FAIL  missing settings     button   "다시 확인"
   FAIL  missing settings     button   "키 변경"

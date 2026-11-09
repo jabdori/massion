@@ -4,11 +4,11 @@
 
 The complete CI command captured all 75 contracts in both system themes (150 unique runs), report-only exit 0 and no infrastructure errors. Contracts outside Settings retain their existing drift. This is fixture evidence, not real-provider, credential or device evidence.
 
-[Before](before.json) · [Before-edit cause table](baseline-causes.md) · [After](after.json) · [All 150](full150.json) · [Exact residuals](remaining.md) · [Capability evidence](capabilities.md) · [Verification](verification.json) · [Independent review](review.md) · [Browser interactions](browser-interactions.json)
+[CI and unknown-save follow-up](ci-follow-up.md) · [Visual follow-up](visual-gate-follow-up.md) · [Actual store run](actual-store-final.txt) · [Before](before.json) · [Before-edit cause table](baseline-causes.md) · [After](after.json) · [All 150](full150.json) · [Exact residuals](remaining.md) · [Capability evidence](capabilities.md) · [Verification](verification.json) · [Independent review](review.md) · [Browser interactions](browser-interactions.json)
 
 ## Results and pairs
 
-Artboard left, application right. Both themes were inspected. All original contracts, ordering/occurrence rules and text budgets remain unchanged.
+Artboard left, application right. Both themes were inspected. Ordering/occurrence rules and text budgets remain unchanged. Two B23 heading strings follow the owner-approved A2 count spacing; the original before baseline predates that spelling correction.
 
 | State | Dark matches / failures | Light matches / failures | Dark pair | Light pair |
 | --- | --- | --- | --- | --- |
@@ -31,6 +31,6 @@ Artboard left, application right. Both themes were inspected. All original contr
 
 ## Verification limits
 
-Node 24.21.0 satisfies the repository’s >=24.19.0 <25 range. Typecheck, source/copy checks and 211 affected tests pass. The final full 1,930-test run records 1,589 passes, 340 optional integration skips and the pre-existing macOS locale/case-path failure documented in CODEX-BRIEF.md. A prior aggregate attempt also hit an unchanged lifetime timing test; it passed in isolation (12 passes, two DB skips) and in subsequent whole-suite runs, including the integrated candidate. The prior failure remains recorded in aggregate-timing-attempt.txt and verification.json. No backup/artifact implementation changed.
+The unchanged CI durable-store command ran against actual SurrealDB 3.3.0 in native Linux arm64 with Node 24.19.0: 1,935 tests, 1,902 passes, zero failures, 33 ordinary conditional browser skips (same skips as CI). The exact amd64 failing-file recheck passes all 13 cases against the CI-pinned amd64 archive. Typecheck, source/copy checks and 37 focused UI/token tests pass. The emulated amd64 full-suite process-argv limitation and preserved ownership guards are documented in ci-follow-up.md. Earlier macOS-only and timing attempts remain historical evidence. No backup/artifact implementation changed.
 
 Two advisory longest-string warnings for recorded member metadata remain visible in after.json; hard text budgets are unchanged. Readonly or disabled controls are listed as capability residuals even when their accessible names satisfy a contract. No native restart, login/credential mutation, member memory/archive, app member binding, non-GitHub catalog or usage/budget outcome was manufactured. E3 as a whole remains open.

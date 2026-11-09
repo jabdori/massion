@@ -47,10 +47,12 @@ const open=async(app:ReturnType<typeof harness>,section:string)=>{await app.node
 
 test('Settings search filters sections locally and preserves the current selection',async()=>{
  const {app,state}=fixture();await settle();await open(app,'members');
- const search=app.node('settings-search');assert.ok(search);search.value=copy('conversation.button.12');await search.fire('input');
+ const search=app.node('settings-search');assert.ok(search);assert.equal(app.node('settings-nav-advanced').hidden,true);search.value=copy('conversation.button.12');await search.fire('input');
  assert.equal(app.node('settings-nav-connections').hidden,false);assert.equal(app.node('settings-nav-members').hidden,true);
  assert.equal(app.node('settings-members').hidden,false);assert.equal(state.posted.length,0);
- search.value='';await search.fire('input');assert.equal(app.node('settings-nav-members').hidden,false);
+ search.value=copy('ui.panel.advanced');await search.fire('input');assert.equal(app.node('settings-nav-advanced').hidden,false);
+ await app.node('settings-nav-advanced').fire('click');assert.equal(app.node('settings-advanced').hidden,false);
+ search.value='';await search.fire('input');assert.equal(app.node('settings-nav-members').hidden,false);assert.equal(app.node('settings-nav-advanced').hidden,true);
 });
 
 function groupFixture(){
@@ -154,7 +156,7 @@ test('Members lists the Representative and each member with its model group; a r
  await byId(app,'settings-member-member-a')!.fire('click');await settle();await button(app.node('settings-members-body'),copy('settings.link.02'))!.fire('click');await settle();
  assert.equal(app.node('page-chat').hidden,false);assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-a'));
  await open(app,'devices');assert.match(app.node('settings-devices-body').textContent,sequence(copy('ui.panel.this-mac'),copy('ui.panel.ready')));
- await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.panel.installed-count',{count:0}),copy('settings.text.03')));
+ await open(app,'apps');assert.match(app.node('settings-apps-body').textContent,sequence(copy('ui.settings.installed-count',{count:0}),copy('settings.text.03')));
 });
 
 test('Settings member identities preserve the admitted shape and recorded running status',async()=>{
@@ -199,3 +201,32 @@ test('review 7: unusable discriminator profiles have no selectable control or sa
  const profiles=[{id:'small',limits:{maxOutputTokens:2048},endpoint:'http://127.0.0.1:9999/v1/chat/completions'},{id:'path',limits:{maxOutputTokens:4096},endpoint:'http://127.0.0.1:9999/api/chat/completions'},{id:'live-disabled',limits:{maxOutputTokens:4096},endpoint:'https://example.test/v1/chat/completions'}].map(p=>({...p,providerKind:'compatible',label:p.id,model:p.id,diagnostics:[]}));
  const app=harness(async(path)=>path==='/connections'?reply({configHash:'h',modelGroups:[],connections:[],runtime:{connections:profiles,defaultRoutes:[]},providerTypes:[],grants:[],liveExecutionEnabled:false}):reply({}));await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.ok(!app.all().some(n=>n.tagName==='OPTION'&&profiles.some(p=>p.id===n.value)));assert.ok(!app.calls.some(c=>c.options?.method==='POST'));
 });
+
+test('General unknown selects retain a selected visible dash without claiming a schedule or version',async()=>{
+ const {app}=fixture();await settle();await open(app,'general');
+ const fields=app.all().filter(n=>n.tagName==='SELECT'&&n.disabled&&n.attributes.has('aria-label'));
+ assert.equal(fields.length,2);
+ for(const field of fields){assert.equal(field.children[0]!.textContent,copy('ui.settings.unknown-value'));assert.equal((field.children[0] as any).selected,true);}
+ });
+
+test('Group detail keeps numbered models and avatar-name-chevron member order with truthful running status',async()=>{
+ const {app,state}=groupFixture();await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');
+ const body=app.node('settings-groups'),back=button(body,'‹ '+copy('conversation.button.12'));assert.ok(back);
+ const models=app.all().filter(n=>n.className==='set-model-index');assert.deepEqual(models.map(n=>n.textContent),['1','2']);
+ const member=app.all().find(n=>n.className==='set-row set-group-member')!;assert.ok(member);
+ assert.deepEqual(member.children.map(n=>n.className),['avatar','set-text','set-side']);assert.equal(member.children[1]!.textContent,'셈');
+ assert.equal(member.children[0]!.attributes.get('aria-hidden'),'true');assert.equal(member.children[2]!.attributes.get('aria-hidden'),'true');
+ runInContext('shellWorks=[{memberId:"member-a",started:true,execution:"active",acceptance:"pending",unknown:false}];renderSettings()',app.context);
+ const active=app.all().find(n=>n.className==='set-row set-group-member')!;assert.equal(active.children[0]!.attributes.get('aria-hidden'),'true');const status=active.children[1]!.children.at(-1)!;assert.equal(status.attributes.get('role'),'status');assert.equal(status.textContent,copy('sidebar.status.05'));
+ assert.equal(state.posted.length,0);await back.fire('click');assert.equal(byId(app,'settings-group-name'),undefined);
+ });
+
+test('Default model selectors show chevrons and subscription provenance only for recorded CLI routes',async()=>{
+ const {app}=fixture();await settle();await open(app,'connections');
+ runInContext(`settingsCatalog=structuredClone(settingsCatalog);settingsCatalog.modelGroups[0].models[0].profileId='cli-profile';settingsCatalog.modelGroups[0].models[1].profileId='api-profile';settingsCatalog.runtime.connections=[{id:'cli-profile',providerKind:'claude-code-cli'},{id:'api-profile',providerKind:'openai'}];renderSettings()`,app.context);
+ const rows=app.all().filter(n=>n.className==='set-row set-default-model');assert.equal(rows.length,2);
+ assert.equal(rows[0]!.children[0]!.children[1]!.textContent,'구독 · claude-sonnet-5-5');
+ assert.equal(rows[1]!.children[0]!.children[1]!.textContent,'gpt-6.1-terra');
+ for(const row of rows){const selector=row.children[1]!;assert.equal(selector.disabled,true);assert.equal(selector.children.at(-1)!.textContent,'⌄');assert.equal(selector.children.at(-1)!.attributes.get('aria-hidden'),'true');}
+ assert.doesNotMatch(app.node('settings-groups').textContent,/로그인됨/);
+ });

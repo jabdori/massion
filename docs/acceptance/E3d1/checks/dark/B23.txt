@@ -17,12 +17,12 @@ contract B23 (B23 설정 · 앱) vs /Users/code/orca/workspaces/massion/e3d1-set
   ok    sidebar      link     "권한" -> button "권한"
   ok    settings     heading  "앱" -> heading "앱"
   ok    settings     textbox  "앱 검색" -> searchbox "앱 검색"
-  ok    settings     heading  "설치됨1" -> heading "설치됨1"
-  ok    settings     heading  "직접 만든 앱1" -> heading "직접 만든 앱1"
+  ok    settings     heading  "설치됨 1" -> heading "설치됨 1"
+  ok    settings     heading  "직접 만든 앱 1" -> heading "직접 만든 앱 1"
   ok    settings     link     "{work_title} ›" -> button "PR #84 검토 ›"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":66,"strings":13,"sentences":0,"longest":14} proto {"chars":135,"strings":35,"sentences":0,"longest":11} source visibleTextBudget
+  budget settings     app {"chars":66,"strings":15,"sentences":0,"longest":14} proto {"chars":135,"strings":35,"sentences":0,"longest":11} source visibleTextBudget
   FAIL  missing settings     link     "{work_title} 1.4.0 · 주노, 퀼 켜짐"
   FAIL  missing settings     heading  "추천"
   FAIL  role   settings     link     "설치" (text exists without the required role)

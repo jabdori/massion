@@ -24,6 +24,5 @@ the running host's maximum, so the current version-1 client cannot reach that
 branch with a valid older host range. The screen fixtures do not manufacture a
 ready conversation with an incompatible protocol or relabel it as CLI expiry.
 
-No checker, contract, ordering, occurrence, budget or infrastructure-failure rule
-was weakened. Extra approved copy has artboard provenance; the original 241
+No checker, ordering, occurrence, budget or infrastructure-failure rule was weakened. Owner feedback A2 updates exactly two B23 heading strings to include the approved space before the count; no other contract expectation changes. Extra approved copy has artboard provenance; the original 241
 imported copy entries and all 75 contracts remain intact.

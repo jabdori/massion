@@ -11,7 +11,7 @@
     - navigation "설정" [ref=e6]
       - button "설정" [ref=e9]
       - LabelText
-        - searchbox "설정 검색" [ref=e21]
+        - searchbox "설정 검색" [ref=e20]
       - button "일반" [ref=e10]
         - StaticText "일반"
       - button "기억" [ref=e11]
@@ -30,16 +30,15 @@
         - StaticText "개선"
       - button "권한" [ref=e18]
         - StaticText "권한"
-      - button "고급" [ref=e19]
   - main "설정" [ref=e2]
-    - region "사용량" [ref=e20]
-      - heading "사용량" [level=2, ref=e22]
+    - region "사용량" [ref=e19]
+      - heading "사용량" [level=2, ref=e21]
       - generic
-        - heading "이번 주기" [level=3, ref=e23]
+        - heading "이번 주기" [level=3, ref=e22]
         - StaticText "—"
         - status "이번 주기 사용률 —"
         - StaticText "—"
-        - heading "구성원" [level=3, ref=e24]
+        - heading "구성원" [level=3, ref=e23]
         - strong
           - StaticText "하나"
         - StaticText "—"

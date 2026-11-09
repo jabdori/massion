@@ -1,6 +1,6 @@
 {
   "data": {
-    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e7]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e8]\n  - complementary \"구성원과 작업\"\n    - navigation \"설정\" [ref=e6]\n      - button \"설정\" [ref=e9]\n      - LabelText\n        - searchbox \"설정 검색\" [ref=e21]\n      - button \"일반\" [ref=e10]\n        - StaticText \"일반\"\n      - button \"기억\" [ref=e11]\n        - StaticText \"기억\"\n      - button \"구성원\" [ref=e12]\n        - StaticText \"구성원\"\n      - button \"기기\" [ref=e13]\n        - StaticText \"기기\"\n      - button \"연결\" [ref=e14]\n        - StaticText \"연결\"\n      - button \"사용량\" [ref=e15]\n        - StaticText \"사용량\"\n      - button \"앱\" [ref=e16]\n        - StaticText \"앱\"\n      - button \"개선\" [ref=e17]\n        - StaticText \"개선\"\n      - button \"권한\" [ref=e18]\n        - StaticText \"권한\"\n      - button \"고급\" [ref=e19]\n  - main \"설정\" [ref=e2]\n    - region \"앱\" [ref=e20]\n      - generic\n        - heading \"앱\" [level=2, ref=e22]\n        - searchbox \"앱 검색\" [ref=e23]\n        - heading \"설치됨1\" [level=3, ref=e24]\n        - button \"GitHub 1.4.0 켜짐\" [ref=e25]\n          - strong\n            - StaticText \"GitHub\"\n          - StaticText \"1.4.0\"\n          - StaticText \"켜짐\"\n        - heading \"직접 만든 앱1\" [level=3, ref=e26]\n        - generic\n          - button \"PR 목록 가져오기\" [ref=e27]\n          - StaticText \"0.1.0 · 주노가 만듦\"\n          - StaticText \" · \"\n          - button \"PR #84 검토 ›\" [ref=e28]\n          - StaticText \"켜짐\""
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e7]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e8]\n  - complementary \"구성원과 작업\"\n    - navigation \"설정\" [ref=e6]\n      - button \"설정\" [ref=e9]\n      - LabelText\n        - searchbox \"설정 검색\" [ref=e20]\n      - button \"일반\" [ref=e10]\n        - StaticText \"일반\"\n      - button \"기억\" [ref=e11]\n        - StaticText \"기억\"\n      - button \"구성원\" [ref=e12]\n        - StaticText \"구성원\"\n      - button \"기기\" [ref=e13]\n        - StaticText \"기기\"\n      - button \"연결\" [ref=e14]\n        - StaticText \"연결\"\n      - button \"사용량\" [ref=e15]\n        - StaticText \"사용량\"\n      - button \"앱\" [ref=e16]\n        - StaticText \"앱\"\n      - button \"개선\" [ref=e17]\n        - StaticText \"개선\"\n      - button \"권한\" [ref=e18]\n        - StaticText \"권한\"\n  - main \"설정\" [ref=e2]\n    - region \"앱\" [ref=e19]\n      - generic\n        - heading \"앱\" [level=2, ref=e21]\n        - searchbox \"앱 검색\" [ref=e22]\n        - heading \"설치됨 1\" [level=3, ref=e23]\n          - StaticText \"설치됨\"\n          - StaticText \"1\"\n        - button \"GitHub 1.4.0 켜짐\" [ref=e24]\n          - strong\n            - StaticText \"GitHub\"\n          - StaticText \"1.4.0\"\n          - StaticText \"켜짐\"\n        - heading \"직접 만든 앱 1\" [level=3, ref=e25]\n          - StaticText \"직접 만든 앱\"\n          - StaticText \"1\"\n        - generic\n          - button \"PR 목록 가져오기\" [ref=e26]\n          - StaticText \"0.1.0 · 주노가 만듦\"\n          - StaticText \" · \"\n          - button \"PR #84 검토 ›\" [ref=e27]\n          - StaticText \"켜짐\""
   },
   "visibleTextBudget": {
     "rail": [
@@ -21,12 +21,14 @@
     ],
     "settings": [
       "앱",
-      "설치됨1",
+      "설치됨",
+      "1",
       "GitHub",
       "1.4.0",
       "켜짐",
       "›",
-      "직접 만든 앱1",
+      "직접 만든 앱",
+      "1",
       "P",
       "PR 목록 가져오기",
       "0.1.0 · 주노가 만듦",

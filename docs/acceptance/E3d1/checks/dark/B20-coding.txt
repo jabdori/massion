@@ -15,7 +15,7 @@ contract B20-coding (B20 설정 · 모델 그룹 편집) vs /Users/code/orca/wor
   ok    sidebar      link     "앱" -> button "앱"
   ok    sidebar      link     "개선" -> button "개선"
   ok    sidebar      link     "권한" -> button "권한"
-  ok    page         link     "연결" -> button "연결"
+  ok    page         link     "연결" -> button "‹ 연결"
   ok    page         heading  "코딩" -> heading "코딩"
   ok    page         text     "이름" -> statictext "이름"
   ok    page         textbox  "그룹 이름" -> textbox "그룹 이름"

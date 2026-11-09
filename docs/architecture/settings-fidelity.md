@@ -39,3 +39,7 @@ client behavior rather than inventing an idempotency field the host rejects.
 Fixture captures are not evidence of real provider or connection outcomes.
 
 Theme reference: [MDN prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-color-scheme).
+
+## PR 109 review corrections
+
+Synchronize the existing replacement-feed background Work read in the owner-relations test; retain its exact request-count, private-draft/CAS, journal and no-POST assertions. A lost group save stays readonly until a later current-scoped catalog read adopts host values, without resending. Apply owner visual feedback A1–A8 with measured tokens and preserve unavailable A9 states as evidenced residuals. B23’s two heading strings follow the owner-approved count spacing; roles, ordering, occurrence and budgets remain unchanged. Run the CI durable-store command against actual SurrealDB 3.3.0 and recapture all 75 contracts × both themes before pushing.

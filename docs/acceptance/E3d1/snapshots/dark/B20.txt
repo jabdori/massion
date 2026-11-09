@@ -11,7 +11,7 @@
     - navigation "설정" [ref=e6]
       - button "설정" [ref=e9]
       - LabelText
-        - searchbox "설정 검색" [ref=e21]
+        - searchbox "설정 검색" [ref=e20]
       - button "일반" [ref=e10]
         - StaticText "일반"
       - button "기억" [ref=e11]
@@ -30,34 +30,38 @@
         - StaticText "개선"
       - button "권한" [ref=e18]
         - StaticText "권한"
-      - button "고급" [ref=e19]
   - main "조사" [ref=e2]
-    - region "연결" [ref=e20]
+    - region "연결" [ref=e19]
       - generic
-        - button "연결" [ref=e22]
-        - heading "조사" [level=2, ref=e23]
+        - button "‹ 연결" [ref=e21]
+        - heading "조사" [level=2, ref=e22]
         - strong
           - StaticText "이름"
-        - textbox "그룹 이름" [ref=e24]: 조사
+        - textbox "그룹 이름" [ref=e23]: 조사
           - StaticText "조사"
         - strong
           - StaticText "설명"
-        - textbox "그룹 설명" [ref=e25]: 출처를 찾아 읽고 근거와 함께 요약해요
+        - textbox "그룹 설명" [ref=e24]: 출처를 찾아 읽고 근거와 함께 요약해요
           - StaticText "출처를 찾아 읽고 근거와 함께 요약해요"
-        - heading "모델 2" [level=3, ref=e26]
-        - button "순서 바꾸기" [ref=e27]
+        - heading "모델 2" [level=3, ref=e25]
+        - button "순서 바꾸기" [ref=e26]
+        - StaticText "1"
         - strong
           - StaticText "claude-sonnet-5-5"
+        - StaticText "Claude Code"
         - StaticText "Anthropic"
-        - button "claude-sonnet-5-5 빼기" [ref=e28]
-        - button "순서 바꾸기" [ref=e29]
+        - button "claude-sonnet-5-5 빼기" [ref=e27]
+        - button "순서 바꾸기" [ref=e28]
+        - StaticText "2"
         - strong
           - StaticText "glm-5.3"
         - StaticText "Z.ai"
-        - button "glm-5.3 빼기" [ref=e30]
-        - button "모델 추가" [expanded=false, ref=e31]
-        - heading "사용하는 구성원" [level=3, ref=e32]
-        - button "퀼 작업 중" [ref=e33]
-          - StaticText "퀼"
-          - status "작업 중"
+        - StaticText "Z.ai"
+        - button "glm-5.3 빼기" [ref=e29]
+        - button "모델 추가" [expanded=false, ref=e30]
+        - heading "사용하는 구성원" [level=3, ref=e31]
+        - button "퀼" [ref=e32]
+          - strong
             - StaticText "퀼"
+          - status
+            - StaticText "작업 중"
