@@ -30,3 +30,10 @@ reported no important issues. Its focused client/HTTP and malformed-identity
 checks passed using a physical temporary path. The later visual batch only
 removes empty owned-page header space, uses the existing profile avatar, hides
 the empty Paused group and removes unrelated B9 fixture content.
+
+The subsequent independent GLM review corrected the earlier interpretation of
+`memberId`: it is the assignee, while `segment` belongs to the Representative.
+The current implementation opens that source thread and retains the assignee
+only on the row. A source-message regression replaces the earlier member-routing
+expectation. Schedule filtering also survives row replacement; see
+[the combined follow-up](review-follow-up.md).

@@ -52,13 +52,38 @@ test('background page resets keep conversation search visible and malformed resu
  await app.node('rail-results').fire('click');await settle();assert.equal(app.node('results-rows').children.length,1);
 });
 
-test('a result opens its authoritative producing member even without the global Work list and a past run opens its recorded segment',async()=>{
- const {app,state}=fixture({results:[{...result,memberId:'member-a'}],schedules:[{...schedule,runs:[{...schedule.runs[0],segment:1}]}]});await settle();
- runInContext("shellWorksFeed='another-feed';shellWorks=[];chatView.members=[{id:'member-a',name:'퀼'}]",app.context);
- await app.node('rail-results').fire('click');await settle();await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
- assert.ok(app.calls.some(c=>c.path.includes('/assistant/conversation?member=member-a')));
+test('a past run opens its recorded Representative segment',async()=>{
+ const {app,state}=fixture({schedules:[{...schedule,runs:[{...schedule.runs[0],segment:1}]}]});await settle();
  await app.node('rail-schedules').fire('click');await settle();await button(app.node('schedule-runs'),copy('ui.panel.view-conversation'))!.fire('click');await settle();
  assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?segment=1'));assert.deepEqual(state.posted,[]);
+});
+
+test('a member-assigned result retains its assignee but opens the originating Representative turn at its source segment',async()=>{
+ const ownerId='m:'+'1'.repeat(32),turnId='assistant-turn:'+ownerId,source={...result,memberId:'member-a',segment:2,turnId},members=[{id:'member-a',name:'퀼',look:{shape:'square',color:'agent-1'}}];
+ const sourceTurn={...turn,id:turnId,messageId:ownerId,proposal:{title:source.title,member:'퀼'},work:{...turn.work,memberId:'member-a',unknown:false}};
+ const app=harness(async(path)=>{
+  if(path==='/assistant/results')return reply({feedId:'feed:a',results:[source]});
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  if(path.startsWith('/assistant/conversation')){const member=path.includes('member='),origin=!member&&path==='/assistant/conversation?segment=2';return reply({feedId:'feed:a',cursor:1,head:3,members,segment:{number:origin?2:3,revision:1,closed:origin,full:origin,previous:null,messages:origin?[{id:ownerId,role:'owner',turnId:null,text:'Original Representative request'},{id:'reply:origin',role:'representative',turnId,text:'Original Representative reply'}]:[{id:'other',role:'owner',turnId:null,text:member?'Unrelated member turn':'Current Representative head'}]},turns:origin?[sourceTurn]:[]});}
+  if(path.startsWith('/missions/intake/record-artifact'))return reply({content:'Accepted result'});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:0,snapshot:null});
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
+  return reply({error:'Not configured'},503);
+ },{'massion.workbench.feed':'feed:a'});
+ await settle();runInContext("chatOpenThread('member-a','퀼')",app.context);await settle();
+ await app.node('rail-results').fire('click');await settle();const row=byId(app,'result-row-intake/work:a')!;assert.match(row.textContent,/퀼/);
+ const before=app.calls.length;await row.fire('click');await settle();const reads=app.calls.slice(before).filter(c=>c.path.startsWith('/assistant/conversation'));
+ assert.ok(reads.some(c=>c.path==='/assistant/conversation?segment=2'));assert.equal(reads.some(c=>c.path.includes('member=')),false);
+ assert.equal(runInContext('chatThread',app.context),'');assert.equal(runInContext('chatView.segment.number',app.context),2);assert.equal(runInContext('chatView.turns[0].id',app.context),turnId);
+ assert.match(app.node('chat-log').textContent,/Original Representative request.*Original Representative reply/);assert.doesNotMatch(app.node('chat-log').textContent,/Unrelated member turn/);
+});
+
+test('schedule sidebar filtering survives a render and a schedule event reread',async()=>{
+ const {app,state}=fixture({schedules:[schedule]});await settle();await app.node('rail-schedules').fire('click');await settle();
+ const row=()=>app.node('side-schedules').children.find(n=>n.className==='side-sched')!;
+ app.node('sidebar-query').value='no matching schedule';await app.node('sidebar-query').fire('input');assert.equal(row().hidden,true);
+ runInContext('renderSchedules()',app.context);assert.equal(row().hidden,true);
+ state.events=[{cursor:2,aggregateId:'assistant-conversation:schedules',revision:2,type:'pause-schedule'}];state.cursor=2;await app.tick();await settle();assert.equal(row().hidden,true);assert.deepEqual(state.posted,[]);
 });
 
 test('schedule request copy and New task are local controls; New task never creates a second schedule',async()=>{

@@ -31,7 +31,8 @@
     "tests/results-schedules-surface.test.ts",
     "tests/skills-surface.test.ts",
     "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
-    "E3d2: B18-room-b supported member conversations and B22-room current global Work; preserve the independent accepted weekly Record bytes and identity from B10"
+    "E3d2: B18-room-b supported member conversations and B22-room current global Work; preserve the independent accepted weekly Record bytes and identity from B10",
+    "GLM correction: Representative read contains the result originating turn and approved B10 days request. memberId is the row assignee; no member segment is treated as a Work source."
   ],
   "routes": {
     "/assistant/conversation": {
@@ -123,6 +124,18 @@
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
               "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "m:weekly",
+              "role": "owner",
+              "turnId": null,
+              "text": "지난달 주문 데이터로 요일별 할인 합계 뽑아 줘."
+            },
+            {
+              "id": "r:weekly",
+              "role": "representative",
+              "turnId": "assistant-turn:m:weekly",
+              "text": "요일별 할인 합계"
             }
           ]
         },
@@ -233,6 +246,47 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              }
+            }
+          },
+          {
+            "id": "assistant-turn:m:weekly",
+            "messageId": "m:weekly",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793851860000,
+            "proposal": {
+              "title": "요일별 할인 합계",
+              "member": "퀼"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "weekly",
+              "title": "요일별 할인 합계",
+              "memberId": "member-quill",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793854920000,
+              "endedAt": 1793855160000,
+              "turnId": "assistant-turn:m:weekly",
+              "segment": 1,
+              "steps": {
+                "done": 3,
+                "total": 3
               }
             }
           }
@@ -1544,6 +1598,18 @@
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
               "text": "테스트부터 확인할게요."
+            },
+            {
+              "id": "m:weekly",
+              "role": "owner",
+              "turnId": null,
+              "text": "지난달 주문 데이터로 요일별 할인 합계 뽑아 줘."
+            },
+            {
+              "id": "r:weekly",
+              "role": "representative",
+              "turnId": "assistant-turn:m:weekly",
+              "text": "요일별 할인 합계"
             }
           ]
         },
@@ -1654,6 +1720,47 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              }
+            }
+          },
+          {
+            "id": "assistant-turn:m:weekly",
+            "messageId": "m:weekly",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793851860000,
+            "proposal": {
+              "title": "요일별 할인 합계",
+              "member": "퀼"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "work": {
+                "status": "admitted",
+                "diagnostics": []
+              },
+              "run": {
+                "status": "requested",
+                "diagnostics": []
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 3,
+              "workId": "weekly",
+              "title": "요일별 할인 합계",
+              "memberId": "member-quill",
+              "execution": "settled",
+              "acceptance": "accepted",
+              "unknown": false,
+              "started": true,
+              "startedAt": 1793854920000,
+              "endedAt": 1793855160000,
+              "turnId": "assistant-turn:m:weekly",
+              "segment": 1,
+              "steps": {
+                "done": 3,
+                "total": 3
               }
             }
           }

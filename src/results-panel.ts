@@ -54,9 +54,9 @@ function renderResults(){
   row.id='result-row-'+resultKey(r);row.append(cell,element('td',r.title),who,element('td',resultWhen(r.at)));row.addEventListener('click',()=>void resultOpen(r));return row;}));
  $('results-tiles').replaceChildren(...rows.map(r=>{const tile=element('button',undefined,'result-tile');tile.type='button';tile.id='result-tile-'+resultKey(r);tile.append(resultIcon(r.kind),element('span',r.title),element('span',resultWhen(r.at)));tile.addEventListener('click',()=>void resultOpen(r));return tile;}));
 }
-/** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. The segment is pinned: the read itself returns to the head view when that segment is the head, so a cached head never decides it. */
+/** A result opens its original Representative conversation segment, independent of the row assignee, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. The segment is pinned: the read itself returns to the head view when that segment is the head, so a cached head never decides it. */
 async function resultOpen(r){
- const member=resultMember(r),name=member?chatMembers().find(m=>m.id===member)?.name||copy('ui.panel.unknown'):'';if(!chatOpenThread(member,name))return;chatSegment=r.segment;void readChat();
+ if(!chatOpenThread(''))return;chatSegment=r.segment;void readChat();
  const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneAway(false);renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */

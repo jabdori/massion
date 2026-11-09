@@ -19,13 +19,13 @@ The rail's Results and Schedules opened empty placeholders. Accepted results cou
 
 - A row is an accepted Record whose Work came from the conversation (`assistantSource`). Its name and its source Work are the Work title; `segment` and `turnId` name the conversation that made it. A direct answer in the conversation is not a result (experience plan §5.8).
 - `at` is the run's durable start. The Record has no acceptance time, so "Last activity" approximates it (follow-up).
-- The original conversation owner (`memberId`) comes from the accepted Work's immutable `assistantSource`; `null` identifies the Representative. The client does not infer this identity from the bounded global Work list. An absent member name is displayed as unknown, while navigation retains the original member identity.
+- The assignee (`memberId`) comes from the accepted Work's immutable `assistantSource`; `null` identifies the Representative. It labels the row but does not identify the source thread. Source validation permits only Representative segment IDs, and member turns cannot create Work. Result navigation therefore opens the Representative thread at the stored `segment` and originating `turnId`, regardless of the assignee. An absent assignee name is displayed as unknown.
 
 ### Surface
 
 - **Rail > Results** replaces the conversation with the Results page (B10). The sidebar shows `Results`, `All` and `Documents` (every readable result is text) and up to five recent names.
 - Heading `All`, a Grid/List switch (two pressed-state buttons), local search and kind filters over the loaded rows, and a table `Name · Work · Assignee · Last activity` or, in the grid, one tile per result. No results: `No results yet`.
-- **A row opens the conversation that made it, with a preview tab beside it** (B10-preview): the page switches to the original member's conversation (or the Representative when its stored member is null) at the result's segment, and the work pane opens a tab named after the result with `Preview` and `Original` and `Copy`.
+- **A row opens the conversation that made it, with a preview tab beside it** (B10-preview): the page switches to the Representative conversation at the result's original segment, retaining the member assignee on the result row, and the work pane opens a tab named after the result with `Preview` and `Original` and `Copy`.
 - The preview reads the exact text through `GET /missions/:id/record-artifact` with the row's Record, version and SHA-256, and renders it literally: lines starting `- ` or `* ` as list items, other lines as paragraphs, never as HTML. `Original` shows the same bytes in a `pre`. A failed or stale read shows `Unavailable`; nothing else is substituted.
 
 ## Schedules

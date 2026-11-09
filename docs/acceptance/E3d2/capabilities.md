@@ -26,3 +26,15 @@ outside this branch's implementation ownership.
 Fixture evidence is not live-provider, real payment, form submission or external
 GitHub evidence. No source label, unknown effect or accepted text becomes a
 payment/connection/submission receipt.
+
+The B10-preview artboard's member-thread composer is not a valid Work source in
+the current host: `validateAssistantSource` rejects member segment identifiers
+and `memberTurn` forces `proposal:null`. Following the independent GLM review,
+results open their actual Representative segment and originating turn while
+preserving the assignee on the row. The literal member-composer requirement is
+retained as a failure, with [code evidence](review-follow-up.md), rather than
+opening an unrelated member turn at the same numeric segment.
+
+The additional A16 `verify 통과` chip has no producing check-status path in the
+bundled GitHub handler; [the follow-up ledger](review-follow-up.md#missing-check-status-a16)
+records the exact handler/view evidence.

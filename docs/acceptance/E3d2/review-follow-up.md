@@ -36,3 +36,21 @@ check verdict. The host's strict [`AppView`](../../../src/apps.ts#L18) validatio
 field. Therefore the `verify 통과` check chip remains absent, with this explicit
 code evidence; neither PR openness, file counts nor an accepted Work is used as
 proof that the PR checks passed.
+
+## Independent GLM findings
+
+1. `validateAssistantSource` permits only Representative segment IDs
+   ([source](../../../src/assistant-conversation.ts#L123)); `memberTurn` clears
+   proposals ([source](../../../src/assistant-service.ts#L325)). Therefore the
+   result row's `memberId` is an assignee, not the source thread. Result navigation
+   opens the Representative at the stored segment; the row keeps its assignee.
+   A regression starts on a member thread with an unrelated turn at the same
+   segment number, then checks the actual Representative source messages/turn.
+   The B10-preview read fixture includes that originating turn. The artboard's
+   member-thread composer remains a documented capability mismatch with the
+   currently enforced source model, rather than navigating to an unrelated turn.
+2. Schedule rows apply the current query to their rendered title/time/cycle
+   before insertion. A regression filters, re-renders and rereads a schedule
+   event; all replacement rows retain the filter and no command is sent.
+
+Both regressions were observed failing before the fixes and passing afterward.
