@@ -211,9 +211,9 @@ test('Work included by the host without a message still renders once and uses th
 });
 
 
-test('Work progress uses assigned make and check counts instead of inferring roles from the total',async()=>{
+test('Work cards show the shared child-task progress without duplicate role counters',async()=>{
  const {app}=fixture([{text:'Build',at:T0,work:{workId:'progress',title:'A result',execution:'active',acceptance:'pending',started:true,steps:{done:1,total:2},progress:{make:{done:1,total:1},check:{done:0,total:1}}}}]);await settle();
- assert.match(byId(app,'chat-card-'+turnId(1))!.textContent,/만들기 1\/1 · 확인 0\/1/);assert.equal(posts(app).length,0);
+ assert.match(byId(app,'chat-card-'+turnId(1))!.textContent,/1\/2/);assert.doesNotMatch(byId(app,'chat-card-'+turnId(1))!.textContent,/만들기|0\/1/);assert.equal(posts(app).length,0);
 });
 
 test('a late clipboard refusal cannot replace the status of a newer conversation generation',async()=>{

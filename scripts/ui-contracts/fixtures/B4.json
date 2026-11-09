@@ -10,7 +10,9 @@
       "readySelector": "#work-heading-toner"
     }
   ],
-  "gaps": [],
+  "gaps": [
+    "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated."
+  ],
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
@@ -127,38 +129,7 @@
             }
           }
         ],
-        "decisions": [
-          {
-            "id": "payment",
-            "at": 1793855460000,
-            "title": "프린터 토너 주문",
-            "question": "34,000원 결제할까요?",
-            "rows": [
-              [
-                "상품",
-                "레이저 토너 검정 1개 · 지난 주문과 같은 상품"
-              ],
-              [
-                "판매처",
-                "오피스몰 · shop.example.com"
-              ],
-              [
-                "금액",
-                "34,000원 · 배송비 포함 · 카드 끝자리 0000"
-              ],
-              [
-                "결제 기한",
-                "14:30까지"
-              ],
-              [
-                "취소",
-                "결제 후 취소 신청 가능"
-              ]
-            ],
-            "action": "34,000원 결제",
-            "state": "open"
-          }
-        ],
+        "decisions": [],
         "briefings": []
       }
     },
@@ -1401,38 +1372,7 @@
             }
           }
         ],
-        "decisions": [
-          {
-            "id": "payment",
-            "at": 1793855460000,
-            "title": "프린터 토너 주문",
-            "question": "34,000원 결제할까요?",
-            "rows": [
-              [
-                "상품",
-                "레이저 토너 검정 1개 · 지난 주문과 같은 상품"
-              ],
-              [
-                "판매처",
-                "오피스몰 · shop.example.com"
-              ],
-              [
-                "금액",
-                "34,000원 · 배송비 포함 · 카드 끝자리 0000"
-              ],
-              [
-                "결제 기한",
-                "14:30까지"
-              ],
-              [
-                "취소",
-                "결제 후 취소 신청 가능"
-              ]
-            ],
-            "action": "34,000원 결제",
-            "state": "open"
-          }
-        ],
+        "decisions": [],
         "briefings": []
       }
     },

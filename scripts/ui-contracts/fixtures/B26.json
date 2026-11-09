@@ -3,7 +3,7 @@
   "extends": "B2",
   "description": "Budget decision with unknown usage and unavailable increase.",
   "gaps": [
-    "The production host has no budget-waiting decision state or budget-increase card; existing Work is shown without fabricating a budget event."
+    "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
   ],
   "reuse": [
     "tests/settings-surface.test.ts",
@@ -193,27 +193,7 @@
             }
           }
         ],
-        "decisions": [
-          {
-            "id": "rounding",
-            "at": 1793848320000,
-            "title": "반올림 규칙",
-            "question": "반올림을 합계에서 한 번으로 바꿀까요?",
-            "rows": [
-              [
-                "지금",
-                "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
-              ],
-              [
-                "변경 후",
-                "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
-              ]
-            ],
-            "detail": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
-            "action": "바꾸기",
-            "state": "open"
-          }
-        ],
+        "decisions": [],
         "briefings": [
           {
             "id": "morning",
@@ -1885,27 +1865,7 @@
             }
           }
         ],
-        "decisions": [
-          {
-            "id": "rounding",
-            "at": 1793848320000,
-            "title": "반올림 규칙",
-            "question": "반올림을 합계에서 한 번으로 바꿀까요?",
-            "rows": [
-              [
-                "지금",
-                "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
-              ],
-              [
-                "변경 후",
-                "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
-              ]
-            ],
-            "detail": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
-            "action": "바꾸기",
-            "state": "open"
-          }
-        ],
+        "decisions": [],
         "briefings": [
           {
             "id": "morning",
@@ -1968,5 +1928,7 @@
         "criteriaVersion": 1
       }
     }
-  }
+  },
+  "steps": [],
+  "readySelector": "#chat-log"
 }

@@ -210,3 +210,25 @@ test('B22 evidence setup opens the new Work room inspection before its nested le
  const outer=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-room-check-pr84'),inner=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-evidence-summary-pr84');
  assert.ok(outer>=0&&inner>outer,'the setup must reveal the outer Work room summary first');
 });
+
+test('E3e fixtures never manufacture payment, remote delegation or budget decisions',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B4','B16','B16-sent','B16-later','B26','B26-later']){
+  const fixture=await loadFixture(screen);
+  for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
+   const view=response.body as any;
+   assert.deepEqual(view.decisions??[],[],screen+' '+path+' must not imply an unimplemented owner decision');
+  }
+  assert.ok(fixture.gaps.length,screen+' must explain the absent producer');
+ }
+});
+
+test('E3e member room reads reuse exact host Work sources and child tasks',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B6','B18-room-b']){
+  const f=await loadFixture(screen),mission=(f.routes['/missions/intake']!.body as any).value;
+  assert.ok(mission.works.every((w:any)=>w.assistantSource&&w.tasks.some((t:any)=>t.parentId!==null)),screen);
+  const member=(f.routes['/assistant/conversation?member=member-quill']!.body as any);
+  assert.ok(member.turns.every((t:any)=>!t.work&&!t.proposal&&!t.outcome),screen+' member discussion cannot admit Work');
+ }
+});
