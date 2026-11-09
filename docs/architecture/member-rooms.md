@@ -102,3 +102,25 @@ turn before independent checking.
 
 The B7/B8/B22 pane regression additionally passed all 20 headless dark/light
 flows. Changed surface files have zero blocking copy-lint findings.
+
+## Main integration and execution-selection repair
+
+Merged origin/main `1d0d1e3` without rebasing or rewriting history. Conflict
+resolution retains both the room runtime version/budget and main's tool-timeout
+policy pin, validates both on restore, and preserves launcher and discriminator
+imports. The existing member Work test now asserts both pins and replays its
+journal.
+
+The B7 pane now carries the existing execution-selection details node after the
+step/detail content and before the check bar. It remains collapsed initially;
+its original form identity, draft, handlers and stale-revision guards are retained.
+A fresh queued Work can choose producing/checking connections, authorization and
+output cap, check the selection, and explicitly run. Started or accepted Work
+still has no selection form. The legacy evidence inspector is not restored.
+
+Node 24.21.0: 195 related tests, 186 passed, nine environment-gated skips, zero
+failures; typecheck passed. The new client-to-HTTP room variant failed before the
+fix, then exercised preflight without a provider call, exact selected execution,
+independent acceptance, reload and no replay using loopback mocks. Two headless
+theme flows checked collapsed placement, populated controls and 1440/390px
+visibility/overflow. See `verify-room-selection.mjs` and selection evidence.

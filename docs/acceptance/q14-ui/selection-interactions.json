@@ -1,0 +1,22 @@
+[
+  {
+    "theme": "dark",
+    "afterSteps": true,
+    "beforeCheck": true,
+    "collapsed": true,
+    "inRoom": true,
+    "legacy": false,
+    "selectionRetained": true,
+    "mobileOverflow": false
+  },
+  {
+    "theme": "light",
+    "afterSteps": true,
+    "beforeCheck": true,
+    "collapsed": true,
+    "inRoom": true,
+    "legacy": false,
+    "selectionRetained": true,
+    "mobileOverflow": false
+  }
+]

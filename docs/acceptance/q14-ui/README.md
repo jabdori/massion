@@ -44,3 +44,11 @@ screen/theme runs with `node scripts/ui-contracts/verify-work-pane.mjs` after th
 fix. See `work-pane-interactions.json`; this covers the check bar, deliberate
 inspection, terminal states, unknown-state preservation, mobile width and close
 focus. The changed files' copy-lint check reported zero blocking findings.
+
+Queued B7 execution-selection follow-up:
+`node scripts/ui-contracts/verify-room-selection.mjs` passes dark/light at 1440px
+and 390px. `B7-selection-{dark,light}.png` shows the collapsed controls below the
+steps and above the check bar; `-1440.png` and `-390.png` show the selected form.
+`selection-interactions.json` records placement, retained choices and no overflow.
+The fixture host makes no provider calls; the client-to-HTTP unit/integration
+variant proves actual preflight, execution and reload using local mock providers.
