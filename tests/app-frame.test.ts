@@ -9,7 +9,7 @@ test('app HTML has an opaque sandbox origin and cannot turn messages into host c
  assert.equal(frame.tagName,'IFRAME');
  assert.equal(frame.attributes.get('sandbox'),'allow-scripts');assert.equal(frame.attributes.get('referrerpolicy'),'no-referrer');
  assert.equal(frame.src,'massion-app://document/'+'a'.repeat(64));assert.equal(frame.srcdoc,undefined);
- frame.contentWindow={};frame.isConnected=true;await settle();
+ frame.contentWindow={};frame.isConnected=true;app.node('app-view').append(frame);await settle();
  const before=frame.style.height;
  (app.context as any).__frame=frame;
  runInContext('appFrameMessage({source:__frame.contentWindow,origin:"https://other.app",data:{type:"resize",height:500}})',app.context);
@@ -20,6 +20,20 @@ test('app HTML has an opaque sandbox origin and cannot turn messages into host c
  runInContext('appFrameMessage({source:__frame.contentWindow,origin:"null",data:{type:"resize",height:500}})',app.context);assert.equal(frame.style.height,'500px');
  for(const height of [79,1201,500.5,NaN,'500']){(app.context as any).__height=height;runInContext('appFrameMessage({source:__frame.contentWindow,origin:"null",data:{type:"resize",height:__height}})',app.context);assert.equal(frame.style.height,'500px');}
  frame.isConnected=false;runInContext('appFrameMessage({source:__frame.contentWindow,origin:"null",data:{type:"resize",height:600}})',app.context);assert.equal(frame.style.height,'500px');
+});
+
+test('the first resize is delivered before load even when insertion follows the registration microtask',async()=>{
+ for(const delayed of [false,true])for(const origin of ['massion-app://document','http://127.0.0.1:12345']){
+  const app=harness(async()=>reply({error:'unavailable'},503));await settle();
+  (app.context as any).__url=origin+'/'+'a'.repeat(64);
+  const frame=runInContext('appFrame("Example",__url)',app.context);
+  assert.equal(frame.contentWindow,undefined);
+  if(delayed)await settle();
+  frame.contentWindow={};frame.isConnected=true;app.node('app-view').append(frame);
+  (app.context as any).__frame=frame;
+  runInContext('appFrameMessage({source:__frame.contentWindow,origin:"null",data:{type:"resize",height:617}})',app.context);
+  assert.equal(frame.style.height,'617px',origin+' delayed insertion: '+delayed);
+ }
 });
 
 test('the frame client refuses raw HTML, arbitrary origins and decorated document URLs',async()=>{
