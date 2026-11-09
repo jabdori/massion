@@ -1,5 +1,6 @@
 import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
+import {validatePredicates} from './work-telemetry.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
@@ -105,7 +106,8 @@ function effect(value: unknown, recoveryPendingIds: readonly string[] = []): ass
   else text(item.receipt, 'effect receipt', 262_144);
 }
 function verdict(value: unknown): asserts value is Verdict {
-  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence'], ['check']);
+  const item = object(value, 'verdict', ['id', 'verifierAssignmentId', 'artifactSha256', 'artifactVersion', 'criteriaVersion', 'status', 'evidence'], ['check','checkedAt','predicates']);
+  if(Object.hasOwn(item,'checkedAt'))integer(item.checkedAt,'check time',0);
   if (Object.hasOwn(item, 'check')) {
     // Shape only here; the replayed verify command binds producers, checker and relation to the Work.
     const check = object(item.check, 'family check', ['relation', 'producers', 'checker']); oneOf(check.relation, ['deterministic', 'different-family', 'same-family'], 'family relation');
@@ -122,7 +124,7 @@ function verdict(value: unknown): asserts value is Verdict {
   }
 }
 function checkVerdictBinding(work: Work, current: boolean): void {
-  const value = work.verdict!;
+  const value = work.verdict!;validatePredicates(value.predicates,work.criteria,value.status);
   ensure(work.artifact, 'verdict has no artifact');
   const verifier = work.assignments.find(entry => entry.id === value.verifierAssignmentId && entry.role === 'verifier');
   ensure(verifier, 'verdict verifier assignment is missing');
@@ -168,7 +170,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+    ['room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt','admittedAt']);
+  if(Object.hasOwn(item,'admittedAt'))integer(item.admittedAt,'Work admission time',0);
   if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
@@ -194,7 +197,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     oneOf(blocker.code, ['provider_unavailable', 'runtime_unavailable', 'provider_failed', 'budget_exceeded', 'verification_failed'], 'blocker code'); text(blocker.detail, 'blocker detail');
   }
   if (Object.hasOwn(item, 'instructions')) for (const entry of array(item.instructions, 'instructions')) {
-    const instruction = object(entry, 'instruction', ['actorId', 'text']); text(instruction.actorId, 'instruction actor'); text(instruction.text, 'instruction text');
+    const instruction = object(entry, 'instruction', ['actorId', 'text'],['at']);if(Object.hasOwn(instruction,'at'))integer(instruction.at,'instruction time',0); text(instruction.actorId, 'instruction actor'); text(instruction.text, 'instruction text');
   }
   const budget = object(item.budget, 'budget', ['limit', 'reserved', 'measured'], ['unit']);
   number(budget.limit, 'budget limit'); number(budget.reserved, 'budget reserved'); ensure(budget.reserved <= budget.limit, 'reservation exceeds budget');
@@ -238,7 +241,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
-    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result']);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
+    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt']);
+    for(const key of ['startedAt','endedAt'])if(Object.hasOwn(task,key))integer(task[key],'task time',0);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
     if (task.parentId !== null) text(task.parentId, 'parent task ID'); oneOf(task.status, ['queued', 'active', 'settled'], 'task status');
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
     if (task.status === 'settled') text(task.result, 'settled task result');

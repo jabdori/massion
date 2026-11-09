@@ -1,5 +1,5 @@
 import {requiresMemoryTime} from './memory-expiry.ts';
-import {apply,createMission,DomainError,endsWork,hash} from './domain.ts';
+import {apply,createMission,DomainError,endsWork,observesWork,hash} from './domain.ts';
 import type {Actor,Command,Mission} from './domain.ts';
 import type {Store,CommitResult} from './storage.ts';
 export interface Envelope { missionId:string; commandId:string; expectedRevision:number; actorId:string; command:Command }
@@ -36,7 +36,7 @@ export class Application {
     if(snapshot.revision!==envelope.expectedRevision) {
       return {status:'conflict',revision:snapshot.revision,reason:'revision'};
     }
-    const {value,events}=apply(snapshot.value,envelope.command,actor,endsWork(envelope.command.type)?{observedAt:this.clock(),workEndVersion:2}:requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock()}:undefined);
+    const {value,events}=apply(snapshot.value,envelope.command,actor,observesWork(envelope.command.type)||endsWork(envelope.command.type)||requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock(),...(endsWork(envelope.command.type)?{workEndVersion:2 as const}:{}),...(observesWork(envelope.command.type)?{telemetryVersion:1 as const}:{})}:undefined);
     const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
     const result=await this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
     if(result.status==='conflict'&&result.reason==='idempotency'){

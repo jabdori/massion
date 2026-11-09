@@ -1,6 +1,7 @@
 import {containsQuote,roomModerationInput} from './member-rooms.ts';
 import type {ModerationInput} from './discriminator.ts';
 import {TOOL_TIMEOUT_VERSION} from './tool-call.ts';
+import {validatePredicates} from './work-telemetry.ts';
 import {parseTeamPlan,procedureSteps,teamCallCount,MAX_TEAM_STEPS} from './internal-teams.ts';
 import {clarificationInput,requireAnswered} from './work-clarification.ts';
 import {conversationSourceInput} from './conversation-work.ts';
@@ -317,12 +318,14 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    const verified=await this.invoke(missionId,workId,runId,'verifier',verifierPrompt,{...binding,artifactSha256:artifact.sha256},controller);
    controller.signal.throwIfAborted();if(verified.status!=='completed'){await this.block(missionId,workId,verified.reason);return this.result(missionId,workId);}
    const reviewed=await this.active(missionId,workId,controller);
+   let predicates:import('./domain.ts').CheckPredicate[]|undefined;
    let verdict:'passed'|'failed'='failed';let details='Verifier response did not satisfy the exact artifact/criteria/evidence contract.';
-   try{const report=JSON.parse(verified.output!) as Record<string,unknown>;const checks=report.checks as {criterion:unknown;passed:unknown;quote:unknown;reason:unknown}[];
-    if(report.artifactSha256===artifact.sha256&&report.criteriaVersion===criteria.version&&report.criteriaHash===hash(criteria)&&['passed','failed'].includes(String(report.verdict))&&Array.isArray(checks)&&checks.length>0&&checks.every(c=>c.criterion===criteria.description&&typeof c.passed==='boolean'&&typeof c.quote==='string'&&c.quote.length>0&&containsQuote(content,c.quote)&&typeof c.reason==='string'&&c.reason.trim().length>0)&&((report.verdict==='passed'&&checks.every(c=>c.passed))||(report.verdict==='failed'&&checks.some(c=>!c.passed)))){verdict=report.verdict as 'passed'|'failed';details=JSON.stringify(report);}
+   try{const report=JSON.parse(verified.output!) as Record<string,unknown>,checks=Array.isArray(report.checks)?report.checks.map(({criterion,passed,quote,reason})=>({criterion,passed,quote,reason})):undefined;
+    validatePredicates(checks,criteria,report.verdict as 'passed'|'failed');
+    if(report.artifactSha256===artifact.sha256&&report.criteriaVersion===criteria.version&&report.criteriaHash===hash(criteria)&&['passed','failed'].includes(String(report.verdict))&&checks?.every(c=>containsQuote(content,c.quote))){predicates=checks;verdict=report.verdict as 'passed'|'failed';details=JSON.stringify(report);}
    }catch{/* Invalid model text is failed assurance, never host code. */}
    if(await this.options.artifacts.read(artifact)!==content)throw new DomainError('Artifact changed during independent review');
-   controller.signal.throwIfAborted();await this.send(missionId,{type:'verify',workId,verdict:{id:`${runId}:verdict`,verifierAssignmentId:`${runId}:verifier:assignment`,artifactSha256:artifact.sha256,artifactVersion:artifact.version,criteriaVersion:criteria.version,status:verdict,evidence:[{kind:'provider-review',detail:details,source:`${runId}:verifier`},{kind:'artifact-readback',detail:`sha256:${artifact.sha256}`,source:artifact.path}],check:familyCheck(workProducers(reviewed),this.options.verifier.adapter.descriptor)}},this.options.verifier.identity);
+   controller.signal.throwIfAborted();await this.send(missionId,{type:'verify',workId,verdict:{id:`${runId}:verdict`,verifierAssignmentId:`${runId}:verifier:assignment`,artifactSha256:artifact.sha256,artifactVersion:artifact.version,criteriaVersion:criteria.version,status:verdict,...(predicates?{predicates}:{}),evidence:[{kind:'provider-review',detail:details,source:`${runId}:verifier`},{kind:'artifact-readback',detail:`sha256:${artifact.sha256}`,source:artifact.path}],check:familyCheck(workProducers(reviewed),this.options.verifier.adapter.descriptor)}},this.options.verifier.identity);
    await this.send(missionId,{type:'settle-task',workId,taskId:`${workId}:verifier`,result:`Independent review ${verdict}`},this.options.verifier.identity);
    await this.send(missionId,{type:'settle-task',workId,taskId:`${workId}:root`,result:'Consumed separate executor and verifier results'},this.options.executor.identity);
    if(verdict==='passed'){controller.signal.throwIfAborted();const snapshot=await this.options.artifacts.snapshot(artifact);controller.signal.throwIfAborted();await this.send(missionId,{type:'accept',workId,recordId:`${runId}:record`,artifactSnapshot:snapshot},'runtime-representative');}
