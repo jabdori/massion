@@ -6,6 +6,8 @@ Massion is a personally owned AI organization that keeps responsibility for outc
 
 Read the [concepts overview](docs/product/concepts.md) for the graph, change history, Growth and core rules, including what is implemented and what remains planned.
 
+For installation and everyday use, read the [development guide](docs/guide/README.md).
+
 ## Current candidate
 
 This clean rebuild has a runnable, tested **development foundation**, not a finished AI product. Its controlled fixture performs actual local file/process effects, rejects an incorrect calculation, revises it, independently checks the result, and accepts an evidence-bound Record. A measured held-out improvement is adopted, applied to a second Work, and reverted without rewriting history. A document-analysis fixture uses the same Work/Records contract.
