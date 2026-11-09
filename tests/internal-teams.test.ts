@@ -12,9 +12,9 @@ const owner={id:'owner',roles:['owner'] as const},rep={id:'rep',roles:['represen
 function work(){let m=createMission({id:'m',purpose:'p',scope:'s',constraints:[],criteria:{version:1,description:'d',oracle:'manual'}},owner);m=apply(m,{type:'admit-work',workId:'w',title:'t',budget:50},owner).value;const w=m.works[0]!;w.team=memberProcedures(null,'member');return {m,w};}
 
 test('a plan cannot omit steps, add authority fields, cycles or blank skip reasons',()=>{
- const {w}=work(),step={role:'Read',title:'Read evidence',dependsOn:[]};
+ const {w}=work(),step={role:'Read',title:'Read evidence',dependsOn:[],instruction:'Read the pinned evidence'};
  for(const steps of [[step],[step,step,step],[{...step,dependsOn:[1]},step],[step,{...step,dependsOn:[1]}],[step,{...step,skipReason:' '}],[step,{...step,actorId:'checker'}]])assert.throws(()=>parseTeamPlan(JSON.stringify({steps}),w),/Invalid internal team/);
- const parsed=parseTeamPlan(JSON.stringify({steps:[step,{...step,role:'Write',dependsOn:[0],skipReason:'No new source'}]}),w);assert.deepEqual(parsed[1]!.dependsOn,['w:step:0']);
+ const parsed=parseTeamPlan(JSON.stringify({steps:[step,{...step,role:'Write',dependsOn:[0],skipReason:'No new source'}]}),w);assert.deepEqual(parsed[1]!.dependsOn,['w:step:0']);assert.equal(parsed[0]!.instruction,step.instruction);assert.throws(()=>parseTeamPlan(JSON.stringify({steps:[{...step,instruction:' '},step]}),w),/Invalid internal team/);
 });
 
 test('procedure load excludes other members, skills and archives, and refuses tampering and excess steps',()=>{

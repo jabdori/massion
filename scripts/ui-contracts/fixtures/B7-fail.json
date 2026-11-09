@@ -1,6 +1,6 @@
 {
   "screen": "B7-fail",
-  "description": "Work room for B7-fail. Data-only domain commands and production readers; no provider calls, payment history or per-step timestamps.",
+  "description": "Work telemetry generated through versioned domain commands; fixture text only, no external business evidence.",
   "now": 1793855520000,
   "readySelector": "[id=\"chat-card-assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd\"]",
   "steps": [
@@ -21,9 +21,8 @@
     }
   ],
   "gaps": [
-    "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+    "These text-only Works have no named business procedure or browser/page-read telemetry.",
     "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-    "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
     "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
   ],
   "reuse": [
@@ -36,7 +35,8 @@
     "src/runtime-lifetime.ts (bounded ownership and no-replay unknown interruption)",
     "scripts/ui-contracts/fixtures/B18.json (existing member discussion copy and GitHub rail descriptor; read-only reuse)",
     "scripts/ui-contracts/fixtures/B16.json (existing accepted PR #84 text for idle unread Juno); B18.json (active PR #84 for B7-churn)",
-    "src/assistant-conversation.ts and src/assistant-service.ts (three actual plain-reply member reads, without steer/proposal/outcome; existing Work state and exact readers unchanged)"
+    "src/assistant-conversation.ts and src/assistant-service.ts (three actual plain-reply member reads, without steer/proposal/outcome; existing Work state and exact readers unchanged)",
+    "scripts/ui-contracts/regenerate-work-telemetry.ts: timed admission, task effects/settlement, independent check and owner discussion commands"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -243,7 +243,7 @@
                 "fact": null
               },
               "steps": {
-                "done": 2,
+                "done": 1,
                 "total": 2
               },
               "progress": {
@@ -316,7 +316,11 @@
             "startedAt": 1793855280001,
             "endedAt": 1793855280001,
             "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-            "segment": 1
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 2
+            }
           },
           {
             "missionId": "intake",
@@ -435,6 +439,7 @@
                 "messages": [
                   {
                     "actorId": "local-owner",
+                    "at": 1793855280009,
                     "id": "e3c-churn-discussion",
                     "ordinal": 1,
                     "replyTo": null,
@@ -460,6 +465,7 @@
             "works": [
               {
                 "acceptance": "failed",
+                "admittedAt": 1793855280001,
                 "appliedMemoryVersions": [],
                 "artifact": {
                   "id": "artifact-churn",
@@ -599,7 +605,7 @@
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
                   }
                 ],
-                "endedAt": 1793855280001,
+                "endedAt": 1793855280008,
                 "execution": "settled",
                 "id": "assistant-236a368dfcf6f32eaeb68fb0",
                 "missionSnapshot": {
@@ -625,21 +631,26 @@
                 },
                 "tasks": [
                   {
+                    "endedAt": 1793855280007,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "parentId": null,
                     "result": "Consumed separate executor and verifier results",
                     "status": "settled"
                   },
                   {
+                    "endedAt": 1793855280004,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "result": "Text artifact 232aa6f7d8f34bba178f6cd787d3c5e8b39938290b194c829ca6f21a1c4ef022",
+                    "startedAt": 1793855280002,
                     "status": "settled"
                   },
                   {
+                    "endedAt": 1793855280006,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "result": "Independent review failed",
+                    "startedAt": 1793855280005,
                     "status": "settled"
                   }
                 ],
@@ -662,6 +673,7 @@
                     ],
                     "relation": "same-family"
                   },
+                  "checkedAt": 1793855280008,
                   "criteriaVersion": 1,
                   "evidence": [
                     {
@@ -1212,6 +1224,7 @@
               "messages": [
                 {
                   "actorId": "local-owner",
+                  "at": 1793855280009,
                   "id": "e3c-churn-discussion",
                   "ordinal": 1,
                   "replyTo": null,
@@ -1237,6 +1250,7 @@
           "works": [
             {
               "acceptance": "failed",
+              "admittedAt": 1793855280001,
               "appliedMemoryVersions": [],
               "artifact": {
                 "id": "artifact-churn",
@@ -1376,7 +1390,7 @@
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
                 }
               ],
-              "endedAt": 1793855280001,
+              "endedAt": 1793855280008,
               "execution": "settled",
               "id": "assistant-236a368dfcf6f32eaeb68fb0",
               "missionSnapshot": {
@@ -1402,21 +1416,26 @@
               },
               "tasks": [
                 {
+                  "endedAt": 1793855280007,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "parentId": null,
                   "result": "Consumed separate executor and verifier results",
                   "status": "settled"
                 },
                 {
+                  "endedAt": 1793855280004,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "result": "Text artifact 232aa6f7d8f34bba178f6cd787d3c5e8b39938290b194c829ca6f21a1c4ef022",
+                  "startedAt": 1793855280002,
                   "status": "settled"
                 },
                 {
+                  "endedAt": 1793855280006,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "result": "Independent review failed",
+                  "startedAt": 1793855280005,
                   "status": "settled"
                 }
               ],
@@ -1439,6 +1458,7 @@
                   ],
                   "relation": "same-family"
                 },
+                "checkedAt": 1793855280008,
                 "criteriaVersion": 1,
                 "evidence": [
                   {
@@ -2178,7 +2198,7 @@
                 "fact": null
               },
               "steps": {
-                "done": 2,
+                "done": 1,
                 "total": 2
               },
               "progress": {
@@ -2573,17 +2593,18 @@
         "cursor": 6,
         "conversation": {
           "id": "conversation:93062916d6cd190500d87278a2d0c648bca8b0f8",
+          "workId": "assistant-236a368dfcf6f32eaeb68fb0",
           "messages": [
             {
-              "actorId": "local-owner",
               "id": "e3c-churn-discussion",
               "ordinal": 1,
-              "replyTo": null,
+              "actorId": "local-owner",
               "role": "owner",
-              "text": "기업 고객은 따로 봐 줘."
+              "replyTo": null,
+              "text": "기업 고객은 따로 봐 줘.",
+              "at": 1793855280009
             }
-          ],
-          "workId": "assistant-236a368dfcf6f32eaeb68fb0"
+          ]
         }
       }
     },

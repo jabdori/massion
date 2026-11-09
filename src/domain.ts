@@ -1,4 +1,6 @@
+import {validatePredicates,validateStepProgress} from './work-telemetry.ts';
 import {validateMemoryMetadata} from './memory-candidates.ts';
+
 import {applyEffectDecision,isEffectDecisionCommand,EFFECT_HOST} from './effect-decisions.ts';
 import {applyRoom,validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,teamTaskReady,teamCallCount} from './internal-teams.ts';
@@ -30,8 +32,10 @@ export interface Assignment { organizationVersion?:number; id: string; actorId: 
 export interface ModelSelection { provider: string; model: string; configVersion: string; reason: string; evidenceClass: 'fixture' | 'real-provider' }
 export interface ProviderDispatchClaim {id:string;runId:string;hostSessionId:string;dispatchId:string;actorId:string;assignmentId:string;provider:string;model:string;configVersion:string;requestHash:string;claimedAt:number}
 export interface Effect { ownerDecision?:import('./effect-decisions.ts').OwnerEffectDecision; providerDispatch?:ProviderDispatchClaim; id: string; taskId: string; status: 'pending' | 'succeeded' | 'failed' | 'unknown'; target: string; authority: string; receipt?: string }
-export interface Task { step?:import('./internal-teams.ts').TeamStep; id: string; parentId: string | null; status: 'queued' | 'active' | 'settled'; result?: string }
-export interface Verdict { id: string; verifierAssignmentId: string; artifactSha256: string; artifactVersion: number; criteriaVersion: number; status: 'passed' | 'failed' | 'stale'; evidence: Evidence[]; check?: CheckFamily }
+export interface StepProgress {done:number;total:number;at:number;note?:{label:string;text:string}}
+export interface Task { progress?:StepProgress; startedAt?:number;endedAt?:number; step?:import('./internal-teams.ts').TeamStep; id: string; parentId: string | null; status: 'queued' | 'active' | 'settled'; result?: string }
+export interface CheckPredicate {criterion:string;passed:boolean;quote:string;reason:string}
+export interface Verdict { checkedAt?:number;predicates?:CheckPredicate[]; id: string; verifierAssignmentId: string; artifactSha256: string; artifactVersion: number; criteriaVersion: number; status: 'passed' | 'failed' | 'stale'; evidence: Evidence[]; check?: CheckFamily }
 /** A model identity with the family the host map gave it when the check ran; null is unknown and counts as the same family. */
 export interface ModelIdentity {provider:string;model:string;family:string|null}
 /** ADR 0003 §7: how independent a check was. Pinned at verify time, never recomputed from a later map. */
@@ -49,6 +53,7 @@ export interface RuntimeRecovery {runId:string;actorId:string;reason:string;pend
 export interface WorkPrerequisite {workId:string;criteriaHash:string;inputHash:string;actorId:string;reason:string}
 export interface PrerequisiteRecord {workId:string;recordId:string;checksum:string;criteriaVersion:number;evidenceClass:'fixture'|'real-provider';artifact:Pick<Artifact,'id'|'version'|'sha256'|'kind'>}
 export interface Work {
+  admittedAt?:number;
   room?:import('./member-rooms.ts').MemberRoom;
   team?:import('./internal-teams.ts').TeamProcedure;
   moderation?:import('./discriminator.ts').ModerationEntry[];
@@ -57,7 +62,7 @@ export interface Work {
   conversationSource?:ConversationSource;
   correction?:CorrectionPin;
   prerequisites?:WorkPrerequisite[];prerequisiteRecords?:PrerequisiteRecord[];runtimeInterruption?:RuntimeInterruption;
-  id: string; title: string; sourceDocuments?:WorkSource[]; organizationSnapshot?:OrganizationRevision; runtimeRun?:RuntimeRun; runtimeRecovery?:RuntimeRecovery; blocker?:ExecutionGate; instructions?:{actorId:string;text:string}[]; missionVersion: number; missionSnapshot?:{version:number;purpose:string;scope:string;constraints:string[]}; criteria: Criteria;
+  id: string; title: string; sourceDocuments?:WorkSource[]; organizationSnapshot?:OrganizationRevision; runtimeRun?:RuntimeRun; runtimeRecovery?:RuntimeRecovery; blocker?:ExecutionGate; instructions?:{actorId:string;text:string;at?:number}[]; missionVersion: number; missionSnapshot?:{version:number;purpose:string;scope:string;constraints:string[]}; criteria: Criteria;
   monthlyBudgetDecision?:string;
   execution: 'budget-waiting' | 'queued' | 'active' | 'waiting' | 'blocked' | 'cancelled' | 'settled';
   acceptance: 'pending' | 'failed' | 'stale' | 'accepted';
@@ -73,7 +78,8 @@ export const ruleChangeId=(missionId:string,g:Pick<Growth,'id'|'baseline'|'candi
 export interface Relation { from: string; to: string; type: 'depends-on' | 'evidenced-by' | 'contains'; fromVersion: number; toVersion: number; provenance: string; inferred: boolean }
 export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
-export interface ConversationMessage {id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
+export interface StepNote {taskId:string;title:string}
+export interface ConversationMessage {stepNote?:StepNote;at?:number;id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
 export interface Mission { memoryExpiries?:import('./memory-expiry.ts').MemoryExpiry[]; memoryTimeWatermark?:number; memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
@@ -86,7 +92,7 @@ export type Command =
   | {type:'declare-memory-conflict';conflictId:string;first:import('./memory-conflicts.ts').MemoryConflictReference;second:import('./memory-conflicts.ts').MemoryConflictReference;reason:string}
   | {type:'ask-work-question'|'answer-work-question';workId:string;questionId:string;text:string}
   | {type:'append-mission-message';messageId:string;replyTo:string|null;text:string}
-  | {type:'append-work-message';workId:string;messageId:string;replyTo:string|null;text:string}
+  | {type:'append-work-message';workId:string;messageId:string;replyTo:string|null;text:string;stepNote?:StepNote}
   | {type:'claim-provider-dispatch';workId:string;effectId:string;claim:ProviderDispatchClaim}
   | {type:'close-expired-runtime';workId:string;runId:string;dispatchId:string;hostSessionId:string;deadlineAt:number;observedAt:number;reason:string;acknowledgeUncertainOutcome:true}
   | {type:'expire-runtime';workId:string;runId:string;dispatchId:string;observedAt:number}
@@ -105,6 +111,7 @@ export type Command =
   | { type:'quarantine-runtime';workId:string;runId:string;reason:string;acknowledgeUncertainOutcome:true }
   | { type: 'block-work';workId:string;blocker:ExecutionGate }
   | { type: 'delegate'; workId: string; taskId: string; parentId: string; step?:import('./internal-teams.ts').TeamStep }
+  | {type:'record-step-progress';workId:string;taskId:string;progress:Omit<StepProgress,'at'>}
   | { type: 'settle-task'; workId: string; taskId: string; result: string }
   | { type: 'admit-effect'; workId: string; effect: Effect; reserve: number }
   | { type: 'receipt'; workId: string; effectId: string; outcome: 'succeeded' | 'failed' | 'unknown'; receipt: string; usage: number | null; providerDispatchId?:string }
@@ -222,16 +229,19 @@ export function freshSourceWork(w:Work):boolean {
 }
 /** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
-export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2}): { value: Mission; events: unknown[] } {
+export const observesWork=(type:string)=>['admit-work','admit-effect','record-step-progress','settle-task','verify','steer','append-work-message','append-mission-message','open-room','record-room-turn'].includes(type);
+export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2;telemetryVersion?:1}): { value: Mission; events: unknown[] } {
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
-  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||(command.type==='adopt-growth'||command.type==='revert-growth')&&command.recordChangeTime===true||command.type==='answer-rule-change'&&command.recordChangeTime===true||time===undefined,'Unexpected expiry clock context');
+  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||(command.type==='adopt-growth'||command.type==='revert-growth')&&command.recordChangeTime===true||command.type==='answer-rule-change'&&command.recordChangeTime===true||time?.telemetryVersion===1&&observesWork(command.type)||time===undefined,'Unexpected expiry clock context');
   if(time&&Object.hasOwn(time,'workEndVersion'))ensure(time.workEndVersion===2&&endsWork(command.type),'Invalid Work end version');
   if(command.type==='adopt-growth'||command.type==='revert-growth'){
     if(Object.hasOwn(command,'recordChangeTime'))ensure(command.recordChangeTime===true,'Invalid Growth time marker');
     if(command.recordChangeTime){const g=current.growth.find(g=>g.id===command.growthId),since=command.type==='adopt-growth'?g?.ruleChange?.at:g?.adoptedAt;ensure(time&&Object.keys(time).length===1&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0&&time.observedAt<=8640000000000000&&(since===undefined||time.observedAt>=since),'Invalid Growth transition time');}
   }
   if(command.type==='propose-growth')ensure(!Object.hasOwn(command.proposal,'adoptedAt')&&!Object.hasOwn(command.proposal,'revertedAt'),'Invalid proposal transition time');
+  if(time&&Object.hasOwn(time,'telemetryVersion'))ensure(time.telemetryVersion===1&&observesWork(command.type)&&Object.keys(time).every(k=>['observedAt','workEndVersion','telemetryVersion'].includes(k))&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Invalid telemetry time');
+  const at=time?.telemetryVersion===1?time.observedAt:undefined;
   const state = structuredClone(current);
   const work = 'workId' in command ? state.works.find(w => w.id === command.workId) : undefined;
   if ('workId' in command && command.type !== 'admit-work' && command.type !== 'observe-growth') ensure(work, 'Unknown work');
@@ -240,11 +250,11 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
   const performer=(w:Work,taskId:string):void=>{role(actor,'executor','verifier');ensure(w.assignments.some(a=>a.actorId===actor.id&&a.taskId===taskId&&actor.roles.includes(a.role)),'Not assigned to effect task');};
   const open = (w: Work): void => { ensure(w.execution !== 'cancelled' && w.acceptance !== 'accepted', 'Work no longer admits changes'); };
   const growth = (): Growth => { const g = state.growth.find(g => 'growthId' in command && g.id === command.growthId); ensure(g, 'Unknown growth'); return g; };
-  if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
-  if(work&&['assign','delegate','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
+  if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','record-step-progress','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
+  if(work&&['assign','delegate','record-step-progress','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
   switch (command.type) {
     case 'propose-owner-effect': case 'answer-owner-effect': case 'dispatch-owner-effect': case 'record-owner-effect': {applyEffectDecision(state,command,actor,time);break;}
-    case 'open-room': case 'record-room-turn': {applyRoom(needWork(),command,actor);break;}
+    case 'open-room': case 'record-room-turn': {applyRoom(needWork(),command,actor,at);break;}
     case 'reserve-moderation': case 'record-moderation': {applyModeration(needWork(),command,actor);break;}
     case 'ask-work-question': case 'answer-work-question': {
       role(actor,'owner');const w=needWork();ensure(freshSourceWork(w),'Clarification requires fresh unstarted Work');ensure(Object.keys(command).length===4&&Object.keys(command).every(k=>['type','workId','questionId','text'].includes(k)),'Exact clarification fields required');
@@ -254,9 +264,9 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
       clarificationInput(w);break;
     }
     case 'append-mission-message': case 'append-work-message': {
-      role(actor,'owner');const workId=command.type==='append-work-message'?command.workId:null;if(command.type==='append-work-message')needWork();const fields=['type','messageId','replyTo','text',...(workId===null?[]:['workId'])];ensure(Object.keys(command).length===fields.length&&Object.keys(command).every(k=>fields.includes(k)),'Exact owner message fields required');validateConversations(state);
+      role(actor,'owner');const workId=command.type==='append-work-message'?command.workId:null;if(command.type==='append-work-message')needWork();const fields=['type','messageId','replyTo','text',...(workId===null?[]:['workId']),...(command.type==='append-work-message'&&Object.hasOwn(command,'stepNote')?['stepNote']:[])];ensure(Object.keys(command).length===fields.length&&Object.keys(command).every(k=>fields.includes(k)),'Exact owner message fields required');validateConversations(state);
       let conversation=state.conversations?.find(c=>c.workId===workId);if(!conversation){conversation={id:workConversationId(state.id,workId),workId,messages:[]};(state.conversations??=[]).push(conversation);}
-      conversation.messages.push({id:command.messageId,ordinal:conversation.messages.length+1,actorId:actor.id,role:'owner',replyTo:command.replyTo,text:command.text});validateConversations(state);break;
+      conversation.messages.push({id:command.messageId,ordinal:conversation.messages.length+1,actorId:actor.id,role:'owner',replyTo:command.replyTo,text:command.text,...(command.type==='append-work-message'&&Object.hasOwn(command,'stepNote')?{stepNote:structuredClone(command.stepNote)}:{}),...(at===undefined?{}:{at})});validateConversations(state);break;
     }
     case 'revise-organization': {
       role(actor,'owner');ensure(Object.keys(command).length===4&&Object.keys(command).every(key=>['type','version','reason','responsibilities'].includes(key)),'Invalid organization command fields');
@@ -280,7 +290,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
       role(actor,'owner');ensure(Object.keys(command).length===5&&Object.keys(command).every(k=>['type','conflictId','first','second','reason'].includes(k)),'Exact memory conflict command fields required');const {type,...declaration}=command;declareMemoryConflict(state,declaration,actor.id);break;
     }
     case 'admit-work': {
-      requireUnconflictedNewWork(state);if(requiresMemoryTime(state,command.type))requireUnexpiredNewWork(state,time);
+      requireUnconflictedNewWork(state);if(requiresMemoryTime(state,command.type))requireUnexpiredNewWork(state,at===undefined?time:{observedAt:at});
       const assistantSource=Object.hasOwn(command,'assistantSource')?(role(actor,'assistant'),ensure(!Object.hasOwn(command,'conversationSource')&&!Object.hasOwn(command,'correction'),'Choose one source admission purpose'),validateAssistantSource(command.assistantSource,command.workId),structuredClone(command.assistantSource!)):(role(actor,'owner','representative'),undefined);
       if(command.team)validateTeamProcedure(command.team,assistantSource?.memberId);
       text(command.workId,'work id'); text(command.title,'title'); ensure(!work,'Work already exists'); ensure(finite(command.budget),'Invalid budget');
@@ -326,12 +336,15 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
       w.execution='cancelled'; break;
     }
     case 'block-work': {role(actor,'owner','representative');const w=needWork();open(w);ensure(w.execution!=='waiting','Owner steering cannot be overwritten by a runtime blocker');text(command.blocker.detail,'blocker');ensure(['provider_unavailable','runtime_unavailable','provider_failed','budget_exceeded','verification_failed'].includes(command.blocker.code),'Invalid blocker');w.blocker=structuredClone(command.blocker);w.execution='blocked';break;}
-    case 'revise-work': { role(actor,'owner','representative'); const w=needWork(); open(w); ensure(w.verdict?.status==='failed'||w.acceptance==='stale','Revision requires failed or stale assurance'); ensure(w.effects.every(e=>e.status==='succeeded'||e.status==='failed'),'Unsettled effects prohibit revision'); const number=w.attempts.length+1; w.attempts.push({id:`${w.id}:attempt:${number}`,number,criteria:structuredClone(w.criteria),status:'queued',modelVersions:w.assignments.map(a=>a.model.configVersion)}); for(const task of w.tasks) { task.status='queued'; delete task.result; } w.execution='queued'; w.acceptance='pending'; delete w.verdict; break; }
+    case 'revise-work': { role(actor,'owner','representative'); const w=needWork(); open(w); ensure(w.verdict?.status==='failed'||w.acceptance==='stale','Revision requires failed or stale assurance'); ensure(w.effects.every(e=>e.status==='succeeded'||e.status==='failed'),'Unsettled effects prohibit revision'); const number=w.attempts.length+1; w.attempts.push({id:`${w.id}:attempt:${number}`,number,criteria:structuredClone(w.criteria),status:'queued',modelVersions:w.assignments.map(a=>a.model.configVersion)}); for(const task of w.tasks) { task.status='queued'; delete task.result;delete task.startedAt;delete task.endedAt;delete task.progress; } w.execution='queued'; w.acceptance='pending'; delete w.verdict; break; }
     case 'assign': {
       role(actor,'owner','representative'); const w=needWork(); open(w); const a=command.assignment; text(a.id,'assignment'); text(a.actorId,'assignee'); text(a.model.reason,'model selection reason'); text(a.model.configVersion,'model config');if(w.runtimeRun?.connectionBindings)ensure(a.model.configVersion===w.runtimeRun.connectionBindings[a.role].configHash,'Assignment does not match admitted connection binding'); text(a.extensionVersion,'extension'); ensure(a.role==='executor'||a.role==='verifier','Unknown responsibility'); ensure(a.model.evidenceClass==='fixture'||a.model.evidenceClass==='real-provider','Unknown evidence class'); ensure(w.tasks.some(t=>t.id===a.taskId),'Unknown task'); ensure(!w.assignments.some(x=>x.id===a.id),'Duplicate assignment');if(w.team)ensure(!w.assignments.some(x=>x.actorId===a.actorId&&w.tasks.some(t=>t.id===x.taskId&&t.step)),'A worker holds only its own step');if(w.tasks.some(t=>t.id===a.taskId&&t.step))ensure(a.role==='executor'&&!w.assignments.some(x=>x.taskId===a.taskId||x.actorId===a.actorId),'One independent worker identity per team step'); ensure(!w.assignments.some(x=>x.actorId===a.actorId&&x.role!==a.role),'Executor and verifier must be independent identities'); const organization=pinnedOrganization(state,w);ensure(a.organizationVersion===undefined||a.organizationVersion===organization?.version,'Assignment organization version mismatch');w.assignments.push({...structuredClone(a),...(organization?{organizationVersion:organization.version}:{})}); w.attempts.at(-1)!.modelVersions.push(a.model.configVersion); break;
     }
     case 'delegate': {
       role(actor,'representative'); const w=needWork(); open(w); ensure(w.tasks.some(t=>t.id===command.parentId),'Unknown parent task'); text(command.taskId,'task'); ensure(!w.tasks.some(t=>t.id===command.taskId),'Duplicate task'); const task:Task={id:command.taskId,parentId:command.parentId,status:'queued',...(command.step?{step:structuredClone(command.step)}:{})};validateTeamTask(w,task);if(task.step)ensure(w.tasks.filter(t=>t.step).length<(w.team?.procedures.flatMap(p=>p.body.steps).length??0),'Too many team steps');w.tasks.push(task); break;
+    }
+    case 'record-step-progress': {
+      const w=needWork();performer(w,command.taskId);open(w);const task=w.tasks.find(t=>t.id===command.taskId);ensure(task?.step&&!task.step.skipReason,'Only assigned unskipped step progress is recorded');ensure(w.execution!=='waiting'&&!w.effects.some(e=>e.status==='unknown'),'Unresolved or unknown Work cannot advance progress');ensure(at!==undefined,'Step progress needs a host time');ensure(Object.keys(command).length===4&&Object.keys(command).every(k=>['type','workId','taskId','progress'].includes(k))&&command.progress&&typeof command.progress==='object'&&!Array.isArray(command.progress)&&!Object.hasOwn(command.progress,'at'),'Exact step progress fields required');const progress={...command.progress,at};validateStepProgress(progress);ensure(!task.progress||progress.total===task.progress.total&&progress.done>=task.progress.done,'Step progress cannot change its total or move backwards');ensure(task.status!=='queued'||progress.done===0,'Queued step progress cannot be completed');ensure(task.status!=='settled'||progress.done===progress.total,'Settled step progress must be complete');task.progress=structuredClone(progress);break;
     }
     case 'settle-task': {
       const w=needWork(); performer(w,command.taskId); open(w); ensure(w.execution!=='waiting','Owner steering must be resolved before task progression'); const task=w.tasks.find(t=>t.id===command.taskId); ensure(task,'Unknown task'); ensure(w.assignments.some(a=>a.actorId===actor.id&&a.taskId===task.id),'Not assigned to task'); ensure(w.tasks.filter(t=>t.parentId===task.id).every(t=>t.status==='settled'),'Child result not settled'); ensure(w.effects.filter(e=>e.taskId===task.id).every(e=>e.status==='succeeded'||e.status==='failed'),'Task has unsettled effects'); if(task.step){ensure(task.status!=='settled','Team step already settled');ensure(task.step.dependsOn.every(id=>w.tasks.some(t=>t.id===id&&t.status==='settled')),'Team dependencies are not settled');if(task.step.skipReason)ensure(command.result==='Skipped · '+task.step.skipReason&&!w.effects.some(e=>e.taskId===task.id),'Skipped step cannot execute');}text(command.result,'result'); task.status='settled'; task.result=command.result; if(w.tasks.every(t=>t.status==='settled')) { w.execution='settled'; w.attempts.at(-1)!.status='settled'; w.attempts.at(-1)!.results=w.tasks.map(t=>({taskId:t.id,result:t.result!})); } break;
@@ -355,7 +368,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
       const w=needWork(); executor(w); open(w); ensure(!w.room,'Room artifact is pinned for this bounded round'); const a=command.artifact; ensure(/^[a-f0-9]{64}$/.test(a.sha256),'Invalid artifact hash'); ensure(Number.isSafeInteger(a.version)&&a.version>(w.artifact?.version??0),'Artifact version must advance'); text(a.id,'artifact'); text(a.path,'artifact path'); text(a.kind,'artifact kind'); w.artifact=structuredClone(a); if(w.verdict) w.acceptance='stale'; break;
     }
     case 'verify': {
-      role(actor,'verifier'); const w=needWork(); open(w); validateRoom(w);ensure((!w.runtimeRun?.roomVersion||w.room)&&(!w.room||w.room.messages.length>=2&&w.room.issue?.status!=='open'),'Room challenge must finish before checking'); const v=command.verdict; text(v.id,'verdict identity'); const a=w.assignments.find(a=>a.id===v.verifierAssignmentId&&a.role==='verifier'&&a.actorId===actor.id); ensure(a,'Verifier not independently assigned'); ensure(!w.assignments.some(a=>a.actorId===actor.id&&a.role==='executor'),'Self-verification prohibited'); ensure(w.artifact,'No candidate artifact'); ensure(v.artifactSha256===w.artifact.sha256&&v.artifactVersion===w.artifact.version&&v.criteriaVersion===w.criteria.version,'Stale verification binding'); ensure(['passed','failed','stale'].includes(v.status),'Invalid verdict'); ensure(Array.isArray(v.evidence)&&v.evidence.length>0&&v.evidence.every(e=>e.kind&&e.detail&&e.source),'Independent evidence required'); if(v.check!==undefined)validateCheck(w,v.check,a.model); w.verdict=structuredClone(v); w.acceptance=v.status==='failed'?'failed':v.status==='stale'?'stale':'pending'; break;
+      role(actor,'verifier'); const w=needWork(); open(w); validateRoom(w);ensure((!w.runtimeRun?.roomVersion||w.room)&&(!w.room||w.room.messages.length>=2&&w.room.issue?.status!=='open'),'Room challenge must finish before checking'); const v=command.verdict;ensure(!Object.hasOwn(v,'checkedAt'),'Check time is host-owned');validatePredicates(v.predicates,w.criteria,v.status); text(v.id,'verdict identity'); const a=w.assignments.find(a=>a.id===v.verifierAssignmentId&&a.role==='verifier'&&a.actorId===actor.id); ensure(a,'Verifier not independently assigned'); ensure(!w.assignments.some(a=>a.actorId===actor.id&&a.role==='executor'),'Self-verification prohibited'); ensure(w.artifact,'No candidate artifact'); ensure(v.artifactSha256===w.artifact.sha256&&v.artifactVersion===w.artifact.version&&v.criteriaVersion===w.criteria.version,'Stale verification binding'); ensure(['passed','failed','stale'].includes(v.status),'Invalid verdict'); ensure(Array.isArray(v.evidence)&&v.evidence.length>0&&v.evidence.every(e=>e.kind&&e.detail&&e.source),'Independent evidence required'); if(v.check!==undefined)validateCheck(w,v.check,a.model); w.verdict=structuredClone(v); w.acceptance=v.status==='failed'?'failed':v.status==='stale'?'stale':'pending'; break;
     }
     case 'accept': {
       role(actor,'owner','representative'); const w=needWork(); open(w); ensure(w.execution==='settled','Execution is not settled'); ensure(w.artifact&&w.verdict&&w.verdict.status==='passed','Independent pass required'); ensure(w.verdict.artifactSha256===w.artifact.sha256&&w.verdict.artifactVersion===w.artifact.version&&w.verdict.criteriaVersion===w.criteria.version,'Stale evidence cannot be accepted'); ensure(w.effects.length>0&&w.effects.every(e=>e.status==='succeeded'||e.status==='failed'),'Required effect outcomes unresolved'); ensure(w.effects.some(e=>e.status==='succeeded'),'No successful effect evidence'); bindPrerequisiteRecords(state,w);text(command.recordId,'record'); if(command.artifactSnapshot) { ensure(command.artifactSnapshot.sha256===w.artifact.sha256,'Snapshot hash mismatch'); text(command.artifactSnapshot.path,'snapshot path'); } pinnedWorkSources(state,w); validateProviderDispatchClaims(w); requireAnswered(w); validateRoom(w);ensure(!w.room||w.room.issue?.status!=='open','Open room issue must reach the checking seat'); const bundle={...(w.room?{room:structuredClone(w.room)}:{}),...(w.team?{team:structuredClone(w.team)}:{}),...(w.assistantSource?{assistantSource:structuredClone(w.assistantSource)}:{}),...(w.questions?{questions:clarificationInput(w)}:{}),...(w.conversationSource?{conversationSource:conversationSourceInput(w)}:{}),...(w.correction?{correction:correctionInput(w)}:{}),...(w.runtimeRun?.ownership?{runtimeOwnership:structuredClone(w.runtimeRun.ownership)}:{}),...(w.prerequisites?{prerequisites:structuredClone(w.prerequisites),prerequisiteRecords:structuredClone(w.prerequisiteRecords!)}:{}),...(w.sourceDocuments?{sourceDocuments:structuredClone(w.sourceDocuments)}:{}),...(w.organizationSnapshot?{organizationSnapshot:structuredClone(w.organizationSnapshot)}:{}),...(command.artifactSnapshot?{artifactSnapshot:command.artifactSnapshot}:{}),id:command.recordId,workId:w.id,criteria:w.criteria,artifact:w.artifact,verdict:w.verdict,receipts:w.effects,assignments:w.assignments,memoryVersions:w.appliedMemoryVersions,evidenceClass:w.assignments.some(a=>a.model.evidenceClass==='fixture')?'fixture' as const:'real-provider' as const}; w.record=structuredClone({...bundle,checksum:hash(bundle)}); w.acceptance='accepted'; break;
@@ -418,6 +431,14 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     }
     case 'relate': { role(actor,'representative','verifier'); const r=command.relation; text(r.from,'relation source'); text(r.to,'relation target'); text(r.provenance,'provenance'); ensure(['depends-on','evidenced-by','contains'].includes(r.type),'Invalid relation type'); ensure(Number.isSafeInteger(r.fromVersion)&&r.fromVersion>0&&Number.isSafeInteger(r.toVersion)&&r.toVersion>0,'Invalid relation versions'); state.relations.push(structuredClone(r)); break; }
     default: throw new DomainError('Unknown command');
+  }
+  if(at!==undefined){
+    const w='workId' in command?state.works.find(w=>w.id===command.workId):undefined;
+    if(command.type==='admit-work')w!.admittedAt=at;
+    if(command.type==='admit-effect'){const task=w!.tasks.find(t=>t.id===command.effect.taskId)!;task.startedAt??=at;}
+    if(command.type==='settle-task')w!.tasks.find(t=>t.id===command.taskId)!.endedAt=at;
+    if(command.type==='verify')w!.verdict!.checkedAt=at;
+    if(command.type==='steer')w!.instructions!.at(-1)!.at=at;
   }
   // Missing time keeps pre-Q12 journals unchanged; unversioned time keeps the original overwrite rule.
   if(time!==undefined&&endsWork(command.type)){ensure(Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Invalid end time');const w=needWork();if(time.workEndVersion===undefined||(command.type!=='steer'||w.runtimeRun)&&(w.endedAt===undefined||w.runtimeRun?.ownership&&w.endedAt<w.runtimeRun.ownership.startedAt))w.endedAt=time.observedAt;}

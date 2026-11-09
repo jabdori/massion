@@ -1,0 +1,88 @@
+contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/orca/workspaces/massion/work-telemetry/docs/acceptance/work-telemetry/contracts/snapshots/dark/B7-fail.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      status   "읽지 않음" -> status "읽지 않음"
+  ok    sidebar      button   "우선순위" -> button "우선순위"
+  ok    sidebar      status   "읽지 않음" -> statictext "읽지 않음"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       link     "{member}" -> button "퀼"
+  ok    header       status   "작업 중" -> statictext "작업 중"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation text     "{date}" -> statictext "11월 5일 (목)"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "다시 시도" -> button "다시 시도"
+  ok    conversation button   "닫기" -> button "닫기"
+  ok    pane         tab      "{work_title}" -> tab "이탈 원인 조사"
+  ok    pane         link     "넓히기" -> button "넓히기"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         text     "실패" -> statictext "실패"
+  ok    pane         heading  "{work_title}" -> heading "이탈 원인 조사"
+  ok    pane         text     "하나가 넘김 · {time}" -> statictext "하나가 넘김 · 14:08"
+  ok    pane         text     "{member}" -> statictext "퀼"
+  ok    pane         chip     "확인" -> statictext "확인"
+  ok    pane         text     "절차" -> statictext "절차"
+  ok    pane         text     "{progress}" -> statictext "1/2"
+  ok    pane         text     "{member}" -> statictext "작성"
+  ok    pane         text     "확인" -> statictext "확인"
+  ok    composer     textbox  "퀼에게 메시지 보내기" -> textbox "퀼에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":55,"strings":16,"sentences":0,"longest":9} proto {"chars":179,"strings":12,"sentences":4,"longest":42} source visibleTextBudget
+  budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget conversation app {"chars":317,"strings":38,"sentences":7,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":106,"strings":18,"sentences":0,"longest":14} proto {"chars":392,"strings":61,"sentences":5,"longest":33} source visibleTextBudget
+  warn  budget conversation sentences 7 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+  warn  budget conversation longest string 36 > 34 chars
+  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
+  FAIL  missing sidebar      link     "{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요."
+  FAIL  missing sidebar      link     "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요."
+  FAIL  missing sidebar      link     "{work_title} 파일 {count}를 다 읽었어요. {time} 완료."
+  FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"
+  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
+  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
+  FAIL  missing conversation button   "남기기"
+  FAIL  missing conversation button   "지우기"
+  FAIL  order  pane         text     "조사" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "요약"
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         chip     "조사" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         chip     "요약"
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "기록"
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "조사" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         button   "복사" (found in conversation)
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         button   "복사" (found in conversation)
+  FAIL  order  pane         chip     "조사" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         button   "복사" (found in conversation)
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         button   "복사" (found in conversation)
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "요약"
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         button   "복사" (found in conversation)
+  FAIL  missing pane         button   "확인 실패 근거 {count} 이상"
+FAIL: 37 failures, 2 warnings, 78 required elements

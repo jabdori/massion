@@ -14,10 +14,11 @@ async function scene(screen:string,rejectStatus=405){
   const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);
   return r?reply(structuredClone(r.body),r.status):reply({},503);
  });await settle();
- const work=(fixture.routes['/missions/intake']!.body as any).value.works[0],turn=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id);
+ const selected=fixture.steps.map(s=>'readySelector' in s?s.readySelector:undefined).findLast(s=>s?.startsWith('#work-heading-'))??fixture.readySelector,works=(fixture.routes['/missions/intake']!.body as any).value.works;
+ const work=works.find((w:any)=>selected==='#work-heading-'+w.id)??works[0],turn=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id);
  await runInContext('shellOpenWork('+JSON.stringify(turn.turnId)+')',app.context);await settle();
  const card=()=>app.all().find(n=>n.id==='work-card-'+work.id)!,nodes=()=>descendants(card());
- return {app,work,posted,card,nodes};
+ return {app,work,posted,card,nodes,fixture};
 }
 
 for(const [screen,status] of [['B7','확인 대기'],['B7-done','확인 완료'],['B7-fail','확인 실패'],['B7-unknown','확인 안 함']] as const)test(screen+' has a status/detail check bar and no unsolicited budget line',async()=>{
@@ -74,10 +75,10 @@ test('a rejected Stop reports the revision conflict while the Work stays running
 });
 
  test('B22 room steps use the B7 pane and never embed the legacy Work inspector',async()=>{
- const {nodes,card}=await scene('B22-room-steps');
+ const {nodes,card,work}=await scene('B22-room-steps');
  assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 돌리기','확인','기록']);
- assert.ok(nodes().some(n=>n.id==='work-room-stop-pr84'));
- assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-pr84'));
+ assert.ok(nodes().some(n=>n.id==='work-room-stop-'+work.id));
+ assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
  assert.doesNotMatch(card().textContent,/실행: active|검증: pending|시도 \/ 예산|측정 사용량|기준·기억·근거|선택한 원문 문서|원래 조직 역할/);
  });
 
@@ -108,7 +109,7 @@ test('conversation and procedure counts use the same child tasks and failed chec
 });
 
 test('legacy procedures list exactly the child tasks counted by their progress',async()=>{
- const {nodes,work}=await scene('B7-churn'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
+ const {nodes,work}=await scene('B7'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
  assert.equal(steps.children.length,work.tasks.filter((task:any)=>task.parentId!==null).length);
  assert.ok(!steps.children.some(n=>n.children[1]?.textContent===work.title));
 });
@@ -128,7 +129,7 @@ test('room participants expose member and independent Check as list items and us
  assert.equal(people.tagName,'UL');assert.ok(people.children.every(n=>n.tagName==='LI'));
  assert.equal(people.children[0]!.children.at(-1)!.textContent,'주노');assert.equal(people.children.at(-1)!.textContent,'확인');
  const check=nodes().find(n=>hasClass(n,'room-steps'))!.children.find(n=>n.children[1]?.textContent==='확인')!;
- assert.equal(check.children.at(-1)!.textContent,'0/1');
+ assert.equal(check.children.find(n=>hasClass(n,'room-step-count'))?.textContent,'0/1');
  const handoff=nodes().find(n=>hasClass(n,'room-handoff'))!;
  assert.ok(handoff);assert.equal(handoff.hidden,false);assert.match(handoff.textContent,/^하나가 넘김 · \d{1,2}:\d{2}$/);
  assert.equal(posted.length,0);
@@ -141,4 +142,65 @@ test('both room fixtures retain current sibling Work with matching Mission snaps
   assert.deepEqual(rows.filter((w:any)=>w.memberId==='member-quill').map((w:any)=>[w.title,w.execution]),[['이탈 원인 조사','active'],['경쟁사 가격','active']]);
   for(const row of rows){const work=mission.works.find((w:any)=>w.id===row.workId);assert.ok(work);assert.equal(row.execution,work.execution);}
  }
+});
+
+test('bound check predicates and admission, check and steering times render literally; stale verdicts hide their telemetry',async()=>{
+ const {app,nodes,work,fixture}=await scene('B8-fail'),at=Date.UTC(2026,10,5,0,1),quote=Object.values(fixture.routes).map(route=>route.body as any).find(body=>body?.artifact?.sha256===work.artifact.sha256&&typeof body.content==='string').content.trim();
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.admittedAt=${at};w.instructions=[{text:'지시',at:${at+60000}}];w.verdict.checkedAt=${at+120000};w.criteria.description='원문 <img src=x>';w.verdict.predicates=[{criterion:'원문 <img src=x>',passed:true,quote:${JSON.stringify(quote)},reason:'일치 <b>그대로</b>'},{criterion:'원문 <img src=x>',passed:false,quote:${JSON.stringify(quote)},reason:'누락'}];w.verdict.evidence.push({kind:'provider-review',detail:JSON.stringify({checks:w.verdict.predicates}),source:'fixture'});renderMission()}`,app.context);
+ const text=()=>nodes().find(n=>hasClass(n,'room-detail'))!.textContent;
+ assert.match(text(),/원문 <img src=x>[\s\S]*맞음[\s\S]*일치 <b>그대로<\/b>/);assert.match(text(),/원문 <img src=x>[\s\S]*아님[\s\S]*누락/);
+ const time=(stamp:number)=>runInContext('chatTime('+stamp+')',app.context);
+ assert.ok(text().includes(time(at)));assert.ok(text().includes(time(at+120000)));
+ assert.ok(nodes().find(n=>hasClass(n,'room-flow'))!.children.some(n=>n.children[0]?.textContent===time(at+60000)));
+ assert.equal(nodes().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(text(),/"checks"/);assert.ok(text().includes(work.verdict.evidence[0].detail));
+ runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='old';renderMission()`,app.context);
+ assert.doesNotMatch(text(),/일치 <b>|아님누락/);
+});
+
+
+test('pending rooms omit the generic check caption while failed and unknown evidence stays visible',async()=>{
+ const pending=await scene('B22-room-steps'),summary=pending.nodes().find(n=>n.id==='work-room-check-'+pending.work.id)!;
+ assert.doesNotMatch(summary.textContent,/요청한 결과와 근거 확인/);
+ assert.equal(pending.nodes().find(n=>hasClass(n,'room-progress')),undefined);
+ for(const screen of ['B7-fail','B7-unknown']){
+  const current=await scene(screen),check=current.nodes().find(n=>n.id==='work-room-check-'+current.work.id)!;
+  assert.ok(check.children.find(n=>hasClass(n,'room-check-detail'))!.textContent.length>0);
+ }
+});
+
+test('pending completed production shows check waiting and an elapsed duration even when the run has an end time',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps'),at=Date.UTC(2026,10,5,1,30);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.execution='settled';w.acceptance='pending';w.runtimeRun={ownership:{startedAt:${at}}};w.endedAt=${at+22*60000};renderMission()}`,app.context);
+ const status=nodes().find(n=>hasClass(n,'room-status'))!;
+ assert.equal(status.children[1]!.textContent,'확인 대기');assert.equal(status.children.find(n=>n.tagName==='TIME')?.textContent,'22분');
+});
+
+
+test('room step roles already expressed by titles disappear from participants and observed counts reach the chat card',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps');
+ assert.deepEqual(nodes().find(n=>hasClass(n,'room-people'))!.children.map(n=>n.children.at(-1)?.textContent??n.textContent),['주노','확인']);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step&&t.step.title==='읽기').progress={done:4,total:11,at:Date.now()};renderMission();renderChat()}`,app.context);
+ const card=app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(work.title))!;
+ assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/읽기 4\/11.*확인 0\/1/);
+ assert.equal(nodes().find(n=>hasClass(n,'room-worker-results')),undefined,'progress without an instruction does not create a transcript');
+});
+
+
+test('all settled workers await the independent check while the Work stays active and its elapsed clock keeps running',async()=>{
+ const {app,nodes,work}=await scene('B22-room-steps');
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});for(const t of w.tasks.filter(t=>t.step))t.status='settled';w.execution='active';w.runtimeRun={ownership:{startedAt:Date.now()-22*60000}};delete w.endedAt;renderMission()}`,app.context);
+ const status=nodes().find(n=>hasClass(n,'room-status'))!;
+ assert.equal(status.children[1]!.textContent,'확인 대기');assert.equal(status.children.find(n=>n.tagName==='TIME')?.textContent,'22분');
+ assert.equal(runInContext('snapshot.value.works.find(w=>w.id==='+JSON.stringify(work.id)+').execution',app.context),'active');
+});
+
+test('observed coding-step cards omit duplicate role chips and keep actual step counts',async()=>{
+ const {app}=await scene('B22-room-steps'),card=app.all().find(n=>hasClass(n,'chat-card'))!;
+ assert.ok(descendants(card).find(n=>hasClass(n,'chat-chips'))!.hidden);
+ assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/읽기 4\/11.*확인 0\/1/);
+});
+
+test('the sidebar and pane agree when all producing steps await the independent check',async()=>{
+ const {app,work}=await scene('B18-room-b'),line=app.all().find(n=>n.id==='side-line-intake/'+work.id)!;
+ assert.equal(descendants(line).find(n=>n.attributes.get('role')==='status')!.textContent,'확인 대기');
 });

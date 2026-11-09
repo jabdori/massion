@@ -548,6 +548,7 @@ test('B5 exception metadata comes from committed effects and original interrupti
   ['known effect',(w:Mission['works'][number])=>{w.effects[0]!.status='succeeded';}],
  ] as const){const candidate=structuredClone(work);change(candidate);assert.deepEqual(workException(candidate),{at:1793855520000,runId:'b5-run',fact:null},name);}
  assert.deepEqual(workException({...work,runtimeRun:undefined,runtimeInterruption:undefined,effects:[]}),{at:null,runId:null,fact:null});
+ assert.equal(work.admittedAt,1793855520000);assert.equal(work.tasks[0]!.startedAt,1793855520000);assert.equal(work.tasks[0]!.endedAt,undefined);
  assert.deepEqual(snapshot,committed);assert.deepEqual(fixture.routes['/read-state?mission=intake'].body.snapshot,committed);
  for(const path of ['/assistant/conversation','/assistant/conversation?segment=1']){const view=fixture.routes[path].body,turn=view.turns[0];assert.equal(turn.at,1793855280000);assert.equal(turn.work.missionRevision,committed.revision);assert.deepEqual(turn.work.exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});assert.deepEqual(turn.work.steps,{done:0,total:0});assert.equal(view.segment.messages[1].text,'지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요.');assert.ok(view.members.every((m:any)=>m.look.shape==='square'));}
  const listed=fixture.routes['/assistant/works'].body.works;assert.ok(listed.every((w:any)=>w.missionRevision===committed.revision));assert.deepEqual(listed.find((w:any)=>w.workId==='toner').exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});

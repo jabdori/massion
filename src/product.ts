@@ -42,8 +42,8 @@ export class ProductService {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-mission-message',...message}});
  }
  async readMissionConversation(missionId:string,feedId?:string){return readMissionConversation(this.app.store,missionId,feedId);}
- async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string}) {
-  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
+ async appendWorkMessage(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;messageId:string;replyTo:string|null;text:string;stepNote?:import('./domain.ts').StepNote}) {
+  input=structuredClone(input);keys(input,['commandId','expectedRevision','workId','messageId','replyTo','text','stepNote']);const {commandId,expectedRevision,...message}=input;return this.app.dispatch({missionId,commandId,expectedRevision,actorId:'local-owner',command:{type:'append-work-message',...message}});
  }
  async readWorkConversation(missionId:string,workId:string,feedId?:string){return readWorkConversation(this.app.store,missionId,workId,feedId);}
  async attachWorkPrerequisite(missionId:string,input:{commandId:string;expectedRevision:number;workId:string;prerequisiteId:string;criteriaHash:string;inputHash:string;reason:string}) {

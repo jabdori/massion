@@ -34,7 +34,7 @@ test('started Work snapshots have assigned executors and consistent task, attemp
  const {loadFixture}=await hostModule();
  for(const screen of screens){
   const f=await loadFixture(screen);
-  assert.equal(f.now,screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
+  assert.equal(f.now,screen==='B22-room-steps'?Date.UTC(2026,10,5,1,44):screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
   const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean}>}).works;
@@ -266,6 +266,19 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
 test('memory screen candidates come from answered production turns and remain owner proposals',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B6','B7-churn','B7-fail','B18','B18-room-b']){const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any,turn=view.turns.find((t:any)=>t.memoryCandidate);assert.equal(turn.status,'answered');assert.equal(turn.memoryCandidate.status,'proposed');assert.equal(turn.memoryCandidate.memberId,'member-quill');assert.ok(view.segment.messages.some((m:any)=>m.turnId===turn.id));}});
 
 test('rule capture keeps the proposal visible and briefings refer to decisions instead of phantom Work',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B2','B9','B9-restart','B9-update']){const f=await loadFixture(screen),view=f.routes['/assistant/conversation']!.body as any,summaries=f.routes['/assistant/works']!.body as any;assert.deepEqual(f.captureScroll,{selector:'#chat-scroll',top:0});assert.equal(view.decisions.find((d:any)=>d.ruleChange).ruleChange.revision,(f.routes['/missions/intake']!.body as any).revision);assert.ok(!summaries.works.some((w:any)=>w.workId==='rounding-work'));assert.ok(view.briefings.some((b:any)=>b.decisionIds.includes(view.decisions.find((d:any)=>d.ruleChange).id)));}});
+test('R-A fixtures come from timed command producers and retain named worker dependencies and skips',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown']){
+  const fixture=await loadFixture(screen),work=(fixture.routes['/missions/intake']!.body as any).value.works[0];
+  assert.ok(Number.isSafeInteger(work.admittedAt),screen+' admission observation');
+  if(work.verdict)assert.ok(Number.isSafeInteger(work.verdict.checkedAt),screen+' check observation');
+  if(screen==='B7-churn'){
+   const steps=work.tasks.filter((t:any)=>t.step);assert.equal(steps.length,4);assert.ok(steps[1].step.dependsOn.includes(steps[0].id));
+   assert.ok(Number.isSafeInteger(steps[0].startedAt));assert.ok(steps[0].endedAt>=steps[0].startedAt);
+   assert.equal(steps[2].startedAt,undefined);assert.ok(Number.isSafeInteger(steps[2].endedAt));
+  }
+ }
+});
 
 test('E8 monthly decision fixtures carry the production budget read and explicit owner deferral',async()=>{
  const {loadFixture}=await hostModule();for(const screen of ['B26','B26-later']){const fixture=await loadFixture(screen),conversation=fixture.routes['/assistant/conversation']!.body as any,usage=fixture.routes['/assistant/usage']!.body as any;assert.equal(conversation.decisions.length,1);const d=conversation.decisions[0];assert.ok(d.id.startsWith('monthly-budget:'));assert.equal(d.state,screen==='B26'?'open':'later');assert.equal(d.budget.revision,usage.revision);assert.equal(usage.unit,'output-tokens');assert.equal(usage.cost,null);assert.deepEqual(fixture.gaps,[]);assert.doesNotMatch(JSON.stringify(conversation),/TOTAL: [34] cents/);}

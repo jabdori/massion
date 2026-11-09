@@ -1,0 +1,340 @@
+[
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "observed": {
+      "chat": "11월 5일 (목)\n\n지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\n\n하나가 넘김: 이탈 원인 조사 · 14:08\n\n이탈 원인 조사\n실행 중\n4분\n작성\n확인\n1/5\n퀼\n퀼\n14:08\n\n지난 90일 해지 건부터 볼게요.\n\n기업 고객은 따로 봐 줘.\n\n방향 바꿈: 이탈 원인 조사 · 09:52\n\n퀼\n퀼\n09:52\n\n기업 고객은 따로 나눠서 같이 정리할게요.\n\n경쟁사 가격도 확인해 줘.\n\n하나가 넘김: 경쟁사 가격 · 13:52\n\n경쟁사 가격\n확인 대기\n4분\n작성\n확인\n1/3\n퀼\n퀼\n13:52\n\n가격 표를 정리하고 확인을 기다리고 있어요.\n\n앞으로 표 금액은 원 단위로 써 줘.\n\n퀼\n퀼\n10:41\n\n알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요.",
+      "header": false,
+      "legacy": false,
+      "messages": [],
+      "pane": "",
+      "people": [],
+      "steps": [],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:08"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "09:52"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "13:52"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "10:41"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "observed": {
+      "chat": "11월 5일 (목)\n\n지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\n\n하나가 넘김: 이탈 원인 조사 · 14:08\n\n이탈 원인 조사\n실행 중\n4분\n작성\n확인\n1/5\n퀼\n퀼\n14:08\n\n지난 90일 해지 건부터 볼게요.\n\n기업 고객은 따로 봐 줘.\n\n방향 바꿈: 이탈 원인 조사 · 09:52\n\n퀼\n퀼\n09:52\n\n기업 고객은 따로 나눠서 같이 정리할게요.\n\n경쟁사 가격도 확인해 줘.\n\n하나가 넘김: 경쟁사 가격 · 13:52\n\n경쟁사 가격\n확인 대기\n4분\n작성\n확인\n1/3\n퀼\n퀼\n13:52\n\n가격 표를 정리하고 확인을 기다리고 있어요.\n\n앞으로 표 금액은 원 단위로 써 줘.\n\n퀼\n퀼\n10:41\n\n알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요.",
+      "header": false,
+      "legacy": false,
+      "messages": [],
+      "pane": "",
+      "people": [],
+      "steps": [],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:08"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "09:52"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "13:52"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "10:41"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "check": {
+      "passed": 56,
+      "failed": 13,
+      "warnings": 2,
+      "required": 69
+    },
+    "observed": {
+      "caption": "",
+      "chat": "11월 5일 (목)\n\n하나가 넘김: 경쟁사 가격 · 13:50\n\n경쟁사 가격\n확인 대기\n22분\n조사\n표 정리\n확인\n출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1\n\n하나가 넘김: 이탈 원인 조사 · 14:08\n\n이탈 원인 조사\n실행 중\n4분\n조사\n분류\n요약\n확인\n2/4\n\n지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\n\n퀼\n퀼\n14:11\n\n지난 90일 해지 건부터 볼게요.\n\n기업 고객은 따로 봐 줘.\n\n퀼\n퀼\n14:11\n\n기업 고객은 따로 나눠서 같이 정리할게요.\n\n앞으로 표 금액은 원 단위로 써 줘.\n\n퀼\n퀼\n14:12\n\n알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요.",
+      "header": false,
+      "legacy": false,
+      "messages": [
+        "퀼\n퀼\n→\n조사\n13:52\n\n세 곳 요금제 페이지에서 월 요금만 모아 줘.",
+        "조사\n→\n퀼\n14:00\n\nA사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요.",
+        "퀼\n퀼\n→\n표 정리\n14:02\n\nC사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.",
+        "표 정리\n→\n퀼\n14:07\n\n표 1개, 요금제 6개예요."
+      ],
+      "pane": "확인 대기\n22분\n중지\n경쟁사 가격\n\n하나가 넘김 · 13:50\n\n퀼\n퀼\n조사\n표 정리\n확인\n출처 고르기\n3/3\n13:52\n가격 모으기\n3/3\n조사\n14:00\nC사\n연간 요금만 공개\n요약\n건너뜀 · 표만 요청\n14:00\n표 만들기\n1/1\n표 정리\n14:07\n확인\n0/1\n대기\n기록\n다음 단계\n퀼\n퀼\n→\n조사\n13:52\n\n세 곳 요금제 페이지에서 월 요금만 모아 줘.\n\n조사\n→\n퀼\n14:00\n\nA사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요.\n\n퀼\n퀼\n→\n표 정리\n14:02\n\nC사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.\n\n표 정리\n→\n퀼\n14:07\n\n표 1개, 요금제 6개예요.\n\n확인 대기",
+      "people": [
+        "퀼",
+        "조사",
+        "표 정리",
+        "확인"
+      ],
+      "status": "확인 대기\n22분\n중지",
+      "steps": [
+        {
+          "text": "출처 고르기\n3/3\n13:52",
+          "time": [
+            "13:52"
+          ]
+        },
+        {
+          "text": "가격 모으기\n3/3\n조사\n14:00\nC사\n연간 요금만 공개",
+          "time": [
+            "14:00"
+          ]
+        },
+        {
+          "text": "요약\n건너뜀 · 표만 요청\n14:00",
+          "time": [
+            "14:00"
+          ]
+        },
+        {
+          "text": "표 만들기\n1/1\n표 정리\n14:07",
+          "time": [
+            "14:07"
+          ]
+        },
+        {
+          "text": "확인\n0/1\n대기",
+          "time": []
+        },
+        {
+          "text": "기록\n다음 단계",
+          "time": []
+        }
+      ],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:11"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:11"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:12"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "check": {
+      "passed": 56,
+      "failed": 13,
+      "warnings": 2,
+      "required": 69
+    },
+    "observed": {
+      "caption": "",
+      "chat": "11월 5일 (목)\n\n하나가 넘김: 경쟁사 가격 · 13:50\n\n경쟁사 가격\n확인 대기\n22분\n조사\n표 정리\n확인\n출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1\n\n하나가 넘김: 이탈 원인 조사 · 14:08\n\n이탈 원인 조사\n실행 중\n4분\n조사\n분류\n요약\n확인\n2/4\n\n지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.\n\n퀼\n퀼\n14:11\n\n지난 90일 해지 건부터 볼게요.\n\n기업 고객은 따로 봐 줘.\n\n퀼\n퀼\n14:11\n\n기업 고객은 따로 나눠서 같이 정리할게요.\n\n앞으로 표 금액은 원 단위로 써 줘.\n\n퀼\n퀼\n14:12\n\n알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요.",
+      "header": false,
+      "legacy": false,
+      "messages": [
+        "퀼\n퀼\n→\n조사\n13:52\n\n세 곳 요금제 페이지에서 월 요금만 모아 줘.",
+        "조사\n→\n퀼\n14:00\n\nA사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요.",
+        "퀼\n퀼\n→\n표 정리\n14:02\n\nC사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.",
+        "표 정리\n→\n퀼\n14:07\n\n표 1개, 요금제 6개예요."
+      ],
+      "pane": "확인 대기\n22분\n중지\n경쟁사 가격\n\n하나가 넘김 · 13:50\n\n퀼\n퀼\n조사\n표 정리\n확인\n출처 고르기\n3/3\n13:52\n가격 모으기\n3/3\n조사\n14:00\nC사\n연간 요금만 공개\n요약\n건너뜀 · 표만 요청\n14:00\n표 만들기\n1/1\n표 정리\n14:07\n확인\n0/1\n대기\n기록\n다음 단계\n퀼\n퀼\n→\n조사\n13:52\n\n세 곳 요금제 페이지에서 월 요금만 모아 줘.\n\n조사\n→\n퀼\n14:00\n\nA사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요.\n\n퀼\n퀼\n→\n표 정리\n14:02\n\nC사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.\n\n표 정리\n→\n퀼\n14:07\n\n표 1개, 요금제 6개예요.\n\n확인 대기",
+      "people": [
+        "퀼",
+        "조사",
+        "표 정리",
+        "확인"
+      ],
+      "status": "확인 대기\n22분\n중지",
+      "steps": [
+        {
+          "text": "출처 고르기\n3/3\n13:52",
+          "time": [
+            "13:52"
+          ]
+        },
+        {
+          "text": "가격 모으기\n3/3\n조사\n14:00\nC사\n연간 요금만 공개",
+          "time": [
+            "14:00"
+          ]
+        },
+        {
+          "text": "요약\n건너뜀 · 표만 요청\n14:00",
+          "time": [
+            "14:00"
+          ]
+        },
+        {
+          "text": "표 만들기\n1/1\n표 정리\n14:07",
+          "time": [
+            "14:07"
+          ]
+        },
+        {
+          "text": "확인\n0/1\n대기",
+          "time": []
+        },
+        {
+          "text": "기록\n다음 단계",
+          "time": []
+        }
+      ],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:11"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:11"
+        },
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "14:12"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "check": {
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49
+    },
+    "observed": {
+      "caption": "",
+      "chat": "11월 5일 (목)\n\nPR #84 검토해 줘.\n\n하나가 넘김: PR #84 검토 · 10:40\n\nPR #84 검토\n실행 중\n4분\n읽기 4/11 확인 0/1\n주\n주노\n10:40\n\n테스트부터 확인할게요.\n\n이번에도 테스트부터 돌려 줘.\n\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n·\n10:44",
+      "header": false,
+      "legacy": false,
+      "messages": [],
+      "pane": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 10:40\n\n주\n주노\n확인\n읽기\n4/11\n실행 중\n10:40\n테스트 돌리기\n다음 단계\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n10:44\n확인\n0/1\n기록\n확인 대기",
+      "people": [
+        "주노",
+        "확인"
+      ],
+      "status": "실행 중\n4분\n중지",
+      "steps": [
+        {
+          "text": "읽기\n4/11\n실행 중\n10:40",
+          "time": [
+            "10:40"
+          ]
+        },
+        {
+          "text": "테스트 돌리기\n다음 단계\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n10:44",
+          "time": [
+            "10:44"
+          ]
+        },
+        {
+          "text": "확인\n0/1",
+          "time": []
+        },
+        {
+          "text": "기록",
+          "time": []
+        }
+      ],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "10:40"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "check": {
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49
+    },
+    "observed": {
+      "caption": "",
+      "chat": "11월 5일 (목)\n\nPR #84 검토해 줘.\n\n하나가 넘김: PR #84 검토 · 10:40\n\nPR #84 검토\n실행 중\n4분\n읽기 4/11 확인 0/1\n주\n주노\n10:40\n\n테스트부터 확인할게요.\n\n이번에도 테스트부터 돌려 줘.\n\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n·\n10:44",
+      "header": false,
+      "legacy": false,
+      "messages": [],
+      "pane": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 10:40\n\n주\n주노\n확인\n읽기\n4/11\n실행 중\n10:40\n테스트 돌리기\n다음 단계\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n10:44\n확인\n0/1\n기록\n확인 대기",
+      "people": [
+        "주노",
+        "확인"
+      ],
+      "status": "실행 중\n4분\n중지",
+      "steps": [
+        {
+          "text": "읽기\n4/11\n실행 중\n10:40",
+          "time": [
+            "10:40"
+          ]
+        },
+        {
+          "text": "테스트 돌리기\n다음 단계\n절차 고침: 테스트 먼저 돌리기 · 확인 대기\n10:44",
+          "time": [
+            "10:44"
+          ]
+        },
+        {
+          "text": "확인\n0/1",
+          "time": []
+        },
+        {
+          "text": "기록",
+          "time": []
+        }
+      ],
+      "times": [
+        {
+          "font": "ui-monospace, SFMono-Regular, Menlo, monospace",
+          "text": "10:40"
+        }
+      ]
+    },
+    "mobileOverflow": false
+  }
+]
