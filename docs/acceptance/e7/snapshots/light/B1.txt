@@ -9,24 +9,29 @@
     - sectionheader
       - button "사이드바 보기" [expanded=false, ref=e7]
       - heading "하나" [level=1, ref=e8]
-        - button "하나" [ref=e11]
-      - button "더 보기" [expanded=false, ref=e9]
-    - region "대화" [ref=e10]
+        - button "하나" [ref=e10]
+    - region "대화" [ref=e9]
       - generic
         - log
           - generic
             - paragraph
-              - StaticText "안녕하세요, 하나예요.\n무엇부터 맡길까요?"
-            - button "복사" [ref=e16]
+              - StaticText "안녕하세요, 하나예요."
+            - button "복사" [ref=e15]
           - generic
-            - link "문단 세 줄 요약" [ref=e17]
-            - link "할인 후 합계 계산" [ref=e18]
-            - link "매일 아침 어제 일 알려 주기" [ref=e19]
-            - link "기타" [ref=e20]
+            - paragraph
+              - StaticText "무엇부터 맡길까요?"
+            - link "문단 세 줄 요약" [ref=e16]
+              - StaticText "문단 세 줄 요약"
+            - link "할인 후 합계 계산" [ref=e17]
+              - StaticText "할인 후 합계 계산"
+            - link "매일 아침 어제 일 알려 주기" [ref=e18]
+              - StaticText "매일 아침 어제 일 알려 주기"
+            - link "기타" [ref=e19]
+              - StaticText "기타"
       - generic
         - form
-          - textbox "답변을 입력하거나 다른 이야기를 하세요" [ref=e12]
-          - button "파일 추가" [disabled, ref=e13]
-          - button "기본 권한" [ref=e14]
+          - textbox "답변을 입력하거나 다른 이야기를 하세요" [ref=e11]
+          - button "파일 추가" [disabled, ref=e12]
+          - button "기본 권한" [ref=e13]
             - StaticText "기본 권한"
-          - button "보내기" [ref=e15]
+          - button "보내기" [ref=e14]

@@ -14,7 +14,7 @@
     - region "대화" [ref=e10]
       - generic
         - log
-          - generic
+          - paragraph
             - StaticText "나중에: Gmail 앱"
             - link "다시 묻기" [ref=e16]
           - generic

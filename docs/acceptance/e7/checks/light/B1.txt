@@ -12,6 +12,6 @@ contract B1 (B1 첫 실행 · 로그인 찾음) vs /Users/code/orca/workspaces/m
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":60,"strings":5,"sentences":1,"longest":23} proto {"chars":59,"strings":6,"sentences":1,"longest":16} source visibleTextBudget
+  budget conversation app {"chars":63,"strings":10,"sentences":1,"longest":16} proto {"chars":59,"strings":6,"sentences":1,"longest":16} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
 PASS: 0 failures, 0 warnings, 11 required elements

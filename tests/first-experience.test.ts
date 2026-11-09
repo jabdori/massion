@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {runInContext} from 'node:vm';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
@@ -82,4 +83,27 @@ test('a new conversation without a stored segment shows the same greeting and re
  const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
  assert.match(app.node('chat-log').textContent,/안녕하세요, 하나예요/);assert.equal(app.node('chat-input').attributes.get('aria-label'),'답변을 입력하거나 다른 이야기를 하세요');
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+test('B1 keeps its greeting separate from the four lettered choices and omits the extra header menu',async()=>{
+ const {app}=await first();const greeting=find(app,'chat-message-first-greeting')!,card=find(app,'chat-first-suggestions')!;
+ assert.equal(greeting.textContent,'안녕하세요, 하나예요.');assert.equal(card.tagName,'SECTION');assert.match(card.className,/first-picker/);
+ assert.equal(card.children[0]!.textContent,'무엇부터 맡길까요?');assert.equal(card.children.length,5);
+ assert.deepEqual(card.children.slice(1).map(row=>[row.tagName,row.children[0]!.textContent,row.children[0]!.attributes.get('aria-hidden')]),['A','B','C','D'].map(letter=>['A',letter,'true']));
+ assert.equal(app.node('header-more').hidden,true);
+ await find(app,'first-calculation')!.fire('click');assert.equal(app.node('header-more').hidden,false);
+});
+test('deferring Gmail replaces the decision card with a plain paragraph and a text link, then restores the card on ask again',async()=>{
+ const {app}=await first();await find(app,'first-calculation')!.fire('click');await find(app,'first-mail-later')!.fire('click');
+ const ask=find(app,'first-mail-ask')!,line=ask.parentElement!;assert.equal(line.tagName,'P');assert.equal(line.className,'chat-system');assert.equal(line.children[0]!.textContent,'나중에: Gmail 앱');assert.equal(ask.tagName,'A');
+ await ask.fire('click');const later=find(app,'first-mail-later')!;assert.equal(later.parentElement!.tagName,'SECTION');assert.match(later.parentElement!.className,/chat-decision/);
+});
+test('a database reset cannot restart onboarding from a cached or refreshed login catalog',async()=>{
+ const {app,posted}=await first();assert.ok(find(app,'chat-first-suggestions'));
+ await runInContext('chatReset()',app.context);await settle();assert.equal(app.node('chat-log').textContent,'');
+ await runInContext('refreshConnections()',app.context);await settle();assert.equal(app.node('chat-log').textContent,'');assert.equal(app.node('first-signin').hidden,true);assert.equal(app.node('app').hidden,false);assert.equal(posted.length,0);
+});
+test('an established configured connection opens conversation even when subscription detection finds nothing',async()=>{
+ const f=await loadFixture('B1-signin');(f.routes['/connections']!.body as any).connections=[{id:'existing',providerType:'compatible',label:'Existing',models:[]}];
+ const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
+ assert.equal(app.node('first-signin').hidden,true);assert.equal(app.node('app').hidden,false);assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
