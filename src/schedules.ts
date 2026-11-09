@@ -30,9 +30,11 @@ export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'rea
   const result=await assistant.send({commandId:input.commandId,segment:segment?segment.number+(full?1:0):1,expectedRevision:segment&&!full?segment.revision:0,text:copy('ui.schedules.dispatch',{request:input.request})});
   if(result.message.status==='conflict')throw new DomainError('Scheduled conversation changed','conflict');
   const turn=result.turn;
-  if(!turn||turn.status==='pending'||turn.status==='unknown'||turn.status==='answered'&&!turn.outcome||turn.outcome?.work.status==='unknown')return null;
-  ensure(turn?.status==='answered'&&turn.outcome?.work.status==='admitted','Scheduled Work was not admitted');
+  if(!turn||turn.status==='pending'||turn.status==='unknown'||turn.outcome?.work.status==='unknown')return null;
+  ensure(turn.status==='answered','Scheduled Work was not admitted');
   const number=result.message.value.segment,view=await assistant.read(number).catch(()=>null),work=view?.turns.find(t=>t.id===turn.id);
+  if(!turn.outcome&&(!work||work.status!=='answered'||work.proposal))return null;
+  ensure(turn.outcome?.work.status==='admitted','Scheduled Work was not admitted');
   if(!work?.work||work.work.unknown)return null;
   return {turnIds:[turn.id],segment:number};
  };

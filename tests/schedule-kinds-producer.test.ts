@@ -7,7 +7,7 @@ import {copy} from '../src/ui-copy.ts';
 
 const request={commandId:'schedule-work:run:one',scheduleId:'expenses',runId:'run:one',kind:'weekly-expenses' as const,request:'Group the supplied receipt files by category.'};
 function fixture(status='answered',workStatus='admitted'){
- const sent:any[]=[],reads:(number|undefined)[]=[],outcome={missionId:'intake',work:{status:workStatus,diagnostics:[]},run:{status:'requested',diagnostics:[]}},turn={id:'turn:scheduled',status,outcome};
+ const sent:any[]=[],reads:(number|undefined)[]=[],outcome={missionId:'intake',work:{status:workStatus,diagnostics:[]},run:{status:'requested',diagnostics:[]}},turn={id:'turn:scheduled',status,proposal:{title:'Receipt categories'},outcome};
  const assistant={
   async send(input:unknown){sent.push(input);return {message:{status:'committed',revision:1,value:{kind:'assistant-conversation',id:'assistant-conversation:4',segment:4,previous:{id:'assistant-conversation:3',lastMessageId:'message:previous'},closed:false,timeWatermark:1,messages:[],turns:[]}},turn};},
   async read(segment?:number){reads.push(segment);return {feedId:'feed:a',cursor:1,head:4,segment:{number:segment??3,revision:4,closed:!segment,full:!segment,previous:null,messages:[]},turns:segment?[{...turn,work:workStatus==='admitted'?{missionId:'intake',workId:'work:scheduled',title:'Receipt categories',execution:'queued',acceptance:'pending',unknown:false}:undefined},{id:'turn:other',work:{workId:'work:other'}}]:[]};}

@@ -47,6 +47,15 @@ test('independent runtime review reads text and RGB evidence from the actual val
  assert.equal(mod.binaryArtifactText('image/png',mod.producePng(2,1,Uint8Array.from([255,0,0,0,128,255]))),'RGB 2x1\n#ff0000 #0080ff');
  assert.throws(()=>mod.binaryArtifactText('image/png',mod.producePng(128,128,new Uint8Array(128*128*3))));
 });
+test('the longest supported PDF line fits the page and existing artifacts remain readable',async()=>{
+ const {producePdf,binaryArtifactText}=await binary(),line='W'.repeat(96),bytes=producePdf(line),pdf=bytes.toString('ascii');
+ const pageWidth=Number(/\/MediaBox \[0 0 (\d+)/.exec(pdf)![1]),fontSize=Number(/\/F1 (\d+) Tf/.exec(pdf)![1]),x=Number(/(\d+) 800 Td/.exec(pdf)![1]);
+ assert.ok(x+96*fontSize*0.6<=pageWidth, 'Courier advances 600/1000 em per character');
+ assert.equal(binaryArtifactText('application/pdf',bytes),line);
+ const old=Buffer.from(producePdf('Legacy PDF').toString('ascii').replace('\n32 800 Td\n','\n40 800 Td\n'),'ascii');
+ assert.equal(binaryArtifactText('application/pdf',old),'Legacy PDF');
+});
+
 test('PNG producer encodes the supplied pixels and PDF producer retains escaped text with correct xref',async()=>{
  const {producePng,producePdf,validateBinary}=await binary(),png=producePng(2,1,Uint8Array.from([255,0,0,0,128,255]));
  assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);assert.equal(png.readUInt32BE(16),2);assert.equal(png.readUInt32BE(20),1);

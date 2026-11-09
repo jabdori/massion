@@ -21,7 +21,7 @@ export function producePng(width:number,height:number,pixels:Uint8Array):Buffer 
 /** 한 페이지의 정적 텍스트만 담으며 링크, 스크립트, 첨부 파일을 만들지 않습니다. */
 export function producePdf(text:string):Buffer {
  if(typeof text!=='string'||!text.length||text.length>3_879||!/^[\x20-\x7e\n]+$/.test(text))fail();const lines=text.split('\n');if(lines.length>40||lines.some(line=>line.length>96))fail();
- const commands='BT\n/F1 10 Tf\n14 TL\n40 800 Td\n'+lines.map((line,i)=>(i?'T*\n':'')+'('+line.replace(/[\\()]/g,'\\$&')+') Tj\n').join('')+'ET\n';
+ const commands='BT\n/F1 10 Tf\n14 TL\n32 800 Td\n'+lines.map((line,i)=>(i?'T*\n':'')+'('+line.replace(/[\\()]/g,'\\$&')+') Tj\n').join('')+'ET\n';
  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>','<< /Length '+commands.length+' >>\nstream\n'+commands+'endstream'];
  let pdf='%PDF-1.4\n';const offsets=[0];for(const [i,object] of objects.entries()){offsets.push(pdf.length);pdf+=(i+1)+' 0 obj\n'+object+'\nendobj\n';}
  const xref=pdf.length;pdf+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(offset=>String(offset).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';return Buffer.from(pdf,'ascii');
@@ -30,9 +30,10 @@ export function producePdf(text:string):Buffer {
 function inspectBinary(kind:string,content:Uint8Array):()=>string {
  if(!(content instanceof Uint8Array)||!content.byteLength||content.byteLength>BINARY_MAX_BYTES)fail();const bytes=Buffer.from(content);
  if(kind==='application/pdf'){
-  const text=bytes.toString('ascii'),stream=/\nstream\nBT\n\/F1 10 Tf\n14 TL\n40 800 Td\n([\s\S]*?)ET\nendstream\n/.exec(text);if(!stream)fail();
-  const body=stream![1]!,lines=[...body.matchAll(/\(((?:\\[\\()]|[^\\()\n])*)\) Tj\n/g)].map(match=>match[1]!.replace(/\\([\\()])/g,'$1'));
-  if(!lines.length||!producePdf(lines.join('\n')).equals(bytes))fail();return ()=>lines.join('\n');
+  const text=bytes.toString('ascii'),stream=/\nstream\nBT\n\/F1 10 Tf\n14 TL\n(32|40) 800 Td\n([\s\S]*?)ET\nendstream\n/.exec(text);if(!stream)fail();
+  const body=stream![2]!,lines=[...body.matchAll(/\(((?:\\[\\()]|[^\\()\n])*)\) Tj\n/g)].map(match=>match[1]!.replace(/\\([\\()])/g,'$1'));
+  // 기존 파일도 원래 바이트열로 재구성해 검증합니다.
+  if(!lines.length||!Buffer.from(producePdf(lines.join('\n')).toString('ascii').replace('\n32 800 Td\n','\n'+stream![1]+' 800 Td\n'),'ascii').equals(bytes))fail();return ()=>lines.join('\n');
  }
  if(kind!=='image/png'||!bytes.subarray(0,8).equals(PNG))fail();
  let offset=8;const chunks:Buffer[]=[];

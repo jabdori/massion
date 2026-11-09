@@ -221,6 +221,17 @@ test('HTTP: an owner schedule action resuming after drain starts is refused and 
 });
 
 
+test('a confirmed clarification without a Work proposal fails the schedule and permits owner retry',async t=>{
+ const f=await setup(t),s=new SchedulesService(f.store,()=>f.assistant.read(),()=>f.now(),f.store,scheduleWorkProducer(f.assistant));
+ await s.act({commandId:'create-price',action:'create',kind:'price-watch',minute:540,offset:0,budget:{runs:2}});
+ const id=(await s.read()).schedules[0]!.id;await s.act({commandId:'clarify-price',action:'run',scheduleId:id});
+ const view=await s.read(),run=view.schedules[0]!.runs[0]!;
+ assert.equal(run.state,'failed');assert.equal(s.unsettled,false);
+ assert.ok((await s.conversation()).exceptions.find(e=>e.runId===run.id)?.actions.includes('retry'));
+ const turn=(await f.assistant.read()).turns[0]!;assert.equal(turn.status,'answered');assert.equal(turn.proposal,undefined);assert.equal(turn.outcome,undefined);
+ assert.equal((await f.store.load('intake'))!.value.works.length,0);
+});
+
 test('a schedule producer uses normal Work admission with fixture providers and retains its exact conversation source',async t=>{
  const answer='- Groceries: KRW 1,200 (receipt R1)\n- Transport: KRW 2,300 (receipt R2)',f=await setup(t,answer),s=new SchedulesService(f.store,()=>f.assistant.read(),()=>f.now(),f.store,scheduleWorkProducer(f.assistant));
  f.queueWork('Weekly receipt categories');
