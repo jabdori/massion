@@ -100,7 +100,7 @@ export class MonthlyBudgetService {
  async #pause(r:Reservation){
   for(let attempt=0;attempt<3;attempt++){
    const budget=await this.#state();if(!budget?.value.reservations.some(entry=>entry.missionId===r.missionId&&entry.workId===r.workId&&entry.decisionId===r.decisionId&&entry.state==='waiting'))return;
-   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(w?.execution==='budget-waiting'&&w.monthlyBudgetDecision===r.decisionId)return;ensure(s&&w&&workInputHash(w)===r.inputHash,'Waiting Work input changed');
+   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(w?.execution==='cancelled')return;if(w?.execution==='budget-waiting'&&w.monthlyBudgetDecision===r.decisionId)return;ensure(s&&w&&workInputHash(w)===r.inputHash,'Waiting Work input changed');
    const result=await new Application(this.#store,[{id:HOST,roles:['representative']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-wait:'+hash([r.decisionId,r.missionId,r.workId]).slice(0,48),actorId:HOST,command:{type:'wait-monthly-budget',workId:r.workId,decisionId:r.decisionId!}});if(result.status!=='conflict')return;
   }throw new DomainError('Budget waiting admission contention');
  }

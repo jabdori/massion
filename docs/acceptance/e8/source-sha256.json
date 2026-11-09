@@ -1,12 +1,17 @@
 {
-  "src/monthly-budget.ts": "04dfd540a89c96bebc6394cd87a06b0e647bfd719fd29355ff8bca24b846b2ad",
-  "src/configured-runtime.ts": "a3558792bbd8415f1c82e820862ad13baeafd6a836001258698fa9fa3f663f6a",
-  "src/server.ts": "38e074f0d38e167085a852467cbf30531bbb44581de4f4fd20e28c723cfc0c4f",
-  "src/domain.ts": "4487bbf415c1e0054d90c9c0e5683320cb3d5b6b1f9e0bb5d1e6aae066ef5ae1",
-  "src/settings-panel.ts": "e831fcead3617d58874f725e955bcbf30d286b2ae0e8b91dce6031d18ad4fbea",
-  "src/assistant-conversation-panel.ts": "9dd78093619ab93ad6f42142af69737de1ca116aa8c2d772ef26e1f323f55158",
-  "src/backup-lineage.ts": "f5150cb91fcc4a200bc6724f8397466a17d015c28ced635eac614e69d10c2ebd",
+  "src/monthly-budget.ts": "e17b6d56963c59bd91708d2ba1da1f44b3f7dc8fe184a522a2dd27548fbe959b",
+  "src/configured-runtime.ts": "f9919bd05dc1b205cf9ad9ff9487232b2cb4a9a930e8df254e22e8903029abc4",
+  "src/server.ts": "b5f212b2b50f842fbfdb195dc6c9e053c30dc4b0456b530f9e0da348f922b59e",
+  "src/domain.ts": "16ef55458e29fa5aaaf63a67bc9b883c37e221a6afb1e84db29543b24086081e",
+  "src/settings-panel.ts": "30d585a90838f6e813bf78d70563824029145cef7537ba22e7912e7ba02f2dcb",
+  "src/assistant-conversation-panel.ts": "d29bf69ac01de5ac4c92f7f2eaa1bde4c3f3800fce41b54ff415a610b069b524",
+  "src/backup-lineage.ts": "c2a170db78ec233f0d2953a5c120bede7e00f8c4718126dde27fa2f6d84379d9",
   "src/portable-backup.ts": "fea624e860361aa58a7841972e602e1b21c9db9f622086e31b855e588dc66f51",
   "src/work-inbox.ts": "2b679a06ba28880e7bce4382b98c200aca0d9fb319e7d4b1f383195f64affc35",
-  "scripts/ui-contracts/monthly-budget-fixtures.ts": "c834e7aba39e310734103f7c1cf32376ddd672244b02e2e25ac4d65c94baec6a"
+  "scripts/ui-contracts/monthly-budget-fixtures.ts": "c834e7aba39e310734103f7c1cf32376ddd672244b02e2e25ac4d65c94baec6a",
+  "src/application.ts": "b7a1e9dee8dd0b05d86b94e93c3739152123d0c91f1c11991f5a3cac0ac892a8",
+  "src/client-protocol.ts": "2c5ac460bd6bbfe02f3b2e6961b262ccdca089dc7a06152568a34295b824536a",
+  "src/work-inbox-panel.ts": "5d666cf6d51b000fa78318c55b1c6623045a9dc1773cf1f4fa6fb37e5e78c2c8",
+  "src/member-rooms.ts": "a7e0fd7d41e86c15ec8bb2954f0ab12275823c19b6304cc3c89b12a1c7abbbe0",
+  "src/internal-teams.ts": "ee3112ce1688306913ae5d6a94d2cf3b7bc54ecb835199dc0f91a16c0d0ac583"
 }

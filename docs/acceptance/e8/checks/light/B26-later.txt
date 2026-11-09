@@ -1,4 +1,4 @@
-contract B26-later (B26 예산 · 나중에) vs /Users/code/orca/workspaces/massion/e8-monthly-budget/.runtime/e8-visual-gate/snapshots/light/B26-later.json
+contract B26-later (B26 예산 · 나중에) vs /Users/code/orca/workspaces/massion/e8-monthly-budget/.runtime/e8-combined-contracts/snapshots/light/B26-later.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"

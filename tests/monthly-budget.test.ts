@@ -110,3 +110,8 @@ test('one unsettled resumed run cannot strand the other Works authorized by the 
  const original=Object.assign(new Error('Original run is unsettled; never resend'),{name:'RunUnsettledError'}),attempted:string[]=[];await assert.rejects(service.resume(d.id,async r=>{attempted.push(r.workId);if(r.workId==='one')throw original;}),e=>e===original);
  assert.deepEqual(attempted,['one','two']);assert.ok((await store.load('mission'))!.value.works.every(w=>w.execution==='queued'&&!w.monthlyBudgetDecision));await service.resume(d.id,async r=>{attempted.push(r.workId);});assert.deepEqual(attempted,['one','two']);
 });
+
+test('an owner-cancelled waiting Work does not block the budget decision for remaining Work',async()=>{
+ const {store,service,app}=await fixture(0);for(const workId of ['one','two'])await service.admit({missionId:'mission',workId,runId:'paused-'+workId,amount:80});const s=(await store.load('mission'))!;await app.dispatch({missionId:'mission',commandId:'stop-one',expectedRevision:s.revision,actorId:'local-owner',command:{type:'cancel',workId:'one'}});const v=await service.read(),d=v.decisions[0]!;
+ await service.decide({commandId:'raise-remaining',decisionId:d.id,answer:'act',expectedRevision:v.revision,limit:d.budget.limit});const resumed:string[]=[];await service.resumeReleased(async r=>{resumed.push(r.workId);});assert.deepEqual(resumed,['two']);assert.equal((await store.load('mission'))!.value.works[0]!.execution,'cancelled');
+});

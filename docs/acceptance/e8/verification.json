@@ -41,5 +41,31 @@
       "B14-usage cycle has only utilization and reset time in both themes; no added token/period/timezone row",
       "B26 current/proposed budget slots have localized numeric values without an output-token suffix in both themes"
     ]
+  },
+  "combinedReviewCorrection": {
+    "baseCommit": "2cfaf7d",
+    "mergedMain": "395193e",
+    "integrationCommit": "8d0f9fc",
+    "relatedFiles": 22,
+    "tests": 408,
+    "passed": 387,
+    "failed": 0,
+    "skipped": 21,
+    "finalCancelledWorkDelta": {
+      "tests": 44,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 3
+    },
+    "typecheck": "passed",
+    "copyLintFindings": 0,
+    "screenRows": 6,
+    "requiredOccurrencesPassed": 176,
+    "contractFailures": 0,
+    "geometryFailures": 0,
+    "infrastructureErrors": 0,
+    "native": "Offline decision and offline Settings save consume no keys; the 256 draft survives and saves after reconnect",
+    "notRun": "Full repository suite, actual DB, live providers; CI-owned or environment-gated",
+    "unknownKeyRule": "Only proven unsent transport or explicit rejection releases a key; unchanged revision alone does not prove rollback"
   }
 }
