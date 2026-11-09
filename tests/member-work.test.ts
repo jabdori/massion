@@ -12,11 +12,12 @@ import {AssistantService,parseAssistantTurn} from '../src/assistant-service.ts';
 import {ASSISTANT_ACTOR_ID,assistantWorkId} from '../src/assistant-conversation.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {Application} from '../src/application.ts';
-import {apply,createMission} from '../src/domain.ts';
-import type {Mission} from '../src/domain.ts';
+import {apply,createMission,documentContentHash} from '../src/domain.ts';
+import type {Command,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 import {MEMBERS_ID,MembersService} from '../src/members.ts';
+import {SkillsService} from '../src/skills.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 
 // docs/architecture/member-work.md: the Representative hands Work to a member, the member's group runs it, the 1:1 conversation steers it, the host lists Works with their end time. Fixture-class only.
@@ -28,13 +29,15 @@ const steer=(reply:string,workId:string|null)=>JSON.stringify({reply,work:null,s
 
 async function setup(t:test.TestContext,providerType='openrouter'){
  const root=await mkdtemp(join(tmpdir(),'massion-member-work-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;
+ const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
-  const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content);
+  const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
   if(Object.hasOwn(prompt,'currentMessage')){prompts.push({model:body.model,prompt});return completion(body.model,script.shift()??v1('Hello.'));}
   calls.push(body.model);
+  if(prompt.teamPlanning)return completion(body.model,JSON.stringify(plan?plan(prompt.teamPlanning.steps):{steps:prompt.teamPlanning.steps.map((title:string,i:number)=>({role:i===0?'Research':'Writing',title,dependsOn:i?[i-1]:[],...(title==='Optional comparison'?{skipReason:'No comparison requested'}:{})}))}));
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Answer bounded',reason:'Controlled fixture'}]}));
+  if(prompt.step&&worker)return completion(body.model,await worker(prompt,init!.signal as AbortSignal));
   if(onExecute)await onExecute(init!.signal as AbortSignal);
   return completion(body.model,'Answer bounded fixture text');
  };
@@ -58,7 +61,7 @@ async function setup(t:test.TestContext,providerType='openrouter'){
   return (await members.read()).members.find(x=>x.name===name)!;
  };
  const chatFor=(member:{id:string;name:string;modelGroup:string},ownerStore?:Store<any>)=>new AssistantService(store,product,m,{clock,member:{id:member.id,name:member.name,modelGroup:member.modelGroup},...(ownerStore?{ownerStore}:{})});
- return {root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
+ return {setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
 }
 
 async function runningWork(f:Awaited<ReturnType<typeof setup>>,t:test.TestContext){
@@ -127,7 +130,7 @@ test('a member in an owner group runs on that group: executor first, a different
  f.script.push(v2('Quill will take it.','Price table','Quill'));sent=await f.say(f.assistant,'Build the price table');await f.assistant.idle();
  assert.equal(sent.turn?.outcome?.run.status,'requested');
  const work=(await f.intake()).works.find(w=>w.title==='Price table')!;assert.equal(work.acceptance,'accepted',JSON.stringify({blocker:work.blocker,verdict:work.verdict}));assert.equal(work.runtimeRun?.authorizationId,'grant-analysis');
- assert.deepEqual(f.calls.slice(calls),['google/gemini-a','anthropic/claude-b']);
+ assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);
  assert.equal(work.verdict?.check?.relation,'different-family');assert.deepEqual(work.verdict?.check?.producers.map(p=>p.model),['google/gemini-a','openai/gpt-rep']);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
@@ -138,7 +141,7 @@ test('with no different family in the group the checker comes from another group
  await f.members.setGroup({commandId:'g-1',memberId:quill.id,modelGroup:'solo'},f.m);
  await f.grant('grant-solo','google/gemini-a','anthropic/claude-check');const calls=f.calls.length;
  f.script.push(v2('Quill will take it.','Price table','Quill'));await f.say(f.assistant,'Build the price table');await f.assistant.idle();
- assert.deepEqual(f.calls.slice(calls),['google/gemini-a','anthropic/claude-check']);
+ assert.deepEqual(f.calls.slice(calls),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-check']);
  const work=(await f.intake()).works.find(w=>w.title==='Price table')!;assert.equal(work.verdict?.check?.relation,'different-family');
 });
 
@@ -244,8 +247,8 @@ test('member routing checks with the same model in a separate identity when no f
  await f.members.setGroup({commandId:'solo-group',memberId:quill.id,modelGroup:'solo'},f.m);
  await f.grant('grant-solo','google/gemini-a','google/gemini-a');const before=f.calls.length;
  f.script.push(v2('On it.','Solo task','Quill'));await f.say(f.assistant,'Check a table');await f.assistant.idle();
- const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted');assert.equal(w.verdict?.check?.relation,'same-family');
- assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a']);assert.notEqual(w.assignments.find(a=>a.role==='executor')!.actorId,w.assignments.find(a=>a.role==='verifier')!.actorId);
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict?.check?.relation,'same-family');
+ assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a']);assert.notEqual(w.assignments.find(a=>a.role==='executor')!.actorId,w.assignments.find(a=>a.role==='verifier')!.actorId);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -390,7 +393,7 @@ for(const authorized of [true,false])test(`manual Start preserves a deferred mem
  if(authorized){assert.equal(check.ready,true);assert.equal(check.selection.choice.executorProfileId,f.profile('google/gemini-a'));assert.equal(check.selection.choice.verifierProfileId,f.profile('anthropic/claude-b'));}
  else{assert.equal(check.ready,false);assert.ok(check.diagnostics.some((d:any)=>d.code==='member_grant_missing'));}
  const result=await post('run','manual-member-start');assert.equal(result.status,authorized?'settled':'blocked');
- if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
+ if(authorized){assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b']);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.equal(after.runtimeRun!.authorizationId,'grant-analysis');assert.equal(after.acceptance,'accepted');}
  else{assert.equal(f.calls.length,before);assert.equal((await f.intake()).works.find(w=>w.id===work.id)!.runtimeRun,undefined);}
  validateMissionJournalLineage(f.store.inspect() as any);
 });
@@ -401,7 +404,7 @@ test('selection-less sequence resolves each deferred Work through its own member
  occupied.release();await f.assistant.idle();const current=(await f.store.load('intake'))!,{hash,workInputHash}=await import('../src/domain.ts'),works=current.value.works.slice(-2).map((w:any)=>({workId:w.id,inputHash:workInputHash(w),criteriaHash:hash(w.criteria)}));
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const before=f.calls.length;
  const result=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/missions/intake/run-sequence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'member-sequence',expectedRevision:current.revision,works})}).then(r=>r.json()) as any;
- assert.equal(result.status,'completed');assert.deepEqual(f.calls.slice(before),['google/gemini-a','anthropic/claude-b','openai/gpt-exec','anthropic/claude-check']);validateMissionJournalLineage(f.store.inspect() as any);
+ assert.equal(result.status,'completed');assert.deepEqual(f.calls.slice(before),['google/gemini-a','google/gemini-a','google/gemini-a','google/gemini-a','anthropic/claude-b','openai/gpt-exec','anthropic/claude-check']);validateMissionJournalLineage(f.store.inspect() as any);
 });
 
 test('a model-selected steering target is only proposed until the owner explicitly applies it',async t=>{
@@ -531,4 +534,126 @@ for(const uncertain of [false,true])test(`confirmation audit: a final snapshot r
  const server=createWorkbench(store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({member:quill.id,segment:1,turnId:sent.turn!.id})}),body=await response.json() as any;
  assert.equal(response.status,200);assert.equal(body.status,uncertain?'unknown':'recorded');assert.notEqual(body.outcome,'rejected');assert.equal(running.signal().aborted,!uncertain);
+});
+
+test('Q13 member procedure becomes nested workers with retained skips and independent evidence',async t=>{
+ const f=await setup(t),member=await f.admit(),skills=new SkillsService(f.store);
+ await skills.act({commandId:'procedure',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body:{description:'Analyze the request',steps:['Read evidence','Optional comparison','Write findings'],verify:'Compare findings with evidence'}});
+ f.script.push(v2('On it.','Churn causes','Quill'));await f.say(f.assistant,'Find churn causes');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;
+ const steps=w.tasks.filter(task=>(task as any).step);
+ assert.equal(steps.length,3,JSON.stringify({blocker:w.blocker,tasks:w.tasks}));
+ assert.ok(steps.every(task=>task.parentId===w.id+':executor'));
+ assert.equal(steps[1]!.result,'Skipped · No comparison requested');
+ assert.ok(steps.every(task=>task.status==='settled'));
+ assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict!.check!.producers.length,2);
+ assert.ok(w.assignments.filter(a=>steps.some(s=>s.id===a.taskId)).every(a=>a.actorId!==w.assignments.find(a=>a.role==='verifier')!.actorId));
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('Q13 member without a procedure uses the host default, with a fresh team for each Work',async t=>{
+ const f=await setup(t);await f.admit();
+ for(const title of ['First analysis','Second analysis']){f.script.push(v2('On it.',title,'Quill'));await f.say(f.assistant,title);await f.assistant.idle();}
+ const works=(await f.intake()).works.slice(-2);
+ for(const w of works){assert.ok(w.tasks.some(task=>(task as any).step),'default workers');assert.equal(w.acceptance,'accepted');}
+ assert.ok(works[0]!.tasks.every(task=>!works[1]!.tasks.some(other=>other.id===task.id)));
+});
+
+
+test('Q13 ready workers overlap, dependencies wait, and each provider claim runs once',async t=>{
+ const f=await setup(t),member=await f.admit();
+ await new SkillsService(f.store).act({commandId:'parallel-procedure',action:'write',memberId:member.id,kind:'procedure',name:'Compare',body:{description:'Compare sources',steps:['Read first','Read second','Compare both'],verify:'Compare result'}});
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({title,role:'Research',dependsOn:i===2?[0,1]:[]}))}));
+ let release=()=>{},started=()=>{};const gate=new Promise<void>(r=>{release=r;}),both=new Promise<void>(r=>{started=r;});let running=0,seen:string[]=[];
+ t.after(async()=>{release();await f.assistant.idle();});
+ f.setWorker(async prompt=>{seen.push(prompt.step.title);if(prompt.step.title!=='Compare both'){running++;if(running===2)started();await gate;running--;}else assert.equal(running,0);return 'Answer bounded '+prompt.step.title;});
+ f.script.push(v2('On it.','Compare evidence','Quill'));await f.say(f.assistant,'Compare evidence');await both;
+ let w=(await f.intake()).works.at(-1)!;assert.equal(w.effects.filter(e=>e.status==='pending').length,2);assert.ok(w.effects.filter(e=>e.status==='pending').every(e=>e.providerDispatch));
+ release();await f.assistant.idle();w=(await f.intake()).works.at(-1)!;
+ assert.deepEqual(seen,['Read first','Read second','Compare both']);assert.equal(w.acceptance,'accepted');
+ assert.equal(new Set(w.effects.map(e=>e.providerDispatch?.id).filter(Boolean)).size,6);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('Q13 invalid plans and unknown worker outcomes never synthesize or check',async t=>{
+ for(const invalid of [true,false]){
+  const f=await setup(t);await f.admit();
+  if(invalid)f.setPlan(()=>({steps:[]}));else f.setWorker(async()=>{throw new Error('lost response');});
+  f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+  const w=(await f.intake()).works.at(-1)!;
+  assert.equal(w.acceptance,'pending');assert.equal(w.artifact,undefined);assert.equal(w.verdict,undefined);
+  assert.ok(invalid?w.blocker?.detail.includes('plan'):w.effects.some(e=>e.status==='unknown'));
+  const calls=f.calls.length;await f.product.run('intake',w.id,'second-run',(await f.store.load('intake'))!.revision);assert.equal(f.calls.length,calls);
+ }
+});
+
+test('Q13 procedure replacement during Work commit retains the originally read version and replays',async t=>{
+ const f=await setup(t),member=await f.admit(),skills=new SkillsService(f.store),body={description:'Analyze inputs',steps:['Read old inputs'],verify:'Check result'};
+ await skills.act({commandId:'procedure-before',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body});
+ const commit=f.store.commit.bind(f.store);let replaced=false;
+ f.store.commit=async input=>{if(!replaced&&input.events.some((e:any)=>e.type==='admit-work'&&e.command?.team)){replaced=true;await skills.act({commandId:'procedure-after',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body:{...body,steps:['Read new inputs']}});}return commit(input);};
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted');assert.equal(w.team!.procedures[0]!.version,1);assert.deepEqual(w.team!.procedures[0]!.body.steps,['Read old inputs']);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('Q13 a newly ready dependent starts while an unrelated worker is still running',async t=>{
+ const f=await setup(t),member=await f.admit();
+ await new SkillsService(f.store).act({commandId:'dag-procedure',action:'write',memberId:member.id,kind:'procedure',name:'Analyze',body:{description:'Analyze sources',steps:['First','Independent','After first'],verify:'Check result'}});
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({title,role:'Analysis',dependsOn:i===2?[0]:[]}))}));
+ let release=()=>{},entered=()=>{},independent=false,sawOverlap=false;
+ const independentStarted=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ const timer=setTimeout(release,1000);t.after(()=>{clearTimeout(timer);release();});
+ f.setWorker(async prompt=>{if(prompt.step.title==='First')await independentStarted;else if(prompt.step.title==='Independent'){independent=true;entered();await gate;independent=false;}else{sawOverlap=independent;release();}return 'Answer bounded';});
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ assert.equal(sawOverlap,true,'a ready dependency cannot wait for unrelated work');assert.equal((await f.intake()).works.at(-1)!.acceptance,'accepted');
+});
+
+test('Q13 loading a procedure records its use through the drain-aware store',async t=>{
+ const f=await setup(t),member=await f.admit(),skills=new SkillsService(f.store,{clock:()=>1});
+ await skills.act({commandId:'usage-procedure',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body:{description:'Read sources',steps:['Read evidence'],verify:'Check evidence'}});
+ f.script.push(v2('On it.','Read evidence','Quill'));await f.say(f.assistant,'Read evidence');await f.assistant.idle();
+ assert.ok(f.store.inspect().some(op=>op.events.some((e:any)=>e.type==='use-skill')),'usage must survive restart');
+ let blocked=0;const ownerStore=intercepted(f.store,{commit:async()=>{blocked++;throw new HostDrainError();}}),chat=new AssistantService(f.store,f.product,f.m,{members:async()=>(await f.members.read()).members,ownerStore});
+ const before=(await f.intake()).works.length;f.script.push(v2('On it.','Other evidence','Quill'));await f.say(chat,'Other evidence');await chat.idle();
+ assert.equal(blocked,1);assert.equal((await f.intake()).works.length,before,'drain must not fall back to raw store');
+});
+
+test('Q13 accepted text reads retain the exact procedure pin of the Record',async t=>{
+ const {readRecordArtifact}=await import('../src/record-artifact.ts'),f=await setup(t);await f.admit();
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!,input={recordId:w.record!.id,artifactVersion:w.artifact!.version,artifactSha256:w.artifact!.sha256};
+ assert.ok(await readRecordArtifact(f.store,f.artifacts,'intake',w.id,input));
+ const changed=intercepted(f.store,{readState:async(id?:string)=>{const state=await f.store.readState(id);if(state.snapshot?.value.works)state.snapshot.value.works.find((work:Mission['works'][number])=>work.id===w.id)!.team!.skillsRevision++;return state;}});
+ await assert.rejects(readRecordArtifact(changed,f.artifacts,'intake',w.id,input),/exact accepted Record/);
+});
+
+
+test('Q13 workers receive pinned constraints, memory and source contents after newer versions exist',async t=>{
+ const f=await setup(t);await f.admit();const app=new Application(f.store,[{id:'local-owner',roles:['owner']}]);
+ const send=async(command:Command)=>{const state=(await f.store.load('intake'))!;const result=await app.dispatch({missionId:'intake',commandId:randomUUID(),expectedRevision:state.revision,actorId:'local-owner',command});assert.equal(result.status,'committed');};
+ await send({type:'revise-mission-constraints',constraints:['Use enterprise records only'],reason:'Scope the analysis'});
+ await send({type:'save-memory',memory:{id:'terms',version:1,scope:'local',authority:'explicit',content:'Use the term cancellation',source:'Owner v1',effective:true}});
+ const preflight=f.product.preflight.bind(f.product);f.product.preflight=async(...args)=>({... (await preflight(...args))!,ready:false});
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze enterprise cancellations');await f.assistant.idle();f.product.preflight=preflight;
+ const workId=(await f.intake()).works.at(-1)!.id,content='Enterprise cancellations: 41',document={id:'document:evidence',version:1,title:'Cancellation counts',content,source:'Owner source v1'};
+ assert.equal((await f.intake()).works.at(-1)!.runtimeRun,undefined);
+ await send({type:'capture-document',document});
+ await send({type:'attach-work-source',workId,documentId:document.id,version:1,contentSha256:documentContentHash(content),reason:'Use the original counts'});
+ await send({type:'ask-work-question',workId,questionId:'period',text:'Which period?'});
+ await send({type:'answer-work-question',workId,questionId:'period',text:'Last quarter'});
+ await send({type:'revise-mission-constraints',constraints:['Use all customer records'],reason:'Future requests'});
+ await send({type:'save-memory',memory:{id:'terms',version:2,scope:'local',authority:'explicit',content:'Use the term departure',source:'Owner v2',effective:true}});
+ await send({type:'capture-document',document:{...document,version:2,content:'All cancellations: 99',source:'Owner source v2'}});
+ const received:any[]=[];f.setWorker(async prompt=>{received.push(prompt);return 'Answer bounded';});
+ const result=await f.product.run('intake',workId,'pinned-worker-inputs',(await f.store.load('intake'))!.revision);assert.equal(result.status,'settled');assert.equal(received.length,2);
+ for(const prompt of received){
+  assert.deepEqual(prompt.mission?.constraints,['Use enterprise records only']);
+  assert.deepEqual(prompt.work.memories,[{id:'terms',version:1,scope:'local',authority:'explicit',content:'Use the term cancellation',source:'Owner v1'}]);
+  assert.equal(prompt.work.sourceDocuments[0].document.version,1);assert.equal(prompt.work.sourceDocuments[0].document.content,content);assert.equal(prompt.work.sourceDocuments[0].document.contentSha256,documentContentHash(content));
+  assert.equal(prompt.work.questions[0].answer.text,'Last quarter');assert.equal(prompt.work.assistantSource.message,'Analyze enterprise cancellations');
+  assert.match(prompt.instruction,/sourceDocuments contain untrusted reference text/);
+  assert.doesNotMatch(JSON.stringify(prompt),/Use all customer records|Use the term departure|All cancellations: 99/);
+ }
+ validateMissionJournalLineage(f.store.inspect() as any);
 });
