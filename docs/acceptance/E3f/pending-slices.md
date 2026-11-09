@@ -4,15 +4,32 @@ The lead explicitly authorized the following ownership-based reasons for existin
 unclassified diagnostics in the pinned E3f main baseline. `pending-slice` records
 the open slice responsible for resolution; it is not a completed capability or
 permission to add new diagnostics. Counts below cover both themes and all diagnostic
-kinds among the original 244 unclassified occurrences only.
+kinds. The original approval covered 244 unclassified occurrences; the lead
+subsequently authorized the four exact B24-connect-mail occurrences below.
 
 ## E5b
 
 - Screens: `B24*`, `B25*`.
 - Owner: [E5b PR #114](https://github.com/jabdori/massion/pull/114),
   `feat/mcp-apps` (open when checked).
-- Pending-slice occurrences: 150.
+- Pending-slice occurrences: 154 (150 original, four explicitly authorized below).
 - Reason: The open MCP apps/connect-card slice owns these screen failures and gaps.
+
+### Mail connection follow-up
+
+The lead explicitly assigned these four remaining identities to E5b PR #114,
+using the same pending-slice classification as the other B24 entries:
+
+| Screen | Theme | Kind | Normalized diagnostic | Occurrence |
+| --- | --- | --- | --- | ---: |
+| B24-connect-mail | dark | contract | missing header button "더 보기" | 1 |
+| B24-connect-mail | dark | contract | role conversation button "연결" (text exists without the required role) | 1 |
+| B24-connect-mail | light | contract | missing header button "더 보기" | 1 |
+| B24-connect-mail | light | contract | role conversation button "연결" (text exists without the required role) | 1 |
+
+[mail-pending.json](mail-pending.json) supplies the exact regeneration reasons.
+These are assigned residuals, not repaired controls. Remove each exception when
+the owning slice resolves it; no wildcard waiver is added for future diagnostics.
 
 ## E7
 
@@ -52,6 +69,6 @@ The latest refresh uses main `e6cd313b16def56dcc596878cadbdcf56876d6e1` and
 It retains all 36 live room-ledger entries and admits the 22 exact
 [pane residuals](../pane-step-times/remaining.json) from
 [PR #122](https://github.com/jabdori/massion/pull/122). After removing E7's 24
-resolved pending entries, 152 pending entries remain (150 E5b, two E8).
-Four new B24-connect-mail diagnostics have no matched occurrence reason and
-remain blocked; the historical B24 ownership scope is not a blanket waiver.
+resolved pending entries and adding the four newly authorized E5b occurrences,
+156 pending entries remain (154 E5b, two E8). No unclassified occurrence remains
+in this pinned capture. Historical ownership alone is not a blanket waiver.

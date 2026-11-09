@@ -29,7 +29,9 @@ For the post-PR #121/#122 refresh, merge current main and use its latest complet
 CI artifact. Remove resolved exceptions first, then admit only exact live
 occurrences reasoned by the room and pane-step-time residual ledgers through
 the explicit addition flag. Preserve unmatched diagnostics in the PR body and
-`docs/acceptance/E3f/unclassified.json`; do not extend pending-slice ownership.
+`docs/acceptance/E3f/unclassified.json`. The lead subsequently authorized the
+four remaining B24-connect-mail occurrences as E5b PR #114 pending-slice items;
+record these exact identities in the ownership ledger before regeneration.
 
 Implementation and verification:
 

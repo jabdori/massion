@@ -15,15 +15,16 @@
   "removedStaleEntries": 30,
   "retainedRoomLedgerEntries": 36,
   "addedPaneLedgerEntries": 22,
-  "currentEntries": 974,
+  "currentEntries": 978,
   "allowed": {
-    "contract": 822,
+    "contract": 826,
     "visual": 16,
     "gaps": 136,
     "copy": 0
   },
-  "pendingSliceEntries": 152,
-  "unclassified": 4,
+  "pendingSliceEntries": 156,
+  "unclassified": 0,
   "stale": 0,
-  "gateExit": 1
+  "gateExit": 0,
+  "addedE5bPendingEntries": 4
 }

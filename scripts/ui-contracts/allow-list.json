@@ -10157,6 +10157,46 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing header button \"더 보기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#mail-connection-follow-up"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role conversation button \"연결\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#mail-connection-follow-up"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing header button \"더 보기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#mail-connection-follow-up"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role conversation button \"연결\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#mail-connection-follow-up"
     }
   ]
 }

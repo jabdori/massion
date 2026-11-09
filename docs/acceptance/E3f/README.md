@@ -26,23 +26,25 @@ worker metadata. No timestamp or role was invented to satisfy a contract.
 All 22 matched the new full CI capture; scoped historical captures were not
 substituted for it. PR #121's 36 room-ledger exceptions remain live and unchanged.
 
-The result is 974 exceptions: 822 contract failures, 16 visual failures and 136
+The result is 978 exceptions: 826 contract failures, 16 visual failures and 136
 gaps. Existing E3b/E3c/E3d1/E3d2/E3e and room reason provenance is retained for
-live entries. The remaining 152 lead-authorized `pending-slice` entries are 150
+live entries. The remaining 156 lead-authorized `pending-slice` entries are 154
 for E5b PR #114 and two for E8 PR #117. No E7 pending entry remains; see
 [the ownership ledger](pending-slices.md).
 
-**The baseline is still red:** [unclassified.json](unclassified.json) contains
-four contract occurrences in B24-connect-mail: missing header button `더 보기`
-and conversation `연결` text without the required button role, once per theme.
-Neither the existing residual ledgers nor the historical pending-slice approval
-reasons these new identities. They remain unallowed and are listed individually
-in the PR body. No room or pane-step-time diagnostic remains unclassified.
+The lead subsequently assigned the four remaining B24-connect-mail identities
+(missing header button `더 보기` and conversation `연결` text without the required
+button role, once per theme) to E5b PR #114 as `pending-slice`, matching the other
+B24 entries. The exact approval and removal obligation are recorded in
+[the ownership ledger](pending-slices.md#mail-connection-follow-up), with
+[machine-readable reasons](mail-pending.json). This explicit authorization adds
+four exact exceptions, not a wildcard waiver or a claim that the UI is repaired.
 
-[main-refresh.json](main-refresh.json) records source, capture totals, 30 removals,
-22 additions and the final gate result: exit 1, four unallowed, zero stale
-exceptions and zero infrastructure errors. No new pending-slice exception was
-added to hide the B24 findings.
+**The pinned baseline gate passes:** [unclassified.json](unclassified.json) is
+empty. [main-refresh.json](main-refresh.json) records source, capture totals,
+30 removals, 22 pane-ledger additions, four authorized E5b additions and the
+final gate result: exit 0, zero unallowed, zero stale exceptions and zero
+infrastructure errors. Screen-contract drift remains represented by exceptions.
 
 ## Regeneration
 
@@ -61,12 +63,14 @@ missing checker output, inconsistent counts and infrastructure errors prohibit
 an update. Review the list diff before committing; CI never auto-updates it.
 
 This refresh used the explicit addition flag justified by PR #122's published
-ledger and the lead's integration request. Source commit/run metadata was updated
+ledger, the lead's integration request and the subsequent explicit E5b approval.
+Source commit/run metadata was updated
 to the downloaded artifact's provenance after regeneration:
 
 ```sh
 UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts --update
 UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts --update --allow-additions --reasons docs/acceptance/pane-step-times/remaining.json
+UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts --update --allow-additions --reasons docs/acceptance/E3f/mail-pending.json
 UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts
 ```
 
@@ -80,8 +84,10 @@ separately authorized; this refresh does not widen their ownership scope.
 After merging main, Node 24.21.0: 135 focused harness/copy tests and TypeScript
 static checking pass. The gate was run against the downloaded complete main CI
 capture and produced the exact residuals above. Assertion checks verify exact
-ledger matching, 30 removals, 22 additions, 36 retained room entries, 152 remaining
-pending entries, zero copy findings and equality with the complete capture gate.
+ledger matching, 30 removals, 22 pane additions, four E5b additions, 36 retained room entries,
+156 remaining pending entries, zero copy findings and a passing complete capture
+gate. The E5b follow-up asserts exactly four additions and no changed or removed
+previous exception.
 The full suite and fresh PR all-screen capture remain CI's responsibility under
 the owner's verification budget. No local browser capture or new screenshot
 review is claimed.
