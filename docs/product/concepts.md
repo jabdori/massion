@@ -12,7 +12,7 @@ Exact version pinning keeps old Work under its original conditions. Work retains
 
 The implemented neighborhood reader follows direct incoming and outgoing links at an exact version. Reverse impact tracing starts with a changed reference and follows incoming relationships across multiple hops to list potentially affected references. Both are read-only: they neither invalidate accepted Records nor schedule re-execution. See [neighborhood exploration](../architecture/exact-knowledge-neighborhood.md) and [reverse impact](../acceptance/relation-impact-evidence.md).
 
-Historically, separating a persistent project graph from transient execution goes back to the owner's earlier jabtang-go prototype, which distinguished a Project Graph from an Execution Graph. That prototype has no public document.
+Historically, separating a persistent project graph from transient execution goes back to the owner's earlier jabtang-go prototype, which split a Project Graph (persistent topology) from an Execution Graph (transient runtime). Source (local archive, not public): `pi-dev/docs/plans/2026-04-01-jabtang-go-execution-plan.md`, Phase 3, cited the same way as the earlier designs in [ADR 0004](../architecture/decisions/0004-member-rooms-mutual-challenge-and-discriminator.md).
 
 ## Change-history audit graph
 
