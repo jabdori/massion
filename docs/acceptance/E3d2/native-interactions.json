@@ -1,0 +1,64 @@
+{
+  "rows": [
+    {
+      "screen": "B10",
+      "theme": "dark",
+      "measured": {
+        "query": "요일별",
+        "rows": 1,
+        "searchVisible": true
+      }
+    },
+    {
+      "screen": "B17",
+      "theme": "dark",
+      "measured": {
+        "height": 20,
+        "knobColor": "rgb(244, 245, 247)",
+        "knobHeight": 16,
+        "knobWidth": 16,
+        "searchVisible": true,
+        "width": 34
+      }
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "measured": {
+        "chatVisible": true,
+        "parent": "sidebar-controls",
+        "searchVisible": true
+      }
+    },
+    {
+      "screen": "B10",
+      "theme": "light",
+      "measured": {
+        "query": "요일별",
+        "rows": 1,
+        "searchVisible": true
+      }
+    },
+    {
+      "screen": "B17",
+      "theme": "light",
+      "measured": {
+        "height": 20,
+        "knobColor": "rgb(255, 255, 255)",
+        "knobHeight": 16,
+        "knobWidth": 16,
+        "searchVisible": true,
+        "width": 34
+      }
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "measured": {
+        "chatVisible": true,
+        "parent": "sidebar-controls",
+        "searchVisible": true
+      }
+    }
+  ]
+}

@@ -8,6 +8,36 @@
       "selector": "#rail-app-app-github",
       "action": "click",
       "readySelector": "#app-view h2"
+    },
+    {
+      "action": "click",
+      "selector": "#app-group-1",
+      "readySelector": "#app-row-83"
+    },
+    {
+      "action": "click",
+      "selector": "#app-group-1"
+    },
+    {
+      "action": "click",
+      "selector": "#sidebar-search",
+      "readySelector": "#sidebar-query"
+    },
+    {
+      "action": "fill",
+      "selector": "#sidebar-query",
+      "value": "#83",
+      "readySelector": "#app-row-83"
+    },
+    {
+      "action": "fill",
+      "selector": "#sidebar-query",
+      "value": "",
+      "readySelector": "#app-row-84"
+    },
+    {
+      "action": "click",
+      "selector": "#sidebar-search"
     }
   ],
   "gaps": [],
@@ -15,7 +45,8 @@
     "tests/apps-surface.test.ts",
     "tests/surface-shell.test.ts",
     "tests/members-surface.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3d2: original immutable GITHUB_APP runHandler output with githubFixture only; page and both item handlers, 11 actual fixture files; no external network or product writes"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -326,24 +357,30 @@
         "meta": "jabdori/massion",
         "groups": [
           {
-            "title": "열림",
+            "title": "Open",
             "rows": [
               {
                 "id": "84",
                 "title": "feat(assistant): answer the owner and start Representative Work",
                 "meta": "#84 · 2026-11-05 10:28",
-                "state": "열림"
+                "state": "Open"
               }
             ]
           },
           {
-            "title": "병합됨",
+            "title": "Merged",
             "rows": [
               {
                 "id": "83",
-                "title": "feat(assistant): store the continuing assistant conversation",
-                "meta": "#83",
-                "state": "병합됨"
+                "title": "feat(assistant): store the continuing assistant conversation as journal segments",
+                "meta": "#83 · 2026-11-05 10:29",
+                "state": "Merged"
+              },
+              {
+                "id": "82",
+                "title": "docs(product): experience plan v3 with conversation and on-demand panes",
+                "meta": "#82 · 2026-11-05 09:57",
+                "state": "Merged"
               }
             ]
           }
@@ -359,10 +396,16 @@
       "body": {
         "feedId": "fixture:B2",
         "title": "feat(assistant): answer the owner and start Representative Work #84",
-        "meta": "열림 · jabdori · feat/assistant-conversation-turns → main",
+        "meta": "Open · jabdori · feat/assistant-conversation-turns → main",
+        "fields": [
+          [
+            "Changes",
+            "+769 −39"
+          ]
+        ],
         "groups": [
           {
-            "title": "파일 2",
+            "title": "Files 11",
             "rows": [
               {
                 "id": "src/assistant-service.ts",
@@ -370,18 +413,57 @@
                 "meta": "+206 −0"
               },
               {
-                "id": "tests/assistant-service.test.ts",
-                "title": "tests/assistant-service.test.ts",
-                "meta": "+563 −39"
+                "id": "tests/assistant-conversation.test.ts",
+                "title": "tests/assistant-conversation.test.ts",
+                "meta": "+370 −0"
+              },
+              {
+                "id": "src/assistant-conversation-panel.ts",
+                "title": "src/assistant-conversation-panel.ts",
+                "meta": "+83 −0"
+              },
+              {
+                "id": "docs/architecture/assistant-conversation.md",
+                "title": "docs/architecture/assistant-conversation.md",
+                "meta": "+31 −3"
+              },
+              {
+                "id": "src/connection-workbench.ts",
+                "title": "src/connection-workbench.ts",
+                "meta": "+30 −12"
+              },
+              {
+                "id": "src/configured-runtime.ts",
+                "title": "src/configured-runtime.ts",
+                "meta": "+15 −9"
+              },
+              {
+                "id": "src/product.ts",
+                "title": "src/product.ts",
+                "meta": "+13 −7"
+              },
+              {
+                "id": "src/server.ts",
+                "title": "src/server.ts",
+                "meta": "+9 −3"
+              },
+              {
+                "id": "src/workbench.ts",
+                "title": "src/workbench.ts",
+                "meta": "+7 −2"
+              },
+              {
+                "id": "src/selectable-runtime.ts",
+                "title": "src/selectable-runtime.ts",
+                "meta": "+3 −3"
+              },
+              {
+                "id": "docs/architecture/default-route-and-persistent-connections.md",
+                "title": "docs/architecture/default-route-and-persistent-connections.md",
+                "meta": "+2 −0"
               }
             ]
           }
-        ],
-        "fields": [
-          [
-            "변경",
-            "+769 −39"
-          ]
         ]
       }
     },
@@ -393,11 +475,17 @@
       },
       "body": {
         "feedId": "fixture:B2",
-        "title": "feat(assistant): store the continuing assistant conversation #83",
-        "meta": "열림 · jabdori · feat/assistant-conversation-turns → main",
+        "title": "feat(assistant): store the continuing assistant conversation as journal segments #83",
+        "meta": "Merged · jabdori · feat/assistant-conversation-storage → main",
+        "fields": [
+          [
+            "Changes",
+            "+412 −20"
+          ]
+        ],
         "groups": [
           {
-            "title": "파일 2",
+            "title": "Files 11",
             "rows": [
               {
                 "id": "src/assistant-service.ts",
@@ -405,18 +493,57 @@
                 "meta": "+206 −0"
               },
               {
-                "id": "tests/assistant-service.test.ts",
-                "title": "tests/assistant-service.test.ts",
-                "meta": "+563 −39"
+                "id": "tests/assistant-conversation.test.ts",
+                "title": "tests/assistant-conversation.test.ts",
+                "meta": "+370 −0"
+              },
+              {
+                "id": "src/assistant-conversation-panel.ts",
+                "title": "src/assistant-conversation-panel.ts",
+                "meta": "+83 −0"
+              },
+              {
+                "id": "docs/architecture/assistant-conversation.md",
+                "title": "docs/architecture/assistant-conversation.md",
+                "meta": "+31 −3"
+              },
+              {
+                "id": "src/connection-workbench.ts",
+                "title": "src/connection-workbench.ts",
+                "meta": "+30 −12"
+              },
+              {
+                "id": "src/configured-runtime.ts",
+                "title": "src/configured-runtime.ts",
+                "meta": "+15 −9"
+              },
+              {
+                "id": "src/product.ts",
+                "title": "src/product.ts",
+                "meta": "+13 −7"
+              },
+              {
+                "id": "src/server.ts",
+                "title": "src/server.ts",
+                "meta": "+9 −3"
+              },
+              {
+                "id": "src/workbench.ts",
+                "title": "src/workbench.ts",
+                "meta": "+7 −2"
+              },
+              {
+                "id": "src/selectable-runtime.ts",
+                "title": "src/selectable-runtime.ts",
+                "meta": "+3 −3"
+              },
+              {
+                "id": "docs/architecture/default-route-and-persistent-connections.md",
+                "title": "docs/architecture/default-route-and-persistent-connections.md",
+                "meta": "+2 −0"
               }
             ]
           }
-        ],
-        "fields": [
-          [
-            "변경",
-            "+769 −39"
-          ]
         ]
       }
     }

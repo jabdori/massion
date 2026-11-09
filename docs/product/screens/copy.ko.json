@@ -16165,5 +16165,75 @@
    "reference": "artboards/dark/B5.png",
    "contract": "contracts/B5.json"
   }
+ },
+ "ui.pages.am": {
+  "ko": "오전 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17:page artboard"
+ },
+ "ui.pages.pm": {
+  "ko": "오후 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17:page artboard"
+ },
+ "ui.pages.tomorrow": {
+  "ko": "내일 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ],
+  "provenance": "Approved B17:sidebar artboard"
+ },
+ "ui.pages.daily": {
+  "ko": "매일",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ],
+  "provenance": "Approved B17:sidebar artboard"
+ },
+ "ui.pages.today": {
+  "ko": "오늘 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ],
+  "provenance": "Approved B22 artboard"
+ },
+ "ui.pages.briefing-run": {
+  "ko": "어제 맡긴 일 {count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17 artboard"
+ },
+ "ui.pages.files": {
+  "ko": "파일 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "Approved B22 artboard file heading"
  }
 }

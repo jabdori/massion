@@ -62,6 +62,6 @@ test('reports keep both theme rows and every evidence link distinct',()=>{
 test('rendered budgets aggregate contract aliases without counting accessible-only names',async()=>{
  const {visibleBudgets}=await import('../scripts/ui-contracts/report.ts');
  const actual={rail:['하'],sidebar:['하나'],header:['하나'],conversation:['첫 답','둘째 답'],composer:['기본 권한'],pane:[],page:['목록'],settings:['일반'],dialog:['이름']};
- assert.deepEqual(visibleBudgets(actual,['page','composer','dialog:새 구성원 만들기']),{page:['목록','첫 답','둘째 답','하나','기본 권한'],composer:['기본 권한'],'dialog:새 구성원 만들기':['이름']});
+ assert.deepEqual(visibleBudgets(actual,['page','composer','dialog:새 구성원 만들기']),{page:['목록','일반','첫 답','둘째 답','하나','기본 권한'],composer:['기본 권한'],'dialog:새 구성원 만들기':['이름']});
  assert.throws(()=>visibleBudgets({...actual,conversation:undefined} as any,['page']),/Missing rendered region/);
 });

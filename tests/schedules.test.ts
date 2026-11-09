@@ -84,6 +84,7 @@ test('scheduler: a due tick leaves one briefing of the last day\'s Work turns, n
  const head=await f.assistant.read(),conv=await f.schedules.conversation(head.segment!.number),turns=head.turns,receipt=turns.find(x=>x.work?.title==='Receipt sort')!;
  assert.deepEqual(conv.briefings,[{id:view.runs[0]!.id,at:f.now(),title:'Morning briefing',turnIds:[receipt.id]}],'only Work turns from the 24 hours before the run');assert.deepEqual(conv.exceptions,[]);
  assert.equal(view.runs[0]!.fact,'1 Work item');
+ assert.equal((view.runs[0] as any).segment,head.segment!.number,'a past run retains the exact conversation segment that produced it');
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 

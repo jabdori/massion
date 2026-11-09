@@ -8,15 +8,19 @@
       "selector": "#activity-toggle",
       "action": "click",
       "readySelector": "#side-activity"
+    },
+    {
+      "action": "click",
+      "selector": "#header-profile",
+      "readySelector": "#shell-profile"
     }
   ],
-  "gaps": [
-    "The header member popover in the contract has no corresponding production control."
-  ],
+  "gaps": [],
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3d2: B2 original message/turn/time bindings, supported profile navigation; no commands or restart/update facts"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -30,7 +34,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -39,7 +43,7 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
@@ -68,7 +72,7 @@
             {
               "id": "r:calculation",
               "role": "representative",
-              "turnId": null,
+              "turnId": "assistant-turn:m:calculation",
               "text": "TOTAL: 3 cents"
             },
             {
@@ -80,7 +84,7 @@
             {
               "id": "r:oneline",
               "role": "representative",
-              "turnId": null,
+              "turnId": "assistant-turn:m:oneline",
               "text": "TOTAL: 3 cents"
             },
             {
@@ -94,6 +98,18 @@
               "role": "representative",
               "turnId": "assistant-turn:m:rounding",
               "text": "TOTAL: 4 cents"
+            },
+            {
+              "id": "m:churn",
+              "role": "owner",
+              "turnId": null,
+              "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+            },
+            {
+              "id": "r:churn",
+              "role": "representative",
+              "turnId": "assistant-turn:m:churn",
+              "text": "지난 90일 해지 건부터 볼게요."
             }
           ]
         },
@@ -103,7 +119,7 @@
             "messageId": "m:rounding",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793851920000
+            "at": 1793795400000
           },
           {
             "id": "assistant-turn:m:summary",
@@ -113,38 +129,9 @@
             "at": 1793794320000
           },
           {
-            "id": "assistant-turn:m:rounding-work",
-            "messageId": "m:rounding-work",
-            "at": 1793855280000,
-            "status": "answered",
-            "displayStatus": "answered",
-            "proposal": {
-              "title": "반올림 규칙"
-            },
-            "work": {
-              "missionId": "intake",
-              "missionRevision": 3,
-              "workId": "rounding-work",
-              "title": "반올림 규칙",
-              "memberId": null,
-              "execution": "waiting",
-              "acceptance": "pending",
-              "unknown": false,
-              "started": true,
-              "startedAt": 1793855280000,
-              "endedAt": null,
-              "turnId": "assistant-turn:m:rounding-work",
-              "segment": 1,
-              "steps": {
-                "done": 1,
-                "total": 3
-              }
-            }
-          },
-          {
             "id": "assistant-turn:m:churn",
             "messageId": "m:churn",
-            "at": 1793855280000,
+            "at": 1793839200000,
             "status": "answered",
             "displayStatus": "answered",
             "proposal": {
@@ -167,14 +154,38 @@
               "steps": {
                 "done": 2,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
+          },
+          {
+            "id": "assistant-turn:m:calculation",
+            "messageId": "m:calculation",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793795040000
+          },
+          {
+            "id": "assistant-turn:m:oneline",
+            "messageId": "m:oneline",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793795160000
           }
         ],
         "decisions": [
           {
             "id": "rounding",
-            "at": 1793848320000,
+            "at": 1793794800000,
             "title": "반올림 규칙",
             "question": "반올림을 합계에서 한 번으로 바꿀까요?",
             "rows": [
@@ -199,6 +210,37 @@
             "title": "아침 브리핑",
             "turnIds": [
               "assistant-turn:m:rounding-work"
+            ],
+            "turns": [
+              {
+                "id": "assistant-turn:m:rounding-work",
+                "messageId": "m:rounding-work",
+                "at": 1793855280000,
+                "status": "answered",
+                "displayStatus": "answered",
+                "proposal": {
+                  "title": "반올림 규칙"
+                },
+                "work": {
+                  "missionId": "intake",
+                  "missionRevision": 3,
+                  "workId": "rounding-work",
+                  "title": "반올림 규칙",
+                  "memberId": null,
+                  "execution": "waiting",
+                  "acceptance": "pending",
+                  "unknown": false,
+                  "started": true,
+                  "startedAt": 1793855280000,
+                  "endedAt": null,
+                  "turnId": "assistant-turn:m:rounding-work",
+                  "segment": 1,
+                  "steps": {
+                    "done": 1,
+                    "total": 3
+                  }
+                }
+              }
             ]
           }
         ]
@@ -732,7 +774,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -741,7 +783,7 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
@@ -840,6 +882,16 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           },
@@ -869,6 +921,16 @@
               "steps": {
                 "done": 2,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }

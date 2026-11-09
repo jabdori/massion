@@ -33,7 +33,7 @@ for(const [role,values] of Object.entries(visual.typography)){
  }
 }
 for(const [component,values] of Object.entries(visual.components)){
- for(const [key,suffix] of [['radius','radius'],['pad','padding'],['fs','font-size'],['fw','font-weight'],['lh','line-height'],['bd','border'],['focus_ring','focus-width']]){
+ for(const [key,suffix] of [['radius','radius'],['pad','padding'],['fs','font-size'],['fw','font-weight'],['lh','line-height'],['bd','border'],['focus_ring','focus-width'],['shadow','shadow']]){
   if(values[key]!=null)add(name(component)+'-'+suffix,values[key]);
  }
  for(const key of ['height','editor_max_height'])if(typeof values[key]==='number')add(name(component)+'-'+name(key),px(values[key]));

@@ -153,6 +153,44 @@
   "conversation": {
    "column_max_width": 680,
    "note": "conversation column and composer share one centered column; with a pane open the column fills main minus 24px gutters"
+  },
+  "pages": {
+   "results_width": 1104,
+   "detail_width": 744,
+   "app_width": 880,
+   "gutter": 32,
+   "title_size": 20,
+   "title_line_height": 28,
+   "search_width": 220,
+   "search_height": 32,
+   "pill_radius": 999,
+   "top_height": 64,
+   "switch_knob": 16,
+   "switch_inset": 2,
+   "empty_width": 600,
+   "empty_icon": 44,
+   "profile_width": 280,
+   "control_height": 30,
+   "document_mark": 26,
+   "tile_minimum": 200,
+   "example_minimum": 260,
+   "schedule_label": 116,
+   "field_label": 96,
+   "space_18": 18,
+   "space_20": 20,
+   "space_24": 24,
+   "radius_5": 5,
+   "radius_7": 7,
+   "icon_9": 9,
+   "switch_width": 34,
+   "border_width": 1,
+   "small_gap": 2,
+   "stroke_width": 1.5,
+   "source_column": 180,
+   "member_column": 72,
+   "time_column": 104,
+   "controls_height": 54,
+   "table_header_height": 34
   }
  },
  "typography": {
@@ -553,6 +591,12 @@
    "lh": "20px",
    "width": 424,
    "height": 136
+  },
+  "pages-popup": {
+   "bd": "1px solid var(--line)",
+   "radius": "10px",
+   "pad": "16px",
+   "shadow": "0 8px 24px var(--shadow-color)"
   }
  },
  "rhythm": {
@@ -581,5 +625,9 @@
   "slow": ".3s",
   "ease": "cubic-bezier(.32,.72,0,1)",
   "reduced_motion": "0s"
+ },
+ "pages_provenance": {
+  "geometry": "Approved B10/B12/B17/B22 dc artboard inline measurements: page max widths 1104/744/880, gutters 32, title 20/28, search 220x32, top 64, profile 280. B10 source/member/time columns are 180/72/104; controls row 54 and table header 34.",
+  "retained_dimensions": "Existing results/schedules component dimensions moved to generated tokens; shared settings/sidebar/switch styles, Work-app tab styles and existing mobile breakpoints are preserved."
  }
 }

@@ -106,7 +106,7 @@ export class SchedulesService {
  async read(){
   const s=await this.#state(),now=this.#clock();
   return {revision:s?.revision??0,schedules:(s?.value.schedules??[]).map(x=>({id:x.id,...BRIEFING,assignee:representativeName,destination:'Conversation with '+representativeName,active:x.active,nextAt:x.nextAt,minute:x.minute,offset:x.offset,budget:{runs:x.budget.runs,used:x.used},
-   runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]],...display(r,now)==='running'?{deadlineAt:r.deadlineAt}:{}}))}))};
+   runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]],...(r.segment===undefined?{}:{segment:r.segment}),...display(r,now)==='running'?{deadlineAt:r.deadlineAt}:{}}))}))};
  }
  /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed, and `runDeadlineAt` while a run is still in time, so the page reads again when it turns unknown. A briefing read from a segment other than `current` carries its turns, read from that segment, so rollover never empties it. */
  async conversation(current?:number){

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {runInContext} from 'node:vm';
 import {copy} from '../src/ui-copy.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
@@ -65,15 +66,37 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  const rail=app.node('rail-apps');assert.equal(rail.hidden,false);const icon=rail.children[0]!;assert.equal(icon.attributes.get('aria-label'),'GitHub');assert.equal(icon.children[0]!.className,'app-branch');assert.equal(icon.children[0]!.textContent,'');assert.equal(icon.children[0]!.attributes.get('aria-hidden'),'true');
  await icon.fire('click');await settle();
  assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(icon.attributes.get('aria-current'),'page');
- const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,sequence('GitHub','jabdori/massion','Open','feat(assistant): answer the owner','#84','Merged',copy('sidebar.link.12')));
+ const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,sequence('GitHub','jabdori/massion',copy('sidebar.text.01'),'feat(assistant): answer the owner','#84',copy('sidebar.button.07'),copy('sidebar.link.12')));
  await app.all().find(n=>n.id==='app-row-84')!.fire('click');await settle();
- assert.match(app.node('app-view').textContent,/answer the owner and start Representative Work #84.*Open · jabdori.*Changes.*\+769 −39.*Files 2.*src\/assistant-service\.ts.*\+206 −0/);
+ assert.match(app.node('app-view').textContent,sequence('answer the owner and start Representative Work #84',copy('sidebar.text.01')+' · jabdori',copy('settings.button.08'),'+769 −39',copy('ui.pages.files',{count:2}),'src/assistant-service.ts','+206 −0'));
  // The Work room tab: a Work whose title names PR #84 gets a second tab drawn by the app.
  (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
  assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/Files 2/);
  await button(side,copy('sidebar.link.12'))[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,sequence(copy('sidebar.heading.01')));
+});
+
+test('app sidebar search and a folded merged group preserve real row selection without product writes',async()=>{
+ const {app,posted}=fixture();await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();
+ const byId=(id:string)=>app.all().find(n=>n.id===id)!;
+ assert.equal(app.node('sidebar-search').hidden,false);
+ assert.equal(byId('app-row-83'),undefined);await byId('app-group-1').fire('click');assert.ok(byId('app-row-83'));
+ app.node('sidebar-query').value='nothing matches';await app.node('sidebar-query').fire('input');assert.equal(byId('app-row-84'),undefined);
+ assert.deepEqual(posted,[]);
+});
+
+test('removing the selected app returns shared search before clearing its sidebar',async()=>{
+ const {app}=fixture();await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();
+ runInContext('appsList=[];renderAppSide()',app.context);
+ assert.equal(app.node('sidebar-search').parentElement?.id,'sidebar-controls');
+ await app.node('rail-chat').fire('click');assert.equal(app.node('page-chat').hidden,false);
+});
+
+test('generic app rows retain provider metadata and state',async()=>{
+ const {app}=fixture(true,[],[],[],[{id:'app-notes',name:'Notes',page:true,item:false,roomTab:null}],()=>({title:'Notes',groups:[{title:'Recent',rows:[{id:'n1',title:'First note',meta:'Saved',state:'Failed'}]}]}));await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ assert.match(app.node('side-app').textContent,/First note.*Saved · Failed/);
 });
 
 test('self-made apps are listed apart with their maker and source Work',async()=>{
@@ -107,7 +130,7 @@ test('app views carry the database feed: the page asks with the conversation fee
  const asked:[string,string|undefined][]=[];
  const {app}=fixture(true,[],[],[],undefined,(b,h)=>{asked.push([b.handler,h['X-Massion-Feed']]);return b.handler==='page'?{...page,feedId:'feed:page'}:item;});await settle();
  await app.node('rail-apps').children[0]!.fire('click');await settle();
- await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();
+ await app.all().find(n=>n.id==='app-group-1')!.fire('click');await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();
  assert.deepEqual(asked,[['page','feed:a'],['item','feed:page'],['item','feed:page']]);
 });
 
@@ -115,6 +138,7 @@ test('every app read draws only its newest request: an item selected A, B, A aga
  const pending:{b:any;done:()=>void}[]=[];
  const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?page:new Promise(done=>{const n=pending.length+1;pending.push({b,done:()=>done({title:'item '+b.ref+' #'+n,groups:[]})});}));await settle();
  await app.node('rail-apps').children[0]!.fire('click');await settle();
+ await app.all().find(n=>n.id==='app-group-1')!.fire('click');
  const row=(id:string)=>app.all().find(n=>n.id==='app-row-'+id)!;
  await row('83').fire('click');await row('84').fire('click');await settle();
  // The first row opens with the page (#1); then 83 (#2), 84 (#3), 84 again (#4). The newest answers first; the older ones arrive late.
