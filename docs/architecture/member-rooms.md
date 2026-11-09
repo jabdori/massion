@@ -124,3 +124,20 @@ fix, then exercised preflight without a provider call, exact selected execution,
 independent acceptance, reload and no replay using loopback mocks. Two headless
 theme flows checked collapsed placement, populated controls and 1440/390px
 visibility/overflow. See `verify-room-selection.mjs` and selection evidence.
+
+## Exact source-use inspection repair
+
+The source-use Work link opens `work-evidence-summary-<workId>`. Removing that
+legacy wrapper also removed the pinned source inspection destination. The room
+now supplies a scoped, initially collapsed source section under its check bar
+when source pins exist: exact document version/content/hash, original provenance
+and literal owner selection author/reason. The whole legacy state/budget/attempt
+inspector stays absent. Existing navigation opens its current ancestors and the
+accepted-text reader remains separate and deliberate.
+
+The original CI failure was reproduced, then passed without removing its checks.
+It additionally verifies v1 content and decisions in the room despite stored v2,
+then navigates v2 separately, rejects HTML interpretation and confirms zero writes.
+Related tests: 67 total, 53 passed, 14 environment-gated skips; typecheck passed.
+The final focused source/room batch passed 20 with two skips. Dark/light desktop
+and mobile source expansion passes in the existing room-selection browser driver.

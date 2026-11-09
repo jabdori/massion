@@ -52,3 +52,11 @@ steps and above the check bar; `-1440.png` and `-390.png` show the selected form
 `selection-interactions.json` records placement, retained choices and no overflow.
 The fixture host makes no provider calls; the client-to-HTTP unit/integration
 variant proves actual preflight, execution and reload using local mock providers.
+
+Exact pinned source inspection: the room-selection driver also seeds distinct v1
+and v2 documents, opens the check bar and its source details, and checks that the
+Work's v1 bytes, hash and literal selection decision remain visible (including
+escaped HTML-shaped text), with no v2 substitution or overflow. See
+`B7-source-{dark,light}-{1440,390}.png` and `sourceInspection` in the interaction
+report. The source-use integration test proves navigation into an accepted Work,
+then its exact accepted-text reader, and separately the Work pinned to v2.
