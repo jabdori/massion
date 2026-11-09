@@ -16,5 +16,5 @@
   "src/internal-teams.ts": "ee3112ce1688306913ae5d6a94d2cf3b7bc54ecb835199dc0f91a16c0d0ac583",
   "scripts/ui-contracts/gate.ts": "72120e71eb9e2b96c0cca57aff16ea8b96481b47ffbbaad6760ffc586c05ce51",
   "scripts/ui-contracts/run.mjs": "08368029142ed948797b4eb6536f7f6c4845c298ffdca8c073d81fcf4717fdee",
-  "scripts/ui-contracts/allow-list.json": "bbe48526c78133ae69cb478799b7f271b790f10ca9309318962d216e9a615cc6"
+  "scripts/ui-contracts/allow-list.json": "fa1913f907a31ee010a17875fab44cd5ba202ae32543590c457ca18c037af31b"
 }

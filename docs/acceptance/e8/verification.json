@@ -126,6 +126,10 @@
     "fullCliReason": "Full CLI requires all 150 rows; scoped validation uses the same official gate functions",
     "fullCapture": "CI-owned",
     "rebaselinePR": 125,
-    "rebaselineStateAtCheck": "OPEN"
+    "rebaselineStateAtCheck": "MERGED",
+    "rebaselineMain": "c045c97372642d95a7a2f7d2c3334a0e4841a977",
+    "finalScopedGateExit": 0,
+    "baselineAllowances": 958,
+    "candidateAllowances": 938
   }
 }
