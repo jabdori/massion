@@ -36,4 +36,27 @@ jobs:
         with:
           node-version: '24.19.0'
       - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run package:mac --prefix desktop
+      - name: Exercise the built app without displaying a window
+        run: npm run smoke:install --prefix desktop
+      - name: Archive the tested development app
+        shell: bash
+        run: |
+          app=$(find desktop/release -maxdepth 2 -name Massion.app -type d -print -quit)
+          test -n "$app"
+          version=$(node -p "require('./package.json').version")
+          ditto -c -k --sequesterRsrc --keepParent "$app" "desktop/release/Massion-${version}-macOS-$(uname -m)-unsigned.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS-development-app
+          path: desktop/release/*-unsigned.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macOS-install-smoke-evidence
+          path: desktop/smoke-artifacts/install
+          if-no-files-found: error
+          retention-days: 14
