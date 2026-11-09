@@ -35,7 +35,8 @@ export interface RuntimeAuthorization {
 }
 export interface RuntimeRole {identity:string;adapter:ProviderAdapter}
 export interface ConfiguredRuntimeOptions {
- moderateRoom?:(missionId:string,input:ModerationInput)=>Promise<unknown>;
+ serializeWrite?:<T>(action:()=>Promise<T>)=>Promise<T>;
+ moderateRoom?:(missionId:string,input:ModerationInput,write:<T>(action:()=>Promise<T>)=>Promise<T>,signal:AbortSignal)=>Promise<unknown>;
  runTimeoutMs?:number;enabled?:boolean; authorization?:RuntimeAuthorization; outputTokenCap:number; connectionBindings?:RuntimeConnectionBindings;
  executor:RuntimeRole; verifier:RuntimeRole; artifacts:TextArtifactStore;
  /** ADR 0003 §7: true when the model groups hold an available checker of a family none of these producers share. */
@@ -122,6 +123,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  readonly app:Application; private readonly options:ConfiguredRuntimeOptions;
  private draining=false;
  private writes:Promise<unknown>=Promise.resolve();
+ private readonly shadows=new Map<string,{job:Promise<unknown>;controller:AbortController}>();
  private readonly runs=new Map<Promise<RuntimeResult>,{key:string;admitted:boolean}>();
  private readonly controllers=new Map<string,{runId:string;controller:AbortController}>();
  constructor(store:Store<Mission>,options:ConfiguredRuntimeOptions){
@@ -135,8 +137,8 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   for(let i=0;i<MAX_TEAM_STEPS;i++)actors.push({id:options.executor.identity+':step:'+i,roles:['executor']});
   this.app=new Application(store,actors);
  }
- beginDrain(){this.draining=true;for(const owned of this.controllers.values())owned.controller.abort(new HostDrainError());}
- async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs.keys()]);if(hasUnsettledRuns(results))throw new Error('Owned runtime did not settle durably during local host drain');}
+ beginDrain(){this.draining=true;for(const shadow of this.shadows.values())shadow.controller.abort();for(const owned of this.controllers.values())owned.controller.abort(new HostDrainError());}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.runs.keys()]);await Promise.allSettled([...this.shadows.values()].map(s=>s.job));if(hasUnsettledRuns(results))throw new Error('Owned runtime did not settle durably during local host drain');}
  availability(mission:Mission){
   if(this.draining)return {ready:false,reason:"Local host is draining; no new run is admitted."};
   const {authorization:g,executor,verifier,outputTokenCap,enabled}=this.options;
@@ -164,8 +166,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  interrupt(missionId:string,workId:string){this.controllers.get(`${missionId}\0${workId}`)?.controller.abort();}
  private async snapshot(missionId:string){const s=await this.app.store.load(missionId);if(!s)throw new DomainError('Unknown Mission');return s;}
  private async current(missionId:string,workId:string){const snapshot=await this.snapshot(missionId);const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new DomainError('Unknown Work');return {snapshot,work};}
+ private serializeWrite<T>(action:()=>Promise<T>):Promise<T>{if(this.options.serializeWrite)return this.options.serializeWrite(action);const next=this.writes.then(action);this.writes=next.catch(()=>{});return next;}
  private dispatch(missionId:string,command:Command,actorId:string,commandId:string=randomUUID()){
-  const next=this.writes.then(()=>this.dispatchOne(missionId,command,actorId,commandId));this.writes=next.catch(()=>{});return next;
+  return this.serializeWrite(()=>this.dispatchOne(missionId,command,actorId,commandId));
  }
  private async dispatchOne(missionId:string,command:Command,actorId:string,commandId:string){
   const s=await this.snapshot(missionId);
@@ -293,7 +296,14 @@ export class ConfiguredTextRuntime implements WorkRuntime {
      await this.send(missionId,{type:'assign',workId,assignment:{...assignments[1]!,id:runId+':'+slot+':assignment',actorId:identity!,taskId:workId+':'+slot,extensionVersion:'massion.builtin.member-room@1'}},'runtime-representative');
     }
     await this.send(missionId,{type:'open-room',workId,content,producerAssignmentId:runId+':executor:assignment',challengerAssignmentId:runId+':challenge:assignment'},'runtime-representative');
-    const moderate=async(moment:2|3|4)=>{if(!this.options.moderateRoom)return;const {snapshot,work}=await this.current(missionId,workId);await this.options.moderateRoom(missionId,roomModerationInput(work,snapshot.revision,moment));await this.active(missionId,workId,controller);};
+    const moderate=async(moment:2|3|4)=>{
+     const key=JSON.stringify([missionId,workId]);if(!this.options.moderateRoom||this.draining||this.shadows.has(key))return;
+     const {snapshot,work}=await this.current(missionId,workId),input=roomModerationInput(work,snapshot.revision,moment),shadow=new AbortController();
+     // Only journal writes share the room queue; model latency never owns it.
+     const write=<T>(action:()=>Promise<T>)=>this.serializeWrite(action);
+     const job=Promise.resolve().then(()=>this.options.moderateRoom!(missionId,input,write,shadow.signal)).catch(()=>{});
+     this.shadows.set(key,{job,controller:shadow});void job.finally(()=>{if(this.shadows.get(key)?.job===job)this.shadows.delete(key);});
+    };
     await moderate(2);
     for(const slot of ['challenge','answer'] as const){
      const w=await this.active(missionId,workId,controller),identity=slot==='challenge'?challenger:this.options.executor.identity;

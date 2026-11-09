@@ -150,6 +150,11 @@ test('HTTP: decisions, proposals and member threads take exact fields; the conve
  assert.equal((await post('/assistant/decisions',{commandId:'d-1',decisionId,answer:'act',member:{name:'셈',shape:'drop',color:'agent-7'}})).status,400,'the owner sets a name and a shape only');
  assert.equal((await post('/assistant/decisions',{commandId:'d-1',decisionId,answer:'act',member:{name:'셈',shape:'drop'}})).status,200);
  view=await fetch(url('/assistant/conversation')).then(r=>r.json()) as any;assert.deepEqual(view.members.map((m:any)=>[m.name,m.look.shape]),[['셈','drop']]);const memberId=view.members[0].id;
+ const beforeGreeting=f.store.inspect().length,beforeCalls=f.prompts.length;
+ const greeting=await fetch(url('/assistant/conversation?member='+memberId)).then(r=>r.json()) as any;
+ assert.match(greeting.greeting.text,/안녕하세요, 셈이에요/);assert.equal(greeting.greeting.id,'greeting:'+memberId);assert.equal(greeting.segment,null);
+ const reread=await fetch(url('/assistant/conversation?member='+memberId)).then(r=>r.json()) as any;
+ assert.deepEqual(reread.greeting,greeting.greeting);assert.equal(f.store.inspect().length,beforeGreeting);assert.equal(f.prompts.length,beforeCalls,'the admission introduction is not a provider call');
  assert.equal((await fetch(url('/assistant/conversation?member=nobody'))).status,404);
  assert.equal((await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:'nobody'})).status,404);
  const sent=await post('/assistant/messages',{commandId:'m-1',segment:1,expectedRevision:0,text:'Hi',member:memberId});assert.equal(sent.status,200);

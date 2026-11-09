@@ -1,0 +1,33 @@
+{
+  "baselineCommit": "17742d213a7f41f7a78656084496cc7d1b2de3cd",
+  "screen": "B19",
+  "baseline": [
+    {
+      "theme": "dark",
+      "passed": 31,
+      "required": 43,
+      "failed": 12,
+      "errors": []
+    },
+    {
+      "theme": "light",
+      "passed": 31,
+      "required": 43,
+      "failed": 12,
+      "errors": []
+    }
+  ],
+  "candidate": {
+    "dark": {
+      "passed": 31,
+      "required": 43,
+      "failed": 12
+    },
+    "light": {
+      "passed": 31,
+      "required": 43,
+      "failed": 12
+    }
+  },
+  "scope": "B19 contains no first-greeting contract. Its 12 failures per theme also occur on the unchanged baseline; no B19 implementation changes are included."
+}

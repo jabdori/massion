@@ -1,0 +1,18 @@
+{
+  "baseline": "6d9007a25345ac390c148182ece197df26fcd214",
+  "scope": [
+    "B7-churn",
+    "B8-done",
+    "B8-fail",
+    "B15",
+    "B22-room",
+    "B22-room-steps"
+  ],
+  "captured": 194,
+  "previousExceptions": 162,
+  "scopedExceptions": 194,
+  "code": 0,
+  "added": [],
+  "resolved": [],
+  "errors": []
+}

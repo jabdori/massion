@@ -16526,6 +16526,581 @@
   ],
   "provenance": "Q13 named worker steps and dependencies."
  },
+ "ui.checkout.browser": {
+  "ko": "브라우저",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane"
+  ],
+  "provenance": "E6c recorded checkout; B4 approved artboard labels."
+ },
+ "ui.checkout.subtotal": {
+  "ko": "상품 금액",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane"
+  ],
+  "provenance": "E6c recorded checkout; B4 approved artboard labels."
+ },
+ "ui.effect.money": {
+  "ko": "{amount}원",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.question": {
+  "ko": "{amount} 결제할까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.action": {
+  "ko": "{amount} 결제",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.item": {
+  "ko": "상품",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.merchant": {
+  "ko": "판매처",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.amount": {
+  "ko": "금액",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.expiry": {
+  "ko": "결제 기한",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.until": {
+  "ko": "{time}까지",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.total-method": {
+  "ko": "{amount} · 배송비 포함 · {method}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.paid": {
+  "ko": "결제했어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.payment.failed": {
+  "ko": "결제 실패",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.rejected": {
+  "ko": "거절했어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.waiting": {
+  "ko": "실행 대기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.unknown": {
+  "ko": "응답 없음 · 다시 보내지 않음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.who": {
+  "ko": "{device}의 {agent}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.question": {
+  "ko": "{who}에게 처음 맡길까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.destination": {
+  "ko": "받는 곳",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.content": {
+  "ko": "보낼 내용",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.excluded": {
+  "ko": "보내지 않는 것",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.excluded-value": {
+  "ko": "기억 · 다른 일 · 연결 키",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.caution": {
+  "ko": "주의",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.irreversible": {
+  "ko": "보낸 요청은 거둘 수 없어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.target": {
+  "ko": "{agent} · {device}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.later": {
+  "ko": "{who}에게 맡기기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.sent": {
+  "ko": "{who}에게 맡김 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.sent-reply": {
+  "ko": "보냈어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.later-reply": {
+  "ko": "알겠어요. 아무것도 보내지 않았어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.failed": {
+  "ko": "보내지 못했어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.checkout.duration": {
+  "ko": "{count}분",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.checkout.pages": {
+  "ko": "{count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
+ },
+ "ui.effect.external.activity": {
+  "ko": "{time}에 보냈어요. 응답 대기예요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:sidebar"
+  ],
+  "provenance": "B16-sent recorded transmission time; arrival is not processing or completion."
+ },
+ "ui.effect.external.awaiting": {
+  "ko": "응답 대기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:conversation"
+  ]
+ },
+ "ui.effect.external.no-reply": {
+  "ko": "받은 답 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:conversation"
+  ]
+ },
+ "ui.effect.external.sent-at": {
+  "ko": "보냄 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:conversation"
+  ]
+ },
+ "ui.room.proposal": {
+  "ko": "제안",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.challenge": {
+  "ko": "반박",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.answer": {
+  "ko": "답변",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.concede": {
+  "ko": "인정",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.inferred": {
+  "ko": "추론",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.returned": {
+  "ko": "반려",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.escalated": {
+  "ko": "확인에 전달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.moderation": {
+  "ko": "판별 기록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.effect.external.request-one": {
+  "ko": "요청 한 문장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.request-many": {
+  "ko": "요청 {count}문장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.payload": {
+  "ko": "{request} · 저장소 이름 {repository} · 테스트 이름 {count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.payload-scope": {
+  "ko": "{request} · 범위 {scope}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.replied": {
+  "ko": "응답 받음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:conversation"
+  ],
+  "provenance": "E6c external receipt: a reply is not independent Work acceptance."
+ },
+ "ui.first.greeting": {
+  "ko": "안녕하세요, {member}예요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.question": {
+  "ko": "무엇부터 맡길까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.mail-question": {
+  "ko": "Gmail을 연결할까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.mail-later": {
+  "ko": "나중에: Gmail 앱",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.calculation": {
+  "ko": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.member-greeting": {
+  "ko": "안녕하세요, {member}이에요.\n{topic}을 맡을게요.\n무엇부터 맡길까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.login-pending": {
+  "ko": "로그인을 마친 뒤 확인해주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.login-check": {
+  "ko": "로그인 확인",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
  "ui.budget.title": {
   "ko": "월간 예산",
   "roles": [
@@ -16756,102 +17331,6 @@
   ],
   "used_in": [
    "B14-usage:settings"
-  ]
- },
- "ui.room.proposal": {
-  "ko": "제안",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.challenge": {
-  "ko": "반박",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.answer": {
-  "ko": "답변",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.concede": {
-  "ko": "인정",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.inferred": {
-  "ko": "추론",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.returned": {
-  "ko": "반려",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.escalated": {
-  "ko": "확인에 전달",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
-  ]
- },
- "ui.room.moderation": {
-  "ko": "판별 기록",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B18:conversation",
-   "B18-room-b:conversation",
-   "B22-room:conversation",
-   "B22-room-steps:conversation"
   ]
  }
 }

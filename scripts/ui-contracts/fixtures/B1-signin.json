@@ -2,16 +2,9 @@
   "screen": "B1-signin",
   "description": "First launch without a login. Deterministic API data; freeze browser Date to now.",
   "now": 1793855520000,
-  "readySelector": "#chat-log",
-  "steps": [
-    {
-      "selector": "#sidebar-toggle",
-      "action": "click"
-    }
-  ],
-  "gaps": [
-    "The production workbench has no first-launch sign-in page or provider login buttons."
-  ],
+  "readySelector": "#first-signin",
+  "steps": [],
+  "gaps": [],
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
@@ -23,17 +16,10 @@
       "body": {
         "feedId": "fixture:B2",
         "cursor": 1,
-        "head": 1,
+        "head": 0,
         "members": [],
         "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": []
-        },
+        "segment": null,
         "turns": [],
         "decisions": [],
         "briefings": []
@@ -87,7 +73,8 @@
         "connections": [],
         "runtime": {
           "connections": [],
-          "defaultRoutes": []
+          "defaultRoutes": [],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
@@ -96,7 +83,19 @@
         },
         "modelGroups": [],
         "fixtureModeEnabled": false,
-        "liveExecutionEnabled": false
+        "liveExecutionEnabled": false,
+        "logins": [
+          {
+            "providerType": "claude-code-cli",
+            "kind": "cli-login",
+            "status": "absent"
+          },
+          {
+            "providerType": "codex-cli",
+            "kind": "cli-login",
+            "status": "absent"
+          }
+        ]
       }
     },
     "/assistant/schedules": {
@@ -160,17 +159,10 @@
       "body": {
         "feedId": "fixture:B2",
         "cursor": 1,
-        "head": 1,
+        "head": 0,
         "members": [],
         "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": []
-        },
+        "segment": null,
         "turns": [],
         "decisions": [],
         "briefings": []

@@ -108,9 +108,9 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
-export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
- if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{transport:options.transport});}
+export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{discriminatorTimeoutMs?:number;transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
+ if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
  let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets);
- manager=new ConnectionWorkbench(store,artifacts,{transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
+ manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }
