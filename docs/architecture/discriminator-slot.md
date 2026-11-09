@@ -4,6 +4,23 @@ Implements [ADR 0004 §6](decisions/0004-member-rooms-mutual-challenge-and-discr
 
 ## Boundary
 
+E9b correction (owner-authorized 2026-11-10): new v3 Work defaults to a 60-second
+host deadline. Trusted host composition accepts `discriminatorTimeoutMs` (positive
+whole milliseconds, at most 60,000); `DiscriminatorService` also accepts
+`{timeoutMs, signal}` as its fourth argument. Each v3 reservation pins its actual
+timeout; v1/v2 retain their historical 2,000 ms policy. Thresholds are unchanged.
+New deadline or cancellation failures record `unconfirmed`, with no typed output
+and `applied: false`; historical `timeout` decisions still replay unchanged.
+
+Member rooms now launch tracked shadow jobs rather than awaiting model replies.
+One pending call per room skips later moments; it cannot delay a challenge,
+answer or independent check. Journal mutations share the runtime's existing write
+queue, not the model wait. Late replies attach only to the original input/feed
+reservation, including after acceptance, without changing the accepted Record.
+The manager tracks calls beyond run completion so host drain can abort them and
+release settings pins. A drain-aware store may refuse the final write; that
+remains an unconfirmed pending reservation, never a successful observation.
+
 The host assembles a versioned question for one of six moments. Agent prose occurs only in bounded `quotes` carrying author and message ordinal, unchanged in language. Speaker and stall moments accept host features only. Typed answers have exactly `kind`, `options`, `distribution`, `confidence`; they cannot produce messages, verdicts, permissions or acceptance. The initial threshold version is shadow-only for every moment and language. There is no enable setting or caller-supplied calibration certificate. Real held-out accuracy, applied-side precision, calibration error and injection measurements are prerequisites for a later change.
 
 Work owns the question identity `(workId, turnOrdinal, moment, questionVersion)`, input hash, model pin, threshold version and result. A host-only reservation precedes the call; a host-only result command commits the raw bounded output, latency, host time and decision through the existing atomic Mission/journal transaction. Replay reads the committed entry and never calls an adapter. A fresh interrupted reservation may be asked again under its original identity; expired, uncertain, closed-Work or changed-pin reservations receive a terminal failure record without another model call. The next turn can then proceed, and only the first committed result counts. Uncertain commits never authorize a call or application. Per-Work serialization and durable reservations protect overlapping questions and the 60-call cap. Three failures permanently select fixed rules. The existing output-token budget reserves a bounded amount before dispatch; missing usage retains that reservation and preserves the Work's known measured usage. New reservations leave two execution output caps free (the pinned runtime cap, or the conservative 4096-token profile maximum before a run is pinned). Reservations are cumulative, matching existing Work budgeting. Input token usage is recorded; monetary accounting remains unavailable just as for existing providers.

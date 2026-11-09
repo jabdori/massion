@@ -31,8 +31,9 @@ async function setup(t:test.TestContext,providerType='openrouter'){
  const root=await mkdtemp(join(tmpdir(),'massion-member-work-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let roomTurn:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
+ let moderationHook:((signal:AbortSignal)=>Promise<void>)|undefined;
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
-  const body=JSON.parse(String(init!.body));if(body.questions){const q=body.questions.moderation,keys=Object.keys(q.criteria),answer=q.type==='noul'?{type:'noul',noul:1}:{type:'choice',choice:keys[0],probabilities:Object.fromEntries(keys.map((k,i)=>[k,i?0:1])),confidence:1};return new Response(JSON.stringify({model:body.model,answers:{moderation:answer},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
+  const body=JSON.parse(String(init!.body));if(body.questions){if(moderationHook)await moderationHook(init!.signal as AbortSignal);const q=body.questions.moderation,keys=Object.keys(q.criteria),answer=q.type==='noul'?{type:'noul',noul:1}:{type:'choice',choice:keys[0],probabilities:Object.fromEntries(keys.map((k,i)=>[k,i?0:1])),confidence:1};return new Response(JSON.stringify({model:body.model,answers:{moderation:answer},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
   if(Object.hasOwn(prompt,'currentMessage')){prompts.push({model:body.model,prompt});return completion(body.model,script.shift()??v1('Hello.'));}
   calls.push(body.model);
   if(prompt.teamPlanning)return completion(body.model,JSON.stringify(plan?plan(prompt.teamPlanning.steps):{steps:prompt.teamPlanning.steps.map((title:string,i:number)=>({role:i===0?'Research':'Writing',title,dependsOn:i?[i-1]:[],...(title==='Optional comparison'?{skipReason:'No comparison requested'}:{})}))}));
@@ -62,7 +63,7 @@ async function setup(t:test.TestContext,providerType='openrouter'){
   return (await members.read()).members.find(x=>x.name===name)!;
  };
  const chatFor=(member:{id:string;name:string;modelGroup:string},ownerStore?:Store<any>)=>new AssistantService(store,product,m,{clock,member:{id:member.id,name:member.name,modelGroup:member.modelGroup},...(ownerStore?{ownerStore}:{})});
- return {setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
+ return {setModerationHook:(hook:typeof moderationHook)=>{moderationHook=hook;},setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
 }
 
 async function runningWork(f:Awaited<ReturnType<typeof setup>>,t:test.TestContext){
@@ -689,4 +690,20 @@ for(const mode of ['shadow','same-model','tight-budget'])test('Q14 discriminator
  f.script.push(v2('On it.','Moderated room','Quill'));await f.say(f.assistant,'Moderated room');await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({blocker:w.blocker,effects:w.effects.map(e=>({status:e.status,receipt:e.receipt?.slice(-500)})),moderation:w.moderation}));if(sameModel){assert.equal(w.moderation,undefined);return;}if(mode==='tight-budget'){assert.ok((w.moderation??[]).every(e=>e.input.turnOrdinal>1));return;}assert.equal(w.moderation?.length,3);assert.deepEqual(w.moderation!.map(e=>e.input.moment),[2,3,4]);
  assert.ok(w.moderation!.every(e=>e.model.model==='jev-fixture'&&e.result?.applied===false));assert.equal(w.room!.issue!.status,'escalated');validateMissionJournalLineage(f.store.inspect() as any);
+ });
+
+for(const mode of ['answer','drain','next-room'])test('slow shadow moderation '+mode+' after acceptance never delays a room turn',async t=>{
+ const f=await setup(t,'compatible');await f.admit();let entered=()=>{},release=()=>{};
+ const started=new Promise<void>(r=>{entered=r;}),held=new Promise<void>(r=>{release=r;});
+ t.after(release);f.setModerationHook(async signal=>{entered();signal.addEventListener('abort',release,{once:true});await held;});
+ await f.m.save(()=>f.m.saveModelGroup({id:'moderator',name:'Moderator',description:'Typed decisions',role:'discriminator',profileIds:[f.profile('jev-fixture')],expectedConfigHash:f.m.list().configHash}));
+ const run=f.m.run.bind(f.m);f.m.run=async(missionId,workId,runId,revision,choice,actor)=>{await f.product.reviseBudget(missionId,{commandId:'slow-shadow-budget-'+workId,expectedRevision:revision,workId,limit:20000,reason:'Fixture shadow call'});return run(missionId,workId,runId,revision+1,choice,actor);};
+ f.script.push(v2('On it.','Slow moderation','Quill'));await f.say(f.assistant,'Slow moderation');
+ await Promise.race([Promise.all([started,f.assistant.idle()]),new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('Room blocked on shadow model')),1500);timer.unref();})]);
+ const before=(await f.intake()).works.at(-1)!;assert.equal(before.acceptance,'accepted');assert.equal(before.moderation?.length,1);assert.equal(before.moderation![0]!.result,null);assert.deepEqual(before.room!.messages.map(m=>m.kind),['proposal','challenge','concede']);
+ const record=structuredClone(before.record);
+ if(mode==='next-room'){f.setRoomTurn(async prompt=>{release();return JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:'Grounds retained',quote:prompt.roomTurn==='challenge'?'Answer bounded':''});});f.script.push(v2('On it.','Next room','Quill'));await f.say(f.assistant,'Next room');await f.assistant.idle();const next=(await f.intake()).works.at(-1)!;assert.equal(next.acceptance,'accepted',JSON.stringify({execution:next.execution,blocker:next.blocker,run:next.runtimeRun,effects:next.effects.map(e=>({id:e.id,status:e.status}))}));}
+ else if(mode==='drain')await f.m.drain();else release();
+ const until=Date.now()+1500;while(!(await f.intake()).works.find(w=>w.id===before.id)!.moderation![0]!.result&&Date.now()<until)await new Promise(r=>setTimeout(r,5));
+ const after=(await f.intake()).works.find(w=>w.id===before.id)!;assert.equal(after.moderation![0]!.result!.decision,mode==='drain'?'unconfirmed':'shadow');assert.equal(after.moderation![0]!.result!.applied,false);assert.deepEqual(after.record,record);assert.equal(after.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect() as any);
  });
