@@ -26,4 +26,3 @@ export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
  child.on('close',code=>finish(true,code));
  child.stdin.on('error',()=>{});child.stdin.end(invocation.stdin);
 });
-
