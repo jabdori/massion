@@ -9,9 +9,7 @@
       "action": "click"
     }
   ],
-  "gaps": [
-    "The production conversation has no first-launch suggestion buttons."
-  ],
+  "gaps": [],
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
@@ -24,24 +22,10 @@
       "body": {
         "feedId": "fixture:B2",
         "cursor": 1,
-        "head": 1,
+        "head": 0,
         "members": [],
         "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": [
-            {
-              "id": "r:hello",
-              "role": "representative",
-              "turnId": null,
-              "text": "안녕하세요, 하나예요. 무엇부터 맡길까요?"
-            }
-          ]
-        },
+        "segment": null,
         "turns": [],
         "decisions": [],
         "briefings": []
@@ -95,7 +79,8 @@
         "connections": [],
         "runtime": {
           "connections": [],
-          "defaultRoutes": []
+          "defaultRoutes": [],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
@@ -104,7 +89,14 @@
         },
         "modelGroups": [],
         "fixtureModeEnabled": false,
-        "liveExecutionEnabled": false
+        "liveExecutionEnabled": false,
+        "logins": [
+          {
+            "providerType": "codex-cli",
+            "kind": "cli-login",
+            "status": "detected"
+          }
+        ]
       }
     },
     "/assistant/schedules": {
@@ -168,24 +160,10 @@
       "body": {
         "feedId": "fixture:B2",
         "cursor": 1,
-        "head": 1,
+        "head": 0,
         "members": [],
         "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": [
-            {
-              "id": "r:hello",
-              "role": "representative",
-              "turnId": null,
-              "text": "안녕하세요, 하나예요. 무엇부터 맡길까요?"
-            }
-          ]
-        },
+        "segment": null,
         "turns": [],
         "decisions": [],
         "briefings": []

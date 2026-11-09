@@ -1,0 +1,86 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+    "occurrence": 2
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 2
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+    "occurrence": 2
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 2
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1
+  }
+]

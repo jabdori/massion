@@ -1,0 +1,20 @@
+contract B1-first (B1-first 첫 일 찾기 · 메일 연결 없음) vs /Users/code/orca/workspaces/massion/e7-first-experience/docs/acceptance/e7/snapshots/dark/B1-first.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    header       link     "사이드바 보기" -> button "사이드바 보기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation link     "연결" -> link "연결"
+  ok    conversation link     "나중에" -> link "나중에"
+  ok    conversation link     "맡기기" -> link "맡기기"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":57,"strings":7,"sentences":1,"longest":16} proto {"chars":83,"strings":9,"sentences":1,"longest":16} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+PASS: 0 failures, 0 warnings, 14 required elements
