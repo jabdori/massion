@@ -162,3 +162,16 @@ test('default runner: argv-only stdin/stdout, SIGKILL on timeout and output over
   setTimeout(() => controller.abort(), 100);
   assert.equal((await pending).aborted, true);
 });
+
+test('overlapping identical provider invocations share one launch and the original outcome',async()=>{
+ let sends=0;const adapter=cliProfileFactory('codex-cli/v1',{mode:'local-http-mock',runner:async()=>{sends++;await new Promise(r=>setTimeout(r,20));return ok(codex());}}).create(profile('codex-cli','codex-cli/v1','m'));
+ const input=request(),[a,b]=await Promise.all([adapter.invoke(input),adapter.invoke(input)]);assert.equal(sends,1);assert.deepEqual(a,b);
+ assert.deepEqual(await adapter.invoke(input),a);assert.equal(sends,1);
+ const changed=await adapter.invoke({...input,instruction:'Different request'});assert.equal(changed.status,'failed');assert.equal(sends,1);
+});
+
+test('process timeout offers bounded cleanup before forced termination',async()=>{
+ const {spawnCliRunner}=await import('../src/cli-agent-providers.ts');
+ const result=await spawnCliRunner({command:process.execPath,args:['-e','process.on("SIGTERM",()=>{process.stdout.write("cleaned");process.exit(0)});setInterval(()=>{},1000)'],stdin:'',cwd:process.cwd(),env:{},timeoutMs:300,maxOutputBytes:1024,signal:signal()});
+ assert.equal(result.timedOut,true);assert.equal(result.stdout,'cleaned');
+});
