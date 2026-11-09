@@ -38,7 +38,7 @@ test('all B17-empty templates are available and author an owner request without 
  const {app,state}=fixture();await settle();await app.node('rail-schedules').fire('click');await settle();await app.all().find(n=>n.id==='schedule-new')!.fire('click');
  for(const id of ['weekly-expenses','price-watch','monthly-subscriptions','meeting-preparation','weekend-groceries'])assert.ok(app.node('schedule-example-'+id),id);
  await app.node('schedule-example-weekly-expenses').fire('click');app.node('schedule-create-request').value='Classify only the receipt files I supplied.';
- await app.node('schedule-create').fire('submit');await settle();assert.deepEqual(state.posted.at(-1),{commandId:state.posted.at(-1).commandId,action:'create',kind:'weekly-expenses',minute:540,offset:-new Date().getTimezoneOffset(),budget:{runs:30},request:'Classify only the receipt files I supplied.'});
+ await app.node('schedule-create').fire('submit');await settle();assert.deepEqual(state.posted.at(-1),{commandId:state.posted.at(-1).commandId,action:'create',kind:'weekly-expenses',minute:540,offset:-new Date().getTimezoneOffset()||0,budget:{runs:30},request:'Classify only the receipt files I supplied.'});
  assert.equal(rows(app).at(-1)!.attributes.get('aria-current'),'page');assert.equal(app.node('schedule-detail').hidden,false);
 });
 

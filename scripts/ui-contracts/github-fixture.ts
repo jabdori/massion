@@ -10,6 +10,7 @@ import type {ScreenFixture} from './fixture-host.ts';
 /** 추가된 검토 상태는 실제 전이로 만들고 GitHub 응답은 모의 네트워크로만 읽습니다. */
 export async function githubScreenFixture(template:ScreenFixture){
  const fixture=structuredClone(template),owner:Actor={id:'local-owner',roles:['owner']},rep:Actor={id:'representative',roles:['representative']};
+ for(const step of fixture.steps)if('selector' in step&&step.selector==='[id="pane-tab-app:app-github:84"]')step.selector='[id="pane-tab-app:app-github:84:intake/pr84"]';
  const handlers=new Map<string,(input:unknown)=>Promise<unknown>>();
  // 고정된 번들 코드만 실행합니다. fixture에는 실제 네트워크나 외부 패키지 입력이 없습니다.
  runInNewContext(GITHUB_APP.source,{massion:{handle:(name:string,fn:(input:unknown)=>Promise<unknown>)=>handlers.set(name,fn),fetch:async(url:string)=>githubFixture(url)}},{timeout:1000,contextCodeGeneration:{strings:false,wasm:false}});

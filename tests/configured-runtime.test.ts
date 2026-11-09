@@ -217,3 +217,8 @@ test('malformed binary output is blocked before file effects and never becomes a
   assert.equal(result.status,'blocked');assert.equal(w.record,undefined);assert.equal(w.artifact,undefined);assert.equal(s.calls.length,1);assert.equal(w.effects.some(e=>e.id==='invalid-binary:artifact'),false);
  }
 });
+
+test('a binary first result preserves the parent ownership boundary for later text output',async t=>{
+ const s=await setup(t,{binaryOutput:JSON.stringify({format:'massion-result/v1',kind:'application/pdf',text:artifactText})});await s.admit();const result=await s.product.run(s.missionId,s.workId,'binary-first',2);assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');
+ const text=await s.config.artifacts.write('later-text',1,'A later text result');assert.equal(await s.config.artifacts.read(text),'A later text result');
+});

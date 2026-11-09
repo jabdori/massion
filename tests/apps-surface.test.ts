@@ -270,24 +270,26 @@ test('a replaced database invalidates pending GitHub reads and clears cached rev
  assert.doesNotMatch(app.node('side-app').textContent,/feat\(assistant\)/);assert.equal(app.node('app-view').textContent,'');
 });
 
-test('binding a PR to a fresh Work uses existing source writes once and stops after an unknown receipt',async()=>{
- for(const lost of [false,true]){
+test('binding a PR sends once, retains unknown locks and releases confirmed rejections for an owner retry',async()=>{
+ for(const failure of ['none','unknown','capture-reject','attach-reject']){
   const {app}=fixture();await settle();
-  (app.context as any).bindLost=lost;
+  (app.context as any).bindFailure=failure;
   runInContext(`
    globalThis.bindCalls=[];globalThis.bindRelease=null;
    globalThis.bindTab={key:'review-tab',appTab:{id:'app-github',ref:'84',missionId:'intake',workId:'fresh'}};
    globalThis.bindView={github:{repository:'jabdori/massion',number:84,headSha:'a'.repeat(40),url:'https://github.com/jabdori/massion/pull/84'}};
    snapshot={revision:1,value:{id:'intake',documents:[],works:[{id:'fresh',execution:'queued',acceptance:'pending',effects:[],assignments:[],attempts:[{status:'queued'}],tasks:[{status:'queued'}]}]}};
    selectedId='intake';feedId='feed:a';paneActive=bindTab.key;busy=false;loading=false;reconnectRequired=false;unknownOperation=null;recoveryProblem=null;
-   write=async(path,body)=>{bindCalls.push({path,body});if(path.endsWith('/documents')){await new Promise(done=>{bindRelease=done;});if(bindLost){unknownOperation={commandId:body.commandId};return false;}snapshot.value.documents.push({...body.document,contentSha256:'b'.repeat(64)});snapshot.revision++;}return true;};
+   write=async(path,body)=>{bindCalls.push({path,body});if(path.endsWith('/documents')){await new Promise(done=>{bindRelease=done;});if(bindFailure==='unknown'){unknownOperation={commandId:body.commandId};return false;}if(bindFailure==='capture-reject')return false;snapshot.value.documents.push({...body.document,contentSha256:'b'.repeat(64)});snapshot.revision++;}if(path.endsWith('/work-source')&&bindFailure==='attach-reject')return false;return true;};
    globalThis.bindButton=document.createElement('button');
    void appsBindReview(bindTab,bindView,bindButton);void appsBindReview(bindTab,bindView,bindButton);
   `,app.context);await settle();
   assert.equal((app.context as any).bindCalls.length,1);(app.context as any).bindRelease();await settle();
-  const calls=(app.context as any).bindCalls;assert.equal(calls.length,lost?1:2);
+  const calls=(app.context as any).bindCalls;assert.equal(calls.length,['unknown','capture-reject'].includes(failure)?1:2);
   const doc=JSON.parse(calls[0].body.document.content);assert.equal(doc.headSha,'a'.repeat(40));assert.equal(doc.format,'github-review/v1');
-  if(!lost){assert.equal(calls[1].path,'/missions/intake/work-source');assert.equal(calls[1].body.expectedRevision,2);assert.equal(calls[1].body.workId,'fresh');}
+  if(['none','attach-reject'].includes(failure)){assert.equal(calls[1].path,'/missions/intake/work-source');assert.equal(calls[1].body.expectedRevision,2);assert.equal(calls[1].body.workId,'fresh');}
+  assert.equal(runInContext("appBindings.has('feed:a:intake/fresh')",app.context),['none','unknown'].includes(failure));
+  if(failure.endsWith('reject')){assert.equal((app.context as any).bindButton.disabled,false);(app.context as any).bindFailure='none';const count=calls.length;runInContext('void appsBindReview(bindTab,bindView,bindButton)',app.context);await settle();assert.equal(calls.length,count+1);(app.context as any).bindRelease();await settle();assert.equal(calls.length,count+2);}
  }
 });
 

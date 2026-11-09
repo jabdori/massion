@@ -292,7 +292,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    await this.active(missionId,workId,controller);
    const effectId=`${runId}:artifact`;await this.send(missionId,{type:'admit-effect',workId,effect:{id:effectId,taskId:`${workId}:executor`,status:'pending',target:'bounded text artifact',authority:g.id},reserve:0},this.options.executor.identity);
    let artifact:Artifact;
-   try{controller.signal.throwIfAborted();artifact=binary?await this.binaryArtifacts.write(hash({missionId,workId}),1,binary.kind,binary.bytes):await this.options.artifacts.write(hash({missionId,workId}),1,executed.output!);}
+   try{controller.signal.throwIfAborted();if(binary){await this.options.artifacts.initialize();artifact=await this.binaryArtifacts.write(hash({missionId,workId}),1,binary.kind,binary.bytes);}else artifact=await this.options.artifacts.write(hash({missionId,workId}),1,executed.output!);}
    catch(error){if(controller.signal.aborted)throw error;await this.send(missionId,{type:'receipt',workId,effectId,outcome:'unknown',receipt:'Artifact write did not produce a durable receipt; inspect content-addressed storage before resolution.',usage:null},this.options.executor.identity);return this.result(missionId,workId);}
    controller.signal.throwIfAborted();await this.send(missionId,{type:'receipt',workId,effectId,outcome:'succeeded',receipt:JSON.stringify({sha256:artifact.sha256,path:artifact.path,binding}),usage:0},this.options.executor.identity);
    await this.send(missionId,{type:'publish-artifact',workId,artifact},this.options.executor.identity);

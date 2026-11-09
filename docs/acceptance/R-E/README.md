@@ -24,3 +24,9 @@ CI owns the full suite and the complete blocking screen gate. The unchanged B10-
 The portable backup format remains text-only and explicitly rejects a Mission containing binary results instead of silently omitting files. Binary backup/restore requires a follow-up format migration. PDF support is the static printable-ASCII subset; PNG is bounded non-interlaced RGB. PDF preview draws the decoded static text, while Original preserves the actual PDF bytes. Schedule times retain the existing fixed UTC-offset/DST limit. GitHub retains the existing single repository and bounded first-page reads. Live-provider, real-GitHub and real-DB execution were not run locally.
 
 Local test logs: `/private/tmp/re-final-related.txt`, `/private/tmp/re-schedule-panel-final.txt`, `/private/tmp/re-contracts-final.txt`. The earlier portable regression run reproduced the already documented macOS Turkish-locale directory-realpath failure; it was not changed by this slice.
+
+## Review regressions
+
+The independent review's binary-first storage failure was reproduced: a nested binary directory could precede the parent text ownership marker. The normal runtime now initializes the existing text store before its first binary write; a binary-first then text-write regression passes. Confirmed GitHub capture/attachment rejections release their private binding lock for an explicit owner retry, while unresolved outcomes retain the lock. The same client test covers both rejection stages and lost receipts.
+
+UTC schedule request assertions normalize JSON's `-0` to `0`. The current Work-scoped PR tab identity is reflected in the fixture interaction. Long commit messages keep their complete title for accessibility/hover while their displayed line remains within the existing pane text budget. The affected run passed 72 tests with three existing real-DB skips; typecheck passed.
