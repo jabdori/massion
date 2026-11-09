@@ -34,3 +34,13 @@ test('the GitHub catalog produces real-shaped external identity and commit histo
  const commits=view.groups.find(g=>g.title.startsWith('Commits '));assert.ok(commits);assert.ok(commits.rows.length>0);assert.match(commits.rows[0]!.meta!,/\d\d:\d\d/);
  assert.equal(called.some(url=>url.endsWith('/pulls/84/commits')),true);
 });
+
+test('long commit subjects stay within the view boundary without losing the PR details',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ for(const message of ['x'.repeat(513),'x'.repeat(510)+'😀suffix']){
+  const handlers=new Map<string,(input:unknown)=>Promise<unknown>>();
+  runInNewContext(GITHUB_APP.source,{massion:{handle:(name:string,fn:(input:unknown)=>Promise<unknown>)=>handlers.set(name,fn),fetch:async(url:string)=>{const r=githubFixture(url);if(url.endsWith('/commits')){const commits=JSON.parse(r.body);commits[0].commit.message=message;return {...r,body:JSON.stringify(commits)};}return r;}}},{timeout:1000,contextCodeGeneration:{strings:false,wasm:false}});
+  const view=checkView(await handlers.get('item')!({ref:'84'})),subject=view.groups.find(g=>g.title.startsWith('Commits '))!.rows[0]!.title;
+  assert.ok(subject.length<=512);assert.ok(subject.isWellFormed());assert.ok(subject.endsWith('…'));assert.equal(view.github!.number,84);assert.ok(view.groups.some(g=>g.title.startsWith('Files ')));
+ }
+});

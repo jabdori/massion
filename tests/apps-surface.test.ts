@@ -298,3 +298,11 @@ test('the catalog update control reuses install admission and the owner decision
  const {app,posted}=fixture(true,[],[],[],undefined,undefined,old);await settle();await open(app);await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  await button(app.node('settings-apps-body'),copy('ui.action.update'))[0]!.fire('click');await settle();assert.equal(posted.length,1);assert.equal(posted[0]!.body.action,'install');assert.equal(posted[0]!.body.catalogId,'github');
 });
+
+test('a completed page refresh preserves a PR selected while that refresh was pending',async()=>{
+ let pages=0,release!:(value:unknown)=>void;
+ const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?(++pages===1?page:new Promise(done=>release=done)):{title:'Selected PR '+b.ref,groups:[]});await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();runInContext('void appsRefresh()',app.context);await settle();
+ await app.all().find(n=>n.id==='app-group-1')!.fire('click');await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();assert.equal(app.node('app-view').textContent,'Selected PR 83');
+ release(page);await settle();assert.equal(app.node('app-view').textContent,'Selected PR 83');assert.equal(runInContext('appItem',app.context),'83');
+});

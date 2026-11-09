@@ -6,11 +6,12 @@ const source=String.raw`const REPO='jabdori/massion';
 const get=async path=>{const r=await massion.fetch('https://api.github.com/repos/'+REPO+path,{secret:'github-token'});if(r.status!==200)throw new Error('GitHub '+r.status);return JSON.parse(r.body);};
 const when=s=>s?s.slice(0,16).replace('T',' '):'';
 const state=p=>p.merged_at?'Merged':p.state==='open'?'Open':'Closed';
+const subject=message=>{const line=message.split(/[\r\n]/,1)[0].replace(/[\u0000-\u001f\u007f]/g,' ');return line.length<=512?line:line.slice(0,511).replace(/[\uD800-\uDBFF]$/u,'')+'…';};
 const identity=p=>({repository:REPO,number:p.number,headSha:p.head.sha,url:p.html_url});
 const row=p=>({id:String(p.number),title:p.title,meta:'#'+p.number+' · '+when(p.merged_at||p.created_at),state:state(p),github:identity(p)});
 massion.handle('page',async()=>{const pulls=await get('/pulls?state=all&per_page=30');return {title:'GitHub',meta:REPO,groups:[{title:'Open',rows:pulls.filter(p=>p.state==='open').map(row)},{title:'Merged',rows:pulls.filter(p=>p.merged_at).map(row)}]};});
 massion.handle('item',async({ref})=>{const p=await get('/pulls/'+ref),files=await get('/pulls/'+ref+'/files'),commits=await get('/pulls/'+ref+'/commits');
- return {title:p.title+' #'+p.number,github:identity(p),meta:state(p)+' · '+p.user.login+' · '+p.head.ref+' → '+p.base.ref,fields:[['Changes','+'+p.additions+' −'+p.deletions]],groups:[{title:'Files '+files.length,rows:files.map(f=>({id:f.filename,title:f.filename,meta:'+'+f.additions+' −'+f.deletions}))},{title:'Commits '+commits.length,rows:commits.map(c=>({id:c.sha,title:c.commit.message.split('\n')[0],meta:c.sha.slice(0,7)+' · '+when(c.commit.committer.date)}))}]};});`;
+ return {title:p.title+' #'+p.number,github:identity(p),meta:state(p)+' · '+p.user.login+' · '+p.head.ref+' → '+p.base.ref,fields:[['Changes','+'+p.additions+' −'+p.deletions]],groups:[{title:'Files '+files.length,rows:files.map(f=>({id:f.filename,title:f.filename,meta:'+'+f.additions+' −'+f.deletions}))},{title:'Commits '+commits.length,rows:commits.map(c=>({id:c.sha,title:subject(c.commit.message),meta:c.sha.slice(0,7)+' · '+when(c.commit.committer.date)}))}]};});`;
 export const GITHUB_APP:AppPackage={manifest:{format:'massion.app.v1',id:'github',name:'GitHub',version:'1.4.1',description:'Pull requests',
  permissions:{read:['Repositories','Pull requests','Check results'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub token'}],events:['PR opened','PR merged']},
  contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},handlers:['page','item']},source};

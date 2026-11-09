@@ -27,3 +27,5 @@ The host assembles review state from stored Work and validated document pins. Ap
 The bundled GitHub app is version 1.4.1. Existing installations expose the available catalog update in Settings, using the existing install/update command and permission decision path. No new app authority or automatic external action is introduced. Provider fields follow [GitHub's pull-request API](https://docs.github.com/en/rest/pulls/pulls) and [commit API](https://docs.github.com/en/rest/commits/commits). The existing single-repository and bounded first-page scope remains.
 
 See [R-E acceptance evidence](../acceptance/R-E/README.md) for the final checks, contract exception removals and limits.
+
+Admission uncertainty includes an answered Representative turn whose outcome was not durably recorded. Missing outcomes and missing/failed source reads never become known rejection or retry permission. GitHub commit subjects are bounded to the view's field limit before validation; the display uses a shorter line with the bounded subject available for hover/accessibility. Cursor/deadline refresh tracks item-selection generation and preserves an owner's newer selection.
