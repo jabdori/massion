@@ -25,7 +25,7 @@ import {ConnectionLifecycle,ConnectionLifecycleRefusedError} from './connection-
 import type {ConnectionFacts,ConnectionTarget} from './connection-lifecycle.ts';
 import {copy} from './ui-copy.ts';
 import {MembersService} from './members.ts';
-import {DevicesService} from './devices.ts';
+import {DevicesService,DeviceAdmissionRefusedError} from './devices.ts';
 import type {DeviceAdapter} from './devices.ts';
 import {SchedulesService} from './schedules.ts';
 import {PermissionsService} from './permissions.ts';
@@ -165,7 +165,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&url.pathname==='/assistant/works'){if([...url.searchParams.keys()].length)throw new RequestError(400,'No query is accepted');send(200,await assistant.works());return;}
    if(method==='GET'&&(url.pathname==='/assistant/members'||url.pathname==='/assistant/devices')){if(url.searchParams.size&&url.searchParams.size!==3)throw new RequestError(400,'Exact lifecycle receipt query required');const state=await store.readState(),service=url.pathname==='/assistant/members'?members:devices,view=url.searchParams.size?await service.outcome(Object.fromEntries(url.searchParams)):await service.read();if((await store.readState()).feedId!==state.feedId)throw new FeedAdmissionError();send(200,{...view,feedId:state.feedId});return;}
    if(method==='POST'&&url.pathname==='/assistant/members'){const body=await readBody();callerCommand(body.commandId);try{sendCommit(await members.act(body));}catch(error){if(error instanceof DomainError)send(error.code==='denied'?403:error.code==='conflict'?409:400,{error:error.message,outcome:'rejected',phase:'admission'});else throw error;}return;}
-   if(method==='POST'&&url.pathname==='/assistant/devices'){const body=await readBody();callerCommand(body.commandId);sendCommit(await devices.act(body,mutationFeed));return;}
+   if(method==='POST'&&url.pathname==='/assistant/devices'){const body=await readBody();callerCommand(body.commandId);try{sendCommit(await devices.act(body,mutationFeed));}catch(error){if(error instanceof DeviceAdmissionRefusedError)send(error.code==='denied'?403:error.code==='conflict'?409:400,{error:error.message,outcome:'rejected',phase:'admission'});else throw error;}return;}
    if(method==='POST'&&url.pathname==='/members/group'){if(!options.connections)throw new RequestError(503,'Connection setup is not enabled by this host');const body=await readBody();callerCommand(body.commandId);sendCommit(await members.setGroup(body,options.connections));return;}
    if(method==='GET'&&url.pathname==='/assistant/conversation'){if([...url.searchParams.keys()].some(k=>k!=='segment'&&k!=='member')||url.searchParams.getAll('segment').length>1||url.searchParams.getAll('member').length>1)throw new RequestError(400,'Only an optional segment and member query are accepted');const raw=url.searchParams.get('segment'),who=url.searchParams.get('member');if(raw!==null&&!/^[1-9][0-9]{0,15}$/.test(raw))throw new RequestError(400,'Invalid segment');queueMonthlyReconcile();
     // The Representative's read carries the admission decisions; every read lists members for the sidebar.

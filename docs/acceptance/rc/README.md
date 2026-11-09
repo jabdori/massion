@@ -296,3 +296,20 @@ full verification and all-screen gate passed, but its three E2E attempts failed
 at different browser waits/clicks; the first two failure snapshots were empty.
 Those runs are retained as failure evidence, not counted as successful validation.
 Current-head CI and Codex checks remain authoritative.
+
+## Concurrent discovery and device refusal
+
+A concurrent reproduction showed discovery using the previous key while replacement
+was pending, and an old in-flight cache write could outlive invalidation. Discovery
+now refuses pending/unknown settings, and a replacement advances its generation,
+waits for that connection's existing cache writes, then invalidates storage before
+writing the key. Discovery checks its generation again after cache persistence.
+Both concurrent regressions failed first, then pass with empty caches after restart.
+
+A real two-command HTTP reproduction showed a second device command refused before
+its durable claim while the first adapter was pending. Mark only that pre-effect
+phase as an explicit admission refusal, so the second tab does not await a receipt
+for a nonexistent command. A post-effect settlement error remains uncertain.
+The HTTP reproduction failed first; 50 affected cache/lifecycle/device/client/HTTP
+checks and typecheck pass. The previous head's E2E passed 14/14 on its second attempt;
+current-head CI and review supersede that historical outcome.

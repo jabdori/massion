@@ -80,3 +80,10 @@ claim stays fenced. Key replacement must invalidate persisted discovery as well
 as memory, so restart cannot restore the previous account's model metadata.
 CLI login/status drain must await the underlying runner's cleanup promise, even
 when the bounded response has already rejected on cancellation.
+
+Model discovery is refused while settings/key replacement is pending. A key
+replacement invalidates discovery generations, waits for already-started cache
+writes for that connection, then clears the persisted cache before touching the
+credential. Discovery rechecks its generation after persistence too. Only device
+errors before a durable claim/effect become explicit admission refusals; errors
+after the claim retain uncertainty.

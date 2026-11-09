@@ -56,7 +56,12 @@ test('remote device HTTP commands retain the external-member decision and never 
  const decisionId=(await server.effectDecisions.decisions())[0]!.id,post=(path:string,body:unknown)=>fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  assert.equal((await post('/assistant/devices',{commandId:'early-connect',deviceId:'laptop',action:'connect'})).status,403);
  assert.equal((await post('/assistant/decisions',{commandId:'approve-remote',decisionId,answer:'act'})).status,200);assert.equal(deliveries,1);
- const input={commandId:'connect-laptop',deviceId:'laptop',action:'connect'},responses=await Promise.all([post('/assistant/devices',input),post('/assistant/devices',input)]);assert.ok(responses.every(r=>r.status===200));assert.equal(connects,1);
+ const input={commandId:'connect-laptop',deviceId:'laptop',action:'connect'};let initialRelease!:()=>void;const initialReady=new Promise<void>(r=>connectStarted=r);heldConnect=new Promise<void>(r=>initialRelease=r);
+ const connecting=post('/assistant/devices',input);await initialReady;
+ try{const refused=await post('/assistant/devices',{...input,commandId:'other-tab-connect'});assert.equal(refused.status,409);assert.equal((await refused.json()).outcome,'rejected');}finally{initialRelease();}
+ assert.equal((await connecting).status,200);heldConnect=undefined;connectStarted=undefined;
+ const refusedReceipt=await (await fetch(origin+'/assistant/devices?'+new URLSearchParams({...input,commandId:'other-tab-connect'}))).json();assert.equal(refusedReceipt.status,'unknown');
+ const responses=await Promise.all([post('/assistant/devices',input),post('/assistant/devices',input)]);assert.ok(responses.every(r=>r.status===200));assert.equal(connects,1);
  const receipt=await fetch(origin+'/assistant/devices?'+new URLSearchParams(input));assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'settled');
  const mismatch=await (await fetch(origin+'/assistant/devices?'+new URLSearchParams({...input,action:'disconnect'}))).json();assert.equal(mismatch.status,'conflict');assert.equal(connects,1);
  assert.equal((await (await fetch(origin+'/assistant/devices')).json()).devices[0].status,'connected');

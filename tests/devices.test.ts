@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {InMemoryStore,CommitOutcomeUnknownError} from '../src/storage.ts';
-import {DevicesService} from '../src/devices.ts';
+import {DevicesService,DeviceAdmissionRefusedError} from '../src/devices.ts';
+import {DomainError} from '../src/domain.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
 const admission={id:'effect-decision:remote',state:'done',effect:{kind:'external-member',missionId:'intake',workId:'work',effectId:'effect-decision:remote',status:'unknown',answer:'act',request:{kind:'external-member',adapterId:'remote',deviceId:'laptop',deviceName:'내 노트북',agentId:'codex',agentName:'Codex',instruction:'Read the repository',scope:'repository'}}};
 function fixture(){const store=new InMemoryStore<any>(),calls:string[]=[],adapter={id:'remote',async inspect(){return {status:'offline' as const};},async connect(){calls.push('connect');return {status:'connected' as const};},async disconnect(){calls.push('disconnect');return {status:'offline' as const};}};const service=new DevicesService(store,store,async()=>[admission],[adapter]);return {store,calls,adapter,service};}
+
+test('a settlement error after the device effect is not classified as a definite admission refusal',async()=>{
+ const f=fixture(),store=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events[0].type==='settle-device')throw new DomainError('Settlement unavailable','conflict');return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),service=new DevicesService(store,store,async()=>[admission],[f.adapter]);
+ await assert.rejects(service.act({commandId:'effect-before-error',deviceId:'laptop',action:'connect'}),error=>error instanceof DomainError&&!(error instanceof DeviceAdmissionRefusedError));
+ assert.deepEqual(f.calls,['connect']);assert.equal((await service.outcome({commandId:'effect-before-error',deviceId:'laptop',action:'connect'})).status,'unknown');
+});
 
 test('device commands require the existing external-member admission and replay overlapping identities once',async()=>{
  const f=fixture();const results=await Promise.all([1,2].map(()=>f.service.act({commandId:'connect',deviceId:'laptop',action:'connect'})));

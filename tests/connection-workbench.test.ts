@@ -71,3 +71,19 @@ test('drain while discovery invalidation is pending prevents the credential writ
  assert.equal(f.writes(),0);assert.equal((await service.read()).connections[0]!.credentialWriteStatus,'idle');
  const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().connections[0]!.models,[]);
 });
+
+test('discovery cannot repopulate the old account cache while a credential write is pending',async()=>{
+ const f=fixture();await f.discover();let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);
+ f.hooks.replace=async()=>{entered();await held;};const replacing=new ConnectionLifecycle(f.store,f.connections).replaceKey(f.command);await started;
+ try{await assert.rejects(f.discover(),/saving|pending|settings/i);assert.equal(f.requests(),1);}finally{release();await replacing;}
+ const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().connections[0]!.models,[]);
+});
+
+test('key replacement waits for an old discovery cache write and discards its late result',async()=>{
+ const f=fixture(),save=f.settings.saveDiscovery.bind(f.settings);let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);
+ f.settings.saveDiscovery=async(...args)=>{if((args[1] as {models:unknown[]}).models.length){entered();await held;}await save(...args);};
+ const discovery=f.discover();await started;const replacing=new ConnectionLifecycle(f.store,f.connections).replaceKey(f.command);
+ try{await new Promise(r=>setImmediate(r));assert.equal(f.writes(),0,'old metadata must settle before invalidation and the credential write');}finally{release();}
+ assert.equal((await discovery).status,'stale');assert.equal((await replacing).status,'completed');assert.equal(f.writes(),1);
+ const restarted=f.host();await restarted.restoreSettings();assert.deepEqual(restarted.list().connections[0]!.models,[]);
+});

@@ -7,6 +7,7 @@ import {FeedAdmissionError,withAdmissionFeed} from './storage.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
 
 export const DEVICES_ID=ASSISTANT_CONVERSATION_PREFIX+'devices';
+export class DeviceAdmissionRefusedError extends DomainError {}
 type DeviceStatus='connected'|'offline'|'unknown';
 export interface DeviceAdapter {
  id:string;
@@ -74,12 +75,15 @@ export class DevicesService {
  }
  async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
  async #act(input:{commandId:string;deviceId:string;action:'connect'|'disconnect'},expectedFeed?:string):Promise<CommitResult<DevicesState>>{
-  const feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
+  const feedId=expectedFeed??(await this.#store.readState()).feedId;let adapter:DeviceAdapter,claim:CommitResult<DevicesState>;
+  try{
+  await this.#feed(feedId);
   const d=(await this.#known()).find(d=>d.effect!.request.deviceId===input.deviceId);ensure(d?.effect?.answer==='act','Existing external-member admission decision required','denied');
-  await this.#feed(feedId);const adapter=this.#adapters.find(a=>a.id===d.effect!.request.adapterId);ensure(adapter,'Device adapter unavailable','denied');
+  await this.#feed(feedId);const found=this.#adapters.find(a=>a.id===d.effect!.request.adapterId);ensure(found,'Device adapter unavailable','denied');adapter=found;
   const operation:DeviceOperation={id:input.commandId,deviceId:input.deviceId,adapterId:adapter.id,decisionId:d.id,action:input.action,status:'unknown',binding:{deviceName:d.effect.request.deviceName!,agentName:d.effect.request.agentName!}};
   // The claim is durable before a single adapter invocation.
-  const command:DevicesCommand={type:'claim-device',operation},claim=await this.#dispatch(feedId,input.commandId,command,true);
+  const command:DevicesCommand={type:'claim-device',operation};claim=await this.#dispatch(feedId,input.commandId,command,true);
+  }catch(error){if(error instanceof DomainError)throw new DeviceAdmissionRefusedError(error.message,error.code);throw error;}
   if(claim.status!=='committed')return claim;await this.#feed(feedId);
   let status:DeviceStatus='unknown';try{const observed=await callTool(signal=>adapter[input.action]({deviceId:input.deviceId,commandId:input.commandId,signal}),{signal:this.#stop.signal});if(['connected','offline'].includes(observed.status))status=observed.status;}catch{}
   await this.#feed(feedId);return this.#dispatch(feedId,'assistant-device:'+hash(input.commandId).slice(0,32),{type:'settle-device',operationId:input.commandId,status},false);
