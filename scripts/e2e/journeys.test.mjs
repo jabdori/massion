@@ -1,4 +1,7 @@
 import test from 'node:test';
+import {desktopJourney} from './desktop.mjs';
+import {APPS_ID} from '../../src/apps.ts';
+import {paymentJourney} from './decisions.mjs';
 import assert from 'node:assert/strict';
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -37,6 +40,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  const until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Durable journey deadline; daemon: '+logs);await new Promise(r=>setTimeout(r,30));}};
  const get=async path=>{const response=await fetch(url+path);assert.equal(response.status,200,path);return response.json();};
  const post=async(path,body)=>{const response=await fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
+ async function control(message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.off('message',listener);reject(Error('Fixture control timeout'));},10000);const listener=reply=>{if(reply.type==='controlled'||reply.type==='error'){clearTimeout(timer);child.off('message',listener);reply.type==='error'?reject(Error(reply.error)):resolve(reply.result);}};child.on('message',listener);child.send(message);});}
  async function start(mode='configured',extra={}){
   await writeFile(configPath,JSON.stringify({mode,database:{endpoint:process.env.MASSION_TEST_SURREAL_RPC,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE,database},...extra}));
   child=spawn(process.execPath,[entry,configPath],{cwd:root,env:{PATH:process.env.PATH},stdio:['ignore','pipe','pipe','ipc']});logs='';
@@ -92,6 +96,60 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    const decision=(await get('/assistant/conversation')).decisions.find(d=>d.id.startsWith('app-decision:'));assert.ok(decision);await browser('click','.chat-decision .chat-actions button:first-child');await until(async()=>(await get('/assistant/apps')).apps.length===1);await browser('reload');await wait("document.getElementById('app').textContent.includes('GitHub')");assert.equal((await get('/assistant/apps')).apps[0].enabled,true);await capture('app-installed',[/GitHub/]);
    const before=await f.store.exportJournal();for(const decisionId of ['payment','delegate','budget'])assert.equal((await post('/assistant/decisions',{commandId:'e9a-'+decisionId,decisionId,answer:'act'})).status,400);assert.deepEqual(await f.store.exportJournal(),before);
   });
+  await journey('payment later, ask and one durable receipt',()=>paymentJourney({browser,wait,capture,current,calls,until,control}));
+  await journey('external admission records sent and arrival without accepting the Work',async()=>{
+   await control({type:'propose-effect',scenario:'external'});await browser('reload');
+   const work=async()=>(await current()).value.works.find(w=>w.id==='external');
+   const id=(await work()).effects[0].id,card='[id="chat-decision-'+id+'"]';
+   await wait(`!!document.getElementById(${JSON.stringify('chat-decision-'+id)})`);await capture('external-admission',[/Fixture Agent/,/내 노트북/,/테스트 이름 1개/]);
+   assert.equal((await calls()).filter(c=>c.kind==='external-member').length,0);
+   await browser('click',card+' .chat-actions button:first-child');
+   await until(async()=>(await calls()).some(c=>c.scenario==='external'));
+   await wait(`!!document.getElementById(${JSON.stringify('chat-exception-owner-effect:'+id)})`);await capture('external-sent',[/외부 테스트 수정/,/다시 보내지/]);
+   const sending=(await work()).effects[0];assert.equal(sending.status,'unknown');assert.equal(sending.ownerDecision.receipt,undefined);
+   await control({type:'release-external',scenario:'external'});
+   await until(async()=>(await work()).effects[0].ownerDecision.receipt?.outcome==='received');
+   await wait(`!!document.getElementById(${JSON.stringify('chat-external-receipt-'+id)})`);await capture('external-arrival',[/Fixture Agent/,/응답/]);
+   const w=await work();assert.equal(w.effects[0].status,'unknown');assert.equal(w.effects[0].ownerDecision.receipt.remoteId,'arrival-external');assert.equal(w.acceptance,'pending');assert.equal(w.record,undefined);
+  });
+  await journey('lost payment and external receipts survive daemon restart without resend',async()=>{
+   for(const scenario of ['payment-lost','external-lost']){
+    if(scenario==='external-lost')await control({type:'propose-effect',scenario});await browser('reload');const w=(await current()).value.works.find(w=>w.id===scenario),id=w.effects[0].id;
+    if(scenario==='external-lost'){await wait(`!!document.getElementById(${JSON.stringify('chat-decision-'+id)})`);await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');}
+    await until(async()=>(await current()).value.works.find(w=>w.id===scenario).effects[0].ownerDecision.settledAt!==undefined);
+    await wait(`!!document.getElementById(${JSON.stringify('chat-exception-owner-effect:'+id)})`);await capture(scenario,[/다시 보내지/]);
+    const effect=(await current()).value.works.find(w=>w.id===scenario).effects[0];assert.equal(effect.status,'unknown');assert.equal(effect.ownerDecision.receipt,undefined);assert.ok(effect.ownerDecision.dispatch);
+    const approvals=(await f.store.exportJournal()).operations.filter(o=>o.aggregateId==='intake'&&o.events.some(e=>e.type==='answer-owner-effect'&&e.command.effectId===id&&e.command.answer==='act'));
+    assert.equal(approvals.length,1);const commandId=approvals[0].commandId;
+    const replay=await Promise.all([1,2].map(()=>post('/assistant/decisions',{commandId,decisionId:id,answer:'act'})));assert.ok(replay.every(r=>r.status===200));
+    assert.equal((await calls()).filter(c=>c.scenario===scenario).length,1);
+   }
+   await stop();const before=await f.store.exportJournal(),sent=await calls();await start();await open();
+   await capture('effect-restart',[/다시 보내지/]);assert.deepEqual(await f.store.exportJournal(),before);assert.deepEqual(await calls(),sent);
+  });
+  await journey('MCP write timeout needs owner evidence before the next write; page stays isolated',async()=>{
+   await control({type:'offer-mcp'});await browser('reload');await wait("[...document.querySelectorAll('.chat-decision')].some(n=>n.textContent.includes('Fixture MCP'))");await capture('mcp-install',[/Fixture MCP/,/comment/]);
+   const id=(await get('/assistant/conversation')).decisions.find(d=>d.title==='Fixture MCP').id;
+   await browser('click','[id="chat-decision-'+id+'"] .chat-actions button:first-child');await until(async()=>(await get('/assistant/apps')).apps.some(a=>a.id==='app-fixture-mcp'));
+   const input={type:'call-mcp',commandId:'assistant-app-e9a2-timeout',scenario:'timeout'};
+   assert.equal((await control(input)).status,'unknown');assert.equal((await control(input)).status,'unknown');
+   const count=(await calls()).filter(c=>c.kind==='mcp-write').length;assert.equal(count,1);
+   await assert.rejects(control({type:'call-mcp',commandId:'assistant-app-e9a2-next',scenario:'next'}),/Unresolved/);assert.equal((await calls()).filter(c=>c.kind==='mcp-write').length,count);
+   await browser('reload');await wait("!!document.getElementById('rail-app-app-fixture-mcp')");await browser('click','#rail-app-app-fixture-mcp');await wait("!!document.getElementById('app-reconcile-evidence-assistant-app-e9a2-timeout')");
+   await capture('mcp-unknown',[/다시 보내지/,/comment/]);
+   await wait("document.querySelector('#app-view iframe')?.style.height==='617px'");
+   const frame=await browser('eval',"(()=>{const f=document.querySelector('#app-view iframe');let blocked=false;try{void f.contentWindow.document.body;}catch{blocked=true;}return {sandbox:f.getAttribute('sandbox'),parentBlocked:blocked,escaped:!!document.body.dataset.appEscaped,src:f.src};})()");
+   assert.equal(frame.result.sandbox,'allow-scripts');assert.equal(frame.result.parentBlocked,true);assert.equal(frame.result.escaped,false);assert.match(frame.result.src,/^http:\/\/127\.0\.0\.1:/);
+   await capture('mcp-isolated-script',[/격리된 앱 · 실행됨/]);
+   const evidence='Observed service receipt confirms no fixture comment';
+   await browser('fill','#app-reconcile-evidence-assistant-app-e9a2-timeout',evidence);await browser('click','#app-reconcile-not-done-assistant-app-e9a2-timeout');
+   await until(async()=>!(await get('/assistant/apps')).apps.find(a=>a.id==='app-fixture-mcp').unresolved.length);
+   const saved=(await f.store.load(APPS_ID)).value.toolCalls.find(c=>c.id===input.commandId);
+   assert.equal(saved.status,'failed');assert.equal(saved.reconciliation.actorId,'local-owner');assert.equal(saved.reconciliation.outcome,'not-done');assert.equal(saved.reconciliation.evidence,evidence);
+   assert.equal((await calls()).filter(c=>c.kind==='mcp-write').length,count);assert.equal((await control(input)).status,'failed');
+   assert.equal((await control({type:'call-mcp',commandId:'assistant-app-e9a2-next',scenario:'next'})).status,'succeeded');assert.equal((await calls()).filter(c=>c.kind==='mcp-write').length,count+1);
+   await wait("document.getElementById('app-tool-outcomes').hidden");await capture('mcp-reconciled',[/Fixture MCP/]);await open();
+  });
   await journey('unknown outcome and drain mid-Work survive restart without resend',async()=>{
    await open();await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));
    await wait("[...document.querySelectorAll('.chat-exception')].some(node=>node.textContent.includes('unknown'))");await capture('unknown',[/unknown/]);const unknown=structuredClone((await current()).value.works.find(w=>w.title==='unknown'));assert.equal(unknown.record,undefined);
@@ -109,8 +167,14 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await start('configured',{restoredBundle:bundlePath,restoredRoot});await open();await capture('restored',[/pass/,/unknown/]);
    assert.deepEqual((await current()).value.works.find(w=>w.id===accepted.id),accepted);assert.equal((await get('/missions/intake/record-artifact?'+new URLSearchParams({work:accepted.id,record:accepted.record.id,version:String(accepted.record.artifact.version),sha256:accepted.record.artifact.sha256}))).content,'Accepted fixture output');assert.equal((await calls()).length,count);assert.deepEqual(await dest.store.exportJournal(),journal);
   });
+  await stop();
+  await journey('Electron authenticated shell runs the same payment journey',async()=>{
+   const desktop=await growthStore(true),name=(await desktop.transport.query('RETURN $session.db;',{}))[0];
+   evidence.push(...await desktopJourney({out,database:{endpoint:process.env.MASSION_TEST_SURREAL_RPC,namespace:process.env.MASSION_TEST_SURREAL_NAMESPACE,database:name},store:desktop.store}));
+  });
   await writeFile(join(out,'calls.json'),JSON.stringify(await calls(),null,2)+'\n');
-  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:(await calls()).length,liveCalls:0,capabilityGaps:['payment','external member','monthly budget','MCP reconcile','Electron journeys']},null,2)+'\n');
+  const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
+  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:['monthly budget (#117 unmerged)']},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
  finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),logs);await rm(root,{recursive:true,force:true});}
 });
