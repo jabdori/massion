@@ -10,14 +10,15 @@
     "copyFindings": 0
   },
   "aggregate": {
-    "command": "TMPDIR=<physical macOS directory> node --test --test-concurrency=4 tests/*.test.ts",
+    "command": "TMPDIR=/private/tmp/e3c-tests node --test --test-concurrency=4 tests/*.test.ts",
     "exitCode": 1,
     "tests": 1899,
     "pass": 1558,
     "fail": 1,
     "skipped": 340,
     "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
-    "failureSource": "tests/portable-backup.test.ts:137"
+    "failureSource": "tests/portable-backup.test.ts:137",
+    "preparation": "mkdir -p /private/tmp/e3c-tests"
   },
   "ui": {
     "command": "UI_CONTRACTS_OUTPUT=.runtime/e3c-delivery node scripts/ui-contracts/run.mjs B7 B7-churn B7-done B7-fail B7-unknown B8 B8-done B8-fail B8-unknown B4",
