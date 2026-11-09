@@ -77,7 +77,7 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
- assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/Files 2/);
+ assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/파일 2/);
  const source=button(app.node('pane-app'),'GitHub')[0];assert.ok(source,'the app item has a source navigation control before its heading');
  assert.equal(app.node('pane-app').children[0],source);
  await source.fire('click');await settle();assert.equal(app.node('page-app').hidden,false);assert.equal(posted.length,0);
@@ -249,4 +249,50 @@ test('overlapping Settings app commands send once and keep unknown outcomes read
   assert.equal(posted.length,1,action+' is admitted only once while busy');assert.equal(posted[0]!.body.action,action);assert.ok(posted[0]!.body.commandId);
   release();await settle();assert.equal(posted.length,1,'a lost response never triggers a resend');
  }
+});
+
+test('GitHub links use exact host review identities and show retained commits',async()=>{
+ const target={repository:'jabdori/massion',number:84,headSha:'cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66',url:'https://github.com/jabdori/massion/pull/84'};
+ const review={missionId:'intake',workId:'pr84',title:'PR #84 검토',memberId:'member-juno',progress:{done:4,total:11},reading:true,deadlineAt:Date.now()+60000};
+ const {app,posted}=fixture(true,[],[],[{id:'member-juno',name:'주노'}],undefined,b=>b.handler==='page'?{...page,groups:[{...page.groups[0],rows:[{...page.groups[0]!.rows[0],github:target,reviews:[review]}]},page.groups[1]]}:{...item,github:target,reviews:[review],groups:[...item.groups,{title:'Commits 1',rows:[{id:target.headSha,title:'Change',meta:'cf2a4b3 · 2026-11-05 10:28'}]}]});await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ const external=app.all().find(n=>n.tagName==='A'&&n.attributes.get('href')===target.url);assert.ok(external);assert.equal(external.attributes.get('rel'),'noopener noreferrer');
+ assert.match(app.node('side-app').textContent,/주노가 보는 중/);assert.match(app.node('app-view').textContent,/PR #84 검토 주노 · 실행 중 읽기 4\/11.*작업 중.*커밋 1.*Change.*10:28/);
+ const link=app.all().find(n=>n.attributes.get('role')==='link'&&n.textContent.startsWith('PR #84 검토'));assert.ok(link);await link.fire('click');await settle();
+ assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);assert.equal(posted.length,0);
+});
+
+test('a replaced database invalidates pending GitHub reads and clears cached review context',async()=>{
+ let release!:(value:unknown)=>void;
+ const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?new Promise(done=>{release=done;}):item);await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ runInContext('appsRail({feedId:"feed:b",apps:[]})',app.context);release(page);await settle();
+ assert.doesNotMatch(app.node('side-app').textContent,/feat\(assistant\)/);assert.equal(app.node('app-view').textContent,'');
+});
+
+test('binding a PR to a fresh Work uses existing source writes once and stops after an unknown receipt',async()=>{
+ for(const lost of [false,true]){
+  const {app}=fixture();await settle();
+  (app.context as any).bindLost=lost;
+  runInContext(`
+   globalThis.bindCalls=[];globalThis.bindRelease=null;
+   globalThis.bindTab={key:'review-tab',appTab:{id:'app-github',ref:'84',missionId:'intake',workId:'fresh'}};
+   globalThis.bindView={github:{repository:'jabdori/massion',number:84,headSha:'a'.repeat(40),url:'https://github.com/jabdori/massion/pull/84'}};
+   snapshot={revision:1,value:{id:'intake',documents:[],works:[{id:'fresh',execution:'queued',acceptance:'pending',effects:[],assignments:[],attempts:[{status:'queued'}],tasks:[{status:'queued'}]}]}};
+   selectedId='intake';feedId='feed:a';paneActive=bindTab.key;busy=false;loading=false;reconnectRequired=false;unknownOperation=null;recoveryProblem=null;
+   write=async(path,body)=>{bindCalls.push({path,body});if(path.endsWith('/documents')){await new Promise(done=>{bindRelease=done;});if(bindLost){unknownOperation={commandId:body.commandId};return false;}snapshot.value.documents.push({...body.document,contentSha256:'b'.repeat(64)});snapshot.revision++;}return true;};
+   globalThis.bindButton=document.createElement('button');
+   void appsBindReview(bindTab,bindView,bindButton);void appsBindReview(bindTab,bindView,bindButton);
+  `,app.context);await settle();
+  assert.equal((app.context as any).bindCalls.length,1);(app.context as any).bindRelease();await settle();
+  const calls=(app.context as any).bindCalls;assert.equal(calls.length,lost?1:2);
+  const doc=JSON.parse(calls[0].body.document.content);assert.equal(doc.headSha,'a'.repeat(40));assert.equal(doc.format,'github-review/v1');
+  if(!lost){assert.equal(calls[1].path,'/missions/intake/work-source');assert.equal(calls[1].body.expectedRevision,2);assert.equal(calls[1].body.workId,'fresh');}
+ }
+});
+
+test('the catalog update control reuses install admission and the owner decision path',async()=>{
+ const old={...github,update:{catalogId:'github',version:'1.4.1'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,old);await settle();await open(app);await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ await button(app.node('settings-apps-body'),copy('ui.action.update'))[0]!.fire('click');await settle();assert.equal(posted.length,1);assert.equal(posted[0]!.body.action,'install');assert.equal(posted[0]!.body.catalogId,'github');
 });

@@ -108,7 +108,7 @@ function renderShell(){
 function shellMarkSeen(turn){const seen=shellSeen();seen[shellKey(turn.work)]=chatCardLabel(turn);storage.set(seenKey,JSON.stringify(seen));}
 /** A card, a Work line and an activity row all show the conversation and open the Work's tab before reading its Mission. */
 async function shellOpenWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work)return;shellShow('chat');shellMarkSeen(turn);renderShell();if(busy||loading)return;paneOpen(turn.work.missionId,turn.work.workId,turn.work.title);await openChatWork(turnId);}
-function paneOpen(missionId,workId,title){const key=missionId+'/'+workId;if(!paneTabs.some(tab=>tab.key===key)){paneTabs.push({key,missionId,workId,title});if(workId)appsRoomTabs(title);}paneActive=key;paneMission=missionId;paneAway(false);renderPane();if(chatThread&&chatView)renderChat();}
+function paneOpen(missionId,workId,title){const key=missionId+'/'+workId;if(!paneTabs.some(tab=>tab.key===key)){paneTabs.push({key,missionId,workId,title});if(workId)appsRoomTabs(title,missionId,workId);}paneActive=key;paneMission=missionId;paneAway(false);renderPane();if(chatThread&&chatView)renderChat();}
 /** A Mission loaded by any other way gets one tab per Mission change; a background reread of the same Mission never reopens a closed pane or replaces a result tab, which keeps paneMission as it was. */
 function paneFor(mission){if(mission.id===paneMission)return;paneOpen(mission.id,'',mission.purpose);}
 /** An owner's explicit open (catalog, inbox, link, load form, Work admitted) always shows the pane: a Work opens its own tab, a Mission its Mission tab on the next read. */

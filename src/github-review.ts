@@ -1,0 +1,25 @@
+import {DomainError,pinnedWorkSources} from './domain.ts';
+import type {Mission,DocumentVersion} from './domain.ts';
+
+export interface GithubTarget {repository:string;number:number;headSha:string;url:string}
+export interface GithubReview {missionId:string;workId:string;title:string;memberId:string|null;progress:{done:number;total:number};reading:boolean;deadlineAt:number}
+export function validGithubTarget(value:unknown):value is GithubTarget {
+ const v=value as GithubTarget;
+ return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===4&&Object.keys(v).every(k=>['repository','number','headSha','url'].includes(k))&&typeof v.repository==='string'&&/^[A-Za-z0-9_-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(v.repository)&&!v.repository.split('/').some(x=>/^\.+$/.test(x))&&Number.isSafeInteger(v.number)&&v.number>0&&v.number<1e9&&typeof v.headSha==='string'&&/^[a-f0-9]{40}$/.test(v.headSha)&&v.url==='https://github.com/'+v.repository+'/pull/'+v.number;
+}
+export function githubReviewDocument(target:GithubTarget,id:string):Pick<DocumentVersion,'id'|'version'|'title'|'source'|'content'> {
+ if(!validGithubTarget(target))throw new DomainError('Exact GitHub review identity required');
+ return {id,version:1,title:target.repository+' #'+target.number,source:target.url,content:JSON.stringify({format:'github-review/v1',...target})};
+}
+/** 고정한 원본 자료와 현재 커밋이 일치하는 실행만 검토 중으로 표시합니다. */
+export function githubReviews(mission:Mission,target:GithubTarget,now:number):GithubReview[] {
+ if(!validGithubTarget(target))return [];
+ return mission.works.flatMap(w=>{
+  const deadlineAt=w.runtimeRun?.ownership?.deadlineAt;
+  if(w.execution!=='active'||w.acceptance==='accepted'||w.runtimeInterruption||w.runtimeRecovery||deadlineAt===undefined||deadlineAt<=now||w.effects.some(e=>e.status==='unknown'))return [];
+  let matches=false;try{matches=(pinnedWorkSources(mission,w)??[]).some(pin=>{let v;try{v=JSON.parse(pin.document.content);}catch{return false;}if(!v||v.format!=='github-review/v1')return false;const {format,...identity}=v;return validGithubTarget(identity)&&pin.document.source===target.url&&identity.url===target.url&&identity.headSha===target.headSha;});}catch{return [];}
+  if(!matches)return [];
+  const tasks=w.tasks.filter(t=>t.step&&!t.step.skipReason);
+  return [{missionId:mission.id,workId:w.id,title:w.title,memberId:w.assistantSource?.memberId??null,progress:{done:tasks.filter(t=>t.status==='settled').length,total:tasks.length},reading:tasks.length>0&&tasks.every(t=>t.step!.role==='읽기'),deadlineAt}];
+ });
+}

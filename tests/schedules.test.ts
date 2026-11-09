@@ -14,7 +14,7 @@ import {DomainError} from '../src/domain.ts';
 import type {Actor,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
-import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot} from '../src/schedules.ts';
+import {SCHEDULES_ID,SchedulesService,applySchedules,replaySchedules,nextSlot,scheduleWorkProducer} from '../src/schedules.ts';
 import type {SchedulesCommand,SchedulesState} from '../src/schedules.ts';
 
 // docs/architecture/results-and-schedules.md: one morning briefing schedule, run by the host scheduler under a cumulative budget; unknown is never resent. Fixture-class only, no model call for the briefing.
@@ -23,15 +23,15 @@ const turn=(reply:string,title?:string)=>JSON.stringify({reply,work:title===unde
 const owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const DAY=86400000,T0=Date.UTC(2026,10,5,23,0);// 08:00 on Nov 6 in UTC+9 is 23:00 UTC on Nov 5.
 
-async function setup(t:test.TestContext){
+async function setup(t:test.TestContext,answer?:string){
  const root=await mkdtemp(join(tmpdir(),'massion-schedules-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[];let calls=0;const start=Date.now();let now=start;const clock=()=>now;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{calls++;
   const body=JSON.parse(String(init!.body)),prompt=JSON.parse(body.messages[0].content);
   if(Object.hasOwn(prompt,'currentMessage'))return completion(body.model,script.shift()??turn('Hello.'));
-  if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Answer bounded',reason:'Controlled fixture'}]}));
-  return completion(body.model,'- Answer bounded fixture text\n- Second point');
+  if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:answer?answer.split('\n')[0]!:'Answer bounded',reason:'Controlled fixture'}]}));
+  return completion(body.model,answer??'- Answer bounded fixture text\n- Second point');
  };
  const m=createHostConnections(store,artifacts,{manifest,allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings:new InMemoryHostSettings()});
  const profile=(model:string)=>(m.list().runtime.connections as any[]).find(p=>p.model===model).id as string;
@@ -43,7 +43,7 @@ async function setup(t:test.TestContext){
  await assistant.setSettings({profileId:profile('representative'),outputTokenCap:64,intakeMissionId:'intake',expectedConfigHash:m.list().configHash});
  let failRead=false;const schedules=new SchedulesService(store,async()=>{if(failRead)throw new Error('read failed');return assistant.read();},clock);
  const say=async(text:string,title?:string)=>{script.push(turn('On it.',title));const view=await assistant.read();const target=!view.segment?{segment:1,expectedRevision:0}:{segment:view.head,expectedRevision:view.segment.revision};const r=await assistant.send({commandId:randomUUID(),...target,text});await assistant.idle();return r;};
- return {root,store,artifacts,m,product,assistant,schedules,say,start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
+ return {root,store,artifacts,m,product,assistant,schedules,say,queueWork:(title:string)=>script.push(turn('On it.',title)),start,now:()=>now,setNow:(v:number)=>{now=v;},failRead:(v:boolean)=>{failRead=v;},calls:()=>calls};
 }
 const apply=(state:SchedulesState|null,command:SchedulesCommand,actor:Actor=owner,at=T0)=>applySchedules(state,command,actor,{observedAt:at}).value;
 const create=(over:Record<string,unknown>={}):SchedulesCommand=>({type:'create-schedule',scheduleId:'schedule-a',kind:'briefing',minute:480,offset:540,budget:{runs:2},...over} as SchedulesCommand);
@@ -157,7 +157,7 @@ test('HTTP: schedules and results routes take exact fields; the conversation rea
  assert.deepEqual((await fetch(url('/assistant/schedules')).then(r=>r.json()) as any).schedules,[]);
  assert.equal((await post('/assistant/schedules',{commandId:'c-1',action:'create',minute:480,offset:540})).status,400,'a cumulative budget is required');
  assert.equal((await post('/assistant/schedules',{commandId:'assistant-x',action:'create',minute:480,offset:540,budget:{runs:30}})).status,400);
- assert.equal((await post('/assistant/schedules',{commandId:'c-1',action:'create',minute:480,offset:540,budget:{runs:30},kind:'briefing'})).status,400);
+ assert.equal((await post('/assistant/schedules',{commandId:'c-1',action:'create',minute:480,offset:540,budget:{runs:30},kind:'unknown'})).status,400);
  assert.equal((await post('/assistant/schedules',{commandId:'c-1',action:'create',minute:480,offset:540,budget:{runs:30}})).status,201);
  const list=await fetch(url('/assistant/schedules')).then(r=>r.json()) as any,id=list.schedules[0].id;assert.equal(list.schedules[0].destination,'Conversation with 하나');
  assert.equal((await post('/assistant/schedules',{commandId:'c-2',action:'run',scheduleId:id})).status,200);
@@ -218,4 +218,16 @@ test('HTTP: an owner schedule action resuming after drain starts is refused and 
  hold=true;const response=fetch(`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant/schedules`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'c-drain',action:'create',minute:480,offset:540,budget:{runs:30}})});
  await reached;const drain=server.drain();release();
  assert.equal((await response).status,503);assert.equal((await drain).status,'drained');assert.deepEqual((await f.schedules.read()).schedules,[]);
+});
+
+
+test('a schedule producer uses normal Work admission with fixture providers and retains its exact conversation source',async t=>{
+ const answer='- Groceries: KRW 1,200 (receipt R1)\n- Transport: KRW 2,300 (receipt R2)',f=await setup(t,answer),s=new SchedulesService(f.store,()=>f.assistant.read(),()=>f.now(),f.store,scheduleWorkProducer(f.assistant));
+ f.queueWork('Weekly receipt categories');
+ await s.act({commandId:'scheduled-expenses',action:'create',kind:'weekly-expenses',minute:540,offset:0,budget:{runs:2},request:'Group these supplied receipts by category: R1 groceries KRW 1200; R2 transport KRW 2300.'});
+ const id=(await s.read()).schedules[0]!.id;await s.act({commandId:'produce-expenses',action:'run',scheduleId:id});
+ const view=(await s.read()).schedules[0]!,head=await f.assistant.read(),source=head.turns.find(t=>t.work?.title==='Weekly receipt categories')!;
+ assert.ok(source?.work);assert.deepEqual(view.runs[0]!.turnIds,[source.id]);assert.equal(view.runs[0]!.segment,head.segment!.number);assert.equal(view.runs[0]!.state,'done');
+ await f.assistant.idle();const work=(await f.store.load('intake'))!.value.works.find((w:any)=>w.id===source.work!.workId);assert.equal(work.acceptance,'accepted');assert.ok(work.record);assert.equal(await f.artifacts.read(work.record.artifact),answer);assert.notEqual(work.assignments.find((a:any)=>a.role==='executor').actorId,work.assignments.find((a:any)=>a.role==='verifier').actorId);
+ const calls=f.calls();await s.act({commandId:'produce-expenses',action:'run',scheduleId:id});assert.equal(f.calls(),calls);validateMissionJournalLineage(f.store.inspect() as any);
 });
