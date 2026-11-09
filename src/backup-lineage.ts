@@ -197,7 +197,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings','ownership']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['connectionBindings','ownership','toolTimeoutVersion']);
+    if(Object.hasOwn(run,'toolTimeoutVersion'))ensure(run.toolTimeoutVersion==='tool-timeouts/v1','unsupported tool timeout policy');
     if(Object.hasOwn(run,'ownership'))validateRuntimeOwnership(run.ownership as import('./domain.ts').RuntimeOwnership);
     text(run.id, 'run ID'); text(run.authorizationId, 'run authorization identity'); sha(run.criteriaHash, 'run criteria hash'); sha(run.inputHash, 'run input hash');
     oneOf(run.mode, ['mock-http', 'live'], 'run mode'); integer(run.outputTokenCap, 'output cap');

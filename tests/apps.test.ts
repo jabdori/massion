@@ -248,3 +248,23 @@ test('a page whose rows an item request could not take is refused, so every row 
  await assert.rejects(service.view({app:appId,handler:'page'}),/item refs/);
  await assert.rejects(service.view({app:appId,handler:'item',ref:'issue:84'}),/Invalid ref/);
 });
+
+test('network diagnostics never reach the app view or HTTP client, and timeouts cancel reads',worker,async t=>{
+ const {randomUUID}=await import('node:crypto'),sentinel=randomUUID();
+ const source=pkg('massion.handle("run",async()=>{try{await massion.fetch("https://api.github.com/x");}catch(e){return {title:e.message,groups:[]};}})');
+ const result=await runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},network:async()=>{throw Error(sentinel);}});
+ assert.ok(!JSON.stringify(result).includes(sentinel));assert.equal(result.view.title,'App request failed');
+ let signal:AbortSignal|undefined;
+ await assert.rejects(runHandler({appId:'app-probe',pkg:source,handler:'run',input:{},timeoutMs:300,network:async r=>{signal=r.signal;return new Promise(()=>{});}}),/Timed out/);
+ assert.equal(signal?.aborted,true);
+ const {service,store}=await setup(async()=>{throw Error(sentinel);});await install(service);await answer(service,(await service.decisions(null))[0]!.id,'act');
+ const server=createWorkbench(store,process.cwd(),{scheduleIntervalMs:0,appNetwork:async()=>{throw Error(sentinel);}});await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));t.after(()=>server.close());
+ const logs:string[]=[];t.mock.method(console,'error',(...args:unknown[])=>logs.push(String(args)));
+ const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps/view',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app:(await state(store)).apps[0]!.id,handler:'page'})});
+ assert.equal(response.status,409);assert.ok(!(await response.text()).includes(sentinel));assert.ok(!JSON.stringify([store.inspect(),logs]).includes(sentinel));
+});
+
+test('app views cannot send writes even when a manifest declares them',worker,async()=>{
+ const source=pkg('massion.handle("page",async()=>{await massion.fetch("https://api.github.com/x",{method:"POST"});return {title:"x",groups:[]};})',{handlers:['page']},{write:['PR comments']});
+ let sends=0;await assert.rejects(runHandler({appId:'app-probe',pkg:source,handler:'page',input:{},network:async()=>{sends++;return {status:200,body:'{}'};}}),/durable Work/);assert.equal(sends,0);
+});

@@ -14,7 +14,7 @@ export interface AppPermissions {read:string[];write:string[];network:string[];f
 export interface AppManifest {format:'massion.app.v1';id:string;name:string;version:string;description:string;permissions:AppPermissions;contributes:{page?:{title:string};roomTab?:{prefix:string};templates:string[];skills:string[];procedures:string[];tools:string[]};handlers:string[]}
 export interface AppPackage {manifest:AppManifest;source:string}
 /** The host's network adapter: it attaches the secret stored for this app's slot itself, keyed by (appId, slot), so one app never names another's secret; the app never receives the value. */
-export type AppNetwork=(request:{appId:string;url:string;method:string;secret:string|null})=>Promise<{status:number;body:string}>;
+export type AppNetwork=(request:{appId:string;url:string;method:string;secret:string|null;signal:AbortSignal})=>Promise<{status:number;body:string}>;
 export interface AppView {title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string}[]}[];fields?:[string,string][]}
 export interface AppCheck {tests:{passed:number;total:number};declaredOnly:boolean;evidence:string}
 export interface AppVersion {hash:string;package:AppPackage;at:number;approvedAt?:number;check?:AppCheck}
