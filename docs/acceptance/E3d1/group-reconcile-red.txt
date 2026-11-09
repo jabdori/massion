@@ -1,0 +1,29 @@
+✖ a lost group save stays readonly until a later fresh catalog read; reconciliation never resends (79.149167ms)
+✔ failed or malformed catalog reads cannot unlock an uncertain group save (10.4455ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 337.110542
+
+✖ failing tests:
+
+test at tests/settings-group-reconciliation.test.ts:7:1
+✖ a lost group save stays readonly until a later fresh catalog read; reconciliation never resends (79.149167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e3d1-settings/tests/settings-group-reconciliation.test.ts:26:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

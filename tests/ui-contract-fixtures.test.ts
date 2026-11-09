@@ -106,7 +106,12 @@ test('state variants preserve acceptance and uncertainty instead of pretending t
   assert.equal(body.works[0]!.execution,execution,screen);assert.equal(body.works[0]!.acceptance,acceptance,screen);assert.equal(body.works[0]!.unknown,unknown,screen);
  }
  for(const screen of ['B22','B22-room'])assert.ok((await loadFixture(screen)).appViews?.length,screen);
- for(const screen of ['B20','B20-coding'])assert.ok((await loadFixture(screen)).gaps.some(g=>g.includes('editor')),screen);
+ for(const screen of ['B20','B20-coding']){
+  const fixture=await loadFixture(screen),group=screen==='B20'?'research':'coding';
+  assert.ok(fixture.steps.some(s=>'selector' in s&&s.selector==='#settings-group-'+group&&s.readySelector==='#settings-group-name'),screen);
+  const catalog=fixture.routes['/connections']!.body as {modelGroups:Array<{id:string;models:Array<{profileId:string;configHash:string}>}>};
+  assert.ok(catalog.modelGroups.find(g=>g.id===group)!.models.every(m=>m.profileId&&/^[a-f0-9]{64}$/.test(m.configHash)),screen);
+ }
 });
 
 test('only declared read-only app views accept bounded exact JSON POST bodies',async t=>{

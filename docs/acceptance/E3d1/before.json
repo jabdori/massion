@@ -1,0 +1,498 @@
+{
+  "rows": [
+    {
+      "screen": "B13",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 8,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 7,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 9,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 18,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 20,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-usage.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "dark",
+      "passed": 24,
+      "failed": 19,
+      "warnings": 0,
+      "required": 43,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "dark",
+      "passed": 25,
+      "failed": 12,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 17,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B20-coding.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 12,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 3,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23-github-expired.png"
+    },
+    {
+      "screen": "B13",
+      "theme": "light",
+      "passed": 14,
+      "failed": 8,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "light",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "passed": 14,
+      "failed": 7,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "passed": 14,
+      "failed": 9,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "light",
+      "passed": 18,
+      "failed": 18,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "light",
+      "passed": 14,
+      "failed": 20,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-usage.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "light",
+      "passed": 24,
+      "failed": 19,
+      "warnings": 0,
+      "required": 43,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "light",
+      "passed": 25,
+      "failed": 12,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "light",
+      "passed": 13,
+      "failed": 17,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "light",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B20-coding.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "light",
+      "passed": 17,
+      "failed": 12,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "light",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "light",
+      "passed": 30,
+      "failed": 3,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23-github-expired.png"
+    }
+  ]
+}

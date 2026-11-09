@@ -41,7 +41,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -50,13 +50,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -326,16 +334,84 @@
             "credentialConfigured": true,
             "models": [],
             "configHash": "fixture"
+          },
+          {
+            "id": "anthropic",
+            "label": "Anthropic API",
+            "providerType": "anthropic",
+            "connectionStatus": "credential-required",
+            "credentialConfigured": false,
+            "models": [],
+            "configHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "id": "openai",
+            "label": "OpenAI API",
+            "providerType": "openai",
+            "connectionStatus": "credential-required",
+            "credentialConfigured": false,
+            "models": [],
+            "configHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           }
         ],
         "runtime": {
-          "connections": [],
-          "defaultRoutes": []
+          "connections": [
+            {
+              "id": "profile:claude-code-cli:claude-sonnet-5-5",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "claude-sonnet-5-5",
+              "label": "Claude Code",
+              "providerKind": "claude-code-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:codex-cli:gpt-6.1-terra",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "gpt-6.1-terra",
+              "label": "Codex",
+              "providerKind": "codex-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:zai:glm-5.3",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "glm-5.3",
+              "label": "Z.ai",
+              "providerKind": "zai",
+              "diagnostics": []
+            }
+          ],
+          "defaultRoutes": [
+            {
+              "authorizationId": "fixture-default",
+              "executor": {
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "verifier": {
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "outputTokenCap": 1024,
+              "scope": "fixture-settings",
+              "status": "stale",
+              "diagnostics": [
+                "live-disabled"
+              ],
+              "check": "different-family"
+            }
+          ],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
         "representative": {
-          "intakeMissionId": "intake"
+          "intakeMissionId": "intake",
+          "route": {
+            "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+            "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "outputTokenCap": 1024
+          }
         },
         "modelGroups": [
           {
@@ -349,14 +425,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "codex-cli",
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -371,14 +451,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "zai",
                 "model": "glm-5.3",
                 "label": "Z.ai",
                 "family": "zhipu",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:zai:glm-5.3",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -393,14 +477,18 @@
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "claude-code-cli",
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           }

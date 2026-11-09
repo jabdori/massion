@@ -14,6 +14,12 @@ test('contract checker reads text and agent-browser JSON snapshots',async()=>{
  const snapshot='- navigation "Rail":\n  - button "결과물"\n  - button "예약"';
  for(const input of [snapshot,JSON.stringify({success:true,data:{snapshot}})]){const result=await check(input);assert.equal(result.status,0,result.stderr+result.stdout);assert.match(result.stdout,/PASS: 0 failures/);}
 });
+test('a standalone Settings main is a page while a dialog remains outside that page',async()=>{
+ const expected={...contract,forbidden:[],regions:[{region:'page',elements:[{role:'heading',text:'기억',required:true}]}]};
+ const result=await check('- main "설정":\n  - heading "기억"',expected);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.equal((await check('- main "설정":\n  - dialog "기억":\n    - heading "기억"',expected)).status,1);
+});
 test('contract checker distinguishes missing, order, region and forbidden failures',async()=>{
  for(const [snapshot,kind] of [
  ['- navigation "Rail":\n  - button "예약"','missing'],

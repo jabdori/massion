@@ -47,6 +47,15 @@ function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[
 const kids=(node:Node)=>node.children.filter(child=>!child.hidden);
 const titles=(list:Node)=>kids(list).map(row=>row.children.find(c=>c.tagName==='BUTTON')!.children.find(c=>c.tagName==='STRONG')!.textContent);
 
+test('activity profile navigation closes its dialog and expanded state without sending a command',async()=>{
+ const {app}=fixture([]);await settle();await app.node('activity-toggle').fire('click');
+ const profile=()=>app.all().find(n=>n.id==='header-profile')!;
+ await profile().fire('click');assert.equal(app.node('shell-profile').hidden,false);assert.equal(profile().attributes.get('aria-expanded'),'true');
+ await app.node('profile-memory').fire('click');await settle();assert.equal(app.node('settings-memory').hidden,false);assert.equal(app.node('shell-profile').hidden,true);
+ await app.node('rail-chat').fire('click');assert.equal(profile().attributes.get('aria-expanded'),'false');
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
 test('Work lines retain stored Work; the activity list orders by priority or recency, marks unread changes and every entry opens the same tab',async()=>{
  const {app,state}=fixture([{workId:'work:b',title:'Running one',execution:'active',acceptance:'pending',started:true},{workId:'work:a',title:'Done one',execution:'settled',acceptance:'accepted',started:true},{workId:'work:c',title:'Failed one',execution:'settled',acceptance:'failed',started:true}]);
  await settle();
@@ -273,7 +282,7 @@ test('sidebar search filters member names and Work titles locally, preserves mem
  await app.node('activity-toggle').fire('click');assert.deepEqual(titles(app.node('activity-list')),['Second']);
  await key(app,{key:'Escape'});assert.equal(app.node('sidebar-query').value,'');assert.equal(app.node('sidebar-query').hidden,true);assert.equal(app.context.document.activeElement,app.node('sidebar-search'));
  assert.equal(quill.parentElement!.hidden,false);assert.equal(juno.parentElement!.hidden,false);assert.equal(find(app,'side-member-quill'),quill);assert.equal(app.calls.length,calls);
- await app.node('rail-results').fire('click');assert.equal(app.node('sidebar-search').hidden,true);await app.node('rail-chat').fire('click');assert.equal(app.node('sidebar-search').hidden,false);
+ await app.node('rail-results').fire('click');assert.equal(app.node('sidebar-search').hidden,false);await app.node('rail-chat').fire('click');assert.equal(app.node('sidebar-search').hidden,false);
 });
 
 test('the attention dot follows open owner decisions and stays clear for unknown Work and schedule exceptions',async()=>{

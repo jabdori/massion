@@ -1,3 +1,6 @@
+import {memberProcedures,teamCallCount} from './internal-teams.ts';
+import {SKILLS_ID,SkillsService} from './skills.ts';
+import type {SkillsState} from './skills.ts';
 /** The Representative turn path: one owner message, at most one model call, at most one Work admission and one run request. Never a resend. */
 import {createHash,randomUUID} from 'node:crypto';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
@@ -32,14 +35,14 @@ const diagnostic=(code:string,message:string):AssistantDiagnostic=>({code,messag
 const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic[]=>list.slice(0,2).map(d=>diagnostic(/^[a-z][a-z0-9_]{0,63}$/.test(d.code)?d.code:'diagnostic',d.message));
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
 /** The root task only contains the steps, so it is not counted (conversation-cards.md). */
-const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>work.team?!!t.step:t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
 export function workException(work:Mission['works'][number]):{at:number|null;runId:string|null;fact:'payment-response-unknown'|null}{
  const unknown=work.effects.filter(effect=>effect.status==='unknown');
  return {at:work.runtimeInterruption?.observedAt??null,runId:work.runtimeRun?.id??null,fact:unknown.length===1&&unknown[0]!.target==='결제 요청'&&unknown[0]!.receipt==='응답 없음 · 다시 보내지 않음'?'payment-response-unknown':null};
 }
 /** Count only assigned child tasks; a retried assignment never counts the same task twice. */
 function progress(work:Mission['works'][number]){
- const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>t.parentId!==null&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+ const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>(work.team&&role==='executor'?!!t.step:t.parentId!==null)&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
  return {make:stage('executor'),check:stage('verifier')};
 }
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
@@ -247,7 +250,8 @@ export class AssistantService {
   if(!message||turn?.status!=='answered'||turn.proposal?.title!==title||turn.proposal.member!==proposal.member)return outcome('not_created',[diagnostic('assistant_source_unavailable','The settled turn no longer matches the stored conversation.')]);
   const assistantSource:AssistantSource={segmentId:segment.id,turnId,messageId,messageHash:hash(message),message:structuredClone(message),representative:{provider:route.provider,model:route.model},...(member?{memberId:member.id}:{})};
   const workId=assistantWorkId(turnId),gate=this.#product.executionGate(intake.value),commandId='assistant-work:'+turnId;
-  const command={type:'admit-work' as const,workId,title,budget:2*resolved.choice.outputTokenCap,assistantSource,...(gate?{executionGate:gate}:{})};
+  let team;try{if(member){const skills=await this.#store.load(SKILLS_ID);team=memberProcedures(skills?.value as unknown as SkillsState??null,member.id,skills?.revision??0);const loader=new SkillsService(this.#ownerStore,{clock:this.#clock});for(const procedure of team.procedures)if(procedure.id!=='host-default-v1'){const used=await loader.use(procedure.id);if(used.status!=='committed'&&used.status!=='replayed')throw new DomainError('Procedure changed during load');}}}catch(error){return outcome('not_created',[diagnostic('procedure_unavailable',error instanceof Error?error.message:'Procedure unavailable')]);}
+  const command={type:'admit-work' as const,workId,title,budget:teamCallCount(team)*resolved.choice.outputTokenCap,...(team?{team}:{}),assistantSource,...(gate?{executionGate:gate}:{})};
   let admitted:CommitResult<Mission>;
   try{admitted=await this.#admission.dispatch({missionId:intakeMissionId,commandId,expectedRevision:intake.revision,actorId:ASSISTANT_ACTOR_ID,command});}
   catch(error){
@@ -292,7 +296,7 @@ export class AssistantService {
  // ponytail: `at` is the run start because Records keep no acceptance time; at most 200 rows, page when owners keep more.
  async results(){
   const intake=this.#connections?.list().representative?.intakeMissionId,state=intake?await this.#store.readState(intake):await this.#store.readState(),mission=(intake?state.snapshot?.value:undefined) as Mission|undefined;
-  const rows=(mission?.works??[]).filter(w=>w.acceptance==='accepted'&&w.record&&w.assistantSource).map(w=>({missionId:mission!.id,workId:w.id,recordId:w.record!.id,version:w.record!.artifact.version,sha256:w.record!.artifact.sha256,kind:w.record!.artifact.kind,title:w.title,at:w.runtimeRun?.ownership?.startedAt??null,segment:Number(w.assistantSource!.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),turnId:w.assistantSource!.turnId}));
+  const rows=(mission?.works??[]).filter(w=>w.acceptance==='accepted'&&w.record&&w.assistantSource).map(w=>({missionId:mission!.id,workId:w.id,recordId:w.record!.id,version:w.record!.artifact.version,sha256:w.record!.artifact.sha256,kind:w.record!.artifact.kind,title:w.title,memberId:w.assistantSource!.memberId??null,at:w.runtimeRun?.ownership?.startedAt??null,segment:Number(w.assistantSource!.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),turnId:w.assistantSource!.turnId}));
   return {feedId:state.feedId,results:rows.sort((a,b)=>(b.at??0)-(a.at??0)).slice(0,200)};
  }
  /** The host Work list (member-work.md): every conversation Work of the intake Mission, newest admission first, with its member and end time. No writes and no calls. */

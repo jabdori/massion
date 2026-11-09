@@ -1,3 +1,4 @@
+import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
 import {validateMemoryConflicts} from './memory-conflicts.ts';
@@ -130,13 +131,14 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['team','assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
   array(record.assignments, 'Record assignments').forEach(assignment); array(record.receipts, 'Record receipts').forEach(entry => effect(entry));
   texts(record.memoryVersions, 'Record memory versions'); oneOf(record.evidenceClass, ['fixture', 'real-provider'], 'Record evidence class');
   if(work.runtimeRun?.ownership)equal(record.runtimeOwnership,work.runtimeRun.ownership,'Record exact runtime ownership');else ensure(!Object.hasOwn(record,'runtimeOwnership'),'Legacy Record has runtime ownership');
+  if(work.team)equal(record.team,work.team,'Record team procedure');else ensure(!Object.hasOwn(record,'team'),'Record has team without Work pin');
   if(work.assistantSource)equal(record.assistantSource,work.assistantSource,'Record assistant source');else ensure(!Object.hasOwn(record,'assistantSource'),'Record has assistant source without its Work pin');
   if(work.questions){requireAnswered(work);equal(record.questions,clarificationInput(work),'Record original owner clarification');}else ensure(!Object.hasOwn(record,'questions'),'Legacy Record has owner clarification');
   if(work.conversationSource)equal(record.conversationSource,conversationSourceInput(work),'Record original conversation provenance');else ensure(!Object.hasOwn(record,'conversationSource'),'Legacy Record has conversation provenance');
@@ -162,7 +164,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+    ['team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+  if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
   clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
@@ -230,7 +233,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
-    const task = object(value, 'task', ['id', 'parentId', 'status'], ['result']); text(task.id, 'task ID');
+    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result']);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
     if (task.parentId !== null) text(task.parentId, 'parent task ID'); oneOf(task.status, ['queued', 'active', 'settled'], 'task status');
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
     if (task.status === 'settled') text(task.result, 'settled task result');
@@ -353,7 +356,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'revise-organization': {required:['version','reason','responsibilities']},
   'revise-mission-constraints': {required:['constraints','reason']},
   'revise-mission': { required: ['purpose', 'criteria'] },
-  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['executionGate','correction','conversationSource','assistantSource'] },
+  'admit-work': { required: ['workId', 'title', 'budget'], optional: ['team','executionGate','correction','conversationSource','assistantSource'] },
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
@@ -361,7 +364,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'close-expired-runtime': { required: ['workId','runId','dispatchId','hostSessionId','deadlineAt','observedAt','reason','acknowledgeUncertainOutcome'] },
   'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
   'block-work': { required: ['workId', 'blocker'] },
-  delegate: { required: ['workId', 'taskId', 'parentId'] },
+  delegate: { required: ['workId', 'taskId', 'parentId'], optional:['step'] },
   'settle-task': { required: ['workId', 'taskId', 'result'] },
   'admit-effect': { required: ['workId', 'effect', 'reserve'] },
   receipt: { required: ['workId', 'effectId', 'outcome', 'receipt', 'usage'],optional:['providerDispatchId'] },
@@ -394,10 +397,10 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
  */
 export function validateMissionJournalLineage(operations: readonly Operation<Mission>[]): void {
   const previous = new Map<string, Operation<Mission>>();
-  const commands = new Set<string>();
+  const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
   for (const operation of operations) {
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
-    if (isSkillsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isSkillsState(operation.value)) { skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isPermissionsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayPermissions(operation as unknown as Operation<PermissionsState>, previous.get(operation.aggregateId) as unknown as Operation<PermissionsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSchedulesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySchedules(operation as unknown as Operation<SchedulesState>, previous.get(operation.aggregateId) as unknown as Operation<SchedulesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
@@ -427,7 +430,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
       ensure(operation.fingerprint === hash({ actorId: actor.id, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
-      checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>);
+      checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');
       equal(operation.outbox, command.type === 'admit-effect' ? [{ type: 'effect-admitted', workId: command.workId, effectId: command.effect.id }] : [], 'command/outbox transition');
@@ -437,7 +440,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
 }
 
 /** Synthetic lineage roles cannot tell the assistant actor apart, so its narrow permission and host IDs are checked here. */
-function checkAssistantSteps(operation: Operation<Mission>, actorId: string, command: Command, mission: Mission, previous: Map<string, Operation<AssistantSegment>>): void {
+function checkAssistantSteps(operation: Operation<Mission>, actorId: string, command: Command, mission: Mission, previous: Map<string, Operation<AssistantSegment>>,skillsHistory:Map<number,SkillsState>): void {
   if (actorId === ASSISTANT_ACTOR_ID) ensure(command.type === 'admit-work' && Object.hasOwn(command, 'assistantSource') || command.type === 'activate-runtime', 'assistant actor may only admit its pinned Work and start its run');
   // Pin the assistant actor's runs and the deterministic assistant run ID; an owner run merely named assistant-* (possible before HTTP refused it) still replays.
   const runSource = command.type === 'activate-runtime' ? mission.works.find(work => work.id === command.workId)?.assistantSource : undefined;
@@ -446,6 +449,7 @@ function checkAssistantSteps(operation: Operation<Mission>, actorId: string, com
   }
   if (command.type !== 'admit-work' || !Object.hasOwn(command, 'assistantSource')) return;
   const source = command.assistantSource as AssistantSource;
+  if(command.team){const revision=command.team.skillsRevision;ensure(revision===0||skillsHistory.has(revision),'Team procedure snapshot must precede admission');equal(command.team,memberProcedures(skillsHistory.get(revision)??null,source.memberId!,revision),'Team must pin the originally read member procedures');}
   ensure(actorId === ASSISTANT_ACTOR_ID, 'assistantSource admission must be by assistant-representative');
   ensure(operation.commandId === 'assistant-work:' + source.turnId, 'assistantSource admission must use command ID assistant-work:<turnId>');
   const segment = previous.get(source.segmentId)?.value, turn = segment?.turns.find(entry => entry.id === source.turnId);

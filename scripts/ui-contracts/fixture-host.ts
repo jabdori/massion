@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {workbenchPage} from '../../src/workbench.ts';
+import {daemonGuard} from '../../src/daemon-auth.ts';
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
@@ -44,8 +45,9 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
 const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'");
 const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"style-src 'self' 'unsafe-inline'","connect-src 'self'","img-src 'self' data:","font-src 'self'","frame-src 'none'","frame-ancestors 'none'","object-src 'none'","base-uri 'none'","form-action 'none'"].join('; ');
 
-export async function startFixtureHost(screen:string):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
- const fixture=await loadFixture(screen);
+export async function startFixtureHost(screen:string|ScreenFixture,options:{daemonSecret?:string;port?:number}={}):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
+ const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
+ const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  let origin='';
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');
@@ -57,6 +59,7 @@ export async function startFixtureHost(screen:string):Promise<{url:string;fixtur
   const protocolPost=method==='POST'&&['/protocol/connect','/protocol/request'].includes(req.url??'');
   if(method!=='GET'&&!appView&&!protocolPost){res.setHeader('Allow','GET');fail(405,'Fixture host rejects product commands');return;}
   if(req.socket.remoteAddress!=='127.0.0.1'||req.headers.host!==origin.slice('http://'.length)||req.headers.origin&&req.headers.origin!==origin){fail(403,'Fixture host allows its loopback origin only');return;}
+  if(authenticate&&!authenticate(req,res))return;
   let url:URL;
   try{url=new URL(req.url!,origin);}catch{fail(400,'Invalid request URL');return;}
   if(url.origin!==origin){fail(403,'Fixture host allows its loopback origin only');return;}
@@ -106,7 +109,7 @@ export async function startFixtureHost(screen:string):Promise<{url:string;fixtur
   const response=fixture.routes[key]!;send(response.status,response.body);
  });
  await new Promise<void>((resolve,reject)=>{
-  server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.off('error',reject);resolve();});
+  server.once('error',reject);server.listen(options.port??0,'127.0.0.1',()=>{server.off('error',reject);resolve();});
  });
  origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  let closing:Promise<void>|undefined;

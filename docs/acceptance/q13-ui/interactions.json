@@ -1,0 +1,102 @@
+[
+  {
+    "screen": "B7-teams",
+    "theme": "dark",
+    "now": 1793855520000,
+    "duration": "4분",
+    "flat": true,
+    "overflow": false,
+    "people": [
+      "퀼퀼",
+      "조사",
+      "분류",
+      "설문",
+      "요약",
+      "확인"
+    ],
+    "resultAfterProcedure": true,
+    "results": "퀼조사지난 90일 해지 41건을 정리했습니다.",
+    "rows": 4,
+    "text": "해지 내역 수집고객 분류설문 발송건너뜀 · 기존 설문 활용원인 요약선행 단계 · 고객 분류",
+    "wide": false,
+    "check": {
+      "contract": "B7-churn",
+      "passed": 49,
+      "failed": 25,
+      "warnings": 2,
+      "required": 74,
+      "budgetFailures": [],
+      "forbiddenFailures": []
+    },
+    "scope": "Matching B7-churn contract",
+    "inspection": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "commands": 0,
+    "fixture": "tests/fixtures/internal-teams/B7-teams.json"
+  },
+  {
+    "screen": "B7-teams",
+    "theme": "light",
+    "now": 1793855520000,
+    "duration": "4분",
+    "flat": true,
+    "overflow": false,
+    "people": [
+      "퀼퀼",
+      "조사",
+      "분류",
+      "설문",
+      "요약",
+      "확인"
+    ],
+    "resultAfterProcedure": true,
+    "results": "퀼조사지난 90일 해지 41건을 정리했습니다.",
+    "rows": 4,
+    "text": "해지 내역 수집고객 분류설문 발송건너뜀 · 기존 설문 활용원인 요약선행 단계 · 고객 분류",
+    "wide": false,
+    "check": {
+      "contract": "B7-churn",
+      "passed": 49,
+      "failed": 25,
+      "warnings": 2,
+      "required": 74,
+      "budgetFailures": [],
+      "forbiddenFailures": []
+    },
+    "scope": "Matching B7-churn contract",
+    "inspection": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "commands": 0,
+    "fixture": "tests/fixtures/internal-teams/B7-teams.json"
+  },
+  {
+    "screen": "B8-teams",
+    "theme": "dark",
+    "now": 1793855520000,
+    "duration": "4분",
+    "flat": true,
+    "overflow": false,
+    "people": [
+      "퀼퀼",
+      "조사",
+      "분류",
+      "설문",
+      "요약",
+      "확인"
+    ],
+    "resultAfterProcedure": true,
+    "results": "퀼조사지난 90일 해지 41건을 정리했습니다.",
+    "rows": 5,
+    "text": "14:08이탈 원인 조사해지 내역 수집퀼조사완료지난 90일 해지 41건을 정리했습니다.고객 분류퀼분류실행 중설문 발송퀼설문건너뜀 · 기존 설문 활용원인 요약퀼요약대기 중선행 단계 · 고객 분류",
+    "wide": true,
+    "check": null,
+    "scope": "B8 structural and interaction check only; no printer contract comparison",
+    "inspection": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "commands": 0,
+    "fixture": "tests/fixtures/internal-teams/B8-teams.json"
+  }
+]

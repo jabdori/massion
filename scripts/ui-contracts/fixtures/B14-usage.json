@@ -3,6 +3,23 @@
   "extends": "B14",
   "description": "Usage settings with unknown values.",
   "gaps": [
-    "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+    "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered."
+  ],
+  "steps": [
+    {
+      "selector": "#rail-me",
+      "action": "click",
+      "readySelector": "#me-menu"
+    },
+    {
+      "selector": "#me-settings",
+      "action": "click",
+      "readySelector": "#page-settings"
+    },
+    {
+      "selector": "#settings-nav-usage",
+      "action": "click",
+      "readySelector": "#settings-usage-body .set-row"
+    }
   ]
 }

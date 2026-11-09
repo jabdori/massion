@@ -61,6 +61,6 @@ export const visibleTextBudgetExpression=String.raw`(()=>{
 })()`;
 
 export function visibleBudgets(rendered:Record<string,string[]>,regions:string[]){
- const aliases:Record<string,string[]>={page:['page','conversation','header','composer'],settings:['settings','page','conversation','composer']};
+ const aliases:Record<string,string[]>={page:['page','settings','conversation','header','composer'],settings:['settings','page','conversation','composer']};
  return Object.fromEntries(regions.map(region=>[region,(aliases[region]??[region.startsWith('dialog:')?'dialog':region]).flatMap(actual=>{const texts=rendered[actual];if(!Array.isArray(texts))throw Error('Missing rendered region: '+actual);return texts;})]));
 }

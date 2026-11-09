@@ -84,6 +84,7 @@ test('scheduler: a due tick leaves one briefing of the last day\'s Work turns, n
  const head=await f.assistant.read(),conv=await f.schedules.conversation(head.segment!.number),turns=head.turns,receipt=turns.find(x=>x.work?.title==='Receipt sort')!;
  assert.deepEqual(conv.briefings,[{id:view.runs[0]!.id,at:f.now(),title:'Morning briefing',turnIds:[receipt.id]}],'only Work turns from the 24 hours before the run');assert.deepEqual(conv.exceptions,[]);
  assert.equal(view.runs[0]!.fact,'1 Work item');
+ assert.equal((view.runs[0] as any).segment,head.segment!.number,'a past run retains the exact conversation segment that produced it');
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -164,6 +165,7 @@ test('HTTP: schedules and results routes take exact fields; the conversation rea
  assert.equal((await post('/assistant/schedules',{commandId:'c-3',action:'pause',scheduleId:id})).status,200);assert.equal((await fetch(url('/assistant/schedules')).then(r=>r.json()) as any).schedules[0].active,false);
  const results=await fetch(url('/assistant/results')).then(r=>r.json()) as any,row=results.results[0];
  assert.deepEqual([results.results.length,row.title,row.kind,row.missionId,row.segment,row.turnId],[1,'Discount totals','text','intake',1,view.turns.find((x:any)=>x.work).id]);
+ assert.equal(row.memberId,null,'the accepted result carries its assignee; null means the Representative');
  const read=await fetch(url(`/missions/${row.missionId}/record-artifact?work=${encodeURIComponent(row.workId)}&record=${encodeURIComponent(row.recordId)}&version=${row.version}&sha256=${row.sha256}`)).then(r=>r.json()) as any;
  assert.match(read.content,/Answer bounded fixture text/,'the preview reads the exact accepted text');
  assert.equal((await fetch(url('/assistant/results?x=1'))).status,400);
