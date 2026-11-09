@@ -1,0 +1,14 @@
+{
+  "data": {
+    "snapshot": "- region \"Massion\" [ref=e1]\n  - heading \"Massion\" [level=1, ref=e2]\n  - button \"Claude로 계속하기\" [ref=e3]\n  - button \"ChatGPT로 계속하기\" [ref=e4]\n  - link \"다른 방법으로 계속하기\" [ref=e5]"
+  },
+  "visibleTextBudget": {
+    "page": [
+      "M",
+      "Massion",
+      "Claude로 계속하기",
+      "ChatGPT로 계속하기",
+      "다른 방법으로 계속하기"
+    ]
+  }
+}

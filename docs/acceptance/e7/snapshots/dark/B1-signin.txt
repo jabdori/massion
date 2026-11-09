@@ -1,0 +1,5 @@
+- region "Massion" [ref=e1]
+  - heading "Massion" [level=1, ref=e2]
+  - button "Claude로 계속하기" [ref=e3]
+  - button "ChatGPT로 계속하기" [ref=e4]
+  - link "다른 방법으로 계속하기" [ref=e5]

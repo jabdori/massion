@@ -1,0 +1,7 @@
+contract B1-signin (B1 첫 실행 · 로그인 없음) vs /Users/code/orca/workspaces/massion/e7-first-experience/docs/acceptance/e7/snapshots/light/B1-signin.json
+  ok    page         heading  "Massion" -> heading "Massion"
+  ok    page         button   "Claude로 계속하기" -> button "Claude로 계속하기"
+  ok    page         button   "ChatGPT로 계속하기" -> button "ChatGPT로 계속하기"
+  ok    page         link     "다른 방법으로 계속하기" -> link "다른 방법으로 계속하기"
+  budget page         app {"chars":45,"strings":5,"sentences":0,"longest":13} proto {"chars":44,"strings":4,"sentences":0,"longest":13} source visibleTextBudget
+PASS: 0 failures, 0 warnings, 4 required elements

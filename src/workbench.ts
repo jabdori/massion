@@ -1,3 +1,4 @@
+import {firstStyle,firstPanel,firstClient} from './first-experience.ts';
 import {workRoomStyle,workRoomClient} from './work-room-panel.ts';
 import {uiTokensStyle} from './ui-tokens.ts';
 import {copy,uiCopyClient} from './ui-copy.ts';
@@ -46,6 +47,7 @@ ${uiTokensStyle}
 .impact-panel{border-top:1px solid var(--line);margin-top:20px;padding-top:14px;overflow-wrap:anywhere}.impact-results{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}.impact-results:focus-visible{outline:var(--focus-width) solid var(--focus-ring);outline-offset:var(--focus-offset)}.impact-results ul{padding-left:20px}.impact-results li{margin-bottom:12px}
 .expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
 ${chatStyle}
+${firstStyle}
 ${memberStyle}
 ${resultsStyle}
 ${schedulesStyle}
@@ -55,6 +57,7 @@ ${shellStyle}
 ${workRoomStyle}</style>
 </head>
 <body>
+${firstPanel}
 <div id="app" class="app">
 ${shellRail}
 ${shellSidebar}
@@ -1614,7 +1617,7 @@ function connectionLocked(){return !connectionCatalog||reconnectRequired||busy||
 function connectionControls(){const locked=connectionBusy||connectionLocked();for(const button of connectionButtons)button.disabled=locked;$('connection-fields').disabled=connectionLocked()||connectionBusy&&!connectionReading||!connectionCatalog||!!connectionCatalog.host?.managed;}
 function installConnections(body){
  if(!body||!Array.isArray(body.providerTypes)||!Array.isArray(body.connections)||!body.runtime||!Array.isArray(body.runtime.connections)||!Array.isArray(body.runtime.authorizations))throw new Error(copy("legacy.invalid-connection-catalog"));
- connectionCatalog=body;runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();
+ connectionCatalog=body;firstRoute();runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
 async function connectionWrite(path,body){
@@ -1701,6 +1704,7 @@ async function connect() {
   await startFeed();
   if (!selectedId && initialReference.present) report(copy("legacy.invalid-mission-link-enter-a-valid-mission"), 'error');
 }
+${firstClient}
 ${chatClient}
 ${memberClient}
 ${resultsClient}
