@@ -106,6 +106,7 @@ test('Schedules empty state offers the morning briefing; choosing it creates it 
  const {app,state}=fixture();await settle();
  await app.node('rail-schedules').fire('click');await settle();
  assert.equal(app.node('side-schedules').hidden,false);assert.equal(app.node('schedules-empty').hidden,false);assert.equal(app.node('schedule-detail').hidden,true);
+ assert.doesNotMatch(app.node('side-schedules').textContent,new RegExp(copy('sidebar.button.12')));
  assert.match(staticText('schedules-empty'),sequence(copy('page.heading.09'),copy('settings.combobox.01'),copy('ui.panel.briefing-description')),'B17-empty: icon, title, one example card');
  await app.node('schedule-example-briefing').fire('click');await settle();
  const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.ok(Number.isSafeInteger(sent.body.offset));
