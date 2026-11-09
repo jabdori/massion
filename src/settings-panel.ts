@@ -43,7 +43,7 @@ function settingsText(title,sub){const box=element('span',undefined,'set-text');
 function settingsRow(title,sub,...controls){const row=element('div',undefined,'set-row');row.append(settingsText(title,sub),...controls.filter(Boolean));return row;}
 function settingsCard(label,rows,action){const head=element('h3',label);if(action)head.append(action);const card=element('div',undefined,'set-card');card.append(...(rows.length?rows:[element('div',copy('settings.text.03'),'set-empty')]));return [head,card];}
 /** Opens one section and reads what it shows; nothing is written by opening. */
-function settingsOpen(name,app=''){if(!$('page-settings').hidden)$('page-heading').textContent=copy('sidebar.link.11');settingsShown=name;settingsAdding=false;settingsMember='';settingsGroup='';settingsGroupAdding=false;settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}void settingsLoad(name);}
+function settingsOpen(name,app=''){if(!$('page-settings').hidden)$('page-heading').textContent=copy('sidebar.link.11');settingsShown=name;settingsAdding=false;settingsMember='';settingsGroup='';settingsGroupAdding=false;settingsApp=app;for(const s of settingsNames){$('settings-'+s).hidden=s!==name;$('settings-nav-'+s).setAttribute('aria-current',s===name?'page':'false');}return settingsLoad(name);}
 async function settingsRead(path,scope){try{const {response,body}=await request(path,{scope});return response.ok?body:null;}catch{return null;}}
 /** Each section's read has its own generation: a slower earlier read for the same section never overwrites a newer one. */
 async function settingsLoad(name){

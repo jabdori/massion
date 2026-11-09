@@ -8,7 +8,7 @@ Member turns may propose one named memory instruction separately from Work steer
 
 ## Visual-gate corrections
 
-- **Case link:** B2's approved link targets B12. It opens existing Memory evidence. The unapproved case pane, version IDs, raw calculation layout and invented headings were removed. `case-memory.png` shows the approved destination.
+- **Case link:** B2's approved link targets B12. It opens existing Memory evidence only after the exact Mission/revision and current navigation generation have loaded; stale or out-of-order reads do not expand another proposal. The unapproved case pane, version IDs, raw calculation layout and invented headings were removed. `case-memory.png` shows the approved destination.
 - **B2/B9:** the proposal is in the captured viewport with `지금 / 변경 후 / 주의`, the two actions and right-aligned case link. No phantom rounding Work appears in the sidebar. Production schedule transitions create the fixture briefing; exact pending decision links supply B9's `반올림 규칙` entry. `B9-briefing.png` verifies its navigation back to the proposal.
 - **B18-room-b:** the fresh isolated capture opens the exact `경쟁사 가격` Work pane. No stale rule-case tab exists.
 - **Member candidates:** B6, B7-fail and B18-room-b render the inline `기억 후보: {text} 남기기 지우기` line once, without a bordered card or repeated name/content.
@@ -16,7 +16,7 @@ Member turns may propose one named memory instruction separately from Work steer
 
 ## Verification
 
-Related tests cover the four recurring failure classes, strict candidate input, backup lineage, source navigation, dated and legacy history, native-hash completion, approved case navigation and briefing references. `npm run typecheck` and copy lint pass. The final related local run passed 163 tests with 16 actual-DB cases skipped (179 total). Real DB/provider/payment execution is not local visual evidence.
+Related tests cover the four recurring failure classes, strict candidate input, backup lineage, source navigation, dated and legacy history, native-hash completion, approved case navigation and briefing references. `npm run typecheck` and copy lint pass. The final related local run passed 164 tests with 16 actual-DB cases skipped (180 total). Real DB/provider/payment execution is not local visual evidence.
 
 Affected browser captures cover B2 and offline variants, B9 and variants, B12, B16 and variants, B7 detail variants, B6, B18 and B18-room-b in both themes. B12 passes 26/26 required elements; B16 passes 22/22; B16-later passes 21/21; offline variants pass 20/20 and 22/22. Every measured remaining diagnostic matches an existing scoped exception, with no new or stale entries. Six B9 briefing exceptions were removed in this correction, reducing the original 804-entry allow-list to 734.
 
