@@ -28,7 +28,7 @@ test('untrusted URLs, subframes and renderer capabilities stay outside the host 
  frame.url='https://example.org/';assert.equal(validSender({sender,senderFrame:frame},sender),false);
  const csp=contentPolicy('<script>safe()</script><style>body{color:red}</style>');
  assert.match(csp,/script-src 'sha256-[^']+'/);assert.doesNotMatch(csp,/unsafe-eval|script-src[^;]*unsafe-inline/);
- assert.match(csp,/connect-src 'self'/);assert.match(csp,/frame-src 'none'/);
+ assert.match(csp,/connect-src 'self'/);assert.match(csp,/frame-src massion-app:\/\/document/);
 });
 
 for(const state of ['ready','update-needed','restart-needed'] as const)test('desktop uses existing version negotiation: '+state,async t=>{

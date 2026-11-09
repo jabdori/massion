@@ -176,3 +176,54 @@ test('unknown app calls are projected without arguments and reconcile over the e
  assert.equal((await post('old-feed')).status,409);assert.equal((await service.rail() as any)[0].unresolved.length,1);
  assert.equal((await post()).status,200);assert.deepEqual((await service.rail() as any)[0].unresolved,[]);
 });
+
+test('lost claim receipt persists unknown and permits owner reconciliation without dispatch',async()=>{
+ let sent=0;const mcp={list:async()=>tools,call:async()=>{sent++;return {};},close:async()=>{}};
+ const {store,service,decisionId}=await setup({mcp});await install(service,decisionId);
+ const guarded=new Proxy(store,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.commandId==='assistant-app-lost-claim')throw new Error('Claim receipt lost');return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ await assert.rejects(call(new AppsService(guarded,{mcp}),'comment','assistant-app-lost-claim'),/receipt lost/);
+ assert.equal((await store.load(APPS_ID))!.value.toolCalls[0].status,'unknown');assert.equal(sent,0);
+ await service.act({commandId:'owner-proof',action:'reconcile',appId:'app-mcp-github',callId:'assistant-app-lost-claim',outcome:'not-done',evidence:'Observed no request at the service'});
+ assert.equal((await call(service,'comment','assistant-app-lost-claim')).status,'failed');assert.equal(sent,0);
+ validateMissionJournalLineage(store.inspect() as any);
+});
+
+test('restart reads quarantine abandoned pending claims durably before owner reconciliation',async()=>{
+ let writesUnavailable=false,sent=0;const mcp={list:async()=>tools,call:async()=>{sent++;return {content:[]};},close:async()=>{}};
+ const {store,service,decisionId}=await setup({mcp});await install(service,decisionId);
+ const guarded=new Proxy(store,{get(target,key){if(key==='commit')return async(input:any)=>{if(writesUnavailable)throw Error('Host exited before settlement');const result=await target.commit(input);if(input.commandId==='assistant-app-abandoned')writesUnavailable=true;return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ assert.equal((await call(new AppsService(guarded,{mcp}),'comment','assistant-app-abandoned')).status,'unknown');assert.equal((await store.load(APPS_ID))!.value.toolCalls[0].status,'pending');
+ const restarted=new AppsService(store,{mcp});await Promise.all([restarted.read(),restarted.rail()]);
+ assert.equal((await store.load(APPS_ID))!.value.toolCalls[0].status,'unknown');assert.equal(sent,1);
+ await restarted.act({commandId:'owner-restart-proof',action:'reconcile',appId:'app-mcp-github',callId:'assistant-app-abandoned',outcome:'done',evidence:'Observed the original service receipt'});
+ assert.equal((await call(restarted,'comment','assistant-app-abandoned')).status,'succeeded');assert.equal(sent,1);
+ assert.equal((await call(restarted,'comment','assistant-app-after-recovery')).status,'succeeded');assert.equal(sent,2);
+ validateMissionJournalLineage(store.inspect() as any);
+});
+
+test('replays and reads never quarantine a live in-process call or dispatch a duplicate',async()=>{
+ let sent=0,entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ const mcp={list:async()=>tools,call:async()=>{sent++;entered();await gate;return {content:[]};},close:async()=>{}};
+ const {store,service,decisionId}=await setup({mcp});await install(service,decisionId);
+ const running=call(service,'comment','assistant-app-live');await started;
+ const other=new AppsService(store,{mcp}),replayed=call(other,'comment','assistant-app-live');
+ await assert.rejects(other.callTool({commandId:'assistant-app-live',appId:'app-mcp-github',name:'comment',arguments:{different:true}}),/identity reused/);
+ await Promise.all([other.read(),other.rail()]);assert.equal((await store.load(APPS_ID))!.value.toolCalls[0].status,'pending');
+ await assert.rejects(other.act({commandId:'premature',action:'reconcile',appId:'app-mcp-github',callId:'assistant-app-live',outcome:'done',evidence:'Not a settled receipt'}),/unknown call/);
+ release();const replies=await Promise.all([running,replayed]);assert.ok(replies.every(r=>r.status==='succeeded'));assert.equal(sent,1);
+});
+
+test('replay alone persists abandoned uncertainty once, while a stored receipt is never overwritten',async()=>{
+ for(const receiptWasStored of [false,true]){
+  let failed=false,sent=0;const mcp={list:async()=>tools,call:async()=>{sent++;return {content:[{type:'text',text:'receipt'}]};},close:async()=>{}};
+  const {store,service,decisionId}=await setup({mcp});await install(service,decisionId);
+  const guarded=new Proxy(store,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.commandId.includes('-result-')){failed=true;if(receiptWasStored)await target.commit(input);throw Error('Settlement receipt lost');}if(failed)throw Error('Original host unavailable');return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  assert.equal((await call(new AppsService(guarded,{mcp}),'comment','assistant-app-replay-recovery')).status,'unknown');
+  const restarted=new AppsService(store),results=await Promise.all([call(restarted,'comment','assistant-app-replay-recovery'),call(restarted,'comment','assistant-app-replay-recovery')]);
+  assert.ok(results.every(r=>r.status===(receiptWasStored?'succeeded':'unknown')));assert.equal(sent,1);
+  const saved=(await store.load(APPS_ID))!.value.toolCalls[0];assert.equal(saved.status,receiptWasStored?'succeeded':'unknown');
+  if(receiptWasStored)assert.deepEqual(saved.result,{content:[{type:'text',text:'receipt'}]});
+  assert.equal(store.inspect().filter(o=>o.events.some((e:any)=>e.type==='abandon-app-tool')).length,receiptWasStored?0:1);
+  validateMissionJournalLineage(store.inspect() as any);
+ }
+});

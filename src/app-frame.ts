@@ -9,10 +9,12 @@ function appFrameMessage(event){
  frame.style.height=data.height+'px';
 }
 window.addEventListener('message',appFrameMessage);
-function appFrame(title,html){
+function appFrame(title,url){
+ if(typeof url!=='string'||!(/^(?:massion-app:\/\/document|http:\/\/127\.0\.0\.1:[0-9]{1,5})\/[a-f0-9]{64}$/).test(url))throw new Error('Invalid hosted app document');
  const frame=element('iframe');frame.setAttribute('title',title);frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('referrerpolicy','no-referrer');frame.setAttribute('credentialless','');frame.className='app-isolated-frame';
  frame.style.width='100%';frame.style.height='400px';frame.style.border='0';
- frame.srcdoc='<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; style-src &#39;unsafe-inline&#39;; img-src data:; connect-src &#39;none&#39;; frame-src &#39;none&#39;; object-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;"></head><body>'+html+'</body></html>';
- frame.addEventListener('load',()=>{if(frame.contentWindow)appFrames.set(frame.contentWindow,frame);});return frame;
+ frame.src=url;
+ const register=()=>{if(frame.contentWindow)appFrames.set(frame.contentWindow,frame);};Promise.resolve().then(register);
+ frame.addEventListener('load',register);return frame;
 }
 `;

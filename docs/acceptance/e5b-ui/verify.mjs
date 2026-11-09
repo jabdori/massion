@@ -33,11 +33,9 @@ async function commandHost(screen){
     const payload={status:'committed'};
     res.end(JSON.stringify(message?.kind?{...message,kind:'reply',status:200,payload}:payload));return;
    }
-   const response=await fetch(new URL(req.url==='/__frame-probe'?'/':req.url,upstream.url),{method:req.method,headers:raw?{'Content-Type':'application/json'}:{},...(raw?{body:raw}:{})});
+   const response=await fetch(new URL(req.url,upstream.url),{method:req.method,headers:raw?{'Content-Type':'application/json'}:{},...(raw?{body:raw}:{})});
    res.statusCode=response.status;
    for(const name of ['content-type','content-security-policy'])if(response.headers.has(name))res.setHeader(name,response.headers.get(name));
-   // The read-only fixture CSP bans frames altogether; this probe uses the production workbench CSP.
-   if(req.url==='/__frame-probe')res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
    if(req.url==='/protocol/request'&&path.startsWith('/assistant/conversation')){
     const body=await response.json();body.payload=structuredClone(view);res.end(JSON.stringify(body));
    }else res.end(Buffer.from(await response.arrayBuffer()));
@@ -73,18 +71,8 @@ for(const theme of ['dark','light']){
   await browser('fill','#app-connect-token','fixture-only');await browser('click','#app-connect-submit');await browser('wait','#chat-system-install');
   assert.equal(await evaluate("document.getElementById('app-connect-token').value"),'');assert.equal(await evaluate("document.getElementById('app-connect-panel').hidden"),true);assert.equal(host.commands(),3);await capture('B24-connect-connected');
   assert.equal(await evaluate("[...Object.values(localStorage)].some(v=>v.includes('fixture-only'))"),false);
-  await browser('open',host.url+'/__frame-probe');await browser('wait','--fn',workbenchReady);
-  const frameProbe=await evaluate(`new Promise(resolve=>{
-   const html='<script>addEventListener("message",async()=>{let parentAccess="allowed",network="allowed";try{parent.document.body}catch(e){parentAccess=e.name}try{await fetch("/health")}catch(e){network=e.name}parent.postMessage({type:"probe",parentAccess,network},"*");parent.postMessage({type:"resize",height:240},"*")})<'+ '/script>';
-   const nodes=appsViewNodes({title:'Example',groups:[],frame:{html}}),frame=nodes[1];
-   window.addEventListener('message',function probe(event){if(event.source!==frame.contentWindow||event.data?.type!=='probe')return;window.removeEventListener('message',probe);resolve({...event.data,sandbox:frame.getAttribute('sandbox'),referrer:frame.getAttribute('referrerpolicy')});});
-   frame.id='e5b-frame-probe';frame.addEventListener('load',()=>frame.contentWindow.postMessage({type:'probe'},'*'));document.body.append(...nodes);
-  })`);
-  assert.deepEqual(frameProbe,{type:'probe',parentAccess:'SecurityError',network:'TypeError',sandbox:'allow-scripts',referrer:'no-referrer'});
-  await browser('wait','--fn',"document.getElementById('e5b-frame-probe').style.height==='240px'");
-  assert.equal(await evaluate(`(()=>{const frame=document.getElementById('e5b-frame-probe');for(const data of [{type:'resize',height:1},{type:'resize',height:1201},{type:'resize',height:250,extra:true},{type:'effect',command:'send'},{type:'ready'}])appFrameMessage({origin:'null',source:frame.contentWindow,data});return frame.style.height})()`),'240px');
-  rows.push({theme,frameProbe,bridge:'Only ready and bounded resize; unknown effects and invalid resize ignored.'});
- }finally{await browser('close');await host.close();}
+  // App-frame checks now use the installed app panel and desktop smoke; see frame-origin-design.md.
+ }catch(error){console.error('Acceptance step failed:',error);throw error;}finally{try{await browser('close');}finally{await host.close();}}
 }
 await writeFile(join(out,'report.json'),JSON.stringify({evidence:'Fixture commands only; no real credential, keychain or provider access.',rows},null,2)+'\n');
 console.log('Verified Later, Ask again, masked token entry, single submission and connected read in both themes. '+join(out,'report.json'));

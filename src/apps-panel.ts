@@ -69,7 +69,7 @@ const appDeltaText=d=>'+'+d.adds+(d.deletes?' −'+d.deletes:'');
 function appsViewNodes(v,github=false){
  const label=github?appLabel:value=>value;
  if(!v||!chatText(v.title)||!Array.isArray(v.groups))return [element('p',copy('ui.panel.unavailable'),'app-meta')];
- if(v.frame&&typeof v.frame.html==='string'&&v.frame.html.length<=65536)return [element('h2',v.title),appFrame(v.title,v.frame.html)];
+ if(v.frame&&typeof v.frame.url==='string'&&v.frame.url.length<=256)return [element('h2',v.title),appFrame(v.title,v.frame.url)];
  const number=github&&/^(.*) #(\d+)$/.exec(v.title),heading=element('h2',number?number[1]+' ':v.title);if(number)heading.append(element('span','#'+number[2],'app-number'));const out=[heading];
  if(chatText(v.meta)){
   const parts=v.meta.split(' · ');

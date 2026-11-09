@@ -10,7 +10,7 @@ for(const name of ['main','security','transport','notifications','daemon','auth'
  const source=await readFile(join(directory,name+'.ts'),'utf8');
  await writeFile(join(out,name+'.js'),stripTypeScriptTypes(source).replaceAll('../src/','./core/').replaceAll(".ts'",".js'"));
 }
-for(const name of ['client-protocol','protocol','daemon-auth']){
+for(const name of ['client-protocol','protocol','daemon-auth','app-documents']){
  const source=await readFile(join(directory,'../src',name+'.ts'),'utf8');
  await writeFile(join(out,'core',name+'.js'),stripTypeScriptTypes(source).replaceAll(".ts'",".js'"));
 }

@@ -48,3 +48,14 @@ The owner-reconciliation fix and its actual host/browser evidence are documented
 
 
 Final integration includes main `395193e` (#115/#116) without rebasing. Auto-merge preserved the reconciliation and startup fixes. Post-integration typecheck and related suites passed **239 tests, 4 opt-in skips, zero failures** ([log](desktop-ci/main395-tests.txt)); the actual reconciliation browser flow and rebuilt Linux Xvfb smoke passed again ([smoke](desktop-ci/main395-smoke.txt)). Only affected checks were run locally; the full suite remains CI work.
+
+
+## Codex P2 follow-up
+
+[Abandoned pending call recovery](p2-recovery.md) persists uncertainty without a
+resend and enables the existing evidenced owner reconciliation. [Isolated app
+documents](frame-origin-design.md) replaces srcdoc with controlled independent
+origins; workbench script/style hashes remain unchanged. Focused combined checks
+passed **123 tests, one real-DB skip, zero failures**, with root typecheck passing
+([logs](p2-checks/)). Browser panel and desktop smoke evidence includes actual
+script/style execution, ready/resize messages and parent/network/API denial.

@@ -27,6 +27,7 @@ export interface AppDecision {id:string;at:number;appId:string;version:number;ba
 export interface AppsState {toolCalls?:McpCall[];kind:'apps';id:string;apps:App[];decisions:AppDecision[];rejected:{at:number;memberId:string;name:string;version:string;hash:string;reason:string}[]}
 type Offer={decisionId:string;origin:'catalog'|'self-made';memberId?:string;source?:App['source'];pkg:AppPackage;check?:AppCheck};
 export type AppsCommand =
+ | {type:'abandon-app-tool';callId:string}
  | {type:'reconcile-app-tool';appId:string;callId:string;outcome:'done'|'not-done';evidence:string}
  | {type:'begin-app-connect'|'complete-app-connect';decisionId:string;connectionId:string}
  | {type:'claim-app-tool';call:McpCall}
@@ -142,6 +143,11 @@ export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor
    const c=state.toolCalls?.find(c=>c.id===command.callId);ensure(c&&c.status==='pending','Original pending tool claim required','conflict');
    if(command.result!==undefined){boundedJson(command.result);c.result=structuredClone(command.result);}c.status=command.status;break;
   }
+  case 'abandon-app-tool': {
+   role('assistant');ensure(exact(command,['type','callId'])&&id(command.callId),'Exact abandoned call required');const call=state.toolCalls?.find(c=>c.id===command.callId);ensure(call,'Unknown tool call');
+   // A concurrent receipt or owner reconciliation remains authoritative; uncertainty never overwrites it.
+   if(call.status==='pending')call.status='unknown';break;
+  }
   case 'reconcile-app-tool': {
    role('owner');ensure(exact(command,['type','appId','callId','outcome','evidence'])&&id(command.appId)&&id(command.callId)&&['done','not-done'].includes(command.outcome)&&line(command.evidence,2000),'Exact reconciliation outcome and evidence required');
    const call=state.toolCalls?.find(c=>c.id===command.callId&&c.appId===command.appId);ensure(call&&call.status==='unknown'&&!call.reconciliation,'Only the exact unknown call can be reconciled','conflict');
@@ -170,6 +176,7 @@ export function replayApps(operation:Operation<AppsState>,prior:Operation<AppsSt
  if(command.type==='begin-app-connect')ensure(command.connectionId===operation.commandId,'Connection claim identity mismatch');
  if(command.type==='complete-app-connect')ensure(operation.commandId==='connect-result-'+hash(command.connectionId).slice(0,32),'Connection completion identity mismatch');
  if(command.type==='claim-app-tool')ensure(command.call.id===operation.commandId,'Tool claim identity mismatch');
+ if(command.type==='abandon-app-tool')ensure(operation.commandId===HOST_PREFIX+'-abandoned-'+hash(command.callId).slice(0,32),'Tool recovery identity mismatch');
  if(command.type==='settle-app-tool')ensure(operation.commandId===HOST_PREFIX+'-result-'+hash(command.callId).slice(0,32),'Tool completion identity mismatch');
  const derived=applyApps(prior?prior.value:null,event.command,{id:event.actor,roles:[host?'assistant':'owner']},event.time);
  ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'apps command/state transition');
@@ -178,13 +185,25 @@ export function replayApps(operation:Operation<AppsState>,prior:Operation<AppsSt
 const unresolvedCalls=(state:AppsState,appId:string)=>(state.toolCalls??[]).filter(c=>c.appId===appId&&(c.status==='pending'||c.status==='unknown')).map(c=>({id:c.id,name:c.name,status:c.status as 'pending'|'unknown'}));
 const joined=(v:string[])=>v.length?v.join(' · '):'None';
 const adds=(m:AppManifest)=>joined([...(m.contributes.page?[m.contributes.page.title+' page']:[]),...(m.contributes.roomTab?[m.contributes.roomTab.prefix.replace(/\s*#$/,'')+' tab']:[])]);
+type ToolResult={status:'succeeded'|'failed'|'unknown';result?:unknown;reconciliation?:McpCall['reconciliation']};
+// Shared by service instances in this host, so a read or replay cannot abandon a live attempt.
+const toolFlights=new Map<string,{identity:string;run:Promise<ToolResult>}>();
+const toolFlightKey=(feed:string,callId:string)=>JSON.stringify([feed,callId]);
 export class AppsService {
  readonly #store:Store<any>;readonly #network?:AppNetwork;readonly #clock:()=>number;readonly #mcp?:McpAdapter;readonly #secrets?:AppSecrets;readonly #timeout:number;readonly #admit:()=>Promise<void>;readonly #connections=new Map<string,{decisionId:string;promise:Promise<{status:string;revision?:number}>}>();readonly #stop=new AbortController();
  constructor(store:Store<any>,options:{network?:AppNetwork;clock?:()=>number;mcp?:McpAdapter;secrets?:AppSecrets;toolTimeoutMs?:number;admit?:()=>Promise<void>}={}){this.#store=store;this.#network=options.network;this.#clock=options.clock??Date.now;this.#mcp=options.mcp;this.#secrets=options.secrets;this.#timeout=options.toolTimeoutMs??MCP_TIMEOUT_MS;ensure(Number.isSafeInteger(this.#timeout)&&this.#timeout>0&&this.#timeout<=MCP_TIMEOUT_MS,'Invalid tool timeout');this.#admit=options.admit??(async()=>{});}
  async #state(){return await this.#store.load(APPS_ID) as Snapshot<AppsState>|null;}
+ async #markUnknown(callId:string){
+  const call=(await this.#state())?.value.toolCalls?.find(c=>c.id===callId);if(!call||call.status!=='pending')return;
+  const result=await this.#dispatch(HOST_PREFIX+'-abandoned-'+hash(callId).slice(0,32),ASSISTANT_ACTOR_ID,{type:'abandon-app-tool',callId});ensure(result.status!=='conflict','Tool recovery could not be confirmed','conflict');
+ }
+ async #recoverPending(){
+  const state=await this.#store.readState(APPS_ID);
+  for(const call of (state.snapshot?.value as AppsState|undefined)?.toolCalls??[])if(call.status==='pending'&&!toolFlights.has(toolFlightKey(state.feedId,call.id)))await this.#markUnknown(call.id);
+ }
  /** Settings > Apps: installed apps with permissions, contributions and approved versions; the catalog with what is installed. */
  async read(){
-  const s=await this.#state(),v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState;
+  await this.#recoverPending();const s=await this.#state(),v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState;
   const apps=v.apps.filter(a=>a.current!==null).map(a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest;
    return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};});
@@ -192,7 +211,7 @@ export class AppsService {
   return {revision:s?.revision??0,apps,catalog};
  }
  /** Enabled apps for the rail and Work room tabs. */
- async rail(){const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null,...(m.kind==='mcp'?{unresolved:unresolvedCalls(v!,a.id)}:{})};});}
+ async rail(){await this.#recoverPending();const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null,...(m.kind==='mcp'?{unresolved:unresolvedCalls(v!,a.id)}:{})};});}
  /** Decision cards: catalog apps in the Representative's conversation (null), self-made apps in their member's (conversation-cards.md shape plus `detail` and `remove`). */
  async decisions(memberId:string|null){
   const v=(await this.#state())?.value;if(!v)return [];const members=((await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined)?.members??[];
@@ -228,20 +247,25 @@ export class AppsService {
   return view;
  }
  /** Only the host calls tools; model/UI input cannot construct a transport or widen a grant. */
- async callTool(input:{commandId:string;appId:string;name:string;arguments:Record<string,unknown>}){
+ async callTool(input:{commandId:string;appId:string;name:string;arguments:Record<string,unknown>}):Promise<ToolResult>{
   ensure(exact(input,['commandId','appId','name','arguments'])&&id(input.commandId)&&input.commandId.startsWith(HOST_PREFIX)&&id(input.appId)&&typeof input.name==='string'&&!!input.arguments&&typeof input.arguments==='object'&&!Array.isArray(input.arguments),'Exact host tool request required');boundedJson(input.arguments);input=structuredClone(input);
-  const inputHash=hash(input.arguments),prior=(await this.#state())?.value.toolCalls?.find(c=>c.id===input.commandId);
-  if(prior){ensure(prior.appId===input.appId&&prior.name===input.name&&prior.inputHash===inputHash,'Tool command identity reused','conflict');return {status:prior.status==='pending'?'unknown':prior.status,...(prior.result!==undefined?{result:prior.result}:{}),...(prior.reconciliation?{reconciliation:structuredClone(prior.reconciliation)}:{})};}
+  const feed=(await this.#store.readState()).feedId,key=toolFlightKey(feed,input.commandId),identity=hash(input),active=toolFlights.get(key);
+  if(active){ensure(active.identity===identity,'Tool command identity reused','conflict');return active.run;}
+  const run=this.#callTool(input),entry={identity,run};toolFlights.set(key,entry);try{return await run;}finally{if(toolFlights.get(key)===entry)toolFlights.delete(key);}
+ }
+ async #callTool(input:{commandId:string;appId:string;name:string;arguments:Record<string,unknown>}):Promise<ToolResult>{
+  await this.#recoverPending();const inputHash=hash(input.arguments);let prior=(await this.#state())?.value.toolCalls?.find(c=>c.id===input.commandId);
+  if(prior){ensure(prior.appId===input.appId&&prior.name===input.name&&prior.inputHash===inputHash,'Tool command identity reused','conflict');if(prior.status==='pending'){await this.#markUnknown(prior.id);prior=(await this.#state())?.value.toolCalls?.find(c=>c.id===input.commandId)??prior;}return {status:prior.status==='pending'?'unknown':prior.status,...(prior.result!==undefined?{result:prior.result}:{}),...(prior.reconciliation?{reconciliation:structuredClone(prior.reconciliation)}:{})};}
   const current=async()=>{const a=(await this.#state())?.value.apps.find(a=>a.id===input.appId);ensure(a&&a.current!==null,'App is not installed','conflict');ensure(a.enabled,'App is off','conflict');const v=a.versions[a.current-1]!;ensure(packageHash(v.package)===v.hash,'Package changed after its check','conflict');return v;};
   const v=await current(),m=v.package.manifest,tool=requireTool(m,input.name),adapter=this.#mcp;ensure(adapter,'MCP adapter unavailable','conflict');await this.#admit();
   const live=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:input.appId,server:structuredClone(m.mcp!),signal}),this.#stop.signal,true);
   ensure(validTools(live)&&live.every(t=>m.mcp!.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t])))&&live.some(t=>t.name===input.name),'MCP tool list changed; owner approval required','denied');
   ensure((await current()).hash===v.hash,'App changed during connection','conflict');await this.#admit();
-  const claim=await this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'claim-app-tool',call:{id:input.commandId,appId:input.appId,versionHash:v.hash,name:input.name,inputHash,timeoutMs:this.#timeout,status:'pending'}});
-  if(claim.status!=='committed')return {status:'unknown'};
+  let claim:CommitResult<AppsState>;try{claim=await this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'claim-app-tool',call:{id:input.commandId,appId:input.appId,versionHash:v.hash,name:input.name,inputHash,timeoutMs:this.#timeout,status:'pending'}});}catch(error){await this.#markUnknown(input.commandId).catch(()=>{});throw error;}
+  if(claim.status!=='committed'){await this.#markUnknown(input.commandId);return {status:'unknown'};}
   let status:'succeeded'|'failed'|'unknown'=tool.readOnly===true?'failed':'unknown',result:unknown;
   try{await this.#admit();result=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.call({requestId,appId:input.appId,server:structuredClone(m.mcp!),name:input.name,arguments:structuredClone(input.arguments),signal}),this.#stop.signal,tool.readOnly===true);boundedJson(result);status=(result as {isError?:unknown})?.isError===true?'failed':'succeeded';}catch{result=undefined;}
-  try{const saved=await this.#dispatch(HOST_PREFIX+'-result-'+hash(input.commandId).slice(0,32),ASSISTANT_ACTOR_ID,{type:'settle-app-tool',callId:input.commandId,status,...(result!==undefined?{result}:{})});if(saved.status==='conflict')return {status:'unknown'};}catch{return {status:'unknown'};}
+  try{const saved=await this.#dispatch(HOST_PREFIX+'-result-'+hash(input.commandId).slice(0,32),ASSISTANT_ACTOR_ID,{type:'settle-app-tool',callId:input.commandId,status,...(result!==undefined?{result}:{})});if(saved.status==='conflict'){await this.#markUnknown(input.commandId);return {status:'unknown'};}}catch{await this.#markUnknown(input.commandId).catch(()=>{});return {status:'unknown'};}
   return {status,...(result!==undefined?{result}:{})};
  }
  beginDrain(){this.#stop.abort();}
@@ -287,7 +311,7 @@ export class AppsService {
   const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={install:['catalogId'],disable:['appId'],enable:['appId'],remove:['appId'],rollback:['appId','version'],reconcile:['appId','callId','outcome','evidence']};
   ensure(typeof action==='string'&&Object.hasOwn(fields,action)&&exact(input,['commandId','action',...fields[action]!])&&id(input.commandId),'Exact app action fields required');const commandId=this.#caller(input.commandId);
   if(action==='install'){const pkg=CATALOG.find(c=>c.manifest.id===input.catalogId);ensure(pkg,'Unknown catalog app');return this.#dispatch(commandId,OWNER,{type:'offer-app',decisionId:appDecisionId(commandId),origin:'catalog',pkg:structuredClone(pkg)});}
-  if(action==='reconcile')return this.#dispatch(commandId,OWNER,{type:'reconcile-app-tool',appId:input.appId as string,callId:input.callId as string,outcome:input.outcome as 'done'|'not-done',evidence:input.evidence as string});
+  if(action==='reconcile'){await this.#recoverPending();return this.#dispatch(commandId,OWNER,{type:'reconcile-app-tool',appId:input.appId as string,callId:input.callId as string,outcome:input.outcome as 'done'|'not-done',evidence:input.evidence as string});}
   if(action==='rollback')return this.#dispatch(commandId,OWNER,{type:'rollback-app',appId:input.appId as string,version:input.version as number,decisionId:appDecisionId(commandId)});
   return this.#dispatch(commandId,OWNER,{type:(action+'-app') as 'disable-app'|'enable-app'|'remove-app',appId:input.appId as string});
  }
