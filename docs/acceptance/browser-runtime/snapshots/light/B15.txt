@@ -12,14 +12,15 @@
     - generic
       - list
         - listitem [level=1]
-          - button "하나" [ref=e20]
+          - button "하나 작업 중" [ref=e20]
             - StaticText "하나"
+            - status "작업 중"
           - list "하나의 작업"
             - listitem [level=2]
               - button "스터디룸 신청" [ref=e29]
                 - StaticText "스터디룸 신청"
                 - status
-                  - StaticText "시작 전"
+                  - StaticText "실행 중"
       - list "구성원"
         - listitem [level=1]
           - button "퀼" [ref=e21]

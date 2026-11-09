@@ -1,3 +1,4 @@
+import type {RawBrowserPage} from '../../src/browser-runtime.ts';
 import {browserFixture} from './browser-fixtures.ts';
 import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
 import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
@@ -30,7 +31,7 @@ export interface ScreenFixture {
 const fixtureDirectory=new URL('./fixtures/',import.meta.url);
 const text=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
 
-export async function loadFixture(screen:string,parents:string[]=[]):Promise<ScreenFixture>{
+export async function loadFixture(screen:string,parents:string[]=[],images?:Record<string,RawBrowserPage>):Promise<ScreenFixture>{
  if(!/^B[1-9]\d*(?:-[a-z]+)*$/.test(screen))throw new Error('Unknown fixture screen: '+screen);
  if(parents.includes(screen))throw new Error('Fixture inheritance cycle: '+[...parents,screen].join(' -> '));
  const raw=JSON.parse(await readFile(new URL(screen+'.json',fixtureDirectory),'utf8'));
@@ -49,8 +50,8 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
  if(parents.length)return fixture;
- const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;
- const observed=['B15','B5','B7'].includes(screen)?await browserFixture(produced):produced;
+ const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture,images?.checkout):fixture;
+ const observed=['B15','B5','B7'].includes(screen)?await browserFixture(produced,images):produced;
  const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;
  const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
@@ -62,7 +63,8 @@ const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].
 const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"style-src 'self' 'unsafe-inline'","connect-src 'self'","img-src 'self' data:","font-src 'self'","frame-src 'none'","frame-ancestors 'none'","object-src 'none'","base-uri 'none'","form-action 'none'"].join('; ');
 
 export async function startFixtureHost(screen:string|ScreenFixture,options:{daemonSecret?:string;port?:number}={}):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
- const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
+ const images=typeof screen==='string'&&['B4','B15'].includes(screen)?(await (await import(new URL('./capture-browser-pages.mjs',import.meta.url).href)).captureReferencePages()).pages:undefined;
+ const fixture=typeof screen==='string'?await loadFixture(screen,[],images):structuredClone(screen);
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  let origin='';
  const server=createServer(async(req,res)=>{

@@ -2,23 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {sanitizePage,validateBrowserSession} from '../src/browser-runtime.ts';
 import {captureBrowserPage} from '../src/headless-browser.ts';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
-import {join} from 'node:path';
-import {tmpdir} from 'node:os';
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9YkAAAAASUVORK5CYII=';
 const screenshot={mimeType:'image/png' as const,data:png,width:1,height:1};
 const raw={address:'https://shop.example.com/checkout',title:'Order',blocks:['Order'],fields:[],screenshot};
-test('sanitized PNG observations retain the image and bind its byte dimensions',()=>{
- assert.deepEqual(sanitizePage(raw).screenshot,screenshot);
+test('persisted observations contain an image hash, never image bytes',()=>{
+ const page=sanitizePage(raw);assert.equal('screenshot' in page,false);assert.match(page.imageHash!,/^[a-f0-9]{64}$/);
  for(const image of [{...screenshot,mimeType:'image/svg+xml'},{...screenshot,width:2},{...screenshot,data:'data:image/png;base64,'+png},{...screenshot,data:'a'.repeat(400000)}])assert.throws(()=>sanitizePage({...raw,screenshot:image} as any),/screenshot|image/i);
- const page={readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at:1,...sanitizePage(raw)};assert.doesNotThrow(()=>validateBrowserSession({id:'session',pages:[page]}));assert.throws(()=>validateBrowserSession({id:'session',pages:[{...page,screenshot:{...screenshot,height:2}}]}),/screenshot|image/i);
- assert.equal(sanitizePage({address:raw.address,title:'Legacy',blocks:[],fields:[]}).screenshot,undefined);
+ const recorded={readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at:1,...page};assert.doesNotThrow(()=>validateBrowserSession({id:'session',pages:[recorded]}));assert.throws(()=>validateBrowserSession({id:'session',pages:[{...recorded,screenshot}]}),/browser/i);
+ assert.equal(sanitizePage({address:raw.address,title:'Legacy',blocks:[],fields:[]}).imageHash,undefined);
 });
-test('capture masks the DOM before the only screenshot command and returns only the resulting PNG',async t=>{
- const dir=await mkdtemp(join(tmpdir(),'browser-shot-'));t.after(()=>rm(dir,{recursive:true,force:true}));const path=join(dir,'page.png'),calls:string[][]=[];
- const result=await captureBrowserPage(async args=>{calls.push(args);if(args[0]==='eval')return {result:{address:raw.address,title:raw.title,blocks:[],fields:[]}};if(args[0]==='screenshot'){assert.ok(calls.some(c=>c[0]==='eval'));await writeFile(path,Buffer.from(png,'base64'));}return {};},path,async()=>1);
- assert.deepEqual(result.screenshot,screenshot);assert.equal(calls.filter(c=>c[0]==='screenshot').length,1);assert.ok(Buffer.from(calls.find(c=>c[0]==='eval')![2]!,'base64').toString().includes('maskBrowserField'));
- let screenshots=0;await assert.rejects(captureBrowserPage(async args=>{if(args[0]==='screenshot')screenshots++;if(args[0]==='eval')throw Error('Redaction failed');return {};},path,async()=>1));assert.equal(screenshots,0);
+test('capture masks the DOM then takes the PNG only through memory CDP transport',async()=>{
+ const calls:string[][]=[];let shots=0;
+ const control={assertDocument:async()=>1,screenshot:async()=>{assert.ok(calls.some(c=>c[0]==='eval'));shots++;return png;}};
+ const result=await captureBrowserPage(async args=>{calls.push(args);return {result:{address:raw.address,title:raw.title,blocks:[],fields:[]}};},control);
+ assert.deepEqual(result.screenshot,screenshot);assert.equal(shots,1);assert.ok(calls.every(c=>c[0]!=='screenshot'));
+ await assert.rejects(captureBrowserPage(async()=>{throw Error('Redaction failed');},control));assert.equal(shots,1);
 });
 for(const field of [
  {label:'보안 코드',type:'number',name:'field',autocomplete:''},
@@ -38,5 +36,5 @@ test('private text ranges join whitespace and mask overlapping values without ex
  const page=sanitizePage({address:raw.address,title:'Order',blocks:['Code: 4 5\n6','Value: abcd'],fields:[{label:'Security code',type:'number',autocomplete:'',value:'456'},{label:'Secret',type:'password',autocomplete:'',value:'abc'},{label:'Password',type:'password',autocomplete:'',value:'abcd'}]});assert.deepEqual(page.blocks,['Code: ••••','Value: ••••']);
 });
 test('document guard failures prevent screenshot creation before and after DOM redaction',async()=>{
- for(const failAt of [1,2]){let inspections=0,shots=0;await assert.rejects(captureBrowserPage(async args=>{if(args[0]==='screenshot')shots++;return {result:raw};},'/unused.png',async()=>{if(++inspections===failAt)throw Error('Unsafe document');return 1;}),/Unsafe document/);assert.equal(shots,0);}
+ for(const failAt of [1,2]){let inspections=0,shots=0;await assert.rejects(captureBrowserPage(async()=>({result:raw}),{screenshot:async()=>{shots++;return png;},assertDocument:async()=>{if(++inspections===failAt)throw Error('Unsafe document');return 1;}}),/Unsafe document/);assert.equal(shots,0);}
 });

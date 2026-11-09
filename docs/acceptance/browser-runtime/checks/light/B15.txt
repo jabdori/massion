@@ -1,4 +1,4 @@
-contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-final-pseudo/snapshots/light/B15.json
+contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-ephemeral-proof/snapshots/light/B15.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -34,7 +34,7 @@ contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-r
   ok    composer     button   "기본 권한" -> button "기본 권한"
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget sidebar      app {"chars":22,"strings":7,"sentences":0,"longest":8} proto {"chars":20,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
+  budget sidebar      app {"chars":21,"strings":6,"sentences":0,"longest":8} proto {"chars":20,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget conversation app {"chars":221,"strings":15,"sentences":3,"longest":37} proto {"chars":252,"strings":20,"sentences":3,"longest":36} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget

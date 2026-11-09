@@ -1,6 +1,6 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {mkdtemp,writeFile,readFile,stat,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -38,16 +38,15 @@ function preparePage(){
  if(clean(document.body.innerText)!==document.body.innerText)throw Error('Browser screenshot redaction incomplete');
  return {address:location.href,title:clean(document.title),blocks:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText||'').trim().slice(0,4000)),fields:original.slice(0,64).map(f=>({...f,label:clean(f.label),value:maskBrowserField(f)?'••••':clean(f.value)}))};
 }
-export async function captureBrowserPage(run:(args:string[])=>Promise<any>,path:string,assertDocument:(expected?:number)=>Promise<number>):Promise<RawBrowserPage>{
- const documentId=await assertDocument();
- await run(['set','viewport','584','764']);
+export async function captureBrowserPage(run:(args:string[])=>Promise<any>,control:{assertDocument:(expected?:number)=>Promise<number>;screenshot:()=>Promise<string>}):Promise<RawBrowserPage>{
+ const documentId=await control.assertDocument();await run(['set','viewport','584','764']);
  const script=`const browserPrivateRanges=${browserPrivateRanges.toString()};const sensitiveBrowserField=${sensitiveBrowserField.toString()};const maskBrowserField=${maskBrowserField.toString()};const browserText=${browserText.toString()};(${preparePage.toString()})()`;
  const page=(await run(['eval','-b',Buffer.from(script).toString('base64')])).result as RawBrowserPage;
- await assertDocument(documentId);await run(['screenshot',path]);if((await stat(path)).size>196608)throw Error('Browser screenshot byte bound exceeded');const bytes=await readFile(path);if(bytes.length<24)throw Error('Invalid browser screenshot');
- const screenshot={mimeType:'image/png' as const,data:bytes.toString('base64'),width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};validateBrowserScreenshot(screenshot);return {...page,screenshot};
+ await control.assertDocument(documentId);const data=await control.screenshot();if(typeof data!=='string'||data.length>262144)throw Error('Browser screenshot byte bound exceeded');const bytes=Buffer.from(data,'base64');if(bytes.length<24)throw Error('Invalid browser screenshot');
+ const screenshot={mimeType:'image/png' as const,data,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};validateBrowserScreenshot(screenshot);return {...page,screenshot};
 }
 /** Hold a CDP session so disabling page scripts survives navigation until browser cleanup. */
-export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,signal?:AbortSignal):Promise<{assertDocument:(expected?:number)=>Promise<number>;close:()=>Promise<void>}>{
+export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,signal?:AbortSignal):Promise<{assertDocument:(expected?:number)=>Promise<number>;screenshot:()=>Promise<string>;close:()=>Promise<void>}>{
  signal?.throwIfAborted();await run(['--no-pin-tab','get','url']);const bound=await run(['--pin-tab','get','url']);if(bound.url!=='about:blank')throw Error('Fresh browser page required');const {cdpUrl}=await run(['get','cdp-url']);let url:URL;try{url=new URL(cdpUrl);}catch{throw Error('Browser script control unavailable');}
  if(url.protocol!=='ws:'||url.hostname!=='127.0.0.1'||url.username||url.password||url.search||url.hash||!url.pathname.startsWith('/devtools/browser/'))throw Error('Local browser script control required');
  const socket=new WebSocket(url),deadline=AbortSignal.any([AbortSignal.timeout(5000),...(signal?[signal]:[])]);
@@ -59,7 +58,7 @@ export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,si
  });
  try{const {targetInfos}=await call('Target.getTargets',{}),pages=targetInfos.filter((t:any)=>t.type==='page'),blank=pages.filter((t:any)=>t.url==='about:blank');if(blank.length!==1||pages.some((t:any)=>!['about:blank','chrome://newtab/'].includes(t.url)))throw Error('Fresh browser page required');for(const p of pages)if(p.url==='chrome://newtab/')await call('Target.closeTarget',{targetId:p.targetId});const {sessionId}=await call('Target.attachToTarget',{targetId:blank[0].targetId,flatten:true});pageSessionId=sessionId;await call('Emulation.setScriptExecutionDisabled',{value:true},sessionId);signal?.throwIfAborted();}
  catch(error){try{await call('Browser.close',{});}catch{}socket.close();throw error;}
- return {async assertDocument(expected){const current=await run(['get','url']),{root}=await call('DOM.getDocument',{depth:-1,pierce:true},pageSessionId);if(root.documentURL!==current.url||!Number.isSafeInteger(root.backendNodeId)||expected!==undefined&&root.backendNodeId!==expected)throw Error('Browser document changed during capture');const pending=[root];let count=0;while(pending.length){const node=pending.pop();if(++count>50000)throw Error('Browser document bound exceeded');if(node.shadowRoots?.some((r:any)=>r.shadowRootType==='open'||r.shadowRootType==='closed'))throw Error('Author shadow DOM cannot be safely captured');pending.push(...(node.children??[]));}return root.backendNodeId;},async close(){if(socket.readyState===WebSocket.OPEN)try{await call('Browser.close',{});}catch{}socket.close();}};
+ return {async assertDocument(expected){const current=await run(['get','url']),{root}=await call('DOM.getDocument',{depth:-1,pierce:true},pageSessionId);if(root.documentURL!==current.url||!Number.isSafeInteger(root.backendNodeId)||expected!==undefined&&root.backendNodeId!==expected)throw Error('Browser document changed during capture');const pending=[root];let count=0;while(pending.length){const node=pending.pop();if(++count>50000)throw Error('Browser document bound exceeded');if(node.shadowRoots?.some((r:any)=>r.shadowRootType==='open'||r.shadowRootType==='closed'))throw Error('Author shadow DOM cannot be safely captured');pending.push(...(node.children??[]));}return root.backendNodeId;},async screenshot(){const {data}=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},pageSessionId);return data;},async close(){if(socket.readyState===WebSocket.OPEN)try{await call('Browser.close',{});}catch{}socket.close();}};
 }
 export function localBrowserAdapter(env:Record<string,string|undefined>):BrowserAdapter|undefined{
  if(env.MASSION_BROWSER_READS===undefined||env.MASSION_BROWSER_READS==='0')return undefined;
@@ -73,7 +72,7 @@ export function localBrowserAdapter(env:Record<string,string|undefined>):Browser
   const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000'};
   const run=async(args:string[],cancel:AbortSignal|undefined=signal)=>{const {stdout}=await exec('agent-browser',['--config',config,'--session',session,'--headed','false','--hide-scrollbars','false','--allowed-domains',new URL(address).hostname,'--json',...args],{cwd:dir,env:childEnv,timeout:30000,maxBuffer:262144,signal:cancel});const result=JSON.parse(stdout);if(!result.success)throw Error('Browser read failed');return result.data;};
   let control:Awaited<ReturnType<typeof disableBrowserScripts>>|undefined;
-  try{await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,join(dir,'page.png'),control.assertDocument);}
+  try{await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,control);}
   catch{throw Error('Local browser read failed');}
   finally{try{await run(['close'],AbortSignal.timeout(5000));}catch{}await control?.close();await rm(dir,{recursive:true,force:true});}
  }};

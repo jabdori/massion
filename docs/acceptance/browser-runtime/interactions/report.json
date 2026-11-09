@@ -2,42 +2,30 @@
   {
     "screen": "B4",
     "theme": "dark",
-    "index": 0,
-    "commands": 0,
-    "domain": "shop.example.com",
-    "hiddenAlternative": true,
-    "image": true,
-    "imageOnly": true,
-    "pixels": [
-      584,
-      764
-    ],
-    "rect": [
-      848,
-      128,
-      584,
-      764
-    ]
+    "width": 1440,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "width": 390,
+    "image": false,
+    "structural": true
   },
   {
     "screen": "B4",
     "theme": "light",
-    "index": 0,
-    "commands": 0,
-    "domain": "shop.example.com",
-    "hiddenAlternative": true,
-    "image": true,
-    "imageOnly": true,
-    "pixels": [
-      584,
-      764
-    ],
-    "rect": [
-      848,
-      128,
-      584,
-      764
-    ]
+    "width": 1440,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "width": 390,
+    "image": false,
+    "structural": true
   },
   {
     "screen": "B15",

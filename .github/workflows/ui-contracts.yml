@@ -25,11 +25,11 @@ jobs:
           agent-browser install --with-deps
           sudo apt-get update
           sudo apt-get install --yes imagemagick fonts-noto-cjk
-      - name: Verify sanitized browser screenshots
+      - name: Verify ephemeral browser images
         run: node scripts/ui-contracts/capture-browser-pages.mjs
       - name: Check harness and copy lint
         run: |
-          node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts
+          node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts scripts/browser-evidence.test.mjs
           node scripts/check.mjs
       - name: Capture all 75 screen contracts in dark and light
         run: node scripts/ui-contracts/run.mjs
@@ -50,7 +50,7 @@ jobs:
           path: |
             .runtime/ui-contracts/
             .runtime/browser-pages/redaction-report.json
-            .runtime/browser-pages/redaction-*.png
+            .runtime/browser-pages/ephemeral-report.json
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

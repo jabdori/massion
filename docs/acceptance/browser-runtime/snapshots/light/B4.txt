@@ -105,7 +105,6 @@
     - tabpanel
       - StaticText "shop.example.com"
       - tabpanel "브라우저"
-        - image "브라우저 페이지"
         - generic
           - heading "주문 / 결제" [level=3, ref=e22]
           - paragraph

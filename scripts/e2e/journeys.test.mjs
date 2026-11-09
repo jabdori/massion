@@ -16,6 +16,7 @@ import {exportPortableBackup,restorePortableBackup} from '../../src/portable-bac
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
 import {browserCommand,browserEgressProxy} from './browser-command.mjs';
+import {evidenceBrowser,redactEvidence} from '../browser-evidence.mjs';
 
 const run=promisify(execFile),out=resolve('.runtime/e2e');
 // No skip: a missing database/browser must fail the required CI job.
@@ -30,10 +31,10 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_PLUGINS:'[]'});
  const egress=await browserEgressProxy();t.after(()=>egress.close());
  const browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{}));
- const browser=async(...args)=>{
+ const browser=evidenceBrowser(async(...args)=>{
   const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--proxy',egress.url,'--proxy-bypass','<-loopback>,127.0.0.1','--args','--force-webrtc-ip-handling-policy=disable_non_proxied_udp','--json',...args],{env,timeout:35000,maxBuffer:4e6}));
   if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;
- };
+ });
  const wait=async code=>browser('wait','--fn',code);
  const entry=fileURLToPath(new URL('./daemon.ts',import.meta.url)),configPath=join(root,'host.json'),argv=[process.execPath,entry,configPath];
  let child,url,logs='',currentStore=f.store;const evidence=[];
@@ -226,5 +227,5 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
   await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:[]},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
- finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),logs);await rm(root,{recursive:true,force:true});}
+ finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),redactEvidence(logs));await rm(root,{recursive:true,force:true});}
 });

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {Application} from './application.ts';
 import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Actor,Mission,Work} from './domain.ts';
@@ -9,7 +10,7 @@ import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
 export const BROWSER_HOST='browser-read-host';
 export interface BrowserScreenshot {mimeType:'image/png';data:string;width:number;height:number}
 export interface RawBrowserPage {screenshot?:BrowserScreenshot;address:string;title:string;blocks:string[];fields:{label:string;type:string;value:string;autocomplete:string;name?:string}[]}
-export interface BrowserPage {screenshot?:BrowserScreenshot;readId:string;expectedRevision:number;inputHash:string;at:number;address:string;title:string;blocks:string[];fields:{label:string;value:string;masked:boolean}[]}
+export interface BrowserPage {imageHash?:string;readId:string;expectedRevision:number;inputHash:string;at:number;address:string;title:string;blocks:string[];fields:{label:string;value:string;masked:boolean}[]}
 export interface BrowserSession {id:string;pages:BrowserPage[]}
 export function browserSummary(w:Work){const pages=w.browserSession?.pages;return pages?.length?{startedAt:pages[0]!.at,pagesRead:pages.length}:undefined;}
 export interface BrowserAdapter {read(input:{address:string;sessionId:string;signal:AbortSignal}):Promise<RawBrowserPage>}
@@ -40,7 +41,7 @@ export function validateBrowserScreenshot(image:unknown):asserts image is Browse
  const bytes=Buffer.from(image.data,'base64');ensure(bytes.length>=57&&bytes.toString('base64')===image.data&&bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))&&bytes.readUInt32BE(8)===13&&bytes.toString('ascii',12,16)==='IHDR'&&bytes.subarray(-12).equals(Buffer.from('0000000049454e44ae426082','hex')),'Invalid browser screenshot PNG');
  ensure(Number.isSafeInteger(image.width)&&Number.isSafeInteger(image.height)&&image.width>0&&image.height>0&&image.width<=2048&&image.height<=2048&&bytes.readUInt32BE(16)===image.width&&bytes.readUInt32BE(20)===image.height,'Invalid browser screenshot dimensions');
 }
-export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'title'|'blocks'|'fields'|'screenshot'>{
+export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'title'|'blocks'|'fields'|'imageHash'>{
  exact(raw,['address','title','blocks','fields',...(Object.hasOwn(raw,'screenshot')?['screenshot']:[])]);if(Object.hasOwn(raw,'screenshot'))validateBrowserScreenshot(raw.screenshot);ensure(text(raw.address)&&text(raw.title)&&Array.isArray(raw.blocks)&&raw.blocks.length<=64&&raw.blocks.every(s=>text(s,4000))&&Array.isArray(raw.fields)&&raw.fields.length<=64,'Invalid browser page bound');
  for(const f of raw.fields){exact(f,['label','type','value','autocomplete',...(Object.hasOwn(f,'name')?['name']:[])]);ensure([f.label,f.type,f.value,f.autocomplete,...(Object.hasOwn(f,'name')?[f.name]:[])].every(s=>text(s,4000)),'Invalid browser form bound');}
  const masked=raw.fields.map(maskBrowserField);
@@ -48,14 +49,13 @@ export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'tit
  const secrets=[url.username,url.password,url.hash.slice(1),...url.searchParams.values(),...raw.fields.filter((_,i)=>masked[i]).map(f=>f.value)].filter(Boolean).sort((a,b)=>b.length-a.length);
  const clean=(s:string)=>browserText(s,secrets);
  const result={address:clean(browserAddress(raw.address)),title:clean(raw.title),blocks:raw.blocks.map(clean),fields:raw.fields.filter(f=>f.type!=='hidden').map(f=>({label:clean(f.label),value:masked[raw.fields.indexOf(f)]?'••••':clean(f.value),masked:masked[raw.fields.indexOf(f)]!}))};
- ensure(JSON.stringify(result).length<=24000,'Browser page bound exceeded');return {...result,...(raw.screenshot?{screenshot:structuredClone(raw.screenshot)}:{})};
+ ensure(JSON.stringify(result).length<=24000,'Browser page bound exceeded');return {...result,...(raw.screenshot?{imageHash:createHash('sha256').update(Buffer.from(raw.screenshot.data,'base64')).digest('hex')}:{})};
 }
 export function validateBrowserSession(value:unknown):asserts value is BrowserSession{
  exact(value,['id','pages']);ensure(id(value.id)&&Array.isArray(value.pages)&&value.pages.length>0&&value.pages.length<=32,'Invalid browser session');let at=-1;const ids=new Set<string>();
- for(const p of value.pages){exact(p,['readId','expectedRevision','inputHash','at','address','title','blocks','fields',...(Object.hasOwn(p,'screenshot')?['screenshot']:[])]);if(Object.hasOwn(p,'screenshot'))validateBrowserScreenshot(p.screenshot);ensure(id(p.readId)&&!ids.has(p.readId)&&Number.isSafeInteger(p.expectedRevision)&&p.expectedRevision>0&&/^[a-f0-9]{64}$/.test(p.inputHash)&&Number.isSafeInteger(p.at)&&p.at>=at&&p.address===browserAddress(p.address)&&text(p.title)&&Array.isArray(p.blocks)&&p.blocks.length<=64&&p.blocks.every((s:unknown)=>text(s,4000))&&Array.isArray(p.fields)&&p.fields.length<=64,'Invalid browser page');
-  for(const f of p.fields){exact(f,['label','value','masked']);ensure(text(f.label,4000)&&text(f.value,4000)&&typeof f.masked==='boolean'&&(!f.masked||f.value==='••••')&&(!sensitiveBrowserField({label:f.label})||f.masked)&&browserText(f.label)===f.label&&browserText(f.value)===f.value,'Invalid browser form');}ensure(browserText(p.title)===p.title&&p.blocks.every((s:string)=>browserText(s)===s),'Invalid browser redaction');const {screenshot,...metadata}=p;ensure(JSON.stringify(metadata).length<=25000,'Browser page bound exceeded');at=p.at;ids.add(p.readId);
+ for(const p of value.pages){exact(p,['readId','expectedRevision','inputHash','at','address','title','blocks','fields',...(Object.hasOwn(p,'imageHash')?['imageHash']:[])]);if(Object.hasOwn(p,'imageHash'))ensure(typeof p.imageHash==='string'&&/^[a-f0-9]{64}$/.test(p.imageHash),'Invalid browser image hash');ensure(id(p.readId)&&!ids.has(p.readId)&&Number.isSafeInteger(p.expectedRevision)&&p.expectedRevision>0&&/^[a-f0-9]{64}$/.test(p.inputHash)&&Number.isSafeInteger(p.at)&&p.at>=at&&p.address===browserAddress(p.address)&&text(p.title)&&Array.isArray(p.blocks)&&p.blocks.length<=64&&p.blocks.every((s:unknown)=>text(s,4000))&&Array.isArray(p.fields)&&p.fields.length<=64,'Invalid browser page');
+  for(const f of p.fields){exact(f,['label','value','masked']);ensure(text(f.label,4000)&&text(f.value,4000)&&typeof f.masked==='boolean'&&(!f.masked||f.value==='••••')&&(!sensitiveBrowserField({label:f.label})||f.masked)&&browserText(f.label)===f.label&&browserText(f.value)===f.value,'Invalid browser form');}ensure(browserText(p.title)===p.title&&p.blocks.every((s:string)=>browserText(s)===s),'Invalid browser redaction');ensure(JSON.stringify(p).length<=25000,'Browser page bound exceeded');at=p.at;ids.add(p.readId);
  }
- ensure(value.pages.reduce((sum:number,p:BrowserPage)=>sum+(p.screenshot?.data.length??0),0)<=1048576,'Browser screenshot session bound exceeded');
 }
 function current(w:Work,at:number){ensure(w.acceptance==='pending'&&!['cancelled','settled'].includes(w.execution)&&!w.runtimeInterruption&&!w.runtimeRecovery,'Work no longer admits browser observations');ensure(!w.runtimeRun?.ownership||at<w.runtimeRun.ownership.deadlineAt,'Browser runtime deadline expired');}
 export function applyBrowserPage(w:Work,c:BrowserCommand,actor:Actor){
@@ -63,9 +63,14 @@ export function applyBrowserPage(w:Work,c:BrowserCommand,actor:Actor){
  if(w.browserSession){ensure(w.browserSession.id===c.sessionId,'Browser session changed');ensure(w.browserSession.pages.length<32&&!w.browserSession.pages.some(p=>p.readId===c.page.readId),'Browser read identity conflict or bound');ensure(c.page.at>=w.browserSession.pages.at(-1)!.at,'Browser clock moved backwards');}
  else w.browserSession={id:c.sessionId,pages:[]};w.browserSession.pages.push(structuredClone(c.page));validateBrowserSession(w.browserSession);
 }
+function live(w:Work|undefined,at:number){return !!w&&w.execution==='active'&&w.acceptance==='pending'&&!w.runtimeInterruption&&!w.runtimeRecovery&&(!w.runtimeRun?.ownership||at<w.runtimeRun.ownership.deadlineAt);}
 export class BrowserSessions {
+ readonly #images=new Map<string,{missionId:string;workId:string;feedId:string;inputHash:string;imageHash:string;image:BrowserScreenshot;timer?:ReturnType<typeof setTimeout>}>();readonly #unsubscribe?:()=>void;#writes=0;
+ #drop(key:string){const image=this.#images.get(key);if(image)clearTimeout(image.timer);this.#images.delete(key);}
+ #prune(missionId?:string,mission?:Mission){for(const [key,image] of this.#images){if(missionId!==undefined&&missionId!==image.missionId)continue;const w=mission?.works?.find(w=>w.id===image.workId);if(!live(w,this.#clock())||workInputHash(w!)!==image.inputHash)this.#drop(key);}}
+
  readonly #store:Store<Mission>;readonly #owner:Store<Mission>;readonly #adapter?:BrowserAdapter;readonly #clock:()=>number;readonly #active=new Map<string,{identity:string;promise:Promise<CommitResult<Mission>>}>();readonly #generation=new Map<string,number>();readonly #controllers=new Set<AbortController>();readonly #reads=new Set<Promise<RawBrowserPage>>();#draining=false;unsettled=false;
- constructor(store:Store<Mission>,ownerStore:Store<Mission>,options:{adapter?:BrowserAdapter;clock?:()=>number}={}){this.#store=store;this.#owner=ownerStore;this.#adapter=options.adapter;this.#clock=options.clock??Date.now;}
+ constructor(store:Store<Mission>,ownerStore:Store<Mission>,options:{adapter?:BrowserAdapter;clock?:()=>number}={}){this.#store=store;this.#owner=ownerStore;this.#adapter=options.adapter;this.#clock=options.clock??Date.now;this.#unsubscribe=store.onWrite?.((id,value)=>{++this.#writes;this.#prune(id,value);});}
  capture(input:Capture):Promise<CommitResult<Mission>>{
   input=structuredClone(input);exact(input,['missionId','workId','readId','address']);ensure([input.missionId,input.workId,input.readId].every(id)&&input.address===browserAddress(input.address),'Invalid browser read request');
   const key=JSON.stringify([input.missionId,input.workId,input.readId]),identity=hash(input),active=this.#active.get(key);if(active){ensure(active.identity===identity,'Browser read identity conflict');return active.promise;}
@@ -82,10 +87,17 @@ export class BrowserSessions {
   try{
    if(this.#draining)throw new HostDrainError();const raw=await callTool(signal=>{const read=Promise.resolve().then(()=>this.#adapter!.read({address:input.address,sessionId,signal}));this.#reads.add(read);void read.then(()=>this.#reads.delete(read),()=>this.#reads.delete(read));return read;},{readOnly:true,signal:controller.signal,timeoutMs:TOOL_TIMEOUT_MS});
    ensure(isCurrent(),'Browser read superseded');if(this.#draining)throw new HostDrainError();const fresh=await this.#store.readState(input.missionId);if(fresh.feedId!==state.feedId)throw new FeedAdmissionError();ensure(fresh.snapshot?.revision===snapshot.revision,'Work revision changed during browser read');
-   const page:BrowserPage={readId:input.readId,expectedRevision:snapshot.revision,inputHash:workInputHash(w),at:this.#clock(),...sanitizePage(raw)};ensure(page.address===input.address,'Browser address changed during read');current(w,page.at);return await dispatch(page);
+   const page:BrowserPage={readId:input.readId,expectedRevision:snapshot.revision,inputHash:workInputHash(w),at:this.#clock(),...sanitizePage(raw)},screenshot=raw.screenshot&&structuredClone(raw.screenshot);ensure(page.address===input.address,'Browser address changed during read');current(w,page.at);const result=await dispatch(page);
+   if(result.status==='committed'&&screenshot&&this.#unsubscribe&&!this.#draining){const writes=this.#writes,latest=await this.#store.readState(input.missionId),active=latest.snapshot?.value.works.find(w=>w.id===input.workId);if(writes===this.#writes&&latest.feedId===state.feedId&&live(active,this.#clock())&&workInputHash(active!)===page.inputHash&&active!.browserSession?.pages.some(p=>p.readId===page.readId&&p.imageHash===page.imageHash)){
+    const key=JSON.stringify([input.missionId,input.workId,page.readId]);this.#drop(key);const image={missionId:input.missionId,workId:input.workId,feedId:state.feedId,inputHash:page.inputHash,imageHash:page.imageHash!,image:screenshot,timer:undefined as ReturnType<typeof setTimeout>|undefined};
+    const deadline=active!.runtimeRun?.ownership?.deadlineAt;if(deadline!==undefined){image.timer=setTimeout(()=>this.#drop(key),Math.max(0,Math.min(2147483647,deadline-this.#clock())));image.timer.unref();}this.#images.set(key,image);
+    while([...this.#images.values()].reduce((sum,i)=>sum+i.image.data.length,0)>1048576)this.#drop(this.#images.keys().next().value!);
+   }}return result;
   }catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.unsettled=true;throw error;}finally{this.#controllers.delete(controller);}
  }
- async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);ensure(w,'Unknown browser Work');const s=w.browserSession;return {feedId:state.feedId,revision:state.snapshot!.revision,session:s?{id:s.id,startedAt:s.pages[0]!.at,pagesRead:s.pages.length,page:structuredClone(s.pages.at(-1)!),pages:structuredClone(s.pages)}:null};}
- beginDrain(){this.#draining=true;for(const c of this.#controllers)c.abort();}
+ async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);this.#prune(missionId,state.snapshot?.value);for(const [key,image] of this.#images)if(image.feedId!==state.feedId)this.#drop(key);ensure(w,'Unknown browser Work');const s=w.browserSession;
+  const pages=s?.pages.map(page=>{const image=this.#images.get(JSON.stringify([missionId,workId,page.readId]));return {...structuredClone(page),...(!this.#draining&&live(w,this.#clock())&&image&&image.imageHash===page.imageHash?{screenshot:structuredClone(image.image)}:{})};});
+  return {feedId:state.feedId,revision:state.snapshot!.revision,session:s&&pages?{id:s.id,active:live(w,this.#clock())&&!this.#draining,startedAt:s.pages[0]!.at,pagesRead:s.pages.length,page:pages.at(-1)!,pages}:null};}
+ beginDrain(){this.#draining=true;this.#unsubscribe?.();for(const key of this.#images.keys())this.#drop(key);for(const c of this.#controllers)c.abort();}
  async drain(){this.beginDrain();await Promise.allSettled([...this.#active.values()].map(v=>v.promise));await Promise.allSettled([...this.#reads]);if(this.unsettled)throw Error('Browser bookkeeping is unsettled');}
 }

@@ -13,13 +13,7 @@
       "이용 하루 전까지 취소 가능"
     ],
     "fields": [],
-    "screenshot": {
-      "mimeType": "image/png",
-      "width": 584,
-      "height": 764,
-      "file": "library-guide.png",
-      "sha256": "255583d6370ef8d560b0905183d51feba61ad61b10f0f7d1f18078d722102e71"
-    },
+    "imageHash": "255583d6370ef8d560b0905183d51feba61ad61b10f0f7d1f18078d722102e71",
     "sourceSha256": "9b3c3a6192ba81c13ea9f67b3c95bb2903cc8af42abc55ff68631b70246a251a"
   },
   "library-availability": {
@@ -37,13 +31,7 @@
       "15:00–17:00 · 4명"
     ],
     "fields": [],
-    "screenshot": {
-      "mimeType": "image/png",
-      "width": 584,
-      "height": 764,
-      "file": "library-availability.png",
-      "sha256": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c"
-    },
+    "imageHash": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c",
     "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
   },
   "library-form": {
@@ -59,55 +47,37 @@
     ],
     "fields": [
       {
-        "autocomplete": "name",
         "label": "이름",
-        "name": "",
-        "type": "text",
-        "value": "홍길동"
+        "value": "홍길동",
+        "masked": false
       },
       {
-        "autocomplete": "tel",
         "label": "연락처",
-        "name": "",
-        "type": "tel",
-        "value": "••••"
+        "value": "••••",
+        "masked": true
       },
       {
-        "autocomplete": "",
         "label": "날짜",
-        "name": "",
-        "type": "select-one",
-        "value": "11월 11일 (수)"
+        "value": "11월 11일 (수)",
+        "masked": false
       },
       {
-        "autocomplete": "",
         "label": "시간",
-        "name": "",
-        "type": "select-one",
-        "value": "15:00–17:00"
+        "value": "15:00–17:00",
+        "masked": false
       },
       {
-        "autocomplete": "",
         "label": "방",
-        "name": "",
-        "type": "select-one",
-        "value": "스터디룸 B"
+        "value": "스터디룸 B",
+        "masked": false
       },
       {
-        "autocomplete": "",
         "label": "인원",
-        "name": "",
-        "type": "select-one",
-        "value": "4명"
+        "value": "4명",
+        "masked": false
       }
     ],
-    "screenshot": {
-      "mimeType": "image/png",
-      "width": 584,
-      "height": 764,
-      "file": "library-form.png",
-      "sha256": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58"
-    },
+    "imageHash": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58",
     "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
   },
   "checkout": {
@@ -133,20 +103,12 @@
     ],
     "fields": [
       {
-        "autocomplete": "cc-number",
         "label": "결제 수단",
-        "name": "",
-        "type": "text",
-        "value": "••••"
+        "value": "••••",
+        "masked": true
       }
     ],
-    "screenshot": {
-      "mimeType": "image/png",
-      "width": 584,
-      "height": 764,
-      "file": "checkout.png",
-      "sha256": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551"
-    },
+    "imageHash": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551",
     "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
   }
 }

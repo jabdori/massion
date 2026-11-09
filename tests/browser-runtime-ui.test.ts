@@ -13,8 +13,10 @@ function decision(){return {id:'decision:1',at,title:'Order',question:'Pay?',row
 function fixture(){
  let mission=createMission({id:'mission:1',purpose:'Observed Work',scope:'local',constraints:[],criteria:{version:1,description:'Review',oracle:'manual'}},owner);
  mission=apply(mission,{type:'admit-work',workId:'work:1',title:'Order',budget:8},owner).value;
- const state={feed:'feed:a',revision:2,decisions:[decision()],deadline:undefined as number|undefined,mission:mission as any,session:{id:'browser:1',startedAt:at-60000,pagesRead:2,page:page()} as any,works:[] as any[],browserStatus:200,browser:undefined as undefined|(()=>Promise<ReturnType<typeof reply>>)};
- state.mission.works[0].browserSession={id:'browser:1',pages:[{...page(),readId:'read:0',at:at-60000},page()]};
+ mission.works[0]!.execution='active';
+ const state={feed:'feed:a',revision:2,decisions:[decision()],deadline:undefined as number|undefined,mission:mission as any,session:{id:'browser:1',active:true,startedAt:at-60000,pagesRead:2,page:page()} as any,works:[] as any[],browserStatus:200,browser:undefined as undefined|(()=>Promise<ReturnType<typeof reply>>)};
+ state.session.pages=[{...page(),readId:'read:0',at:at-60000},page()];
+ state.mission.works[0].browserSession={id:'browser:1',pages:state.session.pages.map(({screenshot,...p}:any)=>p)};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST')return reply({error:'No writes in browser UI tests'},405);
   if(path.endsWith('/browser'))return state.browser?state.browser():reply({feedId:state.feed,revision:state.revision,session:state.session},state.browserStatus);
@@ -48,10 +50,10 @@ test('checkout renders a read-only PNG, one browser tab and a domain pill withou
  assert.match(find(app,'browser-page-alternative').textContent,/Observed checkout/);assert.match(find(app,'browser-page-alternative').textContent,/••••/);assert.doesNotMatch(pane(app).textContent,/never show this/);
  assert.equal(find(app,'browser-page-alternative').className,'visually-hidden');assert.equal(pane(app).attributes.get('data-session-id'),'browser:1');
  assert.equal(descendants(pane(app)).some(n=>['INPUT','IFRAME','FORM','A','SCRIPT','BUTTON','TIME'].includes(n.tagName)),false);
- const query=app.calls.find(c=>c.path.endsWith('/browser'))!;assert.equal(query.path,'/missions/mission%3A1/works/work%3A1/browser');assert.equal(query.options.headers['X-Massion-Feed'],'feed:a');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+ const query=app.calls.find(c=>c.path.endsWith('/browser'))!;assert.equal(query.path,'/missions/mission%3A1/works/work%3A1/browser');assert.equal(query.options.headers['X-Massion-Feed'],'feed:a');assert.ok([...app.storage.values()].every(value=>!value.includes(screenshot.data))); assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
-for(const kind of ['legacy','wrong-mime','empty','bad-base64','zero-width','bad-height'])test(kind+' image never falls back to structured page text',async()=>{
+for(const kind of ['wrong-mime','empty','bad-base64','zero-width','bad-height'])test(kind+' image never falls back to structured page text',async()=>{
  const {app,state}=fixture();state.session.page={...page()};
  if(kind==='legacy')delete state.session.page.screenshot;
  else state.session.page.screenshot={...screenshot,...(kind==='wrong-mime'?{mimeType:'image/svg+xml'}:kind==='empty'?{data:''}:kind==='bad-base64'?{data:'not an image URL'}:kind==='zero-width'?{width:0}:{height:1.5})};
@@ -118,7 +120,8 @@ test('conversation fold derives read telemetry and first-read time from the stor
 test('generic browser tabs use observed titles and select the matching image with keyboard navigation',async()=>{
  const {app,state}=fixture();state.mission.works[0].browserSession.pages=[{...page('이용 안내'),readId:'read:0',at:at-60000},{...page('빈 시간'),readId:'read:1'}, {...page('신청'),readId:'read:2'}];
  state.mission.works[0].browserSession.pages[1].screenshot={...screenshot,width:2};
- state.session={...state.session,pagesRead:3,page:state.mission.works[0].browserSession.pages[2]};
+ state.session={...state.session,pagesRead:3,pages:structuredClone(state.mission.works[0].browserSession.pages),page:state.mission.works[0].browserSession.pages[2]};
+ state.mission.works[0].browserSession.pages=state.mission.works[0].browserSession.pages.map(({screenshot,...p}:any)=>p);
  await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();
  const tabs=pageTabs(app);assert.deepEqual(tabs.map(n=>n.textContent),['이용 안내','빈 시간','신청']);
  await find(app,'browser-page-tab-1').fire('click');assert.match(pane(app).textContent,/빈 시간/);assert.equal(find(app,'browser-page-tab-1').attributes.get('aria-selected'),'true');
@@ -183,7 +186,7 @@ test('opening checkout ignores the revision of an unrelated selected Mission',as
 
 
 test('checkout ignores a previously selected historical page and always shows the current image',async()=>{
- const {app,state}=fixture();state.mission.works[0].browserSession.pages[0]={...page('Old observation'),readId:'read:0',screenshot:{...screenshot,width:2}};
+ const {app,state}=fixture();state.session.pages[0]={...page('Old observation'),readId:'read:0',screenshot:{...screenshot,width:2}};
  await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();await find(app,'browser-page-tab-0').fire('click');assert.equal(find(app,'browser-screenshot').attributes.get('width'),'2');
  await checkout(app);assert.equal(find(app,'browser-screenshot').attributes.get('width'),'1');assert.deepEqual(pageTabs(app).map(n=>n.textContent),['브라우저']);
 });
@@ -225,3 +228,7 @@ test('response history takes precedence over an older snapshot history',async()=
  const {app,state}=fixture();state.session.pages=[{...page('응답의 이용 안내'),readId:'response:0'},state.session.page];
  await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();assert.deepEqual(pageTabs(app).map(n=>n.textContent),['응답의 이용 안내','Observed checkout']);
 });
+
+for(const reason of ['settled','cancelled','waiting','disconnect'])test('live image is removed on '+reason,async()=>{const {app,state}=fixture();await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();assert.ok(find(app,'browser-screenshot'));if(reason==='disconnect')runInContext('requireReconnect()',app.context);else{state.mission.works[0].execution=reason;await runInContext("loadMission('mission:1')",app.context);await settle();}assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);assert.equal(runInContext('!!browserRead?.session?.page?.screenshot',app.context),false);});
+
+test('history renders only sanitized structure after restart without a live image',async()=>{const {app,state}=fixture();delete state.session.page.screenshot;state.session.pages=state.session.pages.map(({screenshot,...p}:any)=>p);await settle();await checkout(app);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);assert.match(pane(app).textContent,/Observed checkout/);assert.match(pane(app).textContent,/••••/);assert.doesNotMatch(pane(app).textContent,/never show this/);});

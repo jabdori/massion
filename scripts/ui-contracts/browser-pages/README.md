@@ -1,9 +1,5 @@
-# Offline browser screenshot fixtures
+# Local browser reference pages
 
-These local pages preserve the page layout from the approved B15/B4 artboards. They are mock library/checkout sites, not an assertion that the example domains were contacted. No page is injected into the workbench.
+The HTML/CSS reference pages are served only on loopback. `capture-browser-pages.mjs` invokes the production CDP capture in memory. The CLI writes only structural metadata, source/image hashes and boolean privacy reports; it never writes page PNGs. `browser-fixtures.ts` lazily captures reference images in process memory for active browser-pane verification. Payment approval is waiting, so B4 shows only structure.
 
-Regenerate with `node scripts/ui-contracts/capture-browser-pages.mjs`. It serves these files only on loopback, opens an isolated script-disabled browser, runs the production `captureBrowserPage` redaction and screenshot routine, then records the PNG plus observed fields in `captured.json`. Fixture addresses map those local documents to their declared example-domain identities. `browser-fixtures.ts` verifies the HTML/CSS and image hashes before using the actual adapter read shapes.
-
-`redaction.html` verifies Korean/English security labels, `name=csc`, and `autocomplete=cc-csc`. Two sets of distinct per-field private values must produce identical masked PNG bytes; those values are not placed in the URL, so URL redaction cannot accidentally satisfy the field test; the ordinary quantity must remain visible and the page's harmless script sentinel must not execute. The report is written to `.runtime/browser-pages/redaction-report.json`.
-
-Sensitive values are synthetic test inputs. The generated PNGs contain only their masks. Edit source HTML/CSS and regenerate; do not edit the PNG or manifest by hand.
+The primitive fixture draws a private value with CSS segments. Its different pixel variants deliberately remain distinguishable, while capture/settle/backup and restart checks prove those bytes never persist. The field/label fixtures separately verify default masking.
