@@ -16265,5 +16265,47 @@
    "B8:pane"
   ],
   "provenance": "Existing approved state labels; an effect status is not payment confirmation."
+ },
+ "ui.room.not-checked": {
+  "ko": "확인 안 함",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7-unknown:pane",
+   "B8-unknown:pane"
+  ],
+  "provenance": "Approved B7-unknown:pane, B8-unknown:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.criteria-content": {
+  "ko": "기준 내용",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.record-empty": {
+  "ko": "아직 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.evidence-count": {
+  "ko": "근거 {count}건",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7-fail:conversation",
+   "B8-fail:pane"
+  ],
+  "provenance": "Approved B7-fail:conversation, B8-fail:pane artboard wording for Work pane visual-gate correction."
  }
 }

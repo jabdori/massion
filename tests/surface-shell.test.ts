@@ -410,16 +410,16 @@ test('a Work tab presents the exact room state, task progress and criteria inste
  await openTurn(app,0).fire('click');await settle();const stale=app.all().find(n=>n.id==='work-room-stop-work:a')!;await app.node('pane-close').fire('click');await stale.fire('click');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0,'a detached room cannot submit Stop');
 });
 
-test('Stop reuses one existing cancellation identity for overlapping clicks and keeps unknown effects unknown',async()=>{
+test('Stop reuses one cancellation identity for overlapping clicks and never resends an unknown command outcome',async()=>{
  let finish!:()=>void;const held=new Promise<void>(resolve=>finish=resolve);let posts=0;
- const {app,state}=fixture([{workId:'work:a',title:'Active request',execution:'active',acceptance:'pending',started:true,stored:{effects:[{id:'effect:a',taskId:'root',status:'unknown',target:'Original target',authority:'owner'}]}}],(path,options)=>{
+ const {app,state}=fixture([{workId:'work:a',title:'Active request',execution:'active',acceptance:'pending',started:true,stored:{effects:[{id:'effect:a',taskId:'root',status:'pending',target:'Original target',authority:'owner'}]}}],(path,options)=>{
   if(path==='/missions/intake/commands'&&options?.method==='POST'){posts++;return held.then(()=>({}));}
  });
  await settle();await openTurn(app,0).fire('click');await settle();
  await app.tick();const stop=app.all().find(n=>n.id==='work-room-stop-work:a');assert.ok(stop);assert.equal(runInContext('reconnectRequired',app.context),false);
  const one=stop.fire('click'),two=stop.fire('click');await settle();assert.equal(posts,1);finish();await Promise.all([one,two]);await settle();
  const sent=app.calls.filter(c=>c.path==='/missions/intake/commands');assert.equal(sent.length,1);assert.deepEqual(JSON.parse(sent[0]!.options.body).command,{type:'cancel',workId:'work:a'});
- assert.equal((state.works[0]!.stored!.effects as any[])[0].status,'unknown');
+ assert.equal((state.works[0]!.stored!.effects as any[])[0].status,'pending');
  await stop.fire('click');await settle();assert.equal(posts,1,'an unknown response never authorizes another send');
 });
 
@@ -434,7 +434,7 @@ test('same-revision Work and Mission tab switches rebuild the matching presentat
 test('a historical passed verdict cannot label a new artifact checked',async()=>{
  const {app}=fixture([{workId:'a',title:'Changed result',execution:'active',acceptance:'stale',started:true,stored:{artifact:{id:'artifact:a',version:2,sha256:'new'},verdict:{id:'verdict:a',status:'passed',artifactVersion:1,artifactSha256:'old',criteriaVersion:1,evidence:[]}}}]);
  await settle();await openTurn(app,0).fire('click');await settle();
- assert.equal(app.all().find(n=>n.id==='work-room-check-a')!.textContent,'확인 전');
+ assert.equal(app.all().find(n=>n.id==='work-room-check-a')!.children.find(n=>n.tagName==='STRONG')!.textContent,'확인 대기');
  const card=app.all().find(n=>n.id==='work-card-a')!;const detail=card.children.find(n=>n.className==='room-detail')!;assert.doesNotMatch(detail.textContent,/1\/1|완료/);
 });
 

@@ -101,43 +101,50 @@
               - StaticText "gpt-6.1-terra"
             - StaticText "연결"
             - strong
-              - StaticText "fixture"
+              - StaticText "알 수 없음"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기준"
-              - paragraph
-                - StaticText "요청한 결과와 근거 확인"
+              - DescriptionList
+                - term "기준 내용"
+                - definition
+                  - StaticText "요청한 결과와 근거 확인"
             - generic
               - sectionheader
                 - strong
                   - StaticText "확인"
                 - StaticText "1/1"
-              - paragraph
-                - StaticText "완료"
-              - paragraph
-                - StaticText "요청한 결과와 근거 확인"
-              - StaticText "1/1"
-              - paragraph
-                - StaticText "고정된 결과 확인"
+              - DescriptionList
+                - term "요청한 결과와 근거 확인"
+                - definition
+                  - StaticText "확인 완료"
+                - StaticText "1/1"
+                - term "근거"
+                - definition
+                  - StaticText "고정된 결과 확인"
             - generic
               - sectionheader
                 - strong
                   - StaticText "전송 1회 보장"
-              - paragraph
-                - StaticText "작성 · 완료"
-              - paragraph
-                - StaticText "작성 · 완료"
-              - paragraph
-                - StaticText "확인 · 완료"
+              - DescriptionList
+                - term "작성"
+                - definition
+                  - StaticText "완료"
+                - term "결과물"
+                - definition
+                  - StaticText "완료"
+                - term "확인"
+                - definition
+                  - StaticText "완료"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기록"
-              - paragraph
-                - StaticText "기록"
-              - paragraph
-                - StaticText "프린터 토너 주문"
+              - DescriptionList
+                - term "결과물"
+                - definition
+                  - StaticText "프린터 토너 주문"
             - generic
               - sectionheader
                 - strong
@@ -147,7 +154,12 @@
                   - time
                     - StaticText "14:08"
                   - StaticText "프린터 토너 주문"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "완료"
             - group
-              - DisclosureTriangle "확인 완료" [expanded=false]
-                - StaticText "확인 완료"
-            - StaticText "예산 2 / 8 토큰"
+              - button "확인 완료 요청한 결과와 근거 확인" [expanded=false, ref=e33]
+                - strong
+                  - StaticText "확인 완료"
+                - StaticText "요청한 결과와 근거 확인"

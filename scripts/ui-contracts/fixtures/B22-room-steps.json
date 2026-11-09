@@ -15,6 +15,11 @@
       "readySelector": "#work-heading-pr84"
     },
     {
+      "selector": "#work-room-check-pr84",
+      "action": "click",
+      "readySelector": "#work-evidence-summary-pr84"
+    },
+    {
       "selector": "#work-evidence-summary-pr84",
       "action": "click",
       "readySelector": "#work-attempts-summary-pr84"

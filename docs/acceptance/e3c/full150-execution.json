@@ -1,0 +1,48 @@
+{
+  "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+  "screenArguments": [],
+  "exitCode": 0,
+  "contracts": 75,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "captured": 150,
+  "infrastructureErrors": 0,
+  "blocking": false,
+  "sourceFiles": 407,
+  "sourceInputSha256": "41d0cee47afc34fa4189f70e4e80ca9056d281597ed5dabb36d4365db8cd496d",
+  "captureInputsUnchanged": true,
+  "b22Before": [
+    {
+      "theme": "dark",
+      "infrastructureErrors": 1
+    },
+    {
+      "theme": "light",
+      "infrastructureErrors": 1
+    }
+  ],
+  "b22After": [
+    {
+      "theme": "dark",
+      "passed": 34,
+      "required": 49,
+      "failed": 18,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "infrastructureErrors": 0
+    },
+    {
+      "theme": "light",
+      "passed": 34,
+      "required": 49,
+      "failed": 18,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "infrastructureErrors": 0
+    }
+  ]
+}

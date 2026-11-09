@@ -6,26 +6,30 @@ Element passes count required matches. Failures also include forbidden strings a
 
 | Screen | Theme | Elements passed / required | Contract failures | Warnings | Visual failures | Gaps | Errors | Pair |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| B4 | dark | 30 / 35 | 5 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B4.png) |
 | B7 | dark | 39 / 40 | 1 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7.png) |
 | B7-churn | dark | 41 / 74 | 33 | 2 | 0 | 4 | 0 | [PNG](pairs/dark/B7-churn.png) |
 | B7-done | dark | 35 / 47 | 12 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7-done.png) |
 | B7-fail | dark | 39 / 78 | 39 | 2 | 0 | 4 | 0 | [PNG](pairs/dark/B7-fail.png) |
 | B7-unknown | dark | 36 / 46 | 10 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B7-unknown.png) |
 | B8 | dark | 23 / 31 | 8 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B8.png) |
-| B8-done | dark | 23 / 36 | 13 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B8-done.png) |
-| B8-fail | dark | 25 / 36 | 11 | 3 | 0 | 4 | 0 | [PNG](pairs/dark/B8-fail.png) |
-| B8-unknown | dark | 22 / 36 | 14 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B8-unknown.png) |
-| B4 | dark | 30 / 35 | 5 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B4.png) |
+| B8-done | dark | 24 / 36 | 12 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B8-done.png) |
+| B8-fail | dark | 26 / 36 | 10 | 3 | 0 | 4 | 0 | [PNG](pairs/dark/B8-fail.png) |
+| B8-unknown | dark | 23 / 36 | 13 | 2 | 0 | 3 | 0 | [PNG](pairs/dark/B8-unknown.png) |
+| B4 | light | 30 / 35 | 5 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B4.png) |
 | B7 | light | 39 / 40 | 1 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7.png) |
 | B7-churn | light | 41 / 74 | 33 | 2 | 0 | 4 | 0 | [PNG](pairs/light/B7-churn.png) |
 | B7-done | light | 35 / 47 | 12 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7-done.png) |
 | B7-fail | light | 39 / 78 | 39 | 2 | 0 | 4 | 0 | [PNG](pairs/light/B7-fail.png) |
 | B7-unknown | light | 36 / 46 | 10 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B7-unknown.png) |
 | B8 | light | 23 / 31 | 8 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B8.png) |
-| B8-done | light | 23 / 36 | 13 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B8-done.png) |
-| B8-fail | light | 25 / 36 | 11 | 3 | 0 | 4 | 0 | [PNG](pairs/light/B8-fail.png) |
-| B8-unknown | light | 22 / 36 | 14 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B8-unknown.png) |
-| B4 | light | 30 / 35 | 5 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B4.png) |
+| B8-done | light | 24 / 36 | 12 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B8-done.png) |
+| B8-fail | light | 26 / 36 | 10 | 3 | 0 | 4 | 0 | [PNG](pairs/light/B8-fail.png) |
+| B8-unknown | light | 23 / 36 | 13 | 2 | 0 | 3 | 0 | [PNG](pairs/light/B8-unknown.png) |
+
+## B4 (dark)
+
+[Snapshot](snapshots/dark/B4.txt) · [Checker](checks/dark/B4.txt) · [Screenshot](screenshots/dark/B4.png) · [Visual measurements](visual/dark/B4.json)
 
 ## B7 (dark)
 
@@ -93,9 +97,9 @@ Element passes count required matches. Failures also include forbidden strings a
 - Gap: No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.
 - Gap: AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.
 
-## B4 (dark)
+## B4 (light)
 
-[Snapshot](snapshots/dark/B4.txt) · [Checker](checks/dark/B4.txt) · [Screenshot](screenshots/dark/B4.png) · [Visual measurements](visual/dark/B4.json)
+[Snapshot](snapshots/light/B4.txt) · [Checker](checks/light/B4.txt) · [Screenshot](screenshots/light/B4.png) · [Visual measurements](visual/light/B4.json)
 
 ## B7 (light)
 
@@ -162,7 +166,3 @@ Element passes count required matches. Failures also include forbidden strings a
 - Gap: No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.
 - Gap: No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.
 - Gap: AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.
-
-## B4 (light)
-
-[Snapshot](snapshots/light/B4.txt) · [Checker](checks/light/B4.txt) · [Screenshot](screenshots/light/B4.png) · [Visual measurements](visual/light/B4.json)

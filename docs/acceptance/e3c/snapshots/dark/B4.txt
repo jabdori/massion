@@ -130,12 +130,12 @@
                   - StaticText "절차"
                 - StaticText "0/1"
               - list
-                - listitem [level=1]
-                  - image "실행 중"
+                - listitem "프린터 토너 주문 · 실행 중" [level=1, ref=e41]
                   - StaticText "프린터 토너 주문"
                   - time
                     - StaticText "14:08"
             - group
-              - DisclosureTriangle "확인 전" [expanded=false]
-                - StaticText "확인 전"
-            - StaticText "예산 1 / 8"
+              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e40]
+                - strong
+                  - StaticText "확인 대기"
+                - StaticText "요청한 결과와 근거 확인"

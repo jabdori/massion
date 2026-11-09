@@ -104,44 +104,51 @@
               - StaticText "gpt-6.1-terra"
             - StaticText "연결"
             - strong
-              - StaticText "fixture"
+              - StaticText "알 수 없음"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기준"
-              - paragraph
-                - StaticText "요청한 결과와 근거 확인"
+              - DescriptionList
+                - term "기준 내용"
+                - definition
+                  - StaticText "요청한 결과와 근거 확인"
             - generic
               - sectionheader
                 - strong
                   - StaticText "확인"
                 - StaticText "1/1"
-              - paragraph
-                - StaticText "확인 실패"
-              - paragraph
-                - StaticText "요청한 결과와 근거 확인"
-              - StaticText "1/1"
-              - paragraph
-                - StaticText "해지 사유 7건 누락"
+              - DescriptionList
+                - term "요청한 결과와 근거 확인"
+                - definition
+                  - StaticText "확인 실패"
+                - StaticText "1/1"
+                - term "근거"
+                - definition
+                  - StaticText "해지 사유 7건 누락"
             - generic
               - sectionheader
                 - strong
                   - StaticText "전송 1회 보장"
-              - paragraph
-                - StaticText "작성 · 완료"
-              - paragraph
-                - StaticText "작성 · 완료"
-              - paragraph
-                - StaticText "확인 · 완료"
+              - DescriptionList
+                - term "작성"
+                - definition
+                  - StaticText "완료"
+                - term "결과물"
+                - definition
+                  - StaticText "완료"
+                - term "확인"
+                - definition
+                  - StaticText "완료"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기록"
                 - StaticText "없음"
-              - paragraph
-                - StaticText "기록"
-              - paragraph
-                - StaticText "없음"
+              - DescriptionList
+                - term "결과물"
+                - definition
+                  - StaticText "아직 없음"
             - generic
               - sectionheader
                 - strong
@@ -152,8 +159,11 @@
                     - StaticText "14:08"
                   - StaticText "이탈 원인 조사"
                 - listitem [level=1]
-                  - StaticText "대화"
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "실패"
             - group
-              - DisclosureTriangle "확인 실패 · 근거 1" [expanded=false]
-                - StaticText "확인 실패 · 근거 1"
-            - StaticText "예산 2 / 8 토큰"
+              - button "확인 실패 근거 1건" [expanded=false, ref=e32]
+                - strong
+                  - StaticText "확인 실패"
+                - StaticText "근거 1건"

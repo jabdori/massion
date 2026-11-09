@@ -150,18 +150,16 @@
                   - StaticText "절차"
                 - StaticText "3/3"
               - list
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "프린터 토너 주문 · 완료" [level=1, ref=e45]
                   - StaticText "프린터 토너 주문"
                   - time
                     - StaticText "14:08"
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "작성 · 완료" [level=1, ref=e46]
                   - StaticText "작성"
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "확인 · 완료" [level=1, ref=e47]
                   - StaticText "확인"
             - group
-              - DisclosureTriangle "확인 완료" [expanded=false]
-                - StaticText "확인 완료"
-            - StaticText "예산 2 / 8 토큰"
+              - button "확인 완료 요청한 결과와 근거 확인" [expanded=false, ref=e44]
+                - strong
+                  - StaticText "확인 완료"
+                - StaticText "요청한 결과와 근거 확인"

@@ -12,8 +12,8 @@
   "aggregate": {
     "command": "TMPDIR=/private/tmp/e3c-tests node --test --test-concurrency=4 tests/*.test.ts",
     "exitCode": 1,
-    "tests": 1899,
-    "pass": 1558,
+    "tests": 1916,
+    "pass": 1575,
     "fail": 1,
     "skipped": 340,
     "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
@@ -21,19 +21,22 @@
     "preparation": "mkdir -p /private/tmp/e3c-tests"
   },
   "ui": {
-    "command": "UI_CONTRACTS_OUTPUT=.runtime/e3c-delivery node scripts/ui-contracts/run.mjs B7 B7-churn B7-done B7-fail B7-unknown B8 B8-done B8-fail B8-unknown B4",
+    "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
     "exitCode": 0,
-    "states": 20,
-    "required": 848,
-    "passed": 566,
-    "failed": 282,
-    "visualFailures": 0,
+    "contracts": 75,
+    "states": 150,
+    "screenArguments": [],
+    "scopedStates": 18,
+    "scopedRequired": 848,
+    "scopedPassed": 572,
+    "scopedFailed": 276,
+    "scopedVisualFailures": 0,
     "infrastructureErrors": 0
   },
   "interactions": {
     "command": "node scripts/ui-contracts/verify-work-pane.mjs",
     "exitCode": 0,
-    "cases": 8,
+    "cases": 20,
     "productCommands": 0
   },
   "steeringProbe": {
@@ -45,5 +48,13 @@
     "failure": "deadline during final acceptance acknowledgment preserves committed Record: Lifetime fixture deadline",
     "isolatedRerun": "node --test tests/runtime-lifetime.test.ts: 12 passed, 2 skipped, 0 failures",
     "finalAggregate": "The complete final suite with four workers, run after browser capture, retains only the documented portable-inventory failure. No runtime test or timeout changed."
+  },
+  "regressions": {
+    "focusedCommand": "node --test tests/work-room-visual.test.ts tests/conversation-visual-gate.test.ts tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/ui-tokens.test.ts tests/ui-contract-fixtures.test.ts",
+    "passed": 108,
+    "failed": 0,
+    "projectedUnknownReviewAddedCases": 6,
+    "b22NativeSetupCases": 2,
+    "visualGate": "A-J implemented; computed card headers 38px, procedure header 34px/progress gap 8px, step height32px, no budget line, terminal Stop absent, failure/progress/current-connection labels checked."
   }
 }

@@ -2,6 +2,18 @@
   "blocking": false,
   "rows": [
     {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 5,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
       "screen": "B7",
       "theme": "dark",
       "passed": 39,
@@ -102,8 +114,8 @@
     {
       "screen": "B8-done",
       "theme": "dark",
-      "passed": 23,
-      "failed": 13,
+      "passed": 24,
+      "failed": 12,
       "warnings": 2,
       "required": 36,
       "visualFailures": [],
@@ -118,8 +130,8 @@
     {
       "screen": "B8-fail",
       "theme": "dark",
-      "passed": 25,
-      "failed": 11,
+      "passed": 26,
+      "failed": 10,
       "warnings": 3,
       "required": 36,
       "visualFailures": [],
@@ -135,8 +147,8 @@
     {
       "screen": "B8-unknown",
       "theme": "dark",
-      "passed": 22,
-      "failed": 14,
+      "passed": 23,
+      "failed": 13,
       "warnings": 2,
       "required": 36,
       "visualFailures": [],
@@ -150,7 +162,7 @@
     },
     {
       "screen": "B4",
-      "theme": "dark",
+      "theme": "light",
       "passed": 30,
       "failed": 5,
       "warnings": 0,
@@ -158,7 +170,7 @@
       "visualFailures": [],
       "gaps": [],
       "errors": [],
-      "pair": "pairs/dark/B4.png"
+      "pair": "pairs/light/B4.png"
     },
     {
       "screen": "B7",
@@ -261,8 +273,8 @@
     {
       "screen": "B8-done",
       "theme": "light",
-      "passed": 23,
-      "failed": 13,
+      "passed": 24,
+      "failed": 12,
       "warnings": 2,
       "required": 36,
       "visualFailures": [],
@@ -277,8 +289,8 @@
     {
       "screen": "B8-fail",
       "theme": "light",
-      "passed": 25,
-      "failed": 11,
+      "passed": 26,
+      "failed": 10,
       "warnings": 3,
       "required": 36,
       "visualFailures": [],
@@ -294,8 +306,8 @@
     {
       "screen": "B8-unknown",
       "theme": "light",
-      "passed": 22,
-      "failed": 14,
+      "passed": 23,
+      "failed": 13,
       "warnings": 2,
       "required": 36,
       "visualFailures": [],
@@ -306,18 +318,6 @@
       ],
       "errors": [],
       "pair": "pairs/light/B8-unknown.png"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "passed": 30,
-      "failed": 5,
-      "warnings": 0,
-      "required": 35,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/light/B4.png"
     }
   ]
 }

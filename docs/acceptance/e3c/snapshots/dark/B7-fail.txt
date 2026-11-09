@@ -145,22 +145,20 @@
               - sectionheader
                 - strong
                   - StaticText "절차"
-                - StaticText "3/3"
+                - StaticText "2/3"
               - list
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "이탈 원인 조사 · 완료" [level=1, ref=e43]
                   - StaticText "이탈 원인 조사"
                   - time
                     - StaticText "14:08"
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "작성 · 완료" [level=1, ref=e44]
                   - StaticText "작성"
-                - listitem [level=1]
-                  - image "완료"
+                - listitem "확인 · 확인 실패" [level=1, ref=e45]
                   - StaticText "확인"
             - paragraph
               - StaticText "기업 고객은 따로 봐 줘."
             - group
-              - DisclosureTriangle "확인 실패 · 근거 1" [expanded=false]
-                - StaticText "확인 실패 · 근거 1"
-            - StaticText "예산 2 / 8 토큰"
+              - button "확인 실패 근거 1건" [expanded=false, ref=e42]
+                - strong
+                  - StaticText "확인 실패"
+                - StaticText "근거 1건"

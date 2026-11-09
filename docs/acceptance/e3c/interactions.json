@@ -38,6 +38,248 @@
       "wide": true,
       "width": 337
     },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B7-done",
+    "theme": "dark",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 완료"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
     "inspection": true,
     "closeFocus": "chat-input",
     "commands": 0
@@ -81,6 +323,56 @@
       "wide": true,
       "width": 337
     },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(245, 118, 110)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 실패"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": false,
+          "failed": true,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206L6%2018%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
     "inspection": true,
     "closeFocus": "chat-input",
     "commands": 0
@@ -94,7 +386,7 @@
       "detail": false,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": false,
@@ -106,7 +398,7 @@
       "detail": true,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": true,
@@ -118,11 +410,61 @@
       "detail": true,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": true,
       "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 안 함"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -166,6 +508,444 @@
       "unknown": false,
       "wide": false,
       "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "dark",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 완료"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "dark",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(245, 118, 110)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 실패"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": false,
+          "failed": true,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206L6%2018%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 안 함"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 348.5,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(162, 168, 180)",
+        "detail": true,
+        "halt": "#f5766e",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": true,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -210,6 +990,248 @@
       "wide": true,
       "width": 337
     },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 완료"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
     "inspection": true,
     "closeFocus": "chat-input",
     "commands": 0
@@ -253,6 +1275,56 @@
       "wide": true,
       "width": 337
     },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(186, 38, 35)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 실패"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": false,
+          "failed": true,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206L6%2018%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
     "inspection": true,
     "closeFocus": "chat-input",
     "commands": 0
@@ -266,7 +1338,7 @@
       "detail": false,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": false,
@@ -278,7 +1350,7 @@
       "detail": true,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": true,
@@ -290,11 +1362,61 @@
       "detail": true,
       "overflow": false,
       "pending": false,
-      "stop": true,
+      "stop": false,
       "title": "프린터 토너 주문",
       "unknown": true,
       "wide": true,
       "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 안 함"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": null,
+      "strayConversation": false
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -338,6 +1460,444 @@
       "unknown": false,
       "wide": false,
       "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "light",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": false,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 완료"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "light",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "이탈 원인 조사",
+      "unknown": false,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(186, 38, 35)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 실패"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": true,
+          "failed": false,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012l5%205L20%207%22%2F%3E%3C%2Fsvg%3E\")"
+        },
+        {
+          "done": false,
+          "failed": true,
+          "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206L6%2018%22%2F%3E%3C%2Fsvg%3E\")"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B8-unknown",
+    "theme": "light",
+    "initial": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": true,
+      "width": 907
+    },
+    "toggled": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": false,
+      "width": 599
+    },
+    "mobile": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": false,
+      "title": "프린터 토너 주문",
+      "unknown": true,
+      "wide": false,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 900,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 533,
+        "paneBottom": 900,
+        "paneLeft": 532,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 안 함"
+      },
+      "budget": false,
+      "cardHeaders": [
+        38,
+        38,
+        38,
+        38
+      ],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": false,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        },
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 0,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 0,
+        "visible": false
+      },
+      "stopMark": null,
+      "strayConversation": false
+    },
+    "inspection": true,
+    "closeFocus": "chat-input",
+    "commands": 0
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "initial": {
+      "compact": true,
+      "dashboard": false,
+      "detail": false,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": false,
+      "width": 599
+    },
+    "toggled": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": true,
+      "width": 907
+    },
+    "mobile": {
+      "compact": false,
+      "dashboard": false,
+      "detail": true,
+      "overflow": false,
+      "pending": false,
+      "stop": true,
+      "title": "PR #84 검토",
+      "unknown": false,
+      "wide": true,
+      "width": 337
+    },
+    "visual": {
+      "bar": {
+        "bottom": 348.5,
+        "chevron": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E\")",
+        "color": "rgb(65, 65, 65)",
+        "detail": true,
+        "halt": "#ba2623",
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+        "left": 841,
+        "paneBottom": 900,
+        "paneLeft": 840,
+        "paneRight": 1440,
+        "right": 1440,
+        "status": "확인 대기"
+      },
+      "budget": false,
+      "cardHeaders": [],
+      "chip": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203.5l7%203v5c0%204.5-3%207.5-7%209-4-1.5-7-4.5-7-9v-5z%22%2F%3E%3C%2Fsvg%3E\")",
+      "connection": "알 수 없음",
+      "fields": true,
+      "flow": true,
+      "inspectionOpen": true,
+      "markers": [
+        {
+          "done": false,
+          "failed": false,
+          "mask": "none"
+        }
+      ],
+      "procedure": {
+        "border": "0px",
+        "divider": "0px",
+        "height": 34,
+        "icon": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%206h11M9%2012h11M9%2018h11M4%206h.01M4%2012h.01M4%2018h.01%22%2F%3E%3C%2Fsvg%3E\")",
+        "progressGap": 8,
+        "visible": true
+      },
+      "stopMark": {
+        "content": "\"\"",
+        "width": "8px"
+      },
+      "strayConversation": false
     },
     "inspection": true,
     "closeFocus": "chat-input",

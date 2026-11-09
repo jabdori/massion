@@ -128,7 +128,7 @@ function chatException(turn,kind){
 }
 /** Open the existing owner review form. The card itself never cancels, quarantines or acknowledges an uncertain effect. */
 async function chatReviewUnknown(turnId){
- const turn=chatView?.turns.find(t=>t.id===turnId),work=turn?.work;
+ const turn=chatView?.turns.find(t=>t.id===turnId)??chatRoomTurns().find(t=>t.id===turnId),work=turn?.work;
  if(!work?.unknown||!chatText(work.exception?.runId)||busy||loading||chatClosing.has(turnId))return;
  const choice={generation:chatGeneration,thread:chatThread,segment:chatSegment,feed:chatView.feedId,epoch:connectionEpoch,focus:document.activeElement,mission:work.missionId,work:work.workId,run:work.exception.runId};
  chatClosing.add(turnId);renderChat();shellMarkSeen(turn);paneOpen(choice.mission,choice.work,work.title);

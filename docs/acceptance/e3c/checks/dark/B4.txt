@@ -1,4 +1,4 @@
-contract B4 (B4 결정 카드) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/e3c-delivery/snapshots/dark/B4.json
+contract B4 (B4 결정 카드) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/ui-contracts/snapshots/dark/B4.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -34,7 +34,7 @@ contract B4 (B4 결정 카드) vs /Users/code/orca/workspaces/massion/e3c-work-p
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget conversation app {"chars":229,"strings":24,"sentences":3,"longest":30} proto {"chars":238,"strings":22,"sentences":3,"longest":30} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":63,"strings":15,"sentences":0,"longest":9} proto {"chars":141,"strings":21,"sentences":0,"longest":19} source visibleTextBudget
+  budget pane         app {"chars":69,"strings":15,"sentences":0,"longest":13} proto {"chars":141,"strings":21,"sentences":0,"longest":19} source visibleTextBudget
   FAIL  missing sidebar      status   "결정 대기"
   FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
   FAIL  region pane         text     "{amount}" (found in conversation)

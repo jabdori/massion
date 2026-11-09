@@ -1,6 +1,80 @@
 [
   {
     "id": "R001",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R002",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "category": "unsupported product capability",
+    "boundary": "business-activity",
+    "strictOrderCascade": false,
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "sources": [
+      "src/configured-runtime.ts:225",
+      "src/assistant-service.ts:300"
+    ]
+  },
+  {
+    "id": "R003",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R004",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R005",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R006",
     "screen": "B7",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         button   \"확인 대기 주문 내역 {count}\"",
@@ -15,7 +89,7 @@
     ]
   },
   {
-    "id": "R002",
+    "id": "R007",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
@@ -30,7 +104,7 @@
     ]
   },
   {
-    "id": "R003",
+    "id": "R008",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
@@ -47,7 +121,7 @@
     ]
   },
   {
-    "id": "R004",
+    "id": "R009",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -62,7 +136,7 @@
     ]
   },
   {
-    "id": "R005",
+    "id": "R010",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -77,7 +151,7 @@
     ]
   },
   {
-    "id": "R006",
+    "id": "R011",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -92,7 +166,7 @@
     ]
   },
   {
-    "id": "R007",
+    "id": "R012",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -107,7 +181,7 @@
     ]
   },
   {
-    "id": "R008",
+    "id": "R013",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
@@ -122,7 +196,7 @@
     ]
   },
   {
-    "id": "R009",
+    "id": "R014",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
@@ -137,7 +211,7 @@
     ]
   },
   {
-    "id": "R010",
+    "id": "R015",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -149,103 +223,28 @@
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
       "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R011",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R012",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R013",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R014",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R015",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": false,
-    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
     ]
   },
   {
     "id": "R016",
     "screen": "B7-churn",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "work-room-messages",
+    "boundary": "business-procedure",
     "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
     "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
     ]
   },
   {
     "id": "R017",
     "screen": "B7-churn",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
     "strictOrderCascade": true,
@@ -275,19 +274,34 @@
     "id": "R019",
     "screen": "B7-churn",
     "theme": "dark",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
     "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
     ]
   },
   {
     "id": "R020",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": false,
+    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R021",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -302,7 +316,22 @@
     ]
   },
   {
-    "id": "R021",
+    "id": "R022",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R023",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -317,7 +346,7 @@
     ]
   },
   {
-    "id": "R022",
+    "id": "R024",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -332,7 +361,52 @@
     ]
   },
   {
-    "id": "R023",
+    "id": "R025",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R026",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R027",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R028",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
@@ -347,89 +421,14 @@
     ]
   },
   {
-    "id": "R024",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R025",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R026",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R027",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R028",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R029",
     "screen": "B7-churn",
     "theme": "dark",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
     "sources": [
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
@@ -440,6 +439,36 @@
     "id": "R030",
     "screen": "B7-churn",
     "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R031",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R032",
+    "screen": "B7-churn",
+    "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
@@ -452,7 +481,52 @@
     ]
   },
   {
-    "id": "R031",
+    "id": "R033",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R034",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R035",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R036",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -467,7 +541,7 @@
     ]
   },
   {
-    "id": "R032",
+    "id": "R037",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -482,7 +556,7 @@
     ]
   },
   {
-    "id": "R033",
+    "id": "R038",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -497,7 +571,7 @@
     ]
   },
   {
-    "id": "R034",
+    "id": "R039",
     "screen": "B7-churn",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         button   \"확인 대기 원인 정리 후 시작\"",
@@ -512,7 +586,7 @@
     ]
   },
   {
-    "id": "R035",
+    "id": "R040",
     "screen": "B7-done",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -526,7 +600,7 @@
     ]
   },
   {
-    "id": "R036",
+    "id": "R041",
     "screen": "B7-done",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -540,7 +614,7 @@
     ]
   },
   {
-    "id": "R037",
+    "id": "R042",
     "screen": "B7-done",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
@@ -554,7 +628,7 @@
     ]
   },
   {
-    "id": "R038",
+    "id": "R043",
     "screen": "B7-done",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -568,85 +642,10 @@
     ]
   },
   {
-    "id": "R039",
-    "screen": "B7-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R040",
-    "screen": "B7-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R041",
-    "screen": "B7-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R042",
-    "screen": "B7-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R043",
-    "screen": "B7-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R044",
     "screen": "B7-done",
     "theme": "dark",
-    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
     "category": "unsupported product capability",
     "boundary": "payment",
     "strictOrderCascade": false,
@@ -676,6 +675,81 @@
     "id": "R046",
     "screen": "B7-done",
     "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R047",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R048",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R049",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R050",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R051",
+    "screen": "B7-done",
+    "theme": "dark",
     "diagnostic": "FAIL  missing pane         button   \"확인 완료 주문 내역 {count}\"",
     "category": "unsupported product capability",
     "boundary": "payment",
@@ -688,7 +762,7 @@
     ]
   },
   {
-    "id": "R047",
+    "id": "R052",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -702,7 +776,7 @@
     ]
   },
   {
-    "id": "R048",
+    "id": "R053",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
@@ -716,7 +790,7 @@
     ]
   },
   {
-    "id": "R049",
+    "id": "R054",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -730,7 +804,7 @@
     ]
   },
   {
-    "id": "R050",
+    "id": "R055",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -744,7 +818,7 @@
     ]
   },
   {
-    "id": "R051",
+    "id": "R056",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
@@ -759,7 +833,7 @@
     ]
   },
   {
-    "id": "R052",
+    "id": "R057",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
@@ -776,7 +850,7 @@
     ]
   },
   {
-    "id": "R053",
+    "id": "R058",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -791,7 +865,7 @@
     ]
   },
   {
-    "id": "R054",
+    "id": "R059",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -806,7 +880,7 @@
     ]
   },
   {
-    "id": "R055",
+    "id": "R060",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -821,7 +895,7 @@
     ]
   },
   {
-    "id": "R056",
+    "id": "R061",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -836,7 +910,7 @@
     ]
   },
   {
-    "id": "R057",
+    "id": "R062",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
@@ -851,7 +925,7 @@
     ]
   },
   {
-    "id": "R058",
+    "id": "R063",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
@@ -866,7 +940,7 @@
     ]
   },
   {
-    "id": "R059",
+    "id": "R064",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -878,81 +952,6 @@
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
       "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R060",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R061",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R062",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R063",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R064",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": false,
-    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
     ]
   },
   {
@@ -974,6 +973,81 @@
     "id": "R066",
     "screen": "B7-fail",
     "theme": "dark",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R067",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R068",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R069",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": false,
+    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R070",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R071",
+    "screen": "B7-fail",
+    "theme": "dark",
     "diagnostic": "FAIL  missing pane         text     \"기록\"",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
@@ -986,7 +1060,7 @@
     ]
   },
   {
-    "id": "R067",
+    "id": "R072",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -1001,7 +1075,7 @@
     ]
   },
   {
-    "id": "R068",
+    "id": "R073",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
@@ -1016,7 +1090,7 @@
     ]
   },
   {
-    "id": "R069",
+    "id": "R074",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1031,7 +1105,7 @@
     ]
   },
   {
-    "id": "R070",
+    "id": "R075",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -1046,7 +1120,7 @@
     ]
   },
   {
-    "id": "R071",
+    "id": "R076",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -1061,7 +1135,7 @@
     ]
   },
   {
-    "id": "R072",
+    "id": "R077",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1076,7 +1150,7 @@
     ]
   },
   {
-    "id": "R073",
+    "id": "R078",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -1091,7 +1165,7 @@
     ]
   },
   {
-    "id": "R074",
+    "id": "R079",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
@@ -1106,89 +1180,14 @@
     ]
   },
   {
-    "id": "R075",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R076",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R077",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R078",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R079",
-    "screen": "B7-fail",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R080",
     "screen": "B7-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
     "sources": [
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
@@ -1199,6 +1198,36 @@
     "id": "R081",
     "screen": "B7-fail",
     "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R082",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R083",
+    "screen": "B7-fail",
+    "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
@@ -1211,7 +1240,52 @@
     ]
   },
   {
-    "id": "R082",
+    "id": "R084",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R085",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R086",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R087",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -1226,7 +1300,7 @@
     ]
   },
   {
-    "id": "R083",
+    "id": "R088",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1241,7 +1315,7 @@
     ]
   },
   {
-    "id": "R084",
+    "id": "R089",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -1256,7 +1330,7 @@
     ]
   },
   {
-    "id": "R085",
+    "id": "R090",
     "screen": "B7-fail",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         button   \"확인 실패 근거 {count} 이상\"",
@@ -1271,7 +1345,7 @@
     ]
   },
   {
-    "id": "R086",
+    "id": "R091",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -1285,7 +1359,7 @@
     ]
   },
   {
-    "id": "R087",
+    "id": "R092",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
@@ -1300,7 +1374,7 @@
     ]
   },
   {
-    "id": "R088",
+    "id": "R093",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -1314,7 +1388,7 @@
     ]
   },
   {
-    "id": "R089",
+    "id": "R094",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
@@ -1328,7 +1402,7 @@
     ]
   },
   {
-    "id": "R090",
+    "id": "R095",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -1342,7 +1416,7 @@
     ]
   },
   {
-    "id": "R091",
+    "id": "R096",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
@@ -1357,7 +1431,7 @@
     ]
   },
   {
-    "id": "R092",
+    "id": "R097",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1372,7 +1446,7 @@
     ]
   },
   {
-    "id": "R093",
+    "id": "R098",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1387,7 +1461,7 @@
     ]
   },
   {
-    "id": "R094",
+    "id": "R099",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -1402,7 +1476,7 @@
     ]
   },
   {
-    "id": "R095",
+    "id": "R100",
     "screen": "B7-unknown",
     "theme": "dark",
     "diagnostic": "FAIL  missing pane         button   \"확인 안 함 결제 응답 없음\"",
@@ -1417,7 +1491,7 @@
     ]
   },
   {
-    "id": "R096",
+    "id": "R101",
     "screen": "B8",
     "theme": "dark",
     "diagnostic": "FAIL  missing conversation link     \"작업 중 · 페이지 {count} 읽음\"",
@@ -1428,81 +1502,6 @@
     "sources": [
       "src/configured-runtime.ts:225",
       "src/assistant-service.ts:300"
-    ]
-  },
-  {
-    "id": "R097",
-    "screen": "B8",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R098",
-    "screen": "B8",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R099",
-    "screen": "B8",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R100",
-    "screen": "B8",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R101",
-    "screen": "B8",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
     ]
   },
   {
@@ -1524,7 +1523,7 @@
     "id": "R103",
     "screen": "B8",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1537,21 +1536,37 @@
   },
   {
     "id": "R104",
-    "screen": "B8-done",
+    "screen": "B8",
     "theme": "dark",
-    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "business-activity",
-    "strictOrderCascade": false,
-    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
     "sources": [
-      "src/configured-runtime.ts:225",
-      "src/assistant-service.ts:300"
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
     ]
   },
   {
     "id": "R105",
-    "screen": "B8-done",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
+    "sources": [
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
+    ]
+  },
+  {
+    "id": "R106",
+    "screen": "B8",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -1565,25 +1580,10 @@
     ]
   },
   {
-    "id": "R106",
-    "screen": "B8-done",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
     "id": "R107",
-    "screen": "B8-done",
+    "screen": "B8",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1596,9 +1596,9 @@
   },
   {
     "id": "R108",
-    "screen": "B8-done",
+    "screen": "B8",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1613,22 +1613,21 @@
     "id": "R109",
     "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
+    "boundary": "business-activity",
+    "strictOrderCascade": false,
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
     "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
+      "src/configured-runtime.ts:225",
+      "src/assistant-service.ts:300"
     ]
   },
   {
     "id": "R110",
     "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1643,7 +1642,7 @@
     "id": "R111",
     "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1658,7 +1657,7 @@
     "id": "R112",
     "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1673,7 +1672,7 @@
     "id": "R113",
     "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1731,7 +1730,7 @@
   },
   {
     "id": "R117",
-    "screen": "B8-fail",
+    "screen": "B8-done",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -1746,7 +1745,7 @@
   },
   {
     "id": "R118",
-    "screen": "B8-fail",
+    "screen": "B8-done",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -1761,9 +1760,9 @@
   },
   {
     "id": "R119",
-    "screen": "B8-fail",
+    "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1776,9 +1775,9 @@
   },
   {
     "id": "R120",
-    "screen": "B8-fail",
+    "screen": "B8-done",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1793,7 +1792,7 @@
     "id": "R121",
     "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1808,7 +1807,7 @@
     "id": "R122",
     "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1823,7 +1822,7 @@
     "id": "R123",
     "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1838,7 +1837,7 @@
     "id": "R124",
     "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1853,7 +1852,7 @@
     "id": "R125",
     "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1896,21 +1895,22 @@
   },
   {
     "id": "R128",
-    "screen": "B8-unknown",
+    "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "business-activity",
-    "strictOrderCascade": false,
-    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
     "sources": [
-      "src/configured-runtime.ts:225",
-      "src/assistant-service.ts:300"
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
     ]
   },
   {
     "id": "R129",
-    "screen": "B8-unknown",
+    "screen": "B8-fail",
     "theme": "dark",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -1925,9 +1925,9 @@
   },
   {
     "id": "R130",
-    "screen": "B8-unknown",
+    "screen": "B8-fail",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"확인\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -1942,22 +1942,21 @@
     "id": "R131",
     "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
+    "boundary": "business-activity",
+    "strictOrderCascade": false,
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
     "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
+      "src/configured-runtime.ts:225",
+      "src/assistant-service.ts:300"
     ]
   },
   {
     "id": "R132",
     "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"결과 모름\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -2002,7 +2001,7 @@
     "id": "R135",
     "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -2017,7 +2016,7 @@
     "id": "R136",
     "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -2105,38 +2104,39 @@
   },
   {
     "id": "R142",
-    "screen": "B4",
+    "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
     "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
     ]
   },
   {
     "id": "R143",
-    "screen": "B4",
+    "screen": "B8-unknown",
     "theme": "dark",
-    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "business-activity",
-    "strictOrderCascade": false,
-    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
     "sources": [
-      "src/configured-runtime.ts:225",
-      "src/assistant-service.ts:300"
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
     ]
   },
   {
     "id": "R144",
     "screen": "B4",
-    "theme": "dark",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
     "category": "unsupported product capability",
     "boundary": "payment",
     "strictOrderCascade": false,
@@ -2150,22 +2150,21 @@
   {
     "id": "R145",
     "screen": "B4",
-    "theme": "dark",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "category": "unsupported product capability",
-    "boundary": "payment",
+    "boundary": "business-activity",
     "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
     "sources": [
-      "src/domain.ts:28",
       "src/configured-runtime.ts:225",
-      "src/server.ts:135"
+      "src/assistant-service.ts:300"
     ]
   },
   {
     "id": "R146",
     "screen": "B4",
-    "theme": "dark",
+    "theme": "light",
     "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
     "category": "unsupported product capability",
     "boundary": "payment",
@@ -2179,6 +2178,36 @@
   },
   {
     "id": "R147",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R148",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R149",
     "screen": "B7",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         button   \"확인 대기 주문 내역 {count}\"",
@@ -2193,7 +2222,7 @@
     ]
   },
   {
-    "id": "R148",
+    "id": "R150",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
@@ -2208,7 +2237,7 @@
     ]
   },
   {
-    "id": "R149",
+    "id": "R151",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
@@ -2225,7 +2254,7 @@
     ]
   },
   {
-    "id": "R150",
+    "id": "R152",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -2240,7 +2269,7 @@
     ]
   },
   {
-    "id": "R151",
+    "id": "R153",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -2255,7 +2284,7 @@
     ]
   },
   {
-    "id": "R152",
+    "id": "R154",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -2270,7 +2299,7 @@
     ]
   },
   {
-    "id": "R153",
+    "id": "R155",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -2285,7 +2314,7 @@
     ]
   },
   {
-    "id": "R154",
+    "id": "R156",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
@@ -2300,7 +2329,7 @@
     ]
   },
   {
-    "id": "R155",
+    "id": "R157",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
@@ -2315,40 +2344,10 @@
     ]
   },
   {
-    "id": "R156",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R157",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R158",
     "screen": "B7-churn",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
     "strictOrderCascade": true,
@@ -2378,6 +2377,21 @@
     "id": "R160",
     "screen": "B7-churn",
     "theme": "light",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R161",
+    "screen": "B7-churn",
+    "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
@@ -2390,7 +2404,22 @@
     ]
   },
   {
-    "id": "R161",
+    "id": "R162",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R163",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         chip     \"요약\"",
@@ -2405,7 +2434,7 @@
     ]
   },
   {
-    "id": "R162",
+    "id": "R164",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -2420,7 +2449,7 @@
     ]
   },
   {
-    "id": "R163",
+    "id": "R165",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
@@ -2435,7 +2464,7 @@
     ]
   },
   {
-    "id": "R164",
+    "id": "R166",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -2450,7 +2479,7 @@
     ]
   },
   {
-    "id": "R165",
+    "id": "R167",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -2465,7 +2494,7 @@
     ]
   },
   {
-    "id": "R166",
+    "id": "R168",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -2480,7 +2509,7 @@
     ]
   },
   {
-    "id": "R167",
+    "id": "R169",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -2495,7 +2524,7 @@
     ]
   },
   {
-    "id": "R168",
+    "id": "R170",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -2510,7 +2539,7 @@
     ]
   },
   {
-    "id": "R169",
+    "id": "R171",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
@@ -2525,7 +2554,7 @@
     ]
   },
   {
-    "id": "R170",
+    "id": "R172",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -2533,36 +2562,6 @@
     "boundary": "work-room-messages",
     "strictOrderCascade": true,
     "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R171",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R172",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
     "sources": [
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
@@ -2573,21 +2572,6 @@
     "id": "R173",
     "screen": "B7-churn",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R174",
-    "screen": "B7-churn",
-    "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
@@ -2600,7 +2584,7 @@
     ]
   },
   {
-    "id": "R175",
+    "id": "R174",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -2615,7 +2599,7 @@
     ]
   },
   {
-    "id": "R176",
+    "id": "R175",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -2630,7 +2614,52 @@
     ]
   },
   {
+    "id": "R176",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
     "id": "R177",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R178",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R179",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -2645,7 +2674,7 @@
     ]
   },
   {
-    "id": "R178",
+    "id": "R180",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -2660,7 +2689,7 @@
     ]
   },
   {
-    "id": "R179",
+    "id": "R181",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -2675,7 +2704,7 @@
     ]
   },
   {
-    "id": "R180",
+    "id": "R182",
     "screen": "B7-churn",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         button   \"확인 대기 원인 정리 후 시작\"",
@@ -2690,7 +2719,7 @@
     ]
   },
   {
-    "id": "R181",
+    "id": "R183",
     "screen": "B7-done",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -2704,7 +2733,7 @@
     ]
   },
   {
-    "id": "R182",
+    "id": "R184",
     "screen": "B7-done",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -2718,7 +2747,7 @@
     ]
   },
   {
-    "id": "R183",
+    "id": "R185",
     "screen": "B7-done",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
@@ -2732,7 +2761,7 @@
     ]
   },
   {
-    "id": "R184",
+    "id": "R186",
     "screen": "B7-done",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -2746,7 +2775,7 @@
     ]
   },
   {
-    "id": "R185",
+    "id": "R187",
     "screen": "B7-done",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
@@ -2761,48 +2790,18 @@
     ]
   },
   {
-    "id": "R186",
-    "screen": "B7-done",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R187",
-    "screen": "B7-done",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R188",
     "screen": "B7-done",
     "theme": "light",
-    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
     "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
     ]
   },
   {
@@ -2824,7 +2823,7 @@
     "id": "R190",
     "screen": "B7-done",
     "theme": "light",
-    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
+    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
     "category": "unsupported product capability",
     "boundary": "payment",
     "strictOrderCascade": false,
@@ -2854,7 +2853,7 @@
     "id": "R192",
     "screen": "B7-done",
     "theme": "light",
-    "diagnostic": "FAIL  missing pane         button   \"확인 완료 주문 내역 {count}\"",
+    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
     "category": "unsupported product capability",
     "boundary": "payment",
     "strictOrderCascade": false,
@@ -2867,6 +2866,36 @@
   },
   {
     "id": "R193",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R194",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 완료 주문 내역 {count}\"",
+    "category": "unsupported product capability",
+    "boundary": "payment",
+    "strictOrderCascade": false,
+    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+    "sources": [
+      "src/domain.ts:28",
+      "src/configured-runtime.ts:225",
+      "src/server.ts:135"
+    ]
+  },
+  {
+    "id": "R195",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -2880,7 +2909,7 @@
     ]
   },
   {
-    "id": "R194",
+    "id": "R196",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
@@ -2894,7 +2923,7 @@
     ]
   },
   {
-    "id": "R195",
+    "id": "R197",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -2908,7 +2937,7 @@
     ]
   },
   {
-    "id": "R196",
+    "id": "R198",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -2922,7 +2951,7 @@
     ]
   },
   {
-    "id": "R197",
+    "id": "R199",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
@@ -2937,7 +2966,7 @@
     ]
   },
   {
-    "id": "R198",
+    "id": "R200",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
@@ -2954,7 +2983,7 @@
     ]
   },
   {
-    "id": "R199",
+    "id": "R201",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
@@ -2969,7 +2998,7 @@
     ]
   },
   {
-    "id": "R200",
+    "id": "R202",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"남기기\"",
@@ -2984,7 +3013,7 @@
     ]
   },
   {
-    "id": "R201",
+    "id": "R203",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"지우기\"",
@@ -2999,7 +3028,7 @@
     ]
   },
   {
-    "id": "R202",
+    "id": "R204",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -3014,7 +3043,7 @@
     ]
   },
   {
-    "id": "R203",
+    "id": "R205",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
@@ -3029,7 +3058,7 @@
     ]
   },
   {
-    "id": "R204",
+    "id": "R206",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
@@ -3044,40 +3073,10 @@
     ]
   },
   {
-    "id": "R205",
-    "screen": "B7-fail",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R206",
-    "screen": "B7-fail",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R207",
     "screen": "B7-fail",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
     "strictOrderCascade": true,
@@ -3107,26 +3106,26 @@
     "id": "R209",
     "screen": "B7-fail",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "business-procedure",
+    "boundary": "work-room-messages",
     "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
     "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
     ]
   },
   {
     "id": "R210",
     "screen": "B7-fail",
     "theme": "light",
-    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
-    "strictOrderCascade": false,
-    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
     "sources": [
       "src/domain.ts:25",
       "src/domain.ts:29",
@@ -3152,7 +3151,7 @@
     "id": "R212",
     "screen": "B7-fail",
     "theme": "light",
-    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
     "strictOrderCascade": false,
@@ -3167,6 +3166,36 @@
     "id": "R213",
     "screen": "B7-fail",
     "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R214",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": false,
+    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R215",
+    "screen": "B7-fail",
+    "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "work-room-messages",
@@ -3179,7 +3208,7 @@
     ]
   },
   {
-    "id": "R214",
+    "id": "R216",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
@@ -3194,7 +3223,7 @@
     ]
   },
   {
-    "id": "R215",
+    "id": "R217",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -3209,7 +3238,7 @@
     ]
   },
   {
-    "id": "R216",
+    "id": "R218",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -3224,7 +3253,7 @@
     ]
   },
   {
-    "id": "R217",
+    "id": "R219",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -3239,7 +3268,7 @@
     ]
   },
   {
-    "id": "R218",
+    "id": "R220",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -3254,7 +3283,7 @@
     ]
   },
   {
-    "id": "R219",
+    "id": "R221",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -3269,7 +3298,7 @@
     ]
   },
   {
-    "id": "R220",
+    "id": "R222",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
@@ -3284,7 +3313,7 @@
     ]
   },
   {
-    "id": "R221",
+    "id": "R223",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -3292,36 +3321,6 @@
     "boundary": "work-room-messages",
     "strictOrderCascade": true,
     "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R222",
-    "screen": "B7-fail",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R223",
-    "screen": "B7-fail",
-    "theme": "light",
-    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": false,
-    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
     "sources": [
       "src/domain.ts:68",
       "src/work-conversation.ts:10",
@@ -3332,21 +3331,6 @@
     "id": "R224",
     "screen": "B7-fail",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "work-room-messages",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
-    "sources": [
-      "src/domain.ts:68",
-      "src/work-conversation.ts:10",
-      "src/assistant-service.ts:63"
-    ]
-  },
-  {
-    "id": "R225",
-    "screen": "B7-fail",
-    "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "business-procedure",
@@ -3359,7 +3343,7 @@
     ]
   },
   {
-    "id": "R226",
+    "id": "R225",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -3374,7 +3358,7 @@
     ]
   },
   {
-    "id": "R227",
+    "id": "R226",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
@@ -3389,7 +3373,52 @@
     ]
   },
   {
+    "id": "R227",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
     "id": "R228",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": false,
+    "reason": "The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R229",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "work-room-messages",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.",
+    "sources": [
+      "src/domain.ts:68",
+      "src/work-conversation.ts:10",
+      "src/assistant-service.ts:63"
+    ]
+  },
+  {
+    "id": "R230",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         text     \"요약\"",
@@ -3404,7 +3433,7 @@
     ]
   },
   {
-    "id": "R229",
+    "id": "R231",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
@@ -3419,7 +3448,7 @@
     ]
   },
   {
-    "id": "R230",
+    "id": "R232",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
@@ -3434,7 +3463,7 @@
     ]
   },
   {
-    "id": "R231",
+    "id": "R233",
     "screen": "B7-fail",
     "theme": "light",
     "diagnostic": "FAIL  missing pane         button   \"확인 실패 근거 {count} 이상\"",
@@ -3449,7 +3478,7 @@
     ]
   },
   {
-    "id": "R232",
+    "id": "R234",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
@@ -3463,7 +3492,7 @@
     ]
   },
   {
-    "id": "R233",
+    "id": "R235",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
@@ -3478,7 +3507,7 @@
     ]
   },
   {
-    "id": "R234",
+    "id": "R236",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
@@ -3492,7 +3521,7 @@
     ]
   },
   {
-    "id": "R235",
+    "id": "R237",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
@@ -3506,7 +3535,7 @@
     ]
   },
   {
-    "id": "R236",
+    "id": "R238",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
@@ -3520,7 +3549,7 @@
     ]
   },
   {
-    "id": "R237",
+    "id": "R239",
     "screen": "B7-unknown",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
@@ -3532,36 +3561,6 @@
       "src/domain.ts:28",
       "src/configured-runtime.ts:225",
       "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R238",
-    "screen": "B7-unknown",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R239",
-    "screen": "B7-unknown",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
     ]
   },
   {
@@ -3583,6 +3582,36 @@
     "id": "R241",
     "screen": "B7-unknown",
     "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R242",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "category": "unsupported product capability",
+    "boundary": "business-procedure",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
+    "sources": [
+      "src/domain.ts:25",
+      "src/domain.ts:29",
+      "src/configured-runtime.ts:222"
+    ]
+  },
+  {
+    "id": "R243",
+    "screen": "B7-unknown",
+    "theme": "light",
     "diagnostic": "FAIL  missing pane         button   \"확인 안 함 결제 응답 없음\"",
     "category": "unsupported product capability",
     "boundary": "payment",
@@ -3595,7 +3624,7 @@
     ]
   },
   {
-    "id": "R242",
+    "id": "R244",
     "screen": "B8",
     "theme": "light",
     "diagnostic": "FAIL  missing conversation link     \"작업 중 · 페이지 {count} 읽음\"",
@@ -3609,40 +3638,10 @@
     ]
   },
   {
-    "id": "R243",
-    "screen": "B8",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R244",
-    "screen": "B8",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
     "id": "R245",
     "screen": "B8",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -3672,7 +3671,7 @@
     "id": "R247",
     "screen": "B8",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -3687,7 +3686,7 @@
     "id": "R248",
     "screen": "B8",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -3715,21 +3714,22 @@
   },
   {
     "id": "R250",
-    "screen": "B8-done",
+    "screen": "B8",
     "theme": "light",
-    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
-    "boundary": "business-activity",
-    "strictOrderCascade": false,
-    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "boundary": "check-time-and-predicates",
+    "strictOrderCascade": true,
+    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
     "sources": [
-      "src/configured-runtime.ts:225",
-      "src/assistant-service.ts:300"
+      "src/domain.ts:20",
+      "src/domain.ts:30",
+      "src/domain.ts:61"
     ]
   },
   {
     "id": "R251",
-    "screen": "B8-done",
+    "screen": "B8",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -3746,15 +3746,14 @@
     "id": "R252",
     "screen": "B8-done",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
     "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
+    "boundary": "business-activity",
+    "strictOrderCascade": false,
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
     "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
+      "src/configured-runtime.ts:225",
+      "src/assistant-service.ts:300"
     ]
   },
   {
@@ -3776,7 +3775,7 @@
     "id": "R254",
     "screen": "B8-done",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -3806,7 +3805,7 @@
     "id": "R256",
     "screen": "B8-done",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -3909,7 +3908,7 @@
   },
   {
     "id": "R263",
-    "screen": "B8-fail",
+    "screen": "B8-done",
     "theme": "light",
     "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
@@ -4090,7 +4089,7 @@
     "id": "R275",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"결과 모름\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4105,7 +4104,7 @@
     "id": "R276",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"확인\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4120,7 +4119,7 @@
     "id": "R277",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4135,7 +4134,7 @@
     "id": "R278",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4150,7 +4149,7 @@
     "id": "R279",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"기록\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4165,7 +4164,7 @@
     "id": "R280",
     "screen": "B8-unknown",
     "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
     "category": "unsupported product capability",
     "boundary": "check-time-and-predicates",
     "strictOrderCascade": true,
@@ -4264,95 +4263,6 @@
       "src/domain.ts:20",
       "src/domain.ts:30",
       "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R287",
-    "screen": "B8-unknown",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{time}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "check-time-and-predicates",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier criteria/fix/check/flow timestamps and per-predicate results. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events.",
-    "sources": [
-      "src/domain.ts:20",
-      "src/domain.ts:30",
-      "src/domain.ts:61"
-    ]
-  },
-  {
-    "id": "R288",
-    "screen": "B4",
-    "theme": "light",
-    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R289",
-    "screen": "B4",
-    "theme": "light",
-    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-    "category": "unsupported product capability",
-    "boundary": "business-activity",
-    "strictOrderCascade": false,
-    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-    "sources": [
-      "src/configured-runtime.ts:225",
-      "src/assistant-service.ts:300"
-    ]
-  },
-  {
-    "id": "R290",
-    "screen": "B4",
-    "theme": "light",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R291",
-    "screen": "B4",
-    "theme": "light",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
-    ]
-  },
-  {
-    "id": "R292",
-    "screen": "B4",
-    "theme": "light",
-    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
-    "category": "unsupported product capability",
-    "boundary": "payment",
-    "strictOrderCascade": false,
-    "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
-    "sources": [
-      "src/domain.ts:28",
-      "src/configured-runtime.ts:225",
-      "src/server.ts:135"
     ]
   }
 ]

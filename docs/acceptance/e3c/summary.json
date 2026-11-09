@@ -1,10 +1,10 @@
 {
-  "passed": 566,
+  "passed": 572,
   "required": 848,
-  "failed": 282,
+  "failed": 276,
   "visualFailures": 0,
   "infrastructureErrors": 0,
-  "strictOrderCascades": 178,
+  "strictOrderCascades": 172,
   "boundaryCounts": {
     "payment": 16,
     "business-procedure": 80,
@@ -13,6 +13,6 @@
     "work-room-messages": 56,
     "rule-change-case": 6,
     "business-activity": 24,
-    "check-time-and-predicates": 88
+    "check-time-and-predicates": 82
   }
 }

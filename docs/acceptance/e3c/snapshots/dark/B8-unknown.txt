@@ -24,17 +24,17 @@
           - generic
             - paragraph
               - StaticText "PR #84 검토"
-            - button "복사" [ref=e28]
+            - button "복사" [ref=e27]
           - button "4분 동안 작업 ›" [ref=e20]
           - paragraph
             - StaticText "경쟁사 가격도 확인해 줘."
           - generic
             - paragraph
               - StaticText "가격 표를 정리하고 확인을 기다리고 있어요."
-            - button "복사" [ref=e29]
+            - button "복사" [ref=e28]
           - paragraph
             - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
-          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e30]
+          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e29]
             - strong
               - StaticText "경쟁사 가격"
             - StaticText "확인 대기"
@@ -50,10 +50,10 @@
           - generic
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
-            - button "복사" [ref=e31]
+            - button "복사" [ref=e30]
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e32]
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e31]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실행 중"
@@ -69,7 +69,7 @@
           - generic
             - paragraph
               - StaticText "지난 주문과 같은 토너를 찾았어요."
-            - button "복사" [ref=e33]
+            - button "복사" [ref=e32]
           - button "3분 동안 작업 ›" [ref=e21]
           - generic
             - paragraph
@@ -78,8 +78,8 @@
               - StaticText "결과 모름14:12"
             - paragraph
               - StaticText "다시 보내지 않음"
-            - button "확인" [ref=e34]
-            - button "닫기" [ref=e35]
+            - button "확인" [ref=e33]
+            - button "닫기" [ref=e34]
       - generic
         - form
           - textbox "하나에게 메시지 보내기" [ref=e22]
@@ -102,7 +102,6 @@
             - time
               - StaticText "14:08 – 14:12"
             - heading "프린터 토너 주문" [level=3, ref=e26]
-            - button "중지" [ref=e27]
             - StaticText "만든 쪽"
             - strong
               - StaticText "claude-sonnet-5-5"
@@ -111,34 +110,41 @@
               - StaticText "gpt-6.1-terra"
             - StaticText "연결"
             - strong
-              - StaticText "fixture"
+              - StaticText "알 수 없음"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기준"
-              - paragraph
-                - StaticText "요청한 결과와 근거 확인"
+              - DescriptionList
+                - term "기준 내용"
+                - definition
+                  - StaticText "요청한 결과와 근거 확인"
             - generic
               - sectionheader
                 - strong
                   - StaticText "확인"
-              - paragraph
-                - StaticText "결과 모름"
+                - StaticText "확인 안 함"
+              - DescriptionList
+                - term "요청한 결과와 근거 확인"
+                - definition
+                  - StaticText "확인 안 함"
             - generic
               - sectionheader
                 - strong
                   - StaticText "전송 1회 보장"
-              - paragraph
-                - StaticText "작성 · 결과 모름"
+              - DescriptionList
+                - term "작성"
+                - definition
+                  - StaticText "결과 모름"
             - generic
               - sectionheader
                 - strong
                   - StaticText "기록"
                 - StaticText "없음"
-              - paragraph
-                - StaticText "기록"
-              - paragraph
-                - StaticText "없음"
+              - DescriptionList
+                - term "결과물"
+                - definition
+                  - StaticText "아직 없음"
             - generic
               - sectionheader
                 - strong
@@ -148,7 +154,12 @@
                   - time
                     - StaticText "14:08"
                   - StaticText "프린터 토너 주문"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:12"
+                  - StaticText "결과 모름"
             - group
-              - DisclosureTriangle "결과 모름" [expanded=false]
-                - StaticText "결과 모름"
-            - StaticText "예산 결과 모름 / 8 토큰"
+              - button "확인 안 함 다시 보내지 않음" [expanded=false, ref=e35]
+                - strong
+                  - StaticText "확인 안 함"
+                - StaticText "다시 보내지 않음"

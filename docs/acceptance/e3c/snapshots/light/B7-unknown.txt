@@ -73,17 +73,17 @@
           - generic
             - paragraph
               - StaticText "PR #84 검토"
-            - button "복사" [ref=e39]
+            - button "복사" [ref=e38]
           - button "4분 동안 작업 ›" [ref=e31]
           - paragraph
             - StaticText "경쟁사 가격도 확인해 줘."
           - generic
             - paragraph
               - StaticText "가격 표를 정리하고 확인을 기다리고 있어요."
-            - button "복사" [ref=e40]
+            - button "복사" [ref=e39]
           - paragraph
             - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
-          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e41]
+          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e40]
             - strong
               - StaticText "경쟁사 가격"
             - StaticText "확인 대기"
@@ -99,10 +99,10 @@
           - generic
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
-            - button "복사" [ref=e42]
+            - button "복사" [ref=e41]
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e43]
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e42]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실행 중"
@@ -118,7 +118,7 @@
           - generic
             - paragraph
               - StaticText "지난 주문과 같은 토너를 찾았어요."
-            - button "복사" [ref=e44]
+            - button "복사" [ref=e43]
           - button "3분 동안 작업 ›" [ref=e32]
           - generic
             - paragraph
@@ -127,8 +127,8 @@
               - StaticText "결과 모름14:12"
             - paragraph
               - StaticText "다시 보내지 않음"
-            - button "확인" [ref=e45]
-            - button "닫기" [ref=e46]
+            - button "확인" [ref=e44]
+            - button "닫기" [ref=e45]
       - generic
         - form
           - textbox "하나에게 메시지 보내기" [ref=e33]
@@ -150,8 +150,7 @@
             - StaticText "결과 모름"
             - time
               - StaticText "14:08 – 14:12"
-            - button "중지" [ref=e37]
-            - heading "프린터 토너 주문" [level=3, ref=e38]
+            - heading "프린터 토너 주문" [level=3, ref=e37]
             - StaticText "하나"
             - StaticText "확인"
             - generic
@@ -160,18 +159,17 @@
                   - StaticText "절차"
                 - StaticText "0/3"
               - list
-                - listitem [level=1]
-                  - image "대기 중"
+                - listitem "프린터 토너 주문 · 대기 중" [level=1, ref=e47]
                   - StaticText "프린터 토너 주문"
                   - time
                     - StaticText "14:08"
-                - listitem [level=1]
-                  - image "실행 중"
+                - listitem "작성 · 결과 모름" [level=1, ref=e48]
                   - StaticText "작성"
-                - listitem [level=1]
-                  - image "대기 중"
+                  - StaticText "결과 모름"
+                - listitem "확인 · 대기 중" [level=1, ref=e49]
                   - StaticText "확인"
             - group
-              - DisclosureTriangle "결과 모름" [expanded=false]
-                - StaticText "결과 모름"
-            - StaticText "예산 결과 모름 / 8 토큰"
+              - button "확인 안 함 다시 보내지 않음" [expanded=false, ref=e46]
+                - strong
+                  - StaticText "확인 안 함"
+                - StaticText "다시 보내지 않음"

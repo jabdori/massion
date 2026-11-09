@@ -1,4 +1,4 @@
-contract B8 (B8 자세히 보기 · 프린터 토너 주문 실행 중) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/e3c-delivery/snapshots/dark/B8.json
+contract B8 (B8 자세히 보기 · 프린터 토너 주문 실행 중) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/ui-contracts/snapshots/dark/B8.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -17,7 +17,7 @@ contract B8 (B8 자세히 보기 · 프린터 토너 주문 실행 중) vs /User
   ok    pane         button   "중지" -> button "중지"
   ok    pane         text     "연결" -> statictext "연결"
   ok    pane         text     "{time}" -> statictext "14:08"
-  ok    pane         text     "확인" -> statictext "확인 전"
+  ok    pane         text     "확인" -> statictext "확인 대기"
   ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
   ok    composer     button   "파일 추가" -> button "파일 추가"
   ok    composer     button   "기본 권한" -> button "기본 권한"
@@ -26,7 +26,7 @@ contract B8 (B8 자세히 보기 · 프린터 토너 주문 실행 중) vs /User
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget conversation app {"chars":330,"strings":33,"sentences":6,"longest":36} proto {"chars":60,"strings":4,"sentences":1,"longest":29} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":150,"strings":27,"sentences":0,"longest":17} proto {"chars":255,"strings":41,"sentences":0,"longest":23} source visibleTextBudget
+  budget pane         app {"chars":174,"strings":31,"sentences":0,"longest":17} proto {"chars":255,"strings":41,"sentences":0,"longest":23} source visibleTextBudget
   warn  budget conversation sentences 6 > 1: "경쟁사 가격도 확인해 줘."
   warn  budget conversation chars 330 > 98
   FAIL  missing conversation link     "작업 중 · 페이지 {count} 읽음"

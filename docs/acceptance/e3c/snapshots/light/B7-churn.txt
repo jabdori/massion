@@ -133,20 +133,18 @@
                   - StaticText "절차"
                 - StaticText "0/3"
               - list
-                - listitem [level=1]
-                  - image "대기 중"
+                - listitem "이탈 원인 조사 · 대기 중" [level=1, ref=e40]
                   - StaticText "이탈 원인 조사"
                   - time
                     - StaticText "14:08"
-                - listitem [level=1]
-                  - image "실행 중"
+                - listitem "작성 · 실행 중" [level=1, ref=e41]
                   - StaticText "작성"
-                - listitem [level=1]
-                  - image "대기 중"
+                - listitem "확인 · 대기 중" [level=1, ref=e42]
                   - StaticText "확인"
             - paragraph
               - StaticText "기업 고객은 따로 봐 줘."
             - group
-              - DisclosureTriangle "확인 전" [expanded=false]
-                - StaticText "확인 전"
-            - StaticText "예산 1 / 8 토큰"
+              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e39]
+                - strong
+                  - StaticText "확인 대기"
+                - StaticText "요청한 결과와 근거 확인"
