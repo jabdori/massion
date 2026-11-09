@@ -62,3 +62,9 @@ change was reverted. CI keeps its original browser selection and all security
 controls; this E2E failure remains unresolved. Local fixture success is not Linux
 E2E success. Related upstream investigation:
 https://github.com/vercel-labs/agent-browser/pull/2193.
+
+PR #132's [bounded context-race handling](e2e-context-race.md) is now merged into
+R-C from main at `156305d`. It waits for the existing resize signal before the
+MCP capture and retries only the named context-installation error once. Screenshot
+timeouts, frame-readiness timeouts and repeated failures remain fatal. The original
+browser configuration and all isolation/network assertions are retained.

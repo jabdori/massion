@@ -90,3 +90,13 @@ reverted, keeping domain restrictions and the opaque app sandbox unchanged.
 The final review loop reports this remaining failure rather than claiming a
 complete E2E pass. Member memory/schedules, builtin provenance, restart execution
 and the absent recommendation packages remain the capability follow-ups above.
+
+## Main integration after the fourth review
+
+At the owner's request, merge `origin/main` at `156305d` (PR #132). It waits for
+existing isolated-frame readiness before the MCP capture and retries only the
+specific browser network-control context error once. Other failures remain fatal;
+app sandbox, domain restrictions and product command handling are unchanged.
+The previous R-C final head passed all 13 E2E tests with the original browser.
+The new merge head's complete CI/review result is tracked on PR #130; the earlier
+failure notes above describe the intermediate browser experiments.
