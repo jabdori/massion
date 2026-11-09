@@ -1,3 +1,6 @@
+import {memberProcedures,teamCallCount} from './internal-teams.ts';
+import {SKILLS_ID} from './skills.ts';
+import type {SkillsState} from './skills.ts';
 /** The Representative turn path: one owner message, at most one model call, at most one Work admission and one run request. Never a resend. */
 import {createHash,randomUUID} from 'node:crypto';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
@@ -32,7 +35,7 @@ const diagnostic=(code:string,message:string):AssistantDiagnostic=>({code,messag
 const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic[]=>list.slice(0,2).map(d=>diagnostic(/^[a-z][a-z0-9_]{0,63}$/.test(d.code)?d.code:'diagnostic',d.message));
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
 /** The root task only contains the steps, so it is not counted (conversation-cards.md). */
-const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>work.team?!!t.step:t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
 export function workException(work:Mission['works'][number]):{at:number|null;runId:string|null;fact:'payment-response-unknown'|null}{
  const unknown=work.effects.filter(effect=>effect.status==='unknown');
  return {at:work.runtimeInterruption?.observedAt??null,runId:work.runtimeRun?.id??null,fact:unknown.length===1&&unknown[0]!.target==='결제 요청'&&unknown[0]!.receipt==='응답 없음 · 다시 보내지 않음'?'payment-response-unknown':null};
@@ -247,7 +250,8 @@ export class AssistantService {
   if(!message||turn?.status!=='answered'||turn.proposal?.title!==title||turn.proposal.member!==proposal.member)return outcome('not_created',[diagnostic('assistant_source_unavailable','The settled turn no longer matches the stored conversation.')]);
   const assistantSource:AssistantSource={segmentId:segment.id,turnId,messageId,messageHash:hash(message),message:structuredClone(message),representative:{provider:route.provider,model:route.model},...(member?{memberId:member.id}:{})};
   const workId=assistantWorkId(turnId),gate=this.#product.executionGate(intake.value),commandId='assistant-work:'+turnId;
-  const command={type:'admit-work' as const,workId,title,budget:2*resolved.choice.outputTokenCap,assistantSource,...(gate?{executionGate:gate}:{})};
+  let team;try{team=member?memberProcedures((await this.#store.load(SKILLS_ID))?.value as unknown as SkillsState??null,member.id):undefined;}catch(error){return outcome('not_created',[diagnostic('procedure_unavailable',error instanceof Error?error.message:'Procedure unavailable')]);}
+  const command={type:'admit-work' as const,workId,title,budget:teamCallCount(team)*resolved.choice.outputTokenCap,...(team?{team}:{}),assistantSource,...(gate?{executionGate:gate}:{})};
   let admitted:CommitResult<Mission>;
   try{admitted=await this.#admission.dispatch({missionId:intakeMissionId,commandId,expectedRevision:intake.revision,actorId:ASSISTANT_ACTOR_ID,command});}
   catch(error){
