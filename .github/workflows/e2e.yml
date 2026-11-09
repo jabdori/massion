@@ -9,7 +9,7 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,7 +21,14 @@ jobs:
         run: |
           npm install --global agent-browser@0.41.2
           agent-browser install --with-deps
-          sudo apt-get install --yes fonts-noto-cjk
+          sudo apt-get install --yes fonts-noto-cjk xvfb xauth
+      - name: Build the desktop shell
+        run: |
+          npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+          npm run install:electron --prefix desktop
+          npm run build --prefix desktop
+          sudo chown root:root desktop/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
       - name: Install verified SurrealDB prerequisite
         shell: bash
         run: |
@@ -32,7 +39,7 @@ jobs:
       - name: Drive real daemon and durable journeys with local model fixtures
         env:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
-        run: python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
+        run: xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
       - name: Upload accessibility snapshots, screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
