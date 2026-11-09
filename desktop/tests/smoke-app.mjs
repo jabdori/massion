@@ -9,6 +9,7 @@ app.setPath('userData',process.env.MASSION_SMOKE_DATA);
 const {startDesktop}=await import('../dist/main.js');
 try{
  const desktop=await startDesktop(),window=desktop.window,contents=window.webContents;
+ assert.equal(app.isHardwareAccelerationEnabled(),false,'Smoke renders without GPU acceleration');
  const prefs=contents.getLastWebPreferences();
  assert.equal(prefs.sandbox,true);assert.equal(prefs.contextIsolation,true);assert.equal(prefs.nodeIntegration,false);
  assert.equal(await contents.executeJavaScript('typeof require'), 'undefined');

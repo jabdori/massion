@@ -68,3 +68,24 @@ No visible window was opened on the owner's Mac. Real model calls, real macOS
 notification delivery, signed distribution and the full repository suite were
 not run locally. Full checks and screen contracts remain CI-owned per budget.
 Headless Linux logs report the absent system D-Bus; all smoke assertions pass.
+
+## PR 112 packaging and CI correction
+
+The first CI headless run failed with `UnknownVizError`; local ARM Linux evidence
+did not establish the CI graphics path. The smoke launcher now disables hardware
+acceleration before readiness and asserts that setting alongside the unchanged
+sandbox, isolation and permission checks. Production rendering is unchanged.
+
+Review also found two gaps in the original packaging evidence: external Node
+cannot execute the supervisor from `app.asar`, and the TypeScript-only resource
+filter omitted `app-runner.mjs`. The shared launch-path resolver now points to a
+physical `extraResources` supervisor; the app worker is explicitly included.
+Both omissions failed the strengthened regression before the fix. Resource tests
+honor the copy filters, and every macOS packaging command also runs them against
+the actual `.app` using external Node, without opening a window.
+
+Correction verification: desktop typecheck and all 12 desktop test cases passed;
+the macOS arm64 build and its three actual-resource checks passed. Linux x86-64
+Node 24.19.0 / Electron 45.2.3 passed the full Xvfb smoke with GPU acceleration
+disabled, including both screenshots and all existing security assertions.
+Evidence: `/private/tmp/massion-e4-review-evidence/`.

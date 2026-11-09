@@ -55,6 +55,8 @@ run `npm run build --prefix desktop` then
 `xvfb-run -a npm run smoke --prefix desktop`. The smoke refuses native macOS and
 Windows execution and writes screenshots plus an accessibility tree under
 `desktop/smoke-artifacts/`. It makes no real provider calls.
+Only the smoke launcher disables GPU acceleration before Electron becomes ready;
+the production launcher and renderer security settings remain unchanged.
 
 ## Package for macOS
 
@@ -62,11 +64,14 @@ Windows execution and writes screenshots plus an accessibility tree under
 npm run package:mac --prefix desktop
 ```
 
-The app is written to `desktop/release/mac-<arch>/Massion.app`. Packaging includes
-the core sources and their runtime copy table, hashes bundled scripts/styles
+The app is written to `desktop/release/mac-<arch>/Massion.app` (`release/mac` on
+Intel). Packaging includes the standalone daemon runner outside ASAR, the core
+sources, their app-handler runner and runtime copy table, hashes bundled scripts/styles
 for CSP, and applies all seven ADR 0005 security fuse settings before signing
 would occur. No distribution identity, notarization or release is used; E9 owns
 those steps. The default Electron icon is retained for this development slice.
+The packaging command finishes by checking the actual `.app` resource paths with
+external Node. Unit tests apply the resource filters instead of copying all files.
 
 ## Current boundary
 

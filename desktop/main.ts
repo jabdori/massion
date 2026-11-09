@@ -1,12 +1,12 @@
 import {app,BrowserWindow,ipcMain,nativeTheme,Notification,protocol,session,Menu} from 'electron';
 import {readFile,mkdir,chmod} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
+import {join} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowRequest,validSender,contentPolicy} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
-import {control,prepareControl,launchDaemon,drainDaemon} from './daemon.ts';
+import {control,prepareControl,launchDaemon,drainDaemon,daemonFiles} from './daemon.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
 
@@ -71,8 +71,8 @@ export async function startDesktop(){
   const {stdout}=await promisify(execFile)(node,['--version'],{timeout:3000});
   if(!/^v24\.(?:19|[2-9][0-9])\./.test(stdout.trim()))throw new Error('The daemon requires Node 24.19 or later in the Node 24 line');
   process.env.MASSION_PORT=new URL(origin).port;
-  const entry=app.isPackaged?join(process.resourcesPath,'core/src/server.ts'):resolve(import.meta.dirname,'../../src/server.ts');
-  await launchDaemon({node,runner:join(import.meta.dirname,'daemon-runner.mjs'),entry,directory,socket,origin});
+  const {runner,entry}=daemonFiles(app.isPackaged,process.resourcesPath,import.meta.dirname);
+  await launchDaemon({node,runner,entry,directory,socket,origin});
  }
  async function observe(){
   if(reading||quitting)return;reading=true;

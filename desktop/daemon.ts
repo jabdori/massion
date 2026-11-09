@@ -1,8 +1,12 @@
 import {connect} from 'node:net';
 import {lstat,unlink,open} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+
+export function daemonFiles(packaged:boolean,resources:string,directory:string){
+ return {runner:join(packaged?resources:directory,'daemon-runner.mjs'),entry:packaged?join(resources,'core/src/server.ts'):resolve(directory,'../../src/server.ts')};
+}
 
 export function control(socket:string,command:'status'|'drain'):Promise<{status:string;pid?:number;origin?:string}>{
  return new Promise((resolve,reject)=>{
