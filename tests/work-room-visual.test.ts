@@ -63,7 +63,7 @@ test('a failed verdict marks only its bound verification task as failed',async()
  const {app,nodes,work}=await scene('B7-fail');
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'settled'});renderMission()}`,app.context);
  assert.equal(nodes().filter(n=>hasClass(n,'room-step-marker')&&hasClass(n,'failed')).length,1);
- assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'3/4');
+ assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'2/3');
 });
 
 test('a rejected Stop reports the revision conflict while the Work stays running',async()=>{
@@ -83,4 +83,26 @@ test('a rejected Stop reports the revision conflict while the Work stays running
 
 for(const [screen,panel] of [['B7-done','record-text-summary'],['B7-fail','rejected-text-summary']])test(screen+' keeps its deliberate result reader without the legacy state dump',async()=>{
  const {nodes,work}=await scene(screen!);assert.ok(nodes().some(n=>n.id==='work-'+panel+'-'+work.id));assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
+});
+
+test('failed procedure rows show only the current bound verdict evidence',async()=>{
+ const {app,nodes,work}=await scene('B7-fail');
+ const failed=()=>nodes().find(n=>hasClass(n,'room-step')&&hasClass(n,'failed'))!;
+ assert.equal(failed().children.find(n=>hasClass(n,'room-step-status'))?.textContent,work.verdict.evidence.map((e:any)=>e.detail).join(' · '));
+ runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='stale';renderMission()`,app.context);
+ assert.ok(!failed().children.some(n=>hasClass(n,'room-step-status')));
+});
+
+for(const [screen,word] of [['B8-done','맞음'],['B8-fail','아님']] as const)test(screen+' shows the verdict word instead of repeating the header count',async()=>{
+ const {nodes}=await scene(screen),group=nodes().find(n=>hasClass(n,'room-grid'))!.children[1]!;
+ assert.equal(descendants(group).filter(n=>hasClass(n,'room-field-note'))[0]?.textContent,word);
+});
+
+test('conversation and procedure counts use the same child tasks and failed check state',async()=>{
+ const {app,nodes,work}=await scene('B7-fail');
+ const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent;
+ assert.equal(count,'1/2');
+ const active=await scene('B7');
+ const card=active.app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(active.work.title))!;
+ assert.ok(card);assert.equal(descendants(card).find(n=>hasClass(n,'chat-steps'))?.textContent,active.nodes().find(n=>hasClass(n,'room-progress'))!.textContent);
 });

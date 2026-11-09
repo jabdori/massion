@@ -16478,6 +16478,32 @@
   ],
   "provenance": "B14 approved artboard: CLI route how"
  },
+ "ui.room.verdict-passed": {
+  "ko": "맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8-done:pane"
+  ],
+  "evidence": {
+   "source": "approved prototype B8-done.dc.html",
+   "reason": "Check row verdict; E3c round-two polish carried into E3e"
+  }
+ },
+ "ui.room.verdict-failed": {
+  "ko": "아님",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8-fail:pane"
+  ],
+  "evidence": {
+   "source": "approved prototype B8-fail.dc.html",
+   "reason": "Check row verdict; E3c round-two polish carried into E3e"
+  }
+ },
  "ui.room.skipped": {
   "ko": "건너뜀 · {reason}",
   "roles": [

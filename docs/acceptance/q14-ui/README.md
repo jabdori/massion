@@ -17,7 +17,7 @@ expand/collapse, mobile overflow and close assertions.
 | Screen | Required | Passed | Failures per theme |
 |---|---:|---:|---:|
 | B18 | 34 | 30 | 4 |
-| B18-room-b | 69 | 29 | 40 |
+| B18-room-b | 69 | 33 | 36 |
 | B22-room | 40 | 27 | 13 |
 | B22-room-steps | 49 | 36 | 13 |
 
@@ -60,3 +60,9 @@ escaped HTML-shaped text), with no v2 substitution or overflow. See
 `B7-source-{dark,light}-{1440,390}.png` and `sourceInspection` in the interaction
 report. The source-use integration test proves navigation into an accepted Work,
 then its exact accepted-text reader, and separately the Work pinned to v2.
+
+The source-use repair was integrated with main `17742d2` (#115). Regenerated room
+flows keep its exact source-linked B18-room-b identity and use Q14 fixture worker
+steps only for the room simulation. Eight room flows and two source/selection
+flows passed; source-use navigation, original pins and no-write behavior passed
+the actual client-to-HTTP fixture tests. The screenshots remain fixture evidence.

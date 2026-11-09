@@ -141,3 +141,16 @@ then navigates v2 separately, rejects HTML interpretation and confirms zero writ
 Related tests: 67 total, 53 passed, 14 environment-gated skips; typecheck passed.
 The final focused source/room batch passed 20 with two skips. Dark/light desktop
 and mobile source expansion passes in the existing room-selection browser driver.
+
+During this repair, main advanced to `17742d2` (#115) and introduced overlapping
+room presentation changes. It was merged without rebasing. Preserve its
+source-linked B18-room-b fixture, child-task progress and current failure evidence;
+keep Q14's separate Check/Record rows outside the producing-step count. The scoped
+room browser driver follows the fixture's actual Work identity.
+
+After integration: 145 related tests, 140 passed, five environment-gated skips;
+typecheck and copy lint passed. Eight room flows and two source/selection flows
+passed in dark/light, including mobile source wrapping and literal HTML-shaped
+content. Full screen contracts remain residuals: per-theme failures are now
+B18 4, B18-room-b 36, B22-room 13 and B22-room-steps 13; no passing full-contract
+claim is made.

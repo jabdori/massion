@@ -7,15 +7,16 @@ import {startFixtureHost,loadFixture} from './fixture-host.ts';
 import {workbenchReady,visibleTextBudgetExpression,visibleBudgets,parseCheck} from './report.ts';
 import {applyRoom,validateRoom} from '../../src/member-rooms.ts';
 import {memberProcedures} from '../../src/internal-teams.ts';
+import {hash} from '../../src/domain.ts';
 const run=promisify(execFile),session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-q14'])).stdout.trim(),out=process.cwd()+'/docs/acceptance/q14-ui',rows=[];
 await mkdir('.runtime/q14',{recursive:true});await mkdir(out,{recursive:true});await writeFile('.runtime/q14/browser-config.json','{}\n');
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',TZ:'Asia/Seoul'});
 for(const screen of ['B18','B18-room-b','B22-room','B22-room-steps'])for(const theme of ['dark','light']){
- const fixture=await loadFixture(screen),work=fixture.routes['/missions/intake'].body.value.works.find(w=>w.id===(screen.startsWith('B22')?'pr84':'pricing'));
+ const fixture=await loadFixture(screen),target=fixture.steps.findLast(s=>s.readySelector?.startsWith('#work-heading-'))?.readySelector.slice('#work-heading-'.length)??'pricing',work=fixture.routes['/missions/intake'].body.value.works.find(w=>w.id===target);
  const coding=screen.startsWith('B22'),content=coding?'테스트 1개 통과':'월 12달러',hostActor={id:'runtime-representative',roles:['representative']},root=work.id+':root';
  work.team=memberProcedures(null,screen.startsWith('B22')?'member-juno':'member-quill');work.execution='active';work.acceptance='pending';delete work.verdict;delete work.record;
  work.artifact={id:'fixture-artifact',kind:'text',path:'fixture',version:1,sha256:createHash('sha256').update(content).digest('hex')};
- const workers=work.tasks.filter(t=>t.step);work.assignments=[];work.tasks=[{id:root,parentId:null,status:'active'},...workers];work.effects=[];
+ const workers=work.tasks.filter(t=>t.step);if(!workers.length)for(const [i,title] of ['출처 확인','가격 정리'].entries())workers.push({id:work.id+':step:'+i,parentId:work.id+':executor',status:i?'active':'settled',step:{title,role:i?'정리':'조사',dependsOn:[]}});work.team.procedures[0].body.steps=workers.map(t=>t.step.title);work.team.procedures[0].hash=hash(work.team.procedures[0].body);work.assignments=[];work.tasks=[{id:root,parentId:null,status:'active'},...workers];work.effects=[];
  for(const [slot,actor] of [['executor','producer'],['challenge','challenger'],['answer','producer'],['verifier','checker']]){work.tasks.push({id:work.id+':'+slot,parentId:root,status:slot==='verifier'?'queued':'active'});work.assignments.push({id:slot,taskId:work.id+':'+slot,actorId:actor,role:slot==='verifier'?'verifier':'executor',model:{provider:'fixture',model:'small',configVersion:'v1',reason:'Fixture',evidenceClass:'fixture'},extensionVersion:'v1'});}
  applyRoom(work,{type:'open-room',workId:work.id,content,producerAssignmentId:'executor',challengerAssignmentId:'challenge'},hostActor);
  for(const [slot,output] of [['challenge',{kind:'challenge',text:coding?'변경 파일 테스트 누락':'요금 변경일 누락',quote:content}],['answer',{kind:'concede',text:coding?'변경 파일 테스트 미확인':'변경일 미확인',quote:''}]]){work.effects.push({id:slot,taskId:work.id+':'+slot,status:'succeeded',target:'fixture',authority:'fixture',receipt:JSON.stringify({status:'completed',output:JSON.stringify(output)})});applyRoom(work,{type:'record-room-turn',workId:work.id,effectId:slot},hostActor);}

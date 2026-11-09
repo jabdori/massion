@@ -10,7 +10,7 @@
     }
   ],
   "gaps": [
-    "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+    "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture."
   ],
   "routes": {
     "/assistant/conversation": {
@@ -55,14 +55,7 @@
           "closed": false,
           "full": false,
           "previous": null,
-          "messages": [
-            {
-              "id": "r:hello-sem",
-              "role": "representative",
-              "turnId": null,
-              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
-            }
-          ]
+          "messages": []
         },
         "turns": [],
         "decisions": [],
@@ -362,14 +355,7 @@
           "closed": false,
           "full": false,
           "previous": null,
-          "messages": [
-            {
-              "id": "r:hello-sem",
-              "role": "representative",
-              "turnId": null,
-              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
-            }
-          ]
+          "messages": []
         },
         "turns": [],
         "decisions": [],
@@ -418,14 +404,7 @@
           "closed": false,
           "full": false,
           "previous": null,
-          "messages": [
-            {
-              "id": "r:hello-sem",
-              "role": "representative",
-              "turnId": null,
-              "text": "안녕하세요, 셈이에요. 표 계산과 합계 확인을 맡을게요. 무엇부터 맡길까요?"
-            }
-          ]
+          "messages": []
         },
         "turns": [],
         "decisions": [],

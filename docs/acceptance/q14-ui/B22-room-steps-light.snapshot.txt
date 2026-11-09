@@ -124,7 +124,7 @@
             - sectionheader
               - strong
                 - StaticText "절차"
-              - StaticText "0/4"
+              - StaticText "0/2"
             - list "절차"
               - listitem "읽기 · 주노 · 읽기 · 실행 중" [level=1, ref=e38]
                 - StaticText "읽기"
