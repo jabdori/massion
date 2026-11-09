@@ -64,3 +64,11 @@ its fingerprint-matched receipt, and clears only that feed-scoped uncertainty
 lock after confirmation. Reading the current archived state alone is insufficient;
 unknown receipts remain fenced. The next read supplies the current member view
 before an inverse owner action is exposed. No uncertain command is resent.
+
+A new device claim also retains the approved binding's display names alongside
+its existing decision, device and adapter identities. Later reads start from
+these durable bindings and overlay current intake decisions; an unanswered new
+handoff cannot erase the approved binding. This is connectivity authority only,
+never Work dispatch authority. Legacy claims without display metadata retain
+their replay shape. Definite member reducer refusals are explicit rejected HTTP
+outcomes; uncertain store commits remain unclassified and fenced.

@@ -14,7 +14,7 @@ export interface DeviceAdapter {
  connect(input:{deviceId:string;commandId:string;signal:AbortSignal}):Promise<{status:'connected'|'offline'}>;
  disconnect(input:{deviceId:string;commandId:string;signal:AbortSignal}):Promise<{status:'connected'|'offline'}>;
 }
-interface DeviceOperation {id:string;deviceId:string;adapterId:string;decisionId:string;action:'connect'|'disconnect';status:DeviceStatus}
+interface DeviceOperation {id:string;deviceId:string;adapterId:string;decisionId:string;action:'connect'|'disconnect';status:DeviceStatus;binding?:{deviceName:string;agentName:string}}
 export interface DevicesState {kind:'devices';id:string;operations:DeviceOperation[]}
 type DevicesCommand={type:'claim-device';operation:DeviceOperation}|{type:'settle-device';operationId:string;status:DeviceStatus};
 type Admission={id:string;effect?:{kind:string;answer?:string;request:{kind:string;adapterId:string;deviceId?:string;deviceName?:string;agentName?:string}}};
@@ -27,7 +27,8 @@ function applyDevices(current:DevicesState|null,command:DevicesCommand,actor:Act
  const state:DevicesState=current?structuredClone(current):{kind:'devices',id:DEVICES_ID,operations:[]};
  if(command.type==='claim-device'){
   ensure(actor.id==='local-owner'&&actor.roles.includes('owner'),'Device owner required','denied');
-  const op=command.operation;ensure(exact(command,['type','operation'])&&exact(op,['id','deviceId','adapterId','decisionId','action','status'])&&[op.id,op.deviceId,op.adapterId,op.decisionId].every(id)&&!op.id.startsWith('assistant-')&&['connect','disconnect'].includes(op.action)&&op.status==='unknown','Exact device claim required');
+  const op=command.operation;ensure(exact(command,['type','operation'])&&exact(op,['id','deviceId','adapterId','decisionId','action','status',...(Object.hasOwn(op,'binding')?['binding']:[])])&&[op.id,op.deviceId,op.adapterId,op.decisionId].every(id)&&!op.id.startsWith('assistant-')&&['connect','disconnect'].includes(op.action)&&op.status==='unknown','Exact device claim required');
+  if(op.binding!==undefined)ensure(exact(op.binding,['deviceName','agentName'])&&Object.values(op.binding).every(value=>typeof value==='string'&&value.trim()===value&&value.length>0&&value.length<=2000&&value.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(value)),'Exact approved device labels required');
   ensure(!state.operations.some(o=>o.id===op.id),'Device command identity already claimed','conflict');ensure(!state.operations.some(o=>o.deviceId===op.deviceId&&o.status==='unknown'),'Unresolved device outcome; never resend','conflict');
   ensure(state.operations.length<256,'Device operation bound reached','conflict');state.operations.push(structuredClone(op));
  }else{
@@ -48,7 +49,11 @@ export function replayDevices(operation:Operation<DevicesState>,prior:Operation<
 export class DevicesService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #admissions:()=>Promise<Admission[]>;readonly #adapters:DeviceAdapter[];readonly #active=new Set<Promise<unknown>>();readonly #stop=new AbortController();
  constructor(store:Store<any>,owner:Store<any>,admissions:()=>Promise<Admission[]>,adapters:DeviceAdapter[]=[]){ensure(new Set(adapters.map(a=>a.id)).size===adapters.length,'Duplicate device adapter');this.#store=store;this.#owner=owner;this.#admissions=admissions;this.#adapters=adapters;}
- async #known(){const choices=new Map<string,Admission>();for(const d of await this.#admissions())if(d.effect?.kind==='external-member'&&d.effect.request.kind==='external-member'&&d.effect.request.deviceId){const previous=choices.get(d.effect.request.deviceId);if(!previous||d.effect.answer==='act'||previous.effect?.answer!=='act')choices.set(d.effect.request.deviceId,d);}return [...choices.values()];}
+ async #known(){
+  const choices=new Map<string,Admission>(),state=await this.#store.load(DEVICES_ID) as Snapshot<DevicesState>|null;
+  for(const op of state?.value.operations??[])if(op.binding)choices.set(op.deviceId,{id:op.decisionId,effect:{kind:'external-member',answer:'act',request:{kind:'external-member',adapterId:op.adapterId,deviceId:op.deviceId,...op.binding}}});
+  for(const d of await this.#admissions())if(d.effect?.kind==='external-member'&&d.effect.request.kind==='external-member'&&d.effect.request.deviceId){const previous=choices.get(d.effect.request.deviceId);if(!previous||d.id===previous.id||d.effect.answer==='act'||previous.effect?.answer!=='act')choices.set(d.effect.request.deviceId,d);}return [...choices.values()];
+ }
  async read(){
   const state=await this.#store.load(DEVICES_ID) as Snapshot<DevicesState>|null;
   const devices=await Promise.all((await this.#known()).map(async d=>{const r=d.effect!.request,adapter=this.#adapters.find(a=>a.id===r.adapterId),pending=state?.value.operations.find(o=>o.deviceId===r.deviceId&&o.status==='unknown');let status:DeviceStatus|'unavailable'=adapter?'unknown':'unavailable';
@@ -65,7 +70,7 @@ export class DevicesService {
   const feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
   const d=(await this.#known()).find(d=>d.effect!.request.deviceId===input.deviceId);ensure(d?.effect?.answer==='act','Existing external-member admission decision required','denied');
   await this.#feed(feedId);const adapter=this.#adapters.find(a=>a.id===d.effect!.request.adapterId);ensure(adapter,'Device adapter unavailable','denied');
-  const operation:DeviceOperation={id:input.commandId,deviceId:input.deviceId,adapterId:adapter.id,decisionId:d.id,action:input.action,status:'unknown'};
+  const operation:DeviceOperation={id:input.commandId,deviceId:input.deviceId,adapterId:adapter.id,decisionId:d.id,action:input.action,status:'unknown',binding:{deviceName:d.effect.request.deviceName!,agentName:d.effect.request.agentName!}};
   // The claim is durable before a single adapter invocation.
   const command:DevicesCommand={type:'claim-device',operation},claim=await this.#dispatch(feedId,input.commandId,command,true);
   if(claim.status!=='committed')return claim;await this.#feed(feedId);

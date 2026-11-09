@@ -243,3 +243,22 @@ R-D screens in both themes have no new/stale diagnostics either; retained gaps
 are documented in `main-growth-integration.json`. The member candidate producer
 saves explicit Mission memory, but still provides no member Settings list or
 forget command. No member-memory ownership or builtin skill provenance is guessed.
+
+## Intake replacement and definite member refusal
+
+Two final-review reproductions exposed a device disappearing after the intake
+Mission changed and a stale Archive action becoming permanently uncertain.
+New device claims retain approved display metadata with the original decision,
+device and adapter IDs. A fresh service can recover connectivity bindings from
+the durable journal when current-intake decisions no longer include them. New
+pending handoffs cannot displace them; an explicitly unapproved version of the
+same decision still refuses. No Work delivery or new admission is created.
+Legacy claims keep their optional-metadata replay shape.
+
+Member reducer refusals now carry the existing explicit rejected/admission signal;
+unknown commits keep their original uncertainty behavior. Both real HTTP
+regressions failed before the correction; 39 affected device, member, HTTP,
+client and backup checks pass, including restart with no current admissions and
+original-journal validation. Typecheck passes. No UI contract or browser assertion
+is changed. The previous integrated head had e2e 14/14 and full-screen gate green;
+current-head CI and Codex checks supersede that prior result.

@@ -15,6 +15,9 @@ test('device commands require the existing external-member admission and replay 
  await assert.rejects(f.service.act({commandId:'connect',deviceId:'laptop',action:'disconnect'}),/identity|conflict/i);
  const denied=new DevicesService(f.store,f.store,async()=>[{...admission,effect:{...admission.effect,answer:'later'}}],[f.adapter]);
  await assert.rejects(denied.act({commandId:'other',deviceId:'laptop',action:'connect'}),/admission|decision/i);
+ const restarted=new DevicesService(f.store,f.store,async()=>[],[f.adapter]),retained=(await restarted.read()).devices[0]!;
+ assert.equal(retained.name,admission.effect.request.deviceName);assert.equal(retained.decisionId,admission.id);assert.equal(retained.admitted,true);
+ await restarted.act({commandId:'disconnect-after-intake-change',deviceId:'laptop',action:'disconnect'});assert.deepEqual(f.calls,['connect','disconnect']);validateMissionJournalLineage(f.store.inspect());
 });
 
 test('unknown device operation remains fenced across restart and cannot invoke another adapter effect',async()=>{

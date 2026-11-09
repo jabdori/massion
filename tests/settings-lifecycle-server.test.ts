@@ -11,8 +11,10 @@ import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {Application} from '../src/application.ts';
 import type {ConnectionWorkbench} from '../src/connection-workbench.ts';
-import {DomainError} from '../src/domain.ts';
+import {DomainError,hash as valueHash} from '../src/domain.ts';
 import {APPS_ID} from '../src/apps.ts';
+import {MEMBERS_ID,MembersService,applyMembers,PROPOSAL_PREFIX,proposalDecisionId,admittedMemberId} from '../src/members.ts';
+import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -31,6 +33,12 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
  const refusedKey=await request(path,{...body,commandId:'refused-key'}),refusal=await refusedKey.json();assert.equal(refusedKey.status,409);assert.equal(refusal.outcome,'rejected');assert.equal(writes,1);
  connections.replaceKey=replace;assert.equal((await request(path,{...body,commandId:'deliberate-new-key'})).status,200);assert.equal(writes,2);validateMissionJournalLineage(store.inspect());
  const refused=await request('/assistant/devices',{commandId:'unknown-device',deviceId:'unknown',action:'connect'});assert.equal(refused.status,403);
+ const proposalId=PROPOSAL_PREFIX+'http-refusal',decisionId=proposalDecisionId(proposalId),actor={id:ASSISTANT_ACTOR_ID,roles:['assistant' as const]},command={type:'propose-member' as const,decisionId,topic:'분석',works:[{title:'First'},{title:'Second'}],count:2};
+ await store.commit({id:MEMBERS_ID,expectedRevision:0,commandId:proposalId,fingerprint:valueHash({actorId:actor.id,command}),...applyMembers(null,command,actor,{observedAt:1}),outbox:[]});
+ const members=new MembersService(store,()=>undefined);await members.decide({commandId:'admit-http',decisionId,answer:'act',member:{name:'하람',shape:'round'}});const memberId=admittedMemberId('admit-http');
+ assert.equal((await request('/assistant/members',{commandId:'archive-other-tab',memberId,action:'archive'})).status,200);
+ const stale=await request('/assistant/members',{commandId:'archive-stale-tab',memberId,action:'archive'});assert.equal(stale.status,409);assert.equal((await stale.json()).outcome,'rejected');
+ assert.equal((await request('/assistant/members',{commandId:'restore-after-refusal',memberId,action:'unarchive'})).status,200);validateMissionJournalLineage(store.inspect());
 });
 
 test('remote device HTTP commands retain the external-member decision and never replay its uncertain Work',async t=>{
@@ -40,7 +48,7 @@ test('remote device HTTP commands retain the external-member decision and never 
  await app.dispatch({missionId:'intake',commandId:'admit-device-work',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'remote',title:'Read repository',budget:8}});
  await app.dispatch({missionId:'intake',commandId:'assign-device-work',expectedRevision:2,actorId:'local-owner',command:{type:'assign',workId:'remote',assignment:{id:'remote:executor',taskId:'remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Device HTTP fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
  let deliveries=0,connects=0,connected=false,connectStarted:(()=>void)|undefined,heldConnect:Promise<void>|undefined;
- const connections={list:()=>({representative:{intakeMissionId:'intake'}})} as unknown as ConnectionWorkbench;
+ let intakeMissionId='intake';const connections={list:()=>({representative:{intakeMissionId}})} as unknown as ConnectionWorkbench;
  const server=createWorkbench(store,root,{connections,scheduleIntervalMs:0,effectAdapters:[{id:'remote-adapter',kind:'external-member',async send(input){deliveries++;return {idempotencyKey:input.idempotencyKey,remoteId:'arrival',outcome:'received',detail:'Arrival only'};}}],deviceAdapters:[{id:'remote-adapter',async inspect(){return {status:connected?'connected':'offline'};},async connect(){connects++;connectStarted?.();await heldConnect;connected=true;return {status:'connected'};},async disconnect(){connected=false;return {status:'offline'};}}]});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  await server.effectDecisions.propose({missionId:'intake',workId:'remote',taskId:'remote:root',stepId:'handoff',request:{kind:'external-member',adapterId:'remote-adapter',deviceId:'laptop',deviceName:'Laptop',agentId:'codex',agentName:'Codex',instruction:'Read repository',scope:'fixture repository'}});
@@ -53,6 +61,8 @@ test('remote device HTTP commands retain the external-member decision and never 
  await app.dispatch({missionId:'intake',commandId:'assign-next-device-work',expectedRevision:(await store.load('intake'))!.revision,actorId:'local-owner',command:{type:'assign',workId:'next-remote',assignment:{id:'next-remote:executor',taskId:'next-remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Pending device fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
  await server.effectDecisions.propose({missionId:'intake',workId:'next-remote',taskId:'next-remote:root',stepId:'handoff',request:{kind:'external-member',adapterId:'unapproved-adapter',deviceId:'laptop',deviceName:'Pending target',agentId:'other-agent',agentName:'Other agent',instruction:'Another request',scope:'another repository'}});
  const known=(await (await fetch(origin+'/assistant/devices')).json()).devices[0];assert.equal(known.admitted,true);assert.equal(known.decisionId,decisionId);assert.equal(known.agent,'Codex');
+ intakeMissionId='replacement-intake';await app.create({id:intakeMissionId,purpose:'Replacement intake',scope:'fixture',constraints:[],criteria:{version:1,description:'Check independently',oracle:'fixture/v1'}},'local-owner','create-replacement-intake');
+ const retained=(await (await fetch(origin+'/assistant/devices')).json()).devices[0];assert.equal(retained?.id,'laptop');assert.equal(retained?.admitted,true);assert.equal(retained?.decisionId,decisionId);
  assert.equal((await post('/assistant/devices',{commandId:'disconnect-laptop',deviceId:'laptop',action:'disconnect'})).status,200);assert.equal(connected,false);
  assert.equal(deliveries,1);assert.equal((await store.load('intake'))!.value.works[0].effects[0].status,'unknown');validateMissionJournalLineage(store.inspect());
  let release!:()=>void;const started=new Promise<void>(resolve=>{connectStarted=resolve;});heldConnect=new Promise<void>(resolve=>{release=resolve;});t.after(()=>release());
