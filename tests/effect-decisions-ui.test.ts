@@ -8,10 +8,10 @@ const payment={kind:'payment',adapterId:'fixture-payment',checkoutId:'checkout:1
 const external={kind:'external-member',adapterId:'fixture-external',deviceId:'device:1',deviceName:'내 노트북',agentId:'agent:1',agentName:'Claude Code',instruction:'깨지는 테스트 고치기',scope:'massion'};
 function decision(request:any=payment){return {id:'decision:1',at,title:'토너 주문',question:'34,000원 결제할까요?',rows:[['상품',request.item||request.instruction]],action:request.kind==='payment'?'34,000원 결제':'맡기기',state:'open',effect:{kind:request.kind,missionId:'mission:1',workId:'work:1',effectId:'effect:1',status:'pending',request}};}
 function fixture(d:any=decision()){
- const state={decisions:[d],feed:'feed:a',hold:null as Promise<void>|null,deadline:undefined as number|undefined};
+ const state={decisions:[d],feed:'feed:a',hold:null as Promise<void>|null,deadline:undefined as number|undefined,memberDecisions:[] as any[],answer:reply({})};
  const app=harness(async(path,options)=>{
-  if(options?.method==='POST'){if(state.hold)await state.hold;return reply({});}
-  if(path.startsWith('/assistant/conversation'))return reply({feedId:state.feed,cursor:1,head:1,runDeadlineAt:state.deadline,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[],decisions:path.includes('member=')?[]:state.decisions,members:[{id:'member:1',name:'민수'}]});
+  if(options?.method==='POST'){if(state.hold)await state.hold;return state.answer;}
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:state.feed,cursor:1,head:1,runDeadlineAt:state.deadline,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[],decisions:path.includes('member=')?state.memberDecisions:state.decisions,members:[{id:'member:1',name:'민수'}]});
   if(path==='/assistant/works')return reply({feedId:state.feed,works:[]});
   if(path.startsWith('/read-state'))return reply({feedId:state.feed,cursor:1,snapshot:null});
   if(path.startsWith('/events'))return reply({feedId:state.feed,cursor:1,events:[]});
@@ -116,4 +116,25 @@ test('expired payments stop scheduling while an overdue run still refreshes afte
  await refresh(app);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))!.delay,31000);
  state.deadline=now-1;await refresh(app);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))!.delay,1000);
  state.deadline=undefined;state.decisions=[{...d,effect:{...d.effect,request:{...payment,expiresAt:now-1}}}];await refresh(app);assert.equal(runInContext('chatPendingTimer',app.context),0);
+});
+
+
+test('member skill and app decisions remain visible and support later, ask and act',async()=>{
+ const {app,state}=fixture();await settle();
+ for(const id of ['skill-decision:one','app-decision:one']){
+  const {effect,...d}=decision();state.memberDecisions=[{...d,id,action:'Change'}];runInContext("chatOpenThread('member:1','민수')",app.context);await refresh(app);
+  const card=find(app,'chat-decision-'+id);assert.ok(card&&app.node('chat-log').contains(card));await button(card,'나중에').fire('click');await settle();
+  state.memberDecisions=[{...d,id,state:'later'}];await refresh(app);await button(app.node('chat-log'),'다시 묻기').fire('click');await settle();
+  state.memberDecisions=[{...d,id}];await refresh(app);await descendants(find(app,'chat-decision-'+id)).find(n=>n.tagName==='BUTTON')!.fire('click');await settle();
+  assert.deepEqual(posts(app).filter(p=>JSON.parse(p.options.body).decisionId===id).map(p=>JSON.parse(p.options.body).answer),['later','ask','act']);
+ }
+});
+
+test('only a same-feed confirmed pre-admission rejection unlocks an effect decision',async()=>{
+ for(const kind of ['rejected','unknown','wrong-feed'] as const){
+  const {app,state}=fixture();await settle();state.answer=reply(kind==='unknown'?{outcome:'unknown'}:{outcome:'rejected',phase:'admission',feedId:kind==='wrong-feed'?'feed:b':'feed:a'},403);
+  await button(find(app,'chat-decision-decision:1'),'34,000원 결제').fire('click');await settle();
+  if(kind==='rejected'){assert.ok(button(app.node('chat-log'),'34,000원 결제'));await button(app.node('chat-log'),'나중에').fire('click');await settle();assert.deepEqual(posts(app).map(p=>JSON.parse(p.options.body).answer),['act','later']);}
+  else {assert.equal(button(app.node('chat-log'),'34,000원 결제'),undefined);assert.equal(posts(app).length,1);}
+ }
 });

@@ -6,7 +6,7 @@ import type {Mission} from '../src/domain.ts';
 import {EffectDecisionsService} from '../src/effect-decisions.ts';
 import type {EffectAdapter,PaymentRequest,ExternalMemberRequest} from '../src/effect-decisions.ts';
 import {CommitOutcomeUnknownError,withAdmissionFeed} from '../src/storage.ts';
-import {apply,hash,workInputHash} from '../src/domain.ts';
+import {apply,hash,workInputHash,DomainError} from '../src/domain.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {EFFECT_HOST} from '../src/effect-decisions.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
@@ -145,4 +145,21 @@ test('external content summary derives from the pinned payload without showing t
  const s=await setup();await s.propose({...external,repository:{name:'massion',tests:['tests/domain.test.ts']}});
  const d=(await s.service.decisions())[0]!;assert.equal(d.rows.find(r=>r[0]==='받는 곳')![1],'Claude Code · 내 노트북');
  assert.equal(d.rows.find(r=>r[0]==='보낼 내용')![1],'요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개');assert.ok(!JSON.stringify(d.rows).includes(external.instruction));
+});
+
+
+test('a successful external reply is reported without accepting the Work',async()=>{
+ const s=await setup({id:'fixture-external',kind:'external-member',async send(input){return {idempotencyKey:input.idempotencyKey,remoteId:'remote-reply',outcome:'succeeded',detail:'Fixture reply'};}});await s.propose(external);await s.service.decide({commandId:'send',decisionId:(await s.read()).effects[0]!.id,answer:'act'});
+ const d=(await s.service.decisions())[0]!;assert.match(d.line,/응답 받음/);assert.doesNotMatch(d.line,/응답 없음/);assert.equal((await s.read()).acceptance,'pending');
+});
+
+
+test('HTTP marks pre-admission refusal explicitly but not a failure after owner approval',async t=>{
+ for(const afterApproval of [false,true]){
+  const s=await setup();let calls=0;
+  const store=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(afterApproval&&input.events[0].type==='dispatch-owner-effect')throw new DomainError('Claim refused','denied');return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+  const server=createWorkbench(store,'.',{connections:{list:()=>({representative:{intakeMissionId:'intake'}})} as unknown as ConnectionWorkbench,scheduleIntervalMs:0,effectAdapters:afterApproval?[{id:'fixture-external',kind:'external-member',async send(){calls++;throw Error('Must not call');}}]:[]});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
+  await server.effectDecisions.propose({missionId:'intake',workId:'work',taskId:'work:root',stepId:'remote',request:external});const decisionId=(await s.read()).effects[0]!.id;
+  const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/decisions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'act',decisionId,answer:'act'})}),body=await response.json();assert.equal(response.status,403);assert.equal(body.phase,afterApproval?undefined:'admission');assert.equal(body.outcome,afterApproval?undefined:'rejected');assert.equal(calls,0);assert.equal((await s.read()).effects[0]!.ownerDecision!.state,afterApproval?'approved':'open');
+ }
 });

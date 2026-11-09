@@ -9,6 +9,8 @@ import {bindPrerequisiteRecords} from './work-prerequisites.ts';
 import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 
+export class EffectAdmissionRejectedError extends Error {readonly code:DomainError['code'];constructor(error:DomainError){super(error.message);this.code=error.code;}}
+
 export const EFFECT_DECISION_PREFIX='effect-decision:',EFFECT_HOST='effect-decision-host',EFFECT_COMMAND_PREFIX='assistant-effect:';
 export interface PaymentRequest {kind:'payment';adapterId:string;checkoutId:string;item:string;quantity:number;subtotal:number;shipping:number;total:number;currency:'KRW';merchant:string;origin:string;destination:string;method:string;expiresAt:number;cancellation:string;pagesRead:number;startedAt:number}
 export interface ExternalMemberRequest {kind:'external-member';adapterId:string;deviceId:string;deviceName:string;agentId:string;agentName:string;instruction:string;scope:string;repository?:{name:string;tests:string[]}}
@@ -109,7 +111,7 @@ export class EffectDecisionsService {
   exact(input,['commandId','decisionId','answer']);ensure(id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.decisionId)&&['act','later','ask'].includes(input.answer),'Exact decision answer required');
   const {commandId,decisionId,answer}=structuredClone(input) as {commandId:string;decisionId:string;answer:EffectAnswer},missionId=this.#intake();ensure(missionId,'Intake Mission unavailable');const snapshot=await this.#store.load(missionId),w=snapshot?.value.works.find(w=>w.effects.some(e=>e.id===decisionId&&e.ownerDecision));ensure(w,'Unknown effect decision');
   const c:EffectDecisionCommand={type:'answer-owner-effect',workId:w.id,effectId:decisionId,answer};
-  const result=await this.#dispatch(missionId,commandId,c,true);
+  let result:CommitResult<Mission>;try{result=await this.#dispatch(missionId,commandId,c,true);}catch(error){if(error instanceof DomainError)throw new EffectAdmissionRejectedError(error);throw error;}
   if(result.status==='committed'&&answer==='act'){
    const task=this.#invoke(missionId,w.id,decisionId);this.#active.add(task);try{await task;}finally{this.#active.delete(task);}
   }
@@ -147,7 +149,7 @@ export class EffectDecisionsService {
    const question=payment?copy('ui.effect.payment.question',{amount:money(r.total)}):copy('ui.effect.external.question',{who}),state=d.state==='open'?'open':d.state==='later'?'later':'done';
    const sentenceCount=payment?0:[...new Intl.Segmenter('ko',{granularity:'sentence'}).segment(r.instruction)].filter(s=>s.segment.trim()).length,requestSummary=copy(sentenceCount===1?'ui.effect.external.request-one':'ui.effect.external.request-many',sentenceCount===1?{}:{count:sentenceCount});
    const rows=payment?[[copy('ui.effect.payment.item'),r.item],[copy('ui.effect.payment.merchant'),r.merchant+' · '+r.origin],[copy('ui.effect.payment.amount'),copy('ui.effect.payment.total-method',{amount:money(r.total),method:r.method})],[copy('ui.effect.payment.expiry'),copy('ui.effect.payment.until',{time:time(r.expiresAt)})],[copy('conversation.link.25'),r.cancellation]]:[[copy('ui.effect.external.destination'),copy('ui.effect.external.target',{agent:r.agentName,device:r.deviceName})],[copy('ui.effect.external.content'),r.repository?copy('ui.effect.external.payload',{request:requestSummary,repository:r.repository.name,count:r.repository.tests.length}):copy('ui.effect.external.payload-scope',{request:requestSummary,scope:r.scope})],[copy('ui.effect.external.excluded'),copy('ui.effect.external.excluded-value')],[copy('ui.effect.external.caution'),copy('ui.effect.external.irreversible')]];
-   const line=d.state==='later'?(payment?copy('ui.effect.payment.action',{amount:money(r.total)}):copy('ui.effect.external.later',{who})):d.state==='rejected'?copy('ui.effect.rejected'):d.dispatch?(payment?copy(e.status==='succeeded'?'ui.effect.payment.paid':e.status==='failed'?'ui.effect.payment.failed':'ui.effect.unknown'):d.receipt?.outcome==='received'?copy('ui.effect.external.sent',{who,time:time(d.dispatch.at)}):copy(d.receipt?.outcome==='failed'?'ui.effect.external.failed':'ui.effect.unknown')):copy('ui.effect.waiting');
+   const line=d.state==='later'?(payment?copy('ui.effect.payment.action',{amount:money(r.total)}):copy('ui.effect.external.later',{who})):d.state==='rejected'?copy('ui.effect.rejected'):d.dispatch?(payment?copy(e.status==='succeeded'?'ui.effect.payment.paid':e.status==='failed'?'ui.effect.payment.failed':'ui.effect.unknown'):d.receipt?.outcome==='received'?copy('ui.effect.external.sent',{who,time:time(d.dispatch.at)}):copy(d.receipt?.outcome==='succeeded'?'ui.effect.external.replied':d.receipt?.outcome==='failed'?'ui.effect.external.failed':'ui.effect.unknown')):copy('ui.effect.waiting');
    return [{id:e.id,at:d.at,title:w.title,question,rows,action:payment?copy('ui.effect.payment.action',{amount:money(r.total)}):copy('conversation.button.08'),state,line,effect:{kind:r.kind,missionId:snapshot.value.id,workId:w.id,effectId:e.id,status:e.status,request:structuredClone(r),...(d.dispatch?{claimedAt:d.dispatch.at}:{}),...(d.receipt?{receipt:structuredClone(d.receipt)}:{}),...(d.answers.length?{answer:d.answers.at(-1)!.answer}:{})}}];
   }));
  }

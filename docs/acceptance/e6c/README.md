@@ -4,12 +4,12 @@ Payment and external-member decisions use the production Work effect reducer, de
 
 ## Verification
 
-- **137/137 targeted regressions passed on Node v24.21.0 for the CI/visual review correction.** This includes the reproduced failing `deadline refresh updates worker results without an event while member chat is selected` test, a mixed run/payment deadline regression, effect authority/dispatch/lineage tests, conversation/sidebar tests and fixture checks. The original E6c future-only deadline filter caused the CI failure; it excluded elapsed run deadlines and chose 60 seconds instead of 1 second. The fix filters expired payment deadlines only.
+- **170/170 targeted regressions passed on Node v24.21.0 for the CI/visual review correction.** This includes the reproduced failing `deadline refresh updates worker results without an event while member chat is selected` test, a mixed run/payment deadline regression, effect authority/dispatch/lineage tests, conversation/sidebar tests and fixture checks. The original E6c future-only deadline filter caused the CI failure; it excluded elapsed run deadlines and chose 60 seconds instead of 1 second. The fix filters expired payment deadlines only.
 - `npm run typecheck` passes; UI copy lint reports no findings.
 - [Initial-round browser interaction](interaction.json): later → ask → act through the rendered UI and production service; exactly one fixture transmission, remote arrival recorded as `received`, Work outcome still `unknown`, reload without another send. This is a synthetic loopback test transport; the normal server route is separately tested.
 - [Contract report](report.md), [raw report](report.json), `checks/`, `snapshots/`, `visual/`, `screenshots/`, and `pairs/` retain B4, B16, B16-sent and B16-later in dark and light. Pairs place the approved artboard on the left and the application on the right. All eight pairs were inspected.
 
-Reproduction: `TMPDIR=/private/tmp node --test tests/internal-teams-surface.test.ts tests/effect-decisions.test.ts tests/effect-decisions-ui.test.ts tests/conversation-cards.test.ts tests/surface-shell.test.ts tests/ui-contract-fixtures.test.ts tests/backup-lineage.test.ts`; `UI_CONTRACTS_BLOCKING=0 UI_CONTRACTS_OUTPUT=docs/acceptance/e6c node scripts/ui-contracts/run.mjs B4 B16 B16-sent B16-later`.
+Reproduction: `TMPDIR=/private/tmp node --test tests/internal-teams-surface.test.ts tests/effect-decisions.test.ts tests/effect-decisions-ui.test.ts tests/conversation-cards.test.ts tests/surface-shell.test.ts tests/ui-contract-fixtures.test.ts tests/backup-lineage.test.ts tests/skills-surface.test.ts tests/apps-surface.test.ts tests/members.test.ts`; `UI_CONTRACTS_BLOCKING=0 UI_CONTRACTS_OUTPUT=docs/acceptance/e6c node scripts/ui-contracts/run.mjs B4 B16 B16-sent B16-later`.
 
 ## Residuals
 

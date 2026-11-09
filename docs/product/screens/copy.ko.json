@@ -17018,5 +17018,15 @@
    "B16:conversation"
   ],
   "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.replied": {
+  "ko": "응답 받음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16-sent:conversation"
+  ],
+  "provenance": "E6c external receipt: a reply is not independent Work acceptance."
  }
 }
