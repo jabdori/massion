@@ -24,6 +24,7 @@ export interface ConnectionLifecycleState {kind:'connection-lifecycle';id:string
 type State=ConnectionLifecycleState;
 type Command=({kind:Kind}&LifecycleCommand)|{kind:'settle';commandId:string;status:'completed'|'unknown'|'rejected';observation:ConnectionObservation|null};
 export interface LifecycleResult {status:'completed'|'unknown'|'stale';connectionId:string;observation:ConnectionObservation|null}
+export class ConnectionLifecycleRefusedError extends DomainError {}
 interface Options {
  logins?:LoginConnections;admit?:()=>Promise<void>;clock?:()=>number;
  observe?:(target:ConnectionTarget,signal:AbortSignal)=>Promise<ConnectionFacts>;
@@ -91,7 +92,8 @@ export class ConnectionLifecycle {
  recheck(input:unknown){return this.#start('recheck',input);}
  replaceKey(input:unknown){return this.#start('replace-key',input);}
  #start(kind:Kind,input:unknown){
-  const pending=this.#run(kind,input);this.#active.add(pending);void pending.then(()=>this.#active.delete(pending),()=>this.#active.delete(pending));return pending;
+  // Post-write failures return unknown inside #run; only definite refusals escape.
+  const pending=this.#run(kind,input).catch(error=>{if(error instanceof DomainError)throw new ConnectionLifecycleRefusedError(error.message,error.code);throw error;});this.#active.add(pending);void pending.then(()=>this.#active.delete(pending),()=>this.#active.delete(pending));return pending;
  }
  async #dispatch(feedId:string,commandId:string,command:Command):Promise<CommitResult<State>> {
   const identity={id:CONNECTION_LIFECYCLE_ID,commandId,fingerprint:fingerprint(command)};

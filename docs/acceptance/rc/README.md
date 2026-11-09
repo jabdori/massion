@@ -100,3 +100,9 @@ app sandbox, domain restrictions and product command handling are unchanged.
 The previous R-C final head passed all 13 E2E tests with the original browser.
 The new merge head's complete CI/review result is tracked on PR #130; the earlier
 failure notes above describe the intermediate browser experiments.
+
+The post-main review found that a proved pre-write key refusal lacked its HTTP
+outcome tag. The server now emits the explicit rejection signal already recognized
+by Settings, preserving deliberate retries without treating ambiguous writes as
+failures. The HTTP regression failed before the fix; 31 related lifecycle, HTTP
+and client tests then passed, including post-write uncertainty and reload behavior.

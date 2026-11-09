@@ -120,3 +120,8 @@ unknown on interruption, failure or a changed connection generation. Environment
 and CLI bindings remain unknown without any credential lookup. `lifecycle.read()`
 checks the database feed again after all asynchronous metadata reads. Presence is
 read-only and creates no state, events, receipts or verification facts.
+
+Definite domain refusals escape as `ConnectionLifecycleRefusedError`; the HTTP
+adapter returns `outcome: 'rejected'`. Settings can then permit a fresh deliberate
+attempt after a read. Post-write/ambiguous failures stay `unknown` and are never
+classified by their HTTP status alone.

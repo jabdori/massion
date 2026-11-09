@@ -55,3 +55,11 @@ test('connection recheck and masked key replacement use exact identities without
  await byId(app,'settings-key-save').fire('click');await settle();assert.equal(posted[1]!.path,'/connections/api/key');assert.equal(posted[1]!.body.apiKey,'fixture-secret');assert.equal(input.value,'');
  assert.ok(!JSON.stringify([...app.storage]).includes('fixture-secret'));
 });
+
+test('an explicit pre-write refusal keeps lifecycle controls usable after a fresh read',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'devices');
+ const start=()=>runInContext("settingsLifecyclePost('connection:api','/connections/api/key',{expectedConfigHash:'hash',apiKey:'fixture-key'})",app.context);
+ const first=start();await settle();state.pending!(reply({outcome:'rejected',error:'Active turn'},409));assert.equal(await first,false);
+ await runInContext('settingsLoad("devices")',app.context);assert.equal(runInContext("settingsLifecycleLocked('connection:api')",app.context),false);
+ const second=start();await settle();assert.equal(state.posted.length,2);state.pending!(reply({status:'completed'}));assert.equal(await second,true);
+});

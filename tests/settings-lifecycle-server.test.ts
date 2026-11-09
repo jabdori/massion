@@ -11,6 +11,7 @@ import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {Application} from '../src/application.ts';
 import type {ConnectionWorkbench} from '../src/connection-workbench.ts';
+import {DomainError} from '../src/domain.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -24,6 +25,9 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
  const response=await request(path,body);const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.status,'completed');assert.equal(writes,1);
  assert.doesNotMatch(JSON.stringify([result,await (await request('/connections/lifecycle')).json(),store.inspect()]),/fixture-http-secret/);
  await request(path,body);assert.equal(writes,1);validateMissionJournalLineage(store.inspect());
+ const replace=connections.replaceKey.bind(connections);connections.replaceKey=async()=>{throw new DomainError('Active conversation prevents this key write','conflict');};
+ const refusedKey=await request(path,{...body,commandId:'refused-key'}),refusal=await refusedKey.json();assert.equal(refusedKey.status,409);assert.equal(refusal.outcome,'rejected');assert.equal(writes,1);
+ connections.replaceKey=replace;assert.equal((await request(path,{...body,commandId:'deliberate-new-key'})).status,200);assert.equal(writes,2);validateMissionJournalLineage(store.inspect());
  const refused=await request('/assistant/devices',{commandId:'unknown-device',deviceId:'unknown',action:'connect'});assert.equal(refused.status,403);
 });
 
