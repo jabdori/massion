@@ -16506,10 +16506,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.challenge": {
@@ -16518,10 +16518,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.answer": {
@@ -16530,10 +16530,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.concede": {
@@ -16542,10 +16542,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.inferred": {
@@ -16554,10 +16554,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.returned": {
@@ -16566,10 +16566,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.escalated": {
@@ -16578,10 +16578,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  },
  "ui.room.moderation": {
@@ -16590,10 +16590,10 @@
    "text"
   ],
   "used_in": [
-   "B18:pane",
-   "B18-room-b:pane",
-   "B22-room:pane",
-   "B22-room-steps:pane"
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
   ]
  }
 }

@@ -23,7 +23,7 @@ threshold, budget and timeout rules. No moderation result changes acceptance.
 Absent configuration or budget uses fixed rules. No new public owner write API.
 
 Implementation order: failing core/runtime tests; room transitions and backup
-validation; runtime/host integration; existing Work-pane transcript rendering;
+validation; runtime/host integration; existing conversation transcript rendering;
 related tests and typecheck; scoped headless screen evidence; PR without merge.
 Four regression risks: overlapping duplicate commands, drain-aware writes,
 stale/feed-replaced Work data, and out-of-order read responses.
@@ -57,7 +57,7 @@ environment-gated skips and no failures. Tests exercise actual application and
 runtime transitions with mock transports, replay the journal including accepted
 room provenance, and cover unknown challenge outcomes, drain, duplicate commands,
 quote normalization, return/escalation, moderator identity and budget isolation.
-The room-pane tests cover literal rendering, current selection, feed replacement
+The room/conversation tests cover literal rendering, current selection, feed replacement
 and late reads; existing team tests cover deadline refresh without an event.
 No real model call, full local suite, deployment or merge was performed.
 
@@ -72,3 +72,33 @@ After integrating main `094eca4` (desktop daemon authentication), typecheck pass
 again and the affected member/runtime/fixture batch passed 100 of 103 tests,
 with three environment-gated skips. The eight headless screen flows passed again
 with the same recorded prototype-contract failures; screenshots were regenerated.
+
+## Visual review correction
+
+The initial B22-room-steps fixture opened the legacy evidence inspector. That
+was not the artboard's steps view. The corrected fixture opens only the B7 Work
+room pane; stored worker steps are followed by independent checking and Record
+stages. B18-room-b and B22-room use the same component and real task fields.
+Room transcript and collapsed moderation records now render in the conversation,
+bound to the selected Work, current member thread, feed and current snapshot.
+Switching Work, selecting an app tab, replacing the feed or losing a read removes
+the old transcript. The Work pane never embeds the legacy state/attempt/budget
+inspector. Deliberate accepted/rejected text readers and unknown-run quarantine
+controls remain available without that state dump.
+
+Review tests on Node 24.21.0: 146 total, 141 passed, five environment-gated skips;
+typecheck passed. Eight dark/light room flows passed the explicit visual blocker
+assertions: no transcript or legacy technical fields in the pane, B22 steps
+exactly Read / Run tests / Check / Record, transcript in the conversation, Stop
+present, pane toggle/close and mobile overflow. The pane text-budget checks now
+have zero failures. Full contracts still have 4 / 40 / 13 / 13 failures per theme
+for B18 / B18-room-b / B22-room / B22-room-steps respectively; those are broader
+shell/data/order differences, not claimed as passing.
+
+The existing Codex finding about surrogate-pair truncation was also reproduced:
+moderation quotes now drop a trailing high surrogate at the bound, preserving
+well-formed Unicode so shadow moderation cannot block a valid emoji-containing
+turn before independent checking.
+
+The B7/B8/B22 pane regression additionally passed all 20 headless dark/light
+flows. Changed surface files have zero blocking copy-lint findings.

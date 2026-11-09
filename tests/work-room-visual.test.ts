@@ -72,3 +72,15 @@ test('a rejected Stop reports the revision conflict while the Work stays running
  assert.equal(posted.length,1);assert.equal(runInContext('snapshot.value.works.find(w=>w.id==='+JSON.stringify(work.id)+').execution',app.context),'active');
  assert.match(app.node('status').className,/warning/);assert.match(app.node('status').textContent,/충돌/);assert.equal(app.node('page-status').hidden,true);assert.equal(runInContext('unknownOperation',app.context),null);
 });
+
+ test('B22 room steps use the B7 pane and never embed the legacy Work inspector',async()=>{
+ const {nodes,card}=await scene('B22-room-steps');
+ assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 돌리기','확인','기록']);
+ assert.ok(nodes().some(n=>n.id==='work-room-stop-pr84'));
+ assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-pr84'));
+ assert.doesNotMatch(card().textContent,/실행: active|검증: pending|시도 \/ 예산|측정 사용량|기준·기억·근거|선택한 원문 문서|원래 조직 역할/);
+ });
+
+for(const [screen,panel] of [['B7-done','record-text-summary'],['B7-fail','rejected-text-summary']])test(screen+' keeps its deliberate result reader without the legacy state dump',async()=>{
+ const {nodes,work}=await scene(screen!);assert.ok(nodes().some(n=>n.id==='work-'+panel+'-'+work.id));assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
+});

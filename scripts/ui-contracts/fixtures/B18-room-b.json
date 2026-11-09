@@ -407,6 +407,46 @@
                     "id": "pricing:root",
                     "parentId": null,
                     "status": "active"
+                  },
+                  {
+                    "id": "pricing:executor",
+                    "parentId": "pricing:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "pricing:step:0",
+                    "parentId": "pricing:executor",
+                    "status": "settled",
+                    "step": {
+                      "title": "출처 고르기",
+                      "role": "조사",
+                      "dependsOn": []
+                    }
+                  },
+                  {
+                    "id": "pricing:step:1",
+                    "parentId": "pricing:executor",
+                    "status": "settled",
+                    "step": {
+                      "title": "가격 모으기",
+                      "role": "조사",
+                      "dependsOn": []
+                    }
+                  },
+                  {
+                    "id": "pricing:step:2",
+                    "parentId": "pricing:executor",
+                    "status": "active",
+                    "step": {
+                      "title": "표 만들기",
+                      "role": "표 정리",
+                      "dependsOn": []
+                    }
+                  },
+                  {
+                    "id": "pricing:verifier",
+                    "parentId": "pricing:root",
+                    "status": "queued"
                   }
                 ],
                 "attempts": [
@@ -611,6 +651,46 @@
                   "id": "pricing:root",
                   "parentId": null,
                   "status": "active"
+                },
+                {
+                  "id": "pricing:executor",
+                  "parentId": "pricing:root",
+                  "status": "active"
+                },
+                {
+                  "id": "pricing:step:0",
+                  "parentId": "pricing:executor",
+                  "status": "settled",
+                  "step": {
+                    "title": "출처 고르기",
+                    "role": "조사",
+                    "dependsOn": []
+                  }
+                },
+                {
+                  "id": "pricing:step:1",
+                  "parentId": "pricing:executor",
+                  "status": "settled",
+                  "step": {
+                    "title": "가격 모으기",
+                    "role": "조사",
+                    "dependsOn": []
+                  }
+                },
+                {
+                  "id": "pricing:step:2",
+                  "parentId": "pricing:executor",
+                  "status": "active",
+                  "step": {
+                    "title": "표 만들기",
+                    "role": "표 정리",
+                    "dependsOn": []
+                  }
+                },
+                {
+                  "id": "pricing:verifier",
+                  "parentId": "pricing:root",
+                  "status": "queued"
                 }
               ],
               "attempts": [

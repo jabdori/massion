@@ -35,8 +35,8 @@ function fixture(){
 test('only worker steps become role chips after the member and before Check; compact progress stays flat and worker results follow under member identity',async()=>{
  const {app,open,progress,people,results}=fixture();await open();
  assert.deepEqual(people()!.children.map(n=>n.textContent),['퀼퀼','조사','분류','설문','요약','확인']);
- const list=progress();assert.ok(list);assert.equal(list.children.length,4);assert.ok(list.children.every(n=>n.tagName==='LI'));
- assert.deepEqual(list.children.map(n=>n.textContent),['해지 내역 수집','고객 분류','설문 발송건너뜀 · 기존 설문','원인 요약선행 단계 · 고객 분류']);
+ const list=progress();assert.ok(list);assert.equal(list.children.length,6);assert.ok(list.children.every(n=>n.tagName==='LI'));
+ assert.deepEqual(list.children.map(n=>n.textContent),['해지 내역 수집','고객 분류','설문 발송건너뜀 · 기존 설문','원인 요약선행 단계 · 고객 분류','확인','기록']);
  assert.ok(list.children.every(n=>n.children.every(child=>child.children.length===0)),'compact rows have no nested identity or result blocks');
  assert.equal(list.children[2]!.textContent.split('기존 설문').length,2,'the skip reason appears once');
  assert.match(results()!.textContent,/퀼.*조사.*해지 41건/);
@@ -115,11 +115,11 @@ for(const deadline of [false,true])test((deadline?'deadline':'minute')+' refresh
 
 test('Q14 room transcript shows inferred author claims and literal quotes without making the discriminator a speaker',async()=>{
  const {app,state,open}=fixture();Object.assign(state.work,{room:{messages:[{ordinal:2,authorId:'challenger',kind:'challenge',text:'근거 <img src=x>',quote:'해지 41건',inferred:true,status:'admitted'}],issue:{status:'escalated'}},moderation:[{questionId:'q',model:{model:'jev-fixture'},result:{decision:'shadow',applied:false}}]});
- await open();const transcript=app.all().find(n=>n.className==='room-transcript')!;assert.ok(transcript);assert.match(transcript.textContent,/퀼.*반박.*추론.*근거 <img src=x>.*해지 41건/);assert.equal(app.all().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(transcript.textContent,/jev-fixture/);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+ await open();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();const transcript=app.all().find(n=>n.className==='room-transcript')!;assert.ok(transcript);assert.ok(app.node('chat-log').contains(transcript));assert.ok(!app.node('work-list').contains(transcript));assert.match(transcript.textContent,/퀼.*반박.*추론.*근거 <img src=x>.*해지 41건/);assert.equal(app.all().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(transcript.children.filter(n=>n.tagName==='ARTICLE').map(n=>n.textContent).join(''),/jev-fixture/);assert.notEqual(transcript.children.find(n=>n.tagName==='DETAILS')!.open,true);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
 test('Q14 transcript uses the latest read and clears on feed replacement and Work selection',async()=>{
- const {app,state,open}=fixture();const room={messages:[{ordinal:2,kind:'challenge',text:'이전 주장',quote:'이전 근거',inferred:true,status:'admitted'}],issue:null};Object.assign(state.work,{room});await open();
+ const {app,state,open}=fixture();const room={messages:[{ordinal:2,kind:'challenge',text:'이전 주장',quote:'이전 근거',inferred:true,status:'admitted'}],issue:null};Object.assign(state.work,{room});await open();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
  let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);state.hold=null;state.revision++;room.messages[0]!.text='최신 주장';await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
  const transcript=()=>app.all().find(n=>n.className==='room-transcript');assert.match(transcript()!.textContent,/최신 주장/);assert.doesNotMatch(transcript()!.textContent,/이전 주장/);
  runInContext('paneOpen("elsewhere","w2","Other")',app.context);assert.equal(transcript(),undefined);await runInContext('paneSelect("intake/w1")',app.context);await settle();assert.ok(transcript());
