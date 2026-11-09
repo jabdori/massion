@@ -48,15 +48,17 @@ call records and daemon logs under `.runtime/e2e/`. No production source changed
 The first CI run exposed agent-browser's opaque-iframe network-control setup
 with automatically downloaded Chrome for Testing 157. The initial workaround
 selected runner-provided Chrome 156.0.8078.79; R-C reproduced the same missing
-execution-context failure on that build in two CI attempts. The tool replaced
-its tab with about:blank while a separate CDP inspection still found the original
-application root healthy. This is not an application top-level navigation.
+execution-context failure on that build in two CI attempts. In a narrow local
+reproduction a separate CDP inspection found the application root healthy until
+the tool replaced its target with about:blank. Basic iframe content without a
+script reproduced the tool failure too.
 
-R-C pins Playwright 1.64.0's Chromium build 1248 (156.0.8078.4), using its installer
-only as CI tooling. Two narrow actual-host runs with agent-browser 0.41.2 reached
-the scripted iframe's 617px height, retained the application root, and observed
-parent access blocked with sandbox/credentialless and the domain filter unchanged.
-The [official browser map](https://github.com/microsoft/playwright/blob/v1.64.0/packages/playwright-core/browsers.json)
-fixes the executable path used in CI. No browser or app security control is removed.
-Related upstream investigation:
+Agent-browser 0.41.2 plus Playwright 1.64.0's Chromium build 1248 (156.0.8078.4)
+passed that narrow local check twice with the domain filter, opaque sandbox and
+credentialless unchanged. The same browser pin did not fix the complete Linux
+CI journey: eight subtests passed before the MCP phase failed during a snapshot
+with `Cannot find default execution context`. The ineffective browser-installer
+change was reverted. CI keeps its original browser selection and all security
+controls; this E2E failure remains unresolved. Local fixture success is not Linux
+E2E success. Related upstream investigation:
 https://github.com/vercel-labs/agent-browser/pull/2193.

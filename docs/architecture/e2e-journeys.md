@@ -79,10 +79,7 @@ MASSION_SURREAL_BINARY=/absolute/path/to/surreal \
 
 This suite requires Linux process-ownership evidence and fails, rather than skips,
 when prerequisites are missing. `MASSION_E2E_BROWSER` can select an already
-installed Chromium executable. CI pins Playwright 1.64.0 Chromium build 1248
-(156.0.8078.4); see the [opaque-frame tooling diagnosis](e2e-decisions-apps-desktop.md).
-Use that build for the MCP iframe journey; the moving Chrome 157 and runner
-156.0.8078.79 builds reproduced a tool network-control failure. In a container, keep a network interface so
+installed Chromium executable. In a container, keep a network interface so
 Chromium reports online; an internal Docker network blocks external routing
 without making the UI's offline guard refuse local commands. Browser domains
 are restricted to loopback and the model transport never opens a network socket.

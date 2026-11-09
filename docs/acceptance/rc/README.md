@@ -81,7 +81,12 @@ Both tests failed before the fixes; 30 focused device, HTTP and app-surface test
 then passed, along with typecheck and syntax/copy checks.
 
 The first CI head passed full durable-store verification and all 150 screen/theme
-captures. E2E exposed the browser tooling failure documented in
-[the E9a2 follow-up](../../architecture/e2e-decisions-apps-desktop.md). CI now pins
-the twice-tested browser build while preserving domain restrictions and the
-opaque app sandbox. The complete E2E run remains subject to the new-head CI result.
+captures. The corrected head also passed code/security review without findings
+and all screen captures. E2E exposed the browser tooling failure documented in
+[the E9a2 follow-up](../../architecture/e2e-decisions-apps-desktop.md). The narrow
+local browser-pin experiment passed, but the complete Linux E2E still failed in
+its MCP snapshot after eight passing subtests. The ineffective CI changes were
+reverted, keeping domain restrictions and the opaque app sandbox unchanged.
+The final review loop reports this remaining failure rather than claiming a
+complete E2E pass. Member memory/schedules, builtin provenance, restart execution
+and the absent recommendation packages remain the capability follow-ups above.
