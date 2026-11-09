@@ -16499,5 +16499,101 @@
    "B8:pane"
   ],
   "provenance": "Q13 named worker steps and dependencies."
+ },
+ "ui.room.proposal": {
+  "ko": "제안",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.challenge": {
+  "ko": "반박",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.answer": {
+  "ko": "답변",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.concede": {
+  "ko": "인정",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.inferred": {
+  "ko": "추론",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.returned": {
+  "ko": "반려",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.escalated": {
+  "ko": "확인에 전달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
+ },
+ "ui.room.moderation": {
+  "ko": "판별 기록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:pane",
+   "B18-room-b:pane",
+   "B22-room:pane",
+   "B22-room-steps:pane"
+  ]
  }
 }

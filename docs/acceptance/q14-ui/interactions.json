@@ -1,0 +1,114 @@
+[
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "check": {
+      "passed": 29,
+      "failed": 40,
+      "warnings": 2,
+      "required": 69
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "check": {
+      "passed": 29,
+      "failed": 40,
+      "warnings": 2,
+      "required": 69
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "check": {
+      "passed": 27,
+      "failed": 13,
+      "warnings": 0,
+      "required": 40
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "check": {
+      "passed": 27,
+      "failed": 13,
+      "warnings": 0,
+      "required": 40
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "check": {
+      "passed": 34,
+      "failed": 18,
+      "warnings": 0,
+      "required": 49
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "check": {
+      "passed": 34,
+      "failed": 18,
+      "warnings": 0,
+      "required": 49
+    },
+    "transcript": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  }
+]

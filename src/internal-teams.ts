@@ -27,7 +27,7 @@ export function validateTeamProcedure(value:unknown,memberId?:string):asserts va
  if(new Set(t.procedures.map(p=>p.id)).size!==t.procedures.length||procedureSteps(t).length>MAX_TEAM_STEPS)fail();
 }
 export const procedureSteps=(team:TeamProcedure)=>team.procedures.flatMap(p=>p.body.steps);
-export const teamCallCount=(team?:TeamProcedure)=>team?procedureSteps(team).length+3:2;
+export const teamCallCount=(team?:TeamProcedure,rooms=false)=>team?procedureSteps(team).length+3+(rooms&&procedureSteps(team).length>1?2:0):2;
 export function parseTeamPlan(output:string,work:Work):TeamStep[] {
  let plan:any;try{plan=JSON.parse(output);}catch{return fail();}
  const count=procedureSteps(work.team!).length;

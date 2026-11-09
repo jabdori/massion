@@ -1,0 +1,79 @@
+contract B18-room-b (B18 퀼 · 경쟁사 가격 업무 방) vs /Users/code/orca/workspaces/massion/q14-member-rooms/docs/acceptance/q14-ui/B18-room-b-light.snapshot.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{work_title}" -> button "이탈 원인 조사"
+  ok    sidebar      status   "실행 중" -> statictext "실행 중"
+  ok    sidebar      link     "{work_title}" -> button "경쟁사 가격"
+  ok    sidebar      status   "확인 대기" -> statictext "확인 대기"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation text     "{date}" -> statictext "11월 5일 (목)"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    pane         tab      "{work_title}" -> tab "경쟁사 가격"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         text     "확인 대기" -> statictext "확인 대기"
+  ok    pane         text     "확인" -> statictext "요청한 결과와 근거 확인"
+  ok    composer     textbox  "퀼에게 메시지 보내기" -> textbox "퀼에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":21,"strings":7,"sentences":0,"longest":8} proto {"chars":28,"strings":6,"sentences":0,"longest":9} source visibleTextBudget
+  budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":0,"strings":0,"sentences":0,"longest":0} source visibleTextBudget
+  budget conversation app {"chars":242,"strings":29,"sentences":6,"longest":36} proto {"chars":301,"strings":38,"sentences":5,"longest":27} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":143,"strings":33,"sentences":3,"longest":17} proto {"chars":567,"strings":101,"sentences":8,"longest":35} source visibleTextBudget
+  warn  budget conversation sentences 6 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+  warn  budget conversation longest string 36 > 34 chars
+  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
+  FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)
+  FAIL  order  sidebar      link     "{work_title}" (occurrence already consumed or found earlier)
+  FAIL  order  sidebar      status   "실행 중" (occurrence already consumed or found earlier)
+  FAIL  missing conversation link     "{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중"
+  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
+  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
+  FAIL  missing conversation button   "남기기"
+  FAIL  missing conversation button   "지우기"
+  FAIL  order  pane         text     "{duration}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         button   "중지" (occurrence already consumed or found earlier)
+  FAIL  order  pane         heading  "{work_title}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "하나가 넘김 · {time}"
+  FAIL  role   pane         listitem "조사" (text exists without the required role)
+  FAIL  order  pane         listitem "확인" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "{count}"
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{progress}" (occurrence already consumed or found earlier)
+  FAIL  region pane         text     "조사" (found in sidebar)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "요약"
+  FAIL  order  pane         text     "{progress}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{progress}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         text     "기록"
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         chip     "조사" (found in sidebar)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  region pane         text     "기본" (found in composer)
+  FAIL  missing pane         text     "{amount}"
+  FAIL  missing pane         text     "{amount}"
+  FAIL  missing pane         text     "{amount}"
+  FAIL  missing pane         text     "{amount}"
+  FAIL  missing pane         text     "{amount}"
+  FAIL  missing pane         text     "{amount}"
+  FAIL  order  pane         text     "확인 대기" (occurrence already consumed or found earlier)
+FAIL: 40 failures, 2 warnings, 69 required elements

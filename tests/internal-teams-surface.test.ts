@@ -112,3 +112,16 @@ for(const deadline of [false,true])test((deadline?'deadline':'minute')+' refresh
  assert.ok(progress());assert.match(results()!.textContent,/퀼.*분류.*기업 고객 7곳/);
  assert.equal(runInContext('chatThread',app.context),'member-q');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
+
+test('Q14 room transcript shows inferred author claims and literal quotes without making the discriminator a speaker',async()=>{
+ const {app,state,open}=fixture();Object.assign(state.work,{room:{messages:[{ordinal:2,authorId:'challenger',kind:'challenge',text:'근거 <img src=x>',quote:'해지 41건',inferred:true,status:'admitted'}],issue:{status:'escalated'}},moderation:[{questionId:'q',model:{model:'jev-fixture'},result:{decision:'shadow',applied:false}}]});
+ await open();const transcript=app.all().find(n=>n.className==='room-transcript')!;assert.ok(transcript);assert.match(transcript.textContent,/퀼.*반박.*추론.*근거 <img src=x>.*해지 41건/);assert.equal(app.all().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(transcript.textContent,/jev-fixture/);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('Q14 transcript uses the latest read and clears on feed replacement and Work selection',async()=>{
+ const {app,state,open}=fixture();const room={messages:[{ordinal:2,kind:'challenge',text:'이전 주장',quote:'이전 근거',inferred:true,status:'admitted'}],issue:null};Object.assign(state.work,{room});await open();
+ let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);state.hold=null;state.revision++;room.messages[0]!.text='최신 주장';await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
+ const transcript=()=>app.all().find(n=>n.className==='room-transcript');assert.match(transcript()!.textContent,/최신 주장/);assert.doesNotMatch(transcript()!.textContent,/이전 주장/);
+ runInContext('paneOpen("elsewhere","w2","Other")',app.context);assert.equal(transcript(),undefined);await runInContext('paneSelect("intake/w1")',app.context);await settle();assert.ok(transcript());
+ state.feed='feed:b';await runInContext('readChat()',app.context);await settle();assert.equal(transcript(),undefined);
+});
