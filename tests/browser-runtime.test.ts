@@ -125,3 +125,8 @@ test('monthly budget waiting and journal replay preserve the same browser observ
 });
 
 for(const separator of ['\u200b','\u200c','\u2060','\uFE0F','\u{E0100}'])test('format separators cannot preserve a reflected private code '+separator.codePointAt(0),async()=>{const secret='123456',reflected=[...secret].join(separator),s=await setup(async()=>({...raw,title:reflected,blocks:[reflected],fields:[{label:'Security code',name:'csc',type:'number',autocomplete:'one-time-code',value:secret}]}));await s.service.capture(request);const journal=JSON.stringify(s.store.inspect());assert.ok(!journal.includes(reflected));assert.ok(!journal.includes(secret));validateMissionJournalLineage(s.store.inspect());});
+
+for(const separator of ['\u200b','\u200c','\u2060','\uFE0F','\u{E0100}'])test('canonical sensitive metadata overrides benign field meanings '+separator.codePointAt(0),async()=>{
+ const fields=[{label:'Ｓｅｃｕ'+separator+'ｒｉｔｙ ｃｏ'+separator+'ｄｅ',name:'quantity',autocomplete:''},{label:'수량',name:'c'+separator+'sc',autocomplete:''},{label:'수량',name:'quantity',autocomplete:'cc-'+separator+'csc'}].map(f=>({...f,type:'number',value:'123456'}));
+ const s=await setup(async()=>({...raw,fields}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.ok(page.fields.every(f=>f.masked&&f.value==='••••'));assert.ok(!JSON.stringify(s.store.inspect()).includes('123456'));validateMissionJournalLineage(s.store.inspect());
+});

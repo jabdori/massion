@@ -21,11 +21,11 @@ const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/
 const text=(v:unknown,max=2000):v is string=>typeof v==='string'&&v.length<=max&&v.isWellFormed()&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v);
 function exact(v:unknown,keys:string[]):asserts v is Record<string,any>{ensure(!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k)),'Invalid browser fields');}
 export function browserAddress(value:string){let u:URL;try{u=new URL(value);}catch{throw new DomainError('Invalid browser address');}ensure(['https:','http:'].includes(u.protocol),'Invalid browser address');u.username='';u.password='';u.search='';u.hash='';ensure(u.href.length<=2000,'Browser address bound exceeded');return u.href;}
-export function sensitiveBrowserField(f:{label:string;name?:string;autocomplete?:string}){return /password|passwd|secret|token|one-time-code|auth|credential|api.?key|cc-|card|cvv|csc|cvc|payment|security|secure|code|otp|\bpin\b|보안|코드|카드|비밀|비번|인증|결제/i.test([f.label,f.name??'',f.autocomplete??''].join(' ').normalize('NFKC'));}
+export function sensitiveBrowserField(f:{label:string;name?:string;autocomplete?:string}){return /password|passwd|secret|token|one-time-code|auth|credential|api.?key|cc-|card|cvv|csc|cvc|payment|security|secure|code|otp|\bpin\b|보안|코드|카드|비밀|비번|인증|결제/i.test([f.label,f.name??'',f.autocomplete??''].join(' ').normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));}
 export function maskBrowserField(f:{label:string;type:string;autocomplete:string;name?:string}){
  if(f.type==='hidden'||f.type==='password'||sensitiveBrowserField(f))return true;
  const benign=/^(이름|성명|주소|배송지|도서|책|제목|수량|날짜|시간|방|인원|name|full.?name|given-name|family-name|street-address|address-line[123]|address|title|quantity|qty|count|guests|room|date|time|isbn)$/i;
- return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||![f.label,f.name??'',f.autocomplete].some(v=>benign.test(v.trim()));
+ return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||![f.label,f.name??'',f.autocomplete].some(v=>benign.test(v.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').trim()));
 }
 export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[number,number]>{
  const sourceOffsets:number[]=[];let visible='',offset=0;for(const character of value){if(!/[\p{Cf}\p{Default_Ignorable_Code_Point}]/u.test(character)){visible+=character;for(let i=0;i<character.length;i++)sourceOffsets.push(offset+i);}offset+=character.length;}
