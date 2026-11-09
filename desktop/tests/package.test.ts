@@ -24,6 +24,10 @@ test('packaged daemon resources are usable by external Node at their resolved pa
   const bundled=JSON.parse(extractFile(join(root,'app.asar'),'package.json').toString());
   const core=JSON.parse(await readFile(join(root,'core/package.json'),'utf8'));
   assert.equal(bundled.version,source.version);assert.equal(core.version,source.version);
+  for(const key of ['CFBundleShortVersionString','CFBundleVersion']){
+   const result=await promisify(execFile)('/usr/libexec/PlistBuddy',['-c','Print '+key,join(root,'../Info.plist')]);
+   assert.equal(result.stdout.trim(),source.version.split('-')[0],key+' must use the numeric macOS version');
+  }
  });
  await t.test('standalone daemon runner is outside ASAR and readable by Node',async()=>{
   await access(paths.runner);assert.ok(!relative(root,paths.runner).split('/').includes('app.asar'));

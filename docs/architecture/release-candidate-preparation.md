@@ -2,7 +2,9 @@
 
 The root package version identifies the source candidate and the packaged desktop
 app. Desktop packaging injects it as Electron metadata; the desktop dependency
-manifest has no independent version. The first candidate is `1.0.0-rc.1`.
+manifest has no independent version. macOS plist versions use its numeric release
+component; the full RC identity remains in the bundled manifest and archive name.
+The first candidate is `1.0.0-rc.1`.
 
 The existing macOS CI job builds an app without a Developer ID signature or
 notarization, runs an install smoke against the authenticated fixture supervisor,

@@ -1,7 +1,9 @@
 # Release candidate checklist
 
 The root `package.json` is the version source; this candidate is `1.0.0-rc.1`.
-Desktop packaging injects that version into its bundled manifest. Update it with
+Desktop packaging injects that version into its bundled manifest. The macOS
+plist version fields use the derived numeric release component (`1.0.0`); the
+full candidate identity remains in the manifest and archive filename. Update it with
 `npm version <next-version> --no-git-tag-version --ignore-scripts`, commit the
 root manifest and lockfile, and update the changelog before the next candidate.
 Do not maintain a separate desktop version.

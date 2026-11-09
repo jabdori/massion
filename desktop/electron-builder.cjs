@@ -1,1 +1,3 @@
-module.exports={...require('./package.json').build,extraMetadata:{version:require('../package.json').version}};
+const {build}=require('./package.json'),{version}=require('../package.json');
+const bundleVersion=version.split('-')[0];
+module.exports={...build,extraMetadata:{version},mac:{...build.mac,bundleVersion,bundleShortVersion:bundleVersion}};
