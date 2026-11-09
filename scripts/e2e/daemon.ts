@@ -1,5 +1,7 @@
 /** Test-only composition: production daemon, storage and services; no real accounts. */
 import assert from 'node:assert/strict';
+import {effectFixtures} from './effects.ts';
+import {inheritedDaemonSecret} from '../../src/daemon-auth.ts';
 import {readFile,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createWorkbench} from '../../src/server.ts';
@@ -13,7 +15,7 @@ import {MembersService} from '../../src/members.ts';
 import {LoginConnections} from '../../src/connection-logins.ts';
 import type {Mission} from '../../src/domain.ts';
 
-const config=JSON.parse(await readFile(process.argv[2]!,'utf8'));
+const config=JSON.parse(await readFile((process.argv[2]??process.env.MASSION_E2E_CONFIG)!,'utf8'));
 const rpc=createHttpRpcTransport(config.database);await initializeSurrealSchema(rpc);
 const store=new SurrealStore<Mission>(rpc),artifacts=new TextArtifactStore(join(process.cwd(),'artifacts'));
 const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
@@ -50,11 +52,13 @@ if(config.mode==='configured'&&!await store.load('intake')){
 }
 const logins=new LoginConnections(async input=>({spawned:true,exitCode:input.command==='codex'&&config.mode==='found'?0:1,signal:null,stdout:input.command==='claude'?'{"loggedIn":false}':'',stderr:input.command==='codex'?(config.mode==='found'?'Logged in using ChatGPT':'Not logged in'):'',timedOut:false,aborted:false,overflow:false}));
 const reader=config.restoredBundle?openRestoredArtifacts(await readFile(config.restoredBundle,'utf8'),config.restoredRoot):artifacts;
-const server=createWorkbench(store,process.cwd(),{connections,artifacts:reader,logins,scheduleIntervalMs:0});
-server.listen(0,'127.0.0.1',()=>process.send?.({type:'ready',url:'http://127.0.0.1:'+(server.address() as {port:number}).port}));
+const fixtures=effectFixtures(store,process.cwd());
+const server=createWorkbench(store,process.cwd(),{connections,artifacts:reader,logins,scheduleIntervalMs:0,effectAdapters:fixtures.adapters,effectTimeoutMs:10000,mcp:fixtures.mcp,daemonSecret:inheritedDaemonSecret()});
+if(config.effectScenario)for(const scenario of [config.effectScenario,config.effectScenario+'-lost'])await fixtures.control({type:'propose-effect',scenario},server);
+server.listen(Number(process.env.MASSION_PORT??0),'127.0.0.1',()=>process.send?.({type:'ready',url:'http://127.0.0.1:'+(server.address() as {port:number}).port}));
 process.on('message',async(message:any)=>{
  try{
-  if(message.type!=='propose-member')throw new Error('Unknown test control');
+  if(message.type!=='propose-member'){process.send?.({type:'controlled',result:await fixtures.control(message,server)});return;}
   const mission=(await store.load('intake'))!;
   await new MembersService(store,()=>'intake').propose({topic:'Fixture analysis',workIds:mission.value.works.filter(w=>w.acceptance==='accepted').slice(0,2).map(w=>w.id)});
   process.send?.({type:'proposed'});
