@@ -68,3 +68,20 @@ were not executed. Saved means stored, not authenticated. Expiry requires truste
 host evidence tied to the current credential. Unknown writes require inspection,
 never another effect attempt. Member archive and Work admission do not share a
 cross-aggregate transaction; an already admitted Work retains its original pin.
+
+## Review corrections
+
+The first Codex head review identified two reproduced regressions. Device commands
+now retain the HTTP admission's original feed and recheck it after reading the
+admission, before invocation and before settlement; claim/settlement commits also
+use that feed's storage fence. Replacement at each boundary makes no claim in the
+new database and cannot dispatch from the old admission. Self-made app reconnect
+opens its owning member's conversation, where the existing app decision is read.
+Both tests failed before the fixes; 30 focused device, HTTP and app-surface tests
+then passed, along with typecheck and syntax/copy checks.
+
+The first CI head passed full durable-store verification and all 150 screen/theme
+captures. E2E exposed the browser tooling failure documented in
+[the E9a2 follow-up](../../architecture/e2e-decisions-apps-desktop.md). CI now pins
+the twice-tested browser build while preserving domain restrictions and the
+opaque app sandbox. The complete E2E run remains subject to the new-head CI result.

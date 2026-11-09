@@ -287,3 +287,11 @@ test('a detached app binding control cannot mutate a different selection or a re
  runInContext("settingsApp='different-app'",app.context);await save.fire('click');assert.equal(posted.length,0);
  runInContext("settingsApp='app-github';connectionEpoch++",app.context);await save.fire('click');assert.equal(posted.length,0);
 });
+
+test('a self-made app reconnect opens its owning member conversation',async()=>{
+ const made={...github,id:'app-self',name:'Private notes',origin:'self-made',memberId:'member-juno',credential:{slot:'github-token',state:'expired',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[made],[{id:'member-juno',name:'주노'}]);await settle();await open(app);runInContext("settingsApp='app-self';renderSettings()",app.context);
+ await app.all().find(n=>n.id==='settings-app-reconnect')!.fire('click');await settle();
+ assert.equal(posted.at(-1)!.body.appId,'app-self');assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-juno'));
+ assert.equal(runInContext('chatThread',app.context),'member-juno');
+});

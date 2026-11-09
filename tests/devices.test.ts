@@ -39,3 +39,15 @@ test('device read derives names from admission and preserves offline status with
  assert.equal(view.devices[0]!.decisionId,admission.id);assert.equal(view.devices[0]!.available,true);
  const unavailable=new DevicesService(f.store,f.store,async()=>[admission]);assert.equal((await unavailable.read()).devices[0]!.status,'unavailable');
 });
+
+test('device admission, invocation and settlement cannot cross a database replacement',async()=>{
+ for(const phase of ['admission','invocation','settlement']){
+  const f=fixture(),replacement=new InMemoryStore<any>();let active=f.store;
+  const store=new Proxy(f.store,{get(_target,key){if(key==='commit')return async(input:any)=>{const result=await active.commit(input);if(phase==='invocation'&&input.events[0].type==='claim-device')active=replacement;return result;};const value=Reflect.get(active,key);return typeof value==='function'?value.bind(active):value;}});
+  const admissions=async()=>{if(phase==='admission')active=replacement;return [admission];};
+  f.adapter.connect=async()=>{f.calls.push('connect');if(phase==='settlement')active=replacement;return {status:'connected'};};
+  const service=new DevicesService(store,store,admissions,[f.adapter]);
+  await assert.rejects(service.act({commandId:'connect',deviceId:'laptop',action:'connect'}),/database|feed/i);
+  assert.equal(f.calls.length,phase==='settlement'?1:0,phase);assert.equal(replacement.inspect().length,0,phase);
+ }
+});

@@ -3,6 +3,7 @@ import type {Actor} from './domain.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {HostDrainError} from './runtime-lifetime.ts';
 import {callTool} from './tool-call.ts';
+import {FeedAdmissionError,withAdmissionFeed} from './storage.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
 
 export const DEVICES_ID=ASSISTANT_CONVERSATION_PREFIX+'devices';
@@ -55,26 +56,30 @@ export class DevicesService {
    return {id:r.deviceId!,name:r.deviceName!,agent:r.agentName!,status,available:!!adapter,admitted:d.effect!.answer==='act',decisionId:d.id};
   }));return {revision:state?.revision??0,devices};
  }
- async act(input:unknown):Promise<CommitResult<DevicesState>>{
+ async act(input:unknown,expectedFeed?:string):Promise<CommitResult<DevicesState>>{
   ensure(exact(input,['commandId','deviceId','action'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.deviceId)&&['connect','disconnect'].includes(input.action),'Exact device command required');
-  const value=structuredClone(input),task=this.#act(value as {commandId:string;deviceId:string;action:'connect'|'disconnect'});this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}
+  const value=structuredClone(input),task=this.#act(value as {commandId:string;deviceId:string;action:'connect'|'disconnect'},expectedFeed);this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}
  }
- async #act(input:{commandId:string;deviceId:string;action:'connect'|'disconnect'}):Promise<CommitResult<DevicesState>>{
+ async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
+ async #act(input:{commandId:string;deviceId:string;action:'connect'|'disconnect'},expectedFeed?:string):Promise<CommitResult<DevicesState>>{
+  const feedId=expectedFeed??(await this.#store.readState()).feedId;await this.#feed(feedId);
   const d=(await this.#known()).find(d=>d.effect!.request.deviceId===input.deviceId);ensure(d?.effect?.answer==='act','Existing external-member admission decision required','denied');
-  const adapter=this.#adapters.find(a=>a.id===d.effect!.request.adapterId);ensure(adapter,'Device adapter unavailable','denied');
+  await this.#feed(feedId);const adapter=this.#adapters.find(a=>a.id===d.effect!.request.adapterId);ensure(adapter,'Device adapter unavailable','denied');
   const operation:DeviceOperation={id:input.commandId,deviceId:input.deviceId,adapterId:adapter.id,decisionId:d.id,action:input.action,status:'unknown'};
   // The claim is durable before a single adapter invocation.
-  const command:DevicesCommand={type:'claim-device',operation},claim=await this.#dispatch(input.commandId,command,true);
-  if(claim.status!=='committed')return claim;
+  const command:DevicesCommand={type:'claim-device',operation},claim=await this.#dispatch(feedId,input.commandId,command,true);
+  if(claim.status!=='committed')return claim;await this.#feed(feedId);
   let status:DeviceStatus='unknown';try{const observed=await callTool(signal=>adapter[input.action]({deviceId:input.deviceId,commandId:input.commandId,signal}),{signal:this.#stop.signal});if(['connected','offline'].includes(observed.status))status=observed.status;}catch{}
-  return this.#dispatch('assistant-device:'+hash(input.commandId).slice(0,32),{type:'settle-device',operationId:input.commandId,status},false);
+  await this.#feed(feedId);return this.#dispatch(feedId,'assistant-device:'+hash(input.commandId).slice(0,32),{type:'settle-device',operationId:input.commandId,status},false);
  }
- async #dispatch(commandId:string,command:DevicesCommand,owner:boolean):Promise<CommitResult<DevicesState>>{
+ async #dispatch(feedId:string,commandId:string,command:DevicesCommand,owner:boolean):Promise<CommitResult<DevicesState>>{
+  return withAdmissionFeed(feedId,async()=>{
   const actor:Actor={id:owner?'local-owner':'device-host',roles:[owner?'owner':'assistant']},identity={id:DEVICES_ID,commandId,fingerprint:hash({actorId:actor.id,command})},store=owner?this.#owner:this.#store;
   for(let attempt=0;attempt<3;attempt++){
-   const snapshot=await store.load(DEVICES_ID),prior=await store.lookupOperation(identity);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device command identity conflict','conflict');return prior;}
+   const snapshot=await store.load(DEVICES_ID),prior=await store.lookupOperation(identity);await this.#feed(feedId);if(prior.status!=='unknown'){ensure(prior.status!=='conflict'||prior.reason!=='idempotency','Device command identity conflict','conflict');return prior;}
    if(owner&&this.#stop.signal.aborted)throw new HostDrainError();const result=await store.commit({...identity,expectedRevision:snapshot?.revision??0,...applyDevices(snapshot?.value??null,command,actor),outbox:[]});if(result.status!=='conflict')return result;
   }return {status:'conflict',revision:(await store.load(DEVICES_ID))?.revision??0,reason:'revision'};
+  });
  }
  beginDrain(){this.#stop.abort();}
  async drain(){this.beginDrain();await Promise.allSettled([...this.#active]);}

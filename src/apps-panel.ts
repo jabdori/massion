@@ -138,7 +138,7 @@ function settingsAppView(a){
  if(a.credential){
   const credential=a.credential,status=['saved','expired','missing'].includes(credential.state)?copy('ui.apps.credential-'+credential.state):copy('conversation.text.01'),token=permissions[3];
   token.children[1].textContent=appsJoin((p.secrets||[]).map(s=>s.label+(s.slot===credential.slot?' · '+status:'')));
-  const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;chatOpenThread('');await readChat();},'set-side');
+  const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;const memberId=a.origin==='self-made'?a.memberId:'';chatOpenThread(memberId||'',chatMembers().find(m=>m.id===memberId)?.name||'');await readChat();},'set-side');
   reconnect.id='settings-app-reconnect';reconnect.disabled=settingsLifecycleLocked('app:'+a.id)||credential.state==='unknown'||!current();token.append(reconnect);
  }
  const adds=[[copy('ui.panel.member-templates'),appsJoin(c.templates)],[copy('settings.heading.07'),appsJoin(c.skills)],[copy('settings.heading.09'),appsJoin(c.procedures)],[copy('ui.panel.tools'),appsJoin(c.tools)],[copy('ui.panel.screens'),appsJoin(screens)]].map(([l,v])=>settingsPair(l,v));
