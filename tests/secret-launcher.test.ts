@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {InMemorySecretSlots,KeychainSecretSlots} from '../src/secret-slots.ts';
-import {CliLauncher} from '../src/cli-launcher.ts';
+import {CliLauncher,cliSandboxProfile} from '../src/cli-launcher.ts';
 import type {LauncherPolicy} from '../src/cli-launcher.ts';
 import type {CliInvocation,CliResult} from '../src/cli-agent-providers.ts';
 import {compileHostBindings,parseHostManifest} from '../src/host-connections.ts';
@@ -88,4 +88,27 @@ test('real macOS signature verification refuses an untrusted team before reading
  const secrets=new InMemorySecretSlots();let reads=0;secrets.read=async()=>{reads++;return 'fixture';};
  const launcher=new CliLauncher({...policy(),command:'/bin/echo',args:['read']},secrets);
  assert.deepEqual(await launcher.launch('bad-team',{...invocation(['read']),command:'/bin/echo'}),{...ok(),spawned:false,exitCode:null});assert.equal(reads,0);
+});
+
+
+test('generated CLI sandbox denies keychain IPC and security execution even with declared Mach services',()=>{
+ const empty=cliSandboxProfile(policy(),'/private/tmp/massion-cli-fixture','/Users/fixture');
+ assert.ok(empty.includes('(deny default)'));assert.ok(!empty.includes('(allow mach-lookup)'));
+ assert.ok(!empty.includes('(allow mach-lookup '),'no service is implicitly allowed');
+ const profile=cliSandboxProfile({...policy(),machServices:['com.apple.fixture.required']},'/private/tmp/massion-cli-fixture','/Users/fixture');
+ assert.ok(profile.includes('(allow mach-lookup (global-name "com.apple.fixture.required"))'));
+ assert.ok(profile.includes('(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))'));
+ assert.ok(profile.includes('(deny process-exec (literal "/usr/bin/security"))'));
+ for(const name of ['com.apple.securityd','com.apple.securityd.xpc','com.apple.SecurityServer','com.apple.SecurityServer.test','com.apple.*','bad"service'])assert.throws(()=>cliSandboxProfile({...policy(),machServices:[name]},'/private/tmp/massion-cli-fixture','/Users/fixture'));
+});
+
+test('keychain creation removes creator trust and permits only an explicitly named host',async()=>{
+ const seen:CliInvocation[]=[],runner:import('../src/cli-agent-providers.ts').CliRunner=async call=>{seen.push(call);return ok();},sentinel=randomUUID();
+ await new KeychainSecretSlots(runner,'darwin').set(slot,sentinel);
+ assert.ok(seen[0]!.stdin.includes('-T ""'),'default ACL must not trust the security CLI or the Node interpreter');
+ const host='/Applications/Massion App.app/Contents/MacOS/Massion';
+ await new KeychainSecretSlots(runner,'darwin',host).set(slot,sentinel);
+ assert.ok(seen[1]!.stdin.includes('-T '+JSON.stringify(host)));
+ for(const call of seen){assert.ok(!call.stdin.includes('-A'));assert.ok(!call.stdin.includes('-T "/usr/bin/security"'));assert.ok(!call.stdin.includes('-T '+JSON.stringify(process.execPath)));assert.ok(!JSON.stringify(call.args).includes(sentinel));}
+ for(const host of ['/usr/bin/security',process.execPath,'relative/host','/host\nextra'])assert.throws(()=>new KeychainSecretSlots(runner,'darwin',host));
 });

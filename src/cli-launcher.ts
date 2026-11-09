@@ -11,7 +11,7 @@ import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 export interface LauncherPolicy {
  command:string;args:readonly (string|RegExp)[];environment:readonly string[];
  secrets:Readonly<Record<string,SecretSlot>>;readOnly:boolean;
- signature:{teamId:string;identifier:string};
+ signature:{teamId:string;identifier:string};machServices?:readonly string[];
 }
 type Prepared=()=>void|CliInvocation|Promise<void|CliInvocation>;
 interface LauncherAdapters {runner?:CliRunner;prepare?:(policy:LauncherPolicy,call:CliInvocation)=>Promise<Prepared>}
@@ -20,17 +20,24 @@ const empty=(change:Partial<CliResult>={}):CliResult=>({spawned:false,exitCode:n
 const stamp=(path:string)=>{const s=lstatSync(path,{bigint:true});if(!s.isFile()||s.isSymbolicLink())throw unavailable();return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');};
 const dangerousEnvironment=/^(?:NODE_OPTIONS|NODE_PATH|DYLD_.*|LD_.*|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/;
 
+export function cliSandboxProfile(policy:LauncherPolicy,cwd:string,home:string):string{
+ const quoted=(path:string)=>JSON.stringify(path),services=policy.machServices??[];
+ if(!Array.isArray(services)||services.length>32||services.some(name=>typeof name!=='string'||!/^[a-zA-Z0-9._-]{1,128}$/.test(name)||/^com\.apple\.(securityd|SecurityServer)/i.test(name)))throw unavailable();
+ const mach=services.map(name=>`(allow mach-lookup (global-name ${quoted(name)}))`).join('');
+ const sensitive=['/Library/Keychains',home+'/.ssh',home+'/.aws',home+'/.azure',home+'/.config/gcloud',home+'/Library/Keychains',home+'/Library/Application Support'];
+ return `(version 1)(deny default)(allow process-exec)(allow process-fork)(allow sysctl-read)${mach}(deny mach-lookup (global-name-prefix "com.apple.securityd") (global-name-prefix "com.apple.SecurityServer"))(deny process-exec (literal "/usr/bin/security"))(allow network-outbound)(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/opt/homebrew") (subpath ${quoted(cwd)}) (literal ${quoted(policy.command)}))(allow file-write* (subpath ${quoted(cwd)}) (literal "/dev/null"))(deny file-read* ${sensitive.map(p=>`(subpath ${quoted(p)})`).join(' ')})`;
+}
+
 async function prepareMac(policy:LauncherPolicy,call:CliInvocation):Promise<Prepared>{
  if(process.platform!=='darwin'||!isAbsolute(policy.command)||await realpath(policy.command)!==policy.command)throw unavailable();
  const before=stamp(policy.command);
  const requirement=`anchor apple generic and certificate leaf[subject.OU] = "${policy.signature.teamId}" and identifier "${policy.signature.identifier}"`;
  const checked=await spawnCliRunner({command:'/usr/bin/codesign',args:['--verify','--strict','-R',requirement,policy.command],stdin:'',cwd:'/',env:{},signal:call.signal,timeoutMs:5000,maxOutputBytes:4096});
  if(!checked.spawned||checked.exitCode!==0||checked.timedOut||checked.aborted||checked.overflow)throw unavailable();
- const cwd=await realpath(call.cwd),home=await realpath(homedir()),quoted=(path:string)=>JSON.stringify(path);
+ const cwd=await realpath(call.cwd),home=await realpath(homedir());
  const directory=lstatSync(cwd);
  if(dirname(cwd)!==await realpath(tmpdir())||!basename(cwd).startsWith('massion-cli-')||!directory.isDirectory()||directory.uid!==process.getuid?.()||(directory.mode&0o077)!==0)throw unavailable();
- const sensitive=['/Library/Keychains',home+'/.ssh',home+'/.aws',home+'/.azure',home+'/.config/gcloud',home+'/Library/Keychains',home+'/Library/Application Support'];
- const profile=`(version 1)(deny default)(allow process-exec)(allow process-fork)(allow sysctl-read)(allow mach-lookup)(allow network-outbound)(allow file-read* (subpath "/System") (subpath "/usr") (subpath "/opt/homebrew") (subpath ${quoted(cwd)}) (literal ${quoted(policy.command)}))(allow file-write* (subpath ${quoted(cwd)}) (literal "/dev/null"))(deny file-read* ${sensitive.map(p=>`(subpath ${quoted(p)})`).join(' ')})`;
+ const profile=cliSandboxProfile(policy,cwd,home);
  return ()=>{if(stamp(policy.command)!==before)throw unavailable();return {...call,command:'/usr/bin/sandbox-exec',args:['-p',profile,policy.command,...call.args]};};
 }
 

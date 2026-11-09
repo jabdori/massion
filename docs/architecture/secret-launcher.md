@@ -103,3 +103,35 @@ split stdout, generic errors, journal/Record/artifact/client responses, overlapp
 launches and restart no-resend. Real macOS codesign rejects the wrong team before
 slot resolution. Keychain mutations and successful vendor-signed sandbox launches
 remain mocked; CI owns the full suite and screen contracts per the owner's budget.
+
+## Keychain isolation correction (GLM review)
+
+The generated CLI sandbox defaults to no Mach service lookups. A host policy may
+name only exact required services in `machServices`; wildcard names and the
+`com.apple.securityd*` / `com.apple.SecurityServer*` families are refused. The
+profile also explicitly denies both keychain service families and execution of
+`/usr/bin/security`. File-read denial alone does not isolate the keychain: its
+secrets are served over Mach IPC. Explicit service grants must be justified per
+packaged tool; no service is enabled just to suppress a sandbox error.
+
+Keychain writes now always supply an explicit `-T` ACL. Without an explicitly
+configured dedicated host executable the trusted list is empty (`-T ""`), so
+creation never silently trusts `/usr/bin/security` or the generic Node runtime.
+The third `KeychainSecretSlots` constructor argument may name the dedicated host;
+paths are bounded, validated and quoted for the security command interpreter.
+This is host configuration, never an app/client-supplied path. Existing keychain
+items are not automatically migrated or inspected by this change.
+
+The current security-CLI read/update path may require OS approval under this
+restricted ACL. Do not grant persistent trust to the generic security CLI to
+restore unattended access: packaging must provide a dedicated signed host with
+native keychain access through the existing SecretSlots boundary. No fallback
+widens the ACL. Restricting ACLs does not turn the generic Node process into a
+uniquely identified native host.
+
+Regression tests assert the generated production profile and captured keychain
+commands (default empty ACL, explicitly selected host, no broad trust). They make
+no keychain API calls or mutations, create no keychain and trigger no GUI prompts.
+Actual macOS keychain/IPC enforcement and signed host interoperability remain
+unverified. Any future live test must use a disposable explicit keychain, suppress
+all interaction, and delete it; never use the login keychain.

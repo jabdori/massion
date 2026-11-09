@@ -144,3 +144,10 @@ trust a PATH binary. Without that binding it refuses execution. Fixture runners
 remain explicitly injected. The desktop packager must provide audited vendor
 identities and permitted subscription authentication before enabling these
 connections. See [secret launcher boundaries](secret-launcher.md).
+
+Keychain ACLs do not implicitly trust the `security` tool. Slot creation defaults
+to an empty trusted-app list; a dedicated host executable can be configured in
+`KeychainSecretSlots`. Reading/updating through the security CLI may require OS
+approval. Unattended desktop operation needs native keychain access in the
+explicitly trusted signed host, not blanket trust for `security` or Node. See the
+[keychain isolation correction](secret-launcher.md#keychain-isolation-correction-glm-review).
