@@ -10,6 +10,7 @@ import {join} from 'node:path';
 import {ConfiguredTextRuntime,TEXT_REVIEW_ORACLE} from '../src/configured-runtime.ts';
 import type {ConfiguredRuntimeOptions} from '../src/configured-runtime.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
+import {BinaryArtifactStore} from '../src/binary-artifacts.ts';
 import {OpenAICompatibleChatAdapter} from '../src/http-provider.ts';
 import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchema} from '../src/storage.ts';
 import type {Store} from '../src/storage.ts';
@@ -20,16 +21,16 @@ import type {Mission} from '../src/domain.ts';
 import {createWorkbench} from '../src/server.ts';
 
 const artifactText='The review has two open blockers: missing coverage and an unresolved dependency.';
-interface MockOptions {reviewChecks?:unknown;outputTokens?:number;forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
+interface MockOptions {reviewChecks?:unknown;outputTokens?:number;binaryOutput?:string;reviewQuote?:string;forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
 async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=new InMemoryStore<Mission>()){
  const calls:{model:string;prompt:any;correlation:string}[]=[];let release!:(value?:unknown)=>void;const held=new Promise(resolve=>{release=resolve;});
  const modelServer=createServer(async(req,res)=>{let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);calls.push({model:body.model,prompt,correlation:String(req.headers['x-client-request-id'])});
   if(body.model==='executor-v1'&&options.holdExecutor)await held;
   if(body.model==='executor-v1'&&options.unknownExecutor){req.socket.destroy();return;}
-  let content=artifactText;
+  let content=options.binaryOutput??artifactText;
   if(body.model==='verifier-v1'){
    if(options.tamperBeforeReview)await options.tamperBeforeReview();
-   content=JSON.stringify({artifactSha256:options.forgeHash?'0'.repeat(64):prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:options.failReview?'failed':'passed',checks:options.reviewChecks??[{criterion:prompt.criteria.description,passed:!options.failReview,quote:'two open blockers',reason:options.failReview?'Mock independent review found inadequate detail':'Mock review confirms the bounded acceptance claim'}]});
+   content=JSON.stringify({artifactSha256:options.forgeHash?'0'.repeat(64):prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:options.failReview?'failed':'passed',checks:options.reviewChecks??[{criterion:prompt.criteria.description,passed:!options.failReview,quote:options.reviewQuote??'two open blockers',reason:options.failReview?'Mock independent review found inadequate detail':'Mock review confirms the bounded acceptance claim'}]});
   }
   res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'chatcmpl-mock',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content,refusal:null}}],usage:{prompt_tokens:20,completion_tokens:options.outputTokens??5,total_tokens:20+(options.outputTokens??5)}}));
  });modelServer.listen(0,'127.0.0.1');await once(modelServer,'listening');const address=modelServer.address();assert.ok(address&&typeof address==='object');const endpoint=`http://127.0.0.1:${address.port}/v1/chat/completions`;
@@ -205,6 +206,34 @@ test('missing pinned memory blocks configured run before intent, budget or mock 
  await s.store.commit({id:s.missionId,expectedRevision:snapshot.revision,commandId:'corrupt-fixture-pin',fingerprint:'controlled-missing-pin-fixture',value,events:[],outbox:[]});
  const before=(await s.store.load(s.missionId))!;const result=await s.product.run(s.missionId,s.workId,'never-dispatched',before.revision);
  assert.equal(result.status,'blocked');assert.match(result.reason??'',/missing/);assert.equal(s.calls.length,0);assert.deepEqual(await s.store.load(s.missionId),before);
+});
+
+
+test('requested PDF and PNG bytes pass independent review on decoded file content',async t=>{
+ for(const output of [{format:'massion-result/v1',kind:'application/pdf',text:artifactText},{format:'massion-result/v1',kind:'image/png',width:1,height:1,pixels:[255,0,0]}]){
+  const s=await setup(t,{binaryOutput:JSON.stringify(output),reviewQuote:output.kind==='image/png'?'#ff0000':'two open blockers'});await s.admit();
+  const result=await s.product.run(s.missionId,s.workId,'binary-run',2),w=result.snapshot.value.works[0]!;
+  assert.equal(w.acceptance,'accepted');assert.equal(w.artifact?.kind,output.kind);assert.ok(w.record?.artifactSnapshot);assert.ok(w.verdict!.predicates?.length);assert.deepEqual(w.record!.verdict.predicates,w.verdict!.predicates);
+  const reviewed=s.calls.find(c=>c.model==='verifier-v1')!.prompt.artifact;
+  assert.equal(reviewed.kind,output.kind);assert.equal(reviewed.sha256,w.artifact!.sha256);assert.match(reviewed.content,output.kind==='image/png'?/#ff0000/:/two open blockers/);
+  const binary=new BinaryArtifactStore(join(s.config.artifacts.root,'binary-results')),server=createWorkbench(s.store,s.root,{scheduleIntervalMs:0,artifacts:{read:a=>s.config.artifacts.read(a),readBytes:a=>binary.readBytes(a)}});
+  await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));t.after(()=>server.close());
+  const before=s.store instanceof InMemoryStore?s.store.inspect():null,url='http://127.0.0.1:'+(server.address() as {port:number}).port+'/missions/'+s.missionId+'/record-binary-artifact?work='+s.workId+'&record='+w.record!.id+'&version=1&sha256='+w.artifact!.sha256;
+  const response=await fetch(url),body=await response.json() as {encoding:string;content:string;artifact:{kind:string}};
+  assert.equal(response.status,200);assert.equal(body.encoding,'base64');assert.equal(body.artifact.kind,output.kind);assert.deepEqual(Buffer.from(body.content,'base64'),await binary.readBytes(w.artifact!));if(s.store instanceof InMemoryStore)assert.deepEqual(s.store.inspect(),before);
+ }
+});
+
+test('malformed binary output is blocked before file effects and never becomes accepted text',async t=>{
+ for(const output of [{format:'massion-result/v1',kind:'text/html',text:'<script>1</script>'},{format:'massion-result/v1',kind:'image/png',width:1,height:1,pixels:[256,0,0]},{format:'massion-result/v1',kind:'application/pdf',text:'한글'}]){
+  const s=await setup(t,{binaryOutput:JSON.stringify(output)});await s.admit();const result=await s.product.run(s.missionId,s.workId,'invalid-binary',2),w=result.snapshot.value.works[0]!;
+  assert.equal(result.status,'blocked');assert.equal(w.record,undefined);assert.equal(w.artifact,undefined);assert.equal(s.calls.length,1);assert.equal(w.effects.some(e=>e.id==='invalid-binary:artifact'),false);
+ }
+});
+
+test('a binary first result preserves the parent ownership boundary for later text output',async t=>{
+ const s=await setup(t,{binaryOutput:JSON.stringify({format:'massion-result/v1',kind:'application/pdf',text:artifactText})});await s.admit();const result=await s.product.run(s.missionId,s.workId,'binary-first',2);assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');
+ const text=await s.config.artifacts.write('later-text',1,'A later text result');assert.equal(await s.config.artifacts.read(text),'A later text result');
 });
 
 for(const checks of [[],[{criterion:'Wrong criterion',passed:true,quote:'two open blockers',reason:'Wrong binding'}],[{criterion:'Identify two open blockers',passed:true,quote:'not in the artifact',reason:'Invented quote'}]])test('invalid check predicates never become detailed pass evidence: '+JSON.stringify(checks),async t=>{

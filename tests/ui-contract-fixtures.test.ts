@@ -51,7 +51,9 @@ test('started Work snapshots have assigned executors and consistent task, attemp
    if(work.acceptance==='accepted'){
     assert.equal(work.verdict?.status,'passed',screen);assert.ok(work.artifact,screen);assert.ok(work.record,screen);
     const {checksum,...record}=work.record!;assert.equal(checksum,hash(record),screen);assert.equal(record.evidenceClass,'fixture',screen);
-    const path='/missions/intake/record-artifact?work='+work.id+'&record='+record.id+'&version=1&sha256='+record.artifact.sha256;
+    const binary=record.artifact.kind!=='text',encode=binary?encodeURIComponent:(value:string)=>value;
+    const path='/missions/intake/'+(binary?'record-binary-artifact':'record-artifact')+'?work='+encode(work.id)+'&record='+encode(record.id)+'&version=1&sha256='+record.artifact.sha256;
+    assert.ok(f.routes[path],screen+' exact accepted route: '+path);
     const reply=f.routes[path]!.body as {artifact:{id:string;sha256:string};criteriaVersion:number;recordChecksum:string};
     assert.equal(reply.artifact?.id,record.artifact.id,screen);assert.equal(reply.criteriaVersion,record.criteria.version,screen);assert.equal(reply.recordChecksum,checksum,screen);
    }
@@ -89,7 +91,7 @@ test('the host serves the real page and isolated deterministic screen responses 
  assert.deepEqual(await (await fetch(a.url+'__fixture')).json(),await loadFixture('B17'));
  const full=await (await fetch(a.url+'assistant/schedules')).json();
  const empty=await (await fetch(b.url+'assistant/schedules')).json();
- assert.equal(full.schedules.length,1);assert.deepEqual(empty.schedules,[]);
+ assert.equal(full.schedules.length,4);assert.deepEqual(empty.schedules,[]);
  assert.deepEqual(await (await fetch(a.url+'assistant/schedules')).json(),full);
  const loaded=await loadFixture('B17');loaded.gaps.push('Local mutation');
  assert.ok(!(await loadFixture('B17')).gaps.includes('Local mutation'));

@@ -67,3 +67,12 @@ test('moderation quotes keep Unicode boundaries so optional shadow calls cannot 
  const m=apply(seed(),open,host).value,w=m.works[0]!;w.room!.messages[0]!.text='a'.repeat(2047)+'😀';
  const input=roomModerationInput(w,1,2);assert.doesNotThrow(()=>buildQuestion(input));assert.equal(input.quotes[0]!.quoted,'a'.repeat(2047));
 });
+
+test('binary room evidence retains exact bytes and refuses substituted review projections',async()=>{
+ const {producePdf,binaryArtifactText}=await import('../src/binary-artifacts.ts'),bytes=producePdf('Two open blockers.'),m=seed(),w=m.works[0]!;
+ w.artifact={...w.artifact!,kind:'application/pdf',sha256:createHash('sha256').update(bytes).digest('hex')};
+ const command={...open,content:binaryArtifactText('application/pdf',bytes),artifactBase64:bytes.toString('base64')} as Command;
+ const opened=apply(m,command,host).value;assert.equal(opened.works[0]!.room!.artifact.base64,bytes.toString('base64'));
+ for(const changed of [{...command,content:'Forged text'},{...command,artifactBase64:bytes.toString('base64')+'!'},{...command,artifactBase64:producePdf('Different bytes').toString('base64')}])assert.throws(()=>apply(m,changed as Command,host),/Room/);
+ assert.throws(()=>apply(seed(),command,host),/Room/);
+});

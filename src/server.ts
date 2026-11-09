@@ -26,7 +26,8 @@ import {AssistantService} from './assistant-service.ts';
 import {LoginConnections} from './connection-logins.ts';
 import {copy} from './ui-copy.ts';
 import {MembersService} from './members.ts';
-import {SchedulesService} from './schedules.ts';
+import {SchedulesService,scheduleWorkProducer} from './schedules.ts';
+import {githubReviews,readGithubReviewMissions} from './github-review.ts';
 import {PermissionsService} from './permissions.ts';
 import {DECISION_PREFIX,SkillsService} from './skills.ts';
 import {AppsService,DECISION_PREFIX as APP_DECISION_PREFIX} from './apps.ts';
@@ -39,7 +40,8 @@ import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from '
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import {loadHostStartup,createHostConnections} from './host-connections.ts';
-import {RecordArtifactError} from './record-artifact.ts';
+import {RecordArtifactError,readBinaryRecordArtifact} from './record-artifact.ts';
+import {BinaryArtifactStore} from './binary-artifacts.ts';
 import type {ArtifactReader} from './record-artifact.ts';
 import {TextArtifactStore} from './text-artifacts.ts';
 /** Loopback-only development workbench. No production authentication or service deployment. */
@@ -94,7 +96,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  // The host scheduler (results-and-schedules.md) writes the briefing from the Representative's conversation read; it stops when the host drains or closes.
  // drain waits for a tick already in flight and reports `unsettled` when any schedule write met an unknown commit, read again once HTTP has closed so a Run now finishing during drain counts, so `drained` means its writes settled.
- let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore),skills=new SkillsService(ownerStore),apps=new AppsService(ownerStore,{network:options.appNetwork,secrets:options.appSecrets,mcp:options.mcp,admit:async()=>{if(draining)throw new HostDrainError();}});const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
+ let ticking:Promise<unknown>|undefined;const permissions=new PermissionsService(ownerStore),skills=new SkillsService(ownerStore),apps=new AppsService(ownerStore,{network:options.appNetwork,secrets:options.appSecrets,mcp:options.mcp,admit:async()=>{if(draining)throw new HostDrainError();}});const schedules=new SchedulesService(store,n=>assistant.read(n),Date.now,ownerStore,scheduleWorkProducer(assistant)),scheduleIntervalMs=options.scheduleIntervalMs??30000,scheduler=scheduleIntervalMs?setInterval(()=>{if(!draining&&!ticking)ticking=schedules.tick().catch(()=>{}).finally(()=>{ticking=undefined;});},scheduleIntervalMs):undefined;scheduler?.unref();
  const memberChat=async(value:unknown)=>{identifier(value,'member identifier');const member=await members.member(value);if(!member)throw new RequestError(404,'Unknown member');let chat=memberChats.get(member.id);if(!chat){chat=new AssistantService(store,product,options.connections,{member:{id:member.id,name:member.name,modelGroup:member.modelGroup},members:async()=>(await members.read()).members,ownerStore});if(draining)chat.beginDrain();memberChats.set(member.id,chat);}return {member,chat};};
  const feed=createProtocolFeed(store);
  const server=createServer(async(req,res)=>{
@@ -169,7 +171,23 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
    if(method==='GET'&&(url.pathname==='/assistant/results'||url.pathname==='/assistant/schedules'||url.pathname==='/assistant/permissions'||url.pathname==='/assistant/skills'||url.pathname==='/assistant/apps')){if([...url.searchParams.keys()].length)throw new RequestError(400,'No query is accepted');const state=await store.readState();send(200,url.pathname==='/assistant/results'?await assistant.results():{feedId:state.feedId,...await (url.pathname==='/assistant/schedules'?schedules:url.pathname==='/assistant/skills'?skills:url.pathname==='/assistant/apps'?apps:permissions).read()});return;}
    // A view runs app code that may call out with a secret: POST with a JSON body, so another site cannot start it without a preflight.
    if(method==='POST'&&url.pathname==='/assistant/apps/connect'){const body=await readBody();callerCommand(body.commandId);const admissionFeed=mutationFeed;const result=await apps.connect(body);if(result.status==='unknown')unsettled=true;if((await store.readState()).feedId!==admissionFeed){send(409,{status:'unknown'});return;}send(result.status==='conflict'?409:200,result);return;}
-   if(method==='POST'&&url.pathname==='/assistant/apps/view'){const body=await readBody();if(Object.keys(body).some(k=>!['app','handler','ref'].includes(k)))throw new RequestError(400,'Only app, handler and an optional ref are accepted');const view=await apps.view({app:body.app,handler:body.handler,...('ref' in body?{ref:body.ref}:{})});if(draining)throw new HostDrainError();send(200,view.frame&&!authenticate?{...view,frame:{url:await appDocuments.publish(view.frame.html)}}:view);return;}
+   if(method==='POST'&&url.pathname==='/assistant/apps/view'){
+    const body=await readBody();if(Object.keys(body).some(k=>!['app','handler','ref'].includes(k)))throw new RequestError(400,'Only app, handler and an optional ref are accepted');
+    const feedId=mutationFeed!,view=await apps.view({app:body.app,handler:body.handler,...('ref' in body?{ref:body.ref}:{})});
+    if(body.app==='app-github'){
+     let missions:Mission[]=[];
+     if(options.catalog){try{missions=await readGithubReviewMissions(store,options.catalog,feedId);}catch(error){if(error instanceof MissionCatalogChangedError)throw new RequestError(409,'Database changed during app read');throw error;}}
+     else{
+      const works=await assistant.works();if(works.feedId!==feedId)throw new RequestError(409,'Database changed during app read');
+      const ids=new Set(works.works.map(w=>w.missionId)),intake=options.connections?.list().representative?.intakeMissionId;if(intake)ids.add(intake);
+      for(const id of ids){const read=await store.readState(id);if(read.feedId!==feedId)throw new RequestError(409,'Database changed during app read');if(read.snapshot)missions.push(read.snapshot.value);}
+     }
+     const reviews=(target:NonNullable<typeof view.github>)=>missions.flatMap(m=>githubReviews(m,target,Date.now()));
+     if(view.github)view.reviews=reviews(view.github);for(const group of view.groups)for(const row of group.rows)if(row.github)row.reviews=reviews(row.github);
+    }
+    if((await store.readState()).feedId!==feedId)throw new RequestError(409,'Database changed during app read');if(draining)throw new HostDrainError();
+    send(200,{...view,feedId,...view.frame&&!authenticate?{frame:{url:await appDocuments.publish(view.frame.html)}}:{}});return;
+   }
    if(method==='POST'&&url.pathname==='/assistant/apps'){const body=await readBody();callerCommand(body.commandId);sendCommit(await apps.act(body),body.action==='install');return;}
    if(method==='POST'&&url.pathname==='/assistant/skills'){const body=await readBody();callerCommand(body.commandId);sendCommit(await skills.act(body));return;}
    if(method==='POST'&&url.pathname==='/assistant/permissions'){const body=await readBody();callerCommand(body.commandId);sendCommit(await permissions.act(body),body.action==='allow');return;}
@@ -293,11 +311,11 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     if([...url.searchParams.keys()].some(k=>!allowed.includes(k)||url.searchParams.getAll(k).length!==1)||!binding||!/^[a-f0-9]{64}$/.test(binding)||!version||!/^\d+$/.test(version)||!Number.isSafeInteger(Number(version))||Number(version)<1||!sha256||!/^[a-f0-9]{64}$/.test(sha256))throw new RequestError(400,'Unique exact rejected candidate query fields required');
     const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const result=await product.readRejectedText(id,workId,{binding,artifactVersion:Number(version),artifactSha256:sha256,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or Work'});return;
    }
-   const recordArtifactRoute=/^\/missions\/([^/]+)\/record-artifact$/.exec(url.pathname);
+   const recordArtifactRoute=/^\/missions\/([^/]+)\/(record-artifact|record-binary-artifact)$/.exec(url.pathname);
    if(method==='GET'&&recordArtifactRoute){
     const id=decodeMissionIdentifier(recordArtifactRoute[1]!),workId=url.searchParams.get('work'),recordId=url.searchParams.get('record'),version=url.searchParams.get('version'),sha256=url.searchParams.get('sha256');identifier(workId,'Work identifier');identifier(recordId,'Record identifier');
     const allowed=['work','record','version','sha256'];if([...url.searchParams.keys()].some(key=>!allowed.includes(key)||url.searchParams.getAll(key).length!==1)||!version||!/^\d+$/.test(version)||!Number.isSafeInteger(Number(version))||Number(version)<1||!sha256||!/^[a-f0-9]{64}$/.test(sha256))throw new RequestError(400,'Unique exact accepted Record/artifact query fields required');
-    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const result=await product.readAcceptedText(id,workId,{recordId,artifactVersion:Number(version),artifactSha256:sha256,...(feedId===undefined?{}:{feedId})});send(result?200:404,result??{error:'Unknown Mission or Work'});return;
+    const feedId=req.headers['x-massion-feed'];if(feedId!==undefined)identifier(feedId,'Feed identity');const input={recordId,artifactVersion:Number(version),artifactSha256:sha256,...(feedId===undefined?{}:{feedId})},result=recordArtifactRoute[2]==='record-binary-artifact'?await readBinaryRecordArtifact(store,options.artifacts,id,workId,input):await product.readAcceptedText(id,workId,input);send(result?200:404,result??{error:'Unknown Mission or Work'});return;
    }
    const budgetHistoryRoute=/^\/missions\/([^/]+)\/work-(budget|intervention)-history$/.exec(url.pathname);
    if(method==='GET'&&budgetHistoryRoute){
@@ -348,7 +366,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const hostStartup=await loadHostStartup(process.argv.slice(2));
  stopping.signal.throwIfAborted();
  const workspaceRoot=resolve('.runtime/workspaces'),artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));
- const artifactReader=hostStartup.restoredArtifacts?await loadRestoredArtifactReader(hostStartup.restoredArtifacts,artifacts):artifacts;
+ const textReader=hostStartup.restoredArtifacts?await loadRestoredArtifactReader(hostStartup.restoredArtifacts,artifacts):artifacts,binaryArtifacts=new BinaryArtifactStore(resolve(artifacts.root,'binary-results'));
+ const artifactReader:ArtifactReader={read:a=>textReader.read(a),readBytes:a=>binaryArtifacts.readBytes(a)};
  const endpoint=process.env.MASSION_SURREAL_RPC??process.env.MASSION_TEST_SURREAL_RPC;
  if(!endpoint)throw new Error('Set MASSION_SURREAL_RPC to an authorized local /rpc endpoint');
  const transport=createHttpRpcTransport({endpoint,namespace:process.env.MASSION_SURREAL_NAMESPACE??process.env.MASSION_TEST_SURREAL_NAMESPACE??'massion',database:process.env.MASSION_SURREAL_DATABASE??process.env.MASSION_TEST_SURREAL_DATABASE??'massion'});

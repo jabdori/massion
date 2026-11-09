@@ -1,0 +1,25 @@
+contract B22 (B22 GitHub) vs /Users/code/orca/workspaces/massion/schedules-results-github/.runtime/r-e-visual-ra-integrated/snapshots/dark/B22.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      text     "{work_title}" -> statictext "GitHub"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      button   "jabdori/massion" -> button "jabdori/massion"
+  ok    sidebar      text     "열림" -> statictext "열림"
+  ok    sidebar      button   "{work_title} #84 오늘 {time}" -> button "feat(assistant): answer the owner and start Representative Work #84 오늘 10:28"
+  ok    sidebar      status   "주노가 보는 중" -> status "주노가 보는 중"
+  ok    sidebar      button   "병합됨" -> button "병합됨"
+  ok    sidebar      link     "앱 설정" -> button "앱 설정"
+  ok    page         heading  "{work_title} #84" -> heading "feat(assistant): answer the owner and start Representative Work #84"
+  ok    page         link     "{work_title}에서 열기" -> link "GitHub에서 열기"
+  ok    page         link     "{work_title} 주노 · 실행 중 읽기 {progress}" -> link "PR #84 검토 주노 · 실행 중 읽기 4/11"
+  ok    page         status   "작업 중" -> status "작업 중"
+  ok    page         text     "{work_title}" -> statictext "+769 −39"
+  ok    page         text     "{time}" -> statictext "10:28"
+  ok    page         text     "{time}" -> statictext "10:28"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":105,"strings":7,"sentences":0,"longest":67} proto {"chars":104,"strings":9,"sentences":0,"longest":63} source visibleTextBudget
+  budget page         app {"chars":706,"strings":48,"sentences":0,"longest":72} proto {"chars":712,"strings":69,"sentences":0,"longest":73} source visibleTextBudget
+PASS: 0 failures, 0 warnings, 20 required elements

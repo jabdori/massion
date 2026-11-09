@@ -17712,5 +17712,323 @@
   "used_in": [
    "B12:page"
   ]
+ },
+ "ui.schedules.weekly-expenses-description": {
+  "ko": "지난주 지출을 항목별로 묶기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.price-watch-description": {
+  "ko": "원하는 값 아래로 내려가면 알림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.monthly-subscriptions-description": {
+  "ko": "이번 달 구독 결제 목록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.meeting-preparation-description": {
+  "ko": "회의 전날 저녁에 자료 모으기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.weekend-groceries-description": {
+  "ko": "금요일마다 장보기 목록 만들기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17-empty:page"
+  ],
+  "provenance": "Approved B17-empty template description"
+ },
+ "ui.schedules.dispatch": {
+  "ko": "예약한 요청입니다. 기존 작업 생성·확인 절차로 맡겨 주세요.\n{request}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:conversation"
+  ],
+  "provenance": "R-E retained owner schedule request"
+ },
+ "ui.schedules.weekly-expenses-title": {
+  "ko": "주간 지출 정리",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-expenses-request": {
+  "ko": "지난주 제공한 지출을 항목별로 묶고 금액마다 출처를 남겨 주세요. 없는 영수증은 만들지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-review-title": {
+  "ko": "매주 다시 보기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-review-request": {
+  "ko": "이전 작업과 제공한 자료를 다시 보고 달라진 내용을 근거와 함께 정리해 주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.price-watch-title": {
+  "ko": "가격 보기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.price-watch-request": {
+  "ko": "제공한 상품과 기준 가격을 확인하고 관찰한 가격만 알려 주세요. 구매하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.monthly-subscriptions-title": {
+  "ko": "월말 구독 점검",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.monthly-subscriptions-request": {
+  "ko": "제공한 내역에서 이번 달 구독 결제를 출처와 함께 정리해 주세요. 구독을 해지하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.meeting-preparation-title": {
+  "ko": "회의 전 자료 모으기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.meeting-preparation-request": {
+  "ko": "제공한 회의 정보를 바탕으로 자료를 모으고 출처를 남겨 주세요. 부족한 정보는 물어봐 주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekend-groceries-title": {
+  "ko": "주말 장보기 목록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekend-groceries-request": {
+  "ko": "제공한 계획과 선호에 맞춰 장보기 목록을 만들어 주세요. 주문하지 마세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.weekly-cycle": {
+  "ko": "매주 {weekday} {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.month-end-cycle": {
+  "ko": "매월 마지막 날 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.once-cycle": {
+  "ko": "{date} {time} 한 번",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.work-run": {
+  "ko": "작업 {count}개 맡김",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.work-unavailable": {
+  "ko": "작업을 맡기지 못함",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.schedules.not-resent": {
+  "ko": "다시 보내지 않음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page",
+   "B17-empty:page"
+  ],
+  "provenance": "R-E owner-created schedule template"
+ },
+ "ui.apps.commits": {
+  "ko": "커밋 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "B22 commit history"
+ },
+ "ui.apps.reviewing": {
+  "ko": "{member}가 보는 중",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ],
+  "provenance": "B22 review binding, parameterized assignee"
+ },
+ "ui.apps.active-review": {
+  "ko": "{work_title} {member} · 실행 중 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "Actual Work progress"
+ },
+ "ui.apps.reading-review": {
+  "ko": "{work_title} {member} · 실행 중 읽기 {progress}",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "B22 named reading steps"
+ },
+ "ui.apps.bind-review": {
+  "ko": "이 작업에 연결",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ],
+  "provenance": "R-E explicit exact-head source selection"
+ },
+ "ui.apps.review-bound": {
+  "ko": "검토 자료 연결됨",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B22-room:pane"
+  ],
+  "provenance": "R-E source receipt"
  }
 }

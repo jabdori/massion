@@ -28,9 +28,9 @@ without substituting the cycle time for a separately stored next-run instant.
 
 ## Missing check status (A16)
 
-The bundled GitHub handler reads only pull requests and changed files:
+The bundled GitHub handler reads pull requests, changed files and commit history:
 [`src/app-catalog.ts:10–12`](../../../src/app-catalog.ts#L10). Its item view emits
-`Changes` and file rows; it never reads check runs/statuses and never emits a
+`Changes`, file rows, external identity and commits; it never reads check runs/statuses and never emits a
 check verdict. The host's strict [`AppView`](../../../src/apps.ts#L18) validation
 [`checkView`](../../../src/app-sandbox.ts#L18) also has no typed check-status
 field. Therefore the `verify 통과` check chip remains absent, with this explicit
@@ -54,3 +54,6 @@ proof that the PR checks passed.
    event; all replacement rows retain the filter and no command is sent.
 
 Both regressions were observed failing before the fixes and passing afterward.
+
+
+R-E visual follow-up: the installed handler still has no check-runs/statuses request or typed check-status field. The missing `verify 통과` fact is the same A16 capability gap, not evidence inferred from an active/accepted review Work. No stale allow-list occurrence is added for this optional contract text; the existing source-backed reason remains here.

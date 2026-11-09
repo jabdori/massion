@@ -1,0 +1,11 @@
+{
+  "flow": "GitHub PR 84 -> PR 83 -> PR 84 -> current Work tab -> owner binds exact head",
+  "pin": {
+    "format": "github-review/v1",
+    "repository": "jabdori/massion",
+    "number": 84,
+    "headSha": "cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66",
+    "url": "https://github.com/jabdori/massion/pull/84"
+  },
+  "noRunStarted": true
+}

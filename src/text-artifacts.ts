@@ -22,7 +22,7 @@ const SHA256 = /^[a-f0-9]{64}$/;
 const MARKER_LIMIT = 2_048;
 type Identity = { device: string; inode: string; birthtime: string };
 type Marker = {
-  schema: typeof SCHEMA;
+  schema: string;
   kind: 'root' | 'work';
   directory: Identity;
   storeId: string;
@@ -151,20 +151,25 @@ async function serialized<T>(path: string, operation: () => Promise<T>): Promise
 }
 
 /** Dedicated marked root, separate from the controlled fixture workspace. */
-export class TextArtifactStore {
+export class ArtifactByteStore {
   readonly root: string;
   readonly maxBytes: number;
   private rootMarker?: Marker;
   private readonly relocated = new Map<string, Artifact>();
   private readonly workMarkers = new Map<string, Marker>();
 
-  constructor(root: string, maxBytes = 32_768, originalArtifacts: readonly Artifact[] = []) {
+  private readonly formats: Readonly<Record<string, string>>;
+  private readonly label: string;
+
+  constructor(root: string, maxBytes: number, formats: Readonly<Record<string, string>>, label: string, originalArtifacts: readonly Artifact[] = []) {
+    this.formats = { ...formats };
+    this.label = label;
     this.root = absolute(root);
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes >= Number.MAX_SAFE_INTEGER) fail('maxBytes must be a positive safe byte bound');
     this.maxBytes = maxBytes;
     for (const artifact of originalArtifacts) {
       const pinned = { ...artifact };
-      if (pinned.kind !== 'text' || !/^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):text$/.test(pinned.id) ||
+      if (!Object.hasOwn(this.formats, pinned.kind) || !/^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):([a-z]+)$/.test(pinned.id) || !pinned.id.endsWith(':' + this.formats[pinned.kind]) ||
           !SHA256.test(pinned.sha256) || absolute(pinned.path) !== pinned.path) fail('invalid relocation descriptor');
       validVersion(pinned.version);
       const key = JSON.stringify([pinned.id, pinned.version, pinned.sha256, pinned.path, pinned.kind]);
@@ -176,7 +181,7 @@ export class TextArtifactStore {
     const pinned = kind === 'root' ? this.rootMarker : this.workMarkers.get(workId!);
     const current = await directory(path, create && !pinned);
     if (pinned && !sameIdentity(pinned.directory, current)) fail('owned directory was replaced');
-    const markerPath = join(path, kind === 'root' ? ROOT_MARKER : WORK_MARKER);
+    const markerPath = join(path, (kind === 'root' ? ROOT_MARKER : WORK_MARKER).replace('text', this.label));
     let exists = true;
     try { await lstat(markerPath); }
     catch (error) { if (!errno(error, 'ENOENT')) throw error; exists = false; }
@@ -191,7 +196,7 @@ export class TextArtifactStore {
         return this.marker(path, kind, create, workId);
       }
       const marker: Marker = {
-        schema: SCHEMA, kind, directory: current,
+        schema: SCHEMA.replace('text', this.label), kind, directory: current,
         storeId: kind === 'root' ? randomUUID() : this.rootMarker!.storeId,
         ...(kind === 'work' ? { workId } : {}),
       };
@@ -205,7 +210,7 @@ export class TextArtifactStore {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fail('invalid ownership marker');
     const marker = parsed as Marker;
     const expectedKeys = kind === 'root' ? ['directory', 'kind', 'schema', 'storeId'] : ['directory', 'kind', 'schema', 'storeId', 'workId'];
-    if (Object.keys(marker).sort().join(',') !== expectedKeys.join(',') || marker.schema !== SCHEMA || marker.kind !== kind ||
+    if (Object.keys(marker).sort().join(',') !== expectedKeys.join(',') || marker.schema !== SCHEMA.replace('text', this.label) || marker.kind !== kind ||
         !marker.directory || typeof marker.directory !== 'object' || !sameIdentity(marker.directory, current) ||
         typeof marker.storeId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(marker.storeId) ||
         (kind === 'work' && (marker.workId !== workId || marker.storeId !== this.rootMarker!.storeId)) ||
@@ -229,12 +234,12 @@ export class TextArtifactStore {
   }
 
   private descriptor(artifact: Artifact): { workId: string; path: string } {
-    if (!artifact || typeof artifact !== 'object' || typeof artifact.id !== 'string' || artifact.kind !== 'text') fail('invalid text artifact');
-    const match = /^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):text$/.exec(artifact.id);
-    if (!match || !SHA256.test(artifact.sha256)) fail('invalid artifact identity or hash');
+    if (!artifact || typeof artifact !== 'object' || typeof artifact.id !== 'string' || !Object.hasOwn(this.formats, artifact.kind)) fail('invalid text artifact');
+    const match = /^([A-Za-z0-9][A-Za-z0-9_-]{0,63}):([a-z]+)$/.exec(artifact.id);
+    if (!match || match[2] !== this.formats[artifact.kind] || !SHA256.test(artifact.sha256)) fail('invalid artifact identity or hash');
     validVersion(artifact.version);
     const workId = match[1]!;
-    const path = join(this.root, workId, `${artifact.sha256}.txt`);
+    const path = join(this.root, workId, `${artifact.sha256}.${artifact.kind === 'text' ? 'txt' : this.formats[artifact.kind]}`);
     const key = JSON.stringify([artifact.id, artifact.version, artifact.sha256, artifact.path, artifact.kind]);
     if (absolute(artifact.path) !== artifact.path || (artifact.path !== path && !this.relocated.has(key))) fail('artifact path does not match its work and hash');
     within(this.root, path);
@@ -245,7 +250,7 @@ export class TextArtifactStore {
     const { workId, path } = this.descriptor(artifact);
     await this.workspace(workId, false);
     const bytes = await boundedRead(path, this.maxBytes, wait);
-    if (!isUtf8(bytes)) fail('artifact must contain valid UTF-8 text');
+    if (artifact.kind === 'text' && !isUtf8(bytes)) fail('artifact must contain valid UTF-8 text');
     if (digest(bytes) !== artifact.sha256) fail('artifact hash/content mismatch');
     await this.workspace(workId, false);
     return bytes;
@@ -261,16 +266,16 @@ export class TextArtifactStore {
     await serialized(this.root, async () => { await this.marker(this.root, 'root', true); });
   }
 
-  async write(workId: string, version: number, content: string): Promise<Artifact> {
+  protected async writeBytes(workId: string, version: number, kind: string, content: Uint8Array): Promise<Artifact> {
     if (typeof workId !== 'string' || !WORK_ID.test(workId)) fail('invalid work ID');
     validVersion(version);
-    if (typeof content !== 'string' || !content.isWellFormed() || content.length === 0) fail('content must be nonempty UTF-8 text');
-    if (Buffer.byteLength(content, 'utf8') > this.maxBytes) fail('content exceeds byte limit');
-    const bytes = Buffer.from(content, 'utf8');
+    if (!Object.hasOwn(this.formats, kind) || !(content instanceof Uint8Array) || !content.byteLength || content.byteLength > this.maxBytes) fail('invalid format or byte limit');
+    const bytes = Buffer.from(content);
     return serialized(this.root, async () => {
       const path = await this.workspace(workId, true);
       const sha256 = digest(bytes);
-      const artifact: Artifact = { id: `${workId}:text`, version, sha256, path: join(path, `${sha256}.txt`), kind: 'text' };
+      const suffix = this.formats[kind]!;
+      const artifact: Artifact = { id: `${workId}:${suffix}`, version, sha256, path: join(path, `${sha256}.${kind === 'text' ? 'txt' : suffix}`), kind };
       await exclusiveWrite(artifact.path, bytes);
       const stored = await this.verifiedBytes(artifact, true);
       if (!stored.equals(bytes)) fail('artifact hash/content mismatch');
@@ -278,11 +283,11 @@ export class TextArtifactStore {
     });
   }
 
-  async read(artifact: Artifact): Promise<string> {
+  async readBytes(artifact: Artifact): Promise<Buffer> {
     // Copy the descriptor before awaiting: caller mutation cannot change the
     // expected work/hash/path halfway through validation.
     const pinned = { ...artifact };
-    return serialized(this.root, async () => (await this.verifiedBytes(pinned)).toString('utf8'));
+    return serialized(this.root, async () => this.verifiedBytes(pinned));
   }
 
   async snapshot(artifact: Artifact): Promise<{ sha256: string; path: string }> {
@@ -293,4 +298,17 @@ export class TextArtifactStore {
       return { sha256: pinned.sha256, path: pinned.path };
     });
   }
+}
+
+/** 기존 텍스트 저장소의 표식, 파일 이름과 공개 API를 유지합니다. */
+export class TextArtifactStore extends ArtifactByteStore {
+  constructor(root: string, maxBytes = 32_768, originalArtifacts: readonly Artifact[] = []) {
+    super(root, maxBytes, { text: 'text' }, 'text', originalArtifacts);
+  }
+  async write(workId: string, version: number, content: string): Promise<Artifact> {
+    if (typeof content !== 'string' || !content.isWellFormed() || !content.length) fail('content must be nonempty UTF-8 text');
+    if (Buffer.byteLength(content, 'utf8') > this.maxBytes) fail('content exceeds byte limit');
+    return this.writeBytes(workId, version, 'text', Buffer.from(content, 'utf8'));
+  }
+  async read(artifact: Artifact): Promise<string> { return (await this.readBytes(artifact)).toString('utf8'); }
 }

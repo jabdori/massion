@@ -1,0 +1,53 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10-preview.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "light",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10-preview.png"
+    }
+  ]
+}
