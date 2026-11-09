@@ -130,25 +130,25 @@ export class MonthlyBudgetService {
  #amount(n:number){return n.toLocaleString('ko-KR');}
  async configure(input:unknown){ensure(exact(input,['commandId','expectedRevision','limit','timezone'])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'configure-monthly-budget',limit:input.limit,timezone:input.timezone},OWNER);}
  async decide(input:unknown){ensure(exact(input,['commandId','expectedRevision','decisionId','answer',...((input as any)?.answer==='act'?['limit']:[])])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget answer fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'decide-monthly-budget',decisionId:input.decisionId,answer:input.answer,...(input.answer==='act'?{limit:input.limit}:{})},OWNER);}
- async snapshot(admitting=false):Promise<MonthlySnapshot>{
+ async snapshot(admitting:()=>boolean=()=>false):Promise<MonthlySnapshot>{
   const before=await this.#store.readState(),budget=await this.#state(),ids=[...new Set(budget?.value.reservations.map(r=>r.missionId)??[])],missions=new Map<string,Snapshot<Mission>|null>();
-  await Promise.all(ids.map(async id=>{missions.set(id,await this.#store.load(id) as Snapshot<Mission>|null);}));ensure((await this.#store.readState()).feedId===before.feedId,'Monthly snapshot database changed');return {feedId:before.feedId,budget,missions,admitting};
+  await Promise.all(ids.map(async id=>{missions.set(id,await this.#store.load(id) as Snapshot<Mission>|null);}));ensure((await this.#store.readState()).feedId===before.feedId,'Monthly snapshot database changed');return {feedId:before.feedId,budget,missions,admitting:admitting()};
  }
  async admit(input:{missionId:string;workId:string;runId:string;amount:number;expectedRevision?:number;selection?:ExecutionChoice}):Promise<BudgetAdmission>{
   input=structuredClone(input);
   for(let attempt=0;attempt<5;attempt++){
    const state=await this.#state(),old=state?.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId);
-   if(old&&['waiting','reserved'].includes(old.state)){if(old.state==='waiting')await this.reconcile(await this.snapshot(true));return {status:old.state==='waiting'?'waiting':'replayed',reservation:old};}
+   if(old&&['waiting','reserved'].includes(old.state)){if(old.state==='waiting')await this.reconcile(await this.snapshot(()=>true));return {status:old.state==='waiting'?'waiting':'replayed',reservation:old};}
    const snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&pristine(w)&&w.execution!=='budget-waiting','Only fresh Work can reserve monthly budget');if(input.expectedRevision!==undefined&&snapshot.revision!==input.expectedRevision)return {status:'conflict',reservation:null};
    const view=state&&state.value.limit!==null?await this.read():{knownOutputTokens:0,reserved:0,usageBounded:true},feed=await this.#store.readState(),at=this.#clock(),timezone=state?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone;
    const inherited=old?.runId===input.runId&&old.inputHash===workInputHash(w)?old.decisionId:undefined;
    const entry:Omit<Reservation,'state'>={missionId:input.missionId,workId:input.workId,runId:input.runId,amount:input.amount,inputHash:workInputHash(w),revision:snapshot.revision,title:w.title,period:accountingPeriod(at,timezone),at,feedId:feed.feedId,...(input.selection?{selection:input.selection}:{}),...(inherited&&state?.value.decisions.some(d=>d.id===inherited&&d.state==='done')?{decisionId:inherited}:{})};
    const result=await this.#dispatch('monthly-reserve:'+hash([input,snapshot.revision]).slice(0,48),state?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.usageBounded,...(!state?{timezone}:{})},HOST,at);
-   if(result.status==='conflict')continue;const reservation=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(reservation.state==='waiting')await this.reconcile(await this.snapshot(true));return {status:result.status==='replayed'?'replayed':reservation.state==='waiting'?'waiting':'reserved',reservation};
+   if(result.status==='conflict')continue;const reservation=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(reservation.state==='waiting')await this.reconcile(await this.snapshot(()=>true));return {status:result.status==='replayed'?'replayed':reservation.state==='waiting'?'waiting':'reserved',reservation};
   }throw new DomainError('Monthly budget admission contention');
  }
- async reconcile(initial?:MonthlySnapshot,run?:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>){
-  let snapshot=initial??await this.snapshot();const admitting=snapshot.admitting,attempted=new Set<string>(),errors:unknown[]=[];
+ async reconcile(initial?:MonthlySnapshot,run?:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>,admitting:()=>boolean=()=>initial?.admitting??false){
+  let snapshot=initial??await this.snapshot(admitting);const attempted=new Set<string>(),errors:unknown[]=[];
   for(let step=0;step<8*((snapshot.budget?.value.reservations.length??0)+1);step++){
    const plans=reconcileMonthly(snapshot).filter(p=>p.kind!=='hold'),plan=plans.find(p=>p.kind!=='run'||run&&!attempted.has(hash([p.reservation.missionId,p.reservation.workId,p.reservation.runId])));if(!plan)break;
    const r=plan.reservation,mission=plan.mission!,w=mission?.value.works.find(w=>w.id===r.workId);if(!w||!snapshot.budget)break;

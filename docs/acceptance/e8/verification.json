@@ -221,5 +221,22 @@
     "typecheck": "passed",
     "e2eSyntax": "passed",
     "newProductionChanges": false
+  },
+  "liveAdmissionFollowUp": {
+    "baseCommit": "85f0848",
+    "integratedMain": "156305d",
+    "relatedFiles": 8,
+    "tests": 274,
+    "passed": 238,
+    "skipped": 36,
+    "failed": 0,
+    "typecheck": "passed",
+    "scopedBlockingGate": "passed using retained unchanged screen captures and official gate functions",
+    "allowancesRemoved": 20,
+    "allowancesAdded": 0,
+    "regression": "a run starting mid-reconciliation retains its reservation until activation commits",
+    "red": "live reservation was released before activation, causing its revision to conflict",
+    "green": "live reservation stays reserved; activation accepts with exactly two role calls; known settlement releases remaining exposure",
+    "scope": "Observe host activity after loading every initial/refreshed snapshot; pure planning still consumes a boolean fact. No additional GLM review."
   }
 }
