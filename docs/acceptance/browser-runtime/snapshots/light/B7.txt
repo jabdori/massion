@@ -161,6 +161,8 @@
               - list "절차"
                 - listitem "작성 · 실행 중" [level=1, ref=e47]
                   - StaticText "작성"
+                  - time
+                    - StaticText "14:08"
                 - listitem "확인 · 대기 중" [level=1, ref=e48]
                   - StaticText "확인"
             - time
@@ -168,7 +170,6 @@
             - StaticText "페이지 2개 읽음"
             - button "브라우저" [ref=e32]
             - group
-              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e46]
+              - button "확인 대기" [expanded=false, ref=e46]
                 - strong
                   - StaticText "확인 대기"
-                - StaticText "요청한 결과와 근거 확인"

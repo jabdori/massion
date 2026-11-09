@@ -15,6 +15,8 @@
   "cssHiddenReflection": true,
   "generatedContentSuppressed": true,
   "closedShadowRefused": true,
+  "uninspectablePixelsNeutralized": true,
+  "trustedFontsOnly": true,
   "displayContentsReflection": true,
-  "pngSha256": "7cc74a5a9ce7a9e3e0f641346b5f4f3fb99565a0558e5380475fcfd5fbf93d17"
+  "pngSha256": "88066d46b26b5156b61ffeff2a5b8610867a194cbe2b9d6ae4a8b53ddd6cb8f2"
 }

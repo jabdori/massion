@@ -1,4 +1,4 @@
-contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-image-final/snapshots/dark/B15.json
+contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-last-visual/snapshots/dark/B15.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"

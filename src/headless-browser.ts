@@ -18,6 +18,9 @@ function preparePage(){
   if(['SCRIPT','IFRAME','FRAME','OBJECT','EMBED','CANVAS','VIDEO','AUDIO'].includes(e.tagName)||e.tagName==='META'&&e.getAttribute('http-equiv')?.toLowerCase()==='refresh'||e.tagName.includes('-')||e.hasAttribute('contenteditable')){e.remove();continue;}
   for(const attr of [...e.attributes]){if(attr.name.startsWith('on')){e.removeAttribute(attr.name);continue;}const value=clean(attr.value);if(value!==attr.value){if(['src','srcset','href','action','formaction'].includes(attr.name))e.removeAttribute(attr.name);else e.setAttribute(attr.name,value);}}
  }
+ // Untrusted pixels cannot be matched to private strings. Preserve boxes, neutralize their paint.
+ const imageProperties=['background-image','border-image-source','mask-image','-webkit-mask-image','list-style-image','clip-path','filter','backdrop-filter'];
+ for(const e of nodes){if(!e.isConnected)continue;const style=(e as HTMLElement).style;if(!style)throw Error('Unsupported visual element');const family=/\bmonospace\b/.test(getComputedStyle(e).fontFamily)?'ui-monospace':'system-ui';style.setProperty('animation','none','important');style.setProperty('transition','none','important');for(const property of imageProperties)style.setProperty(property,'none','important');style.setProperty('content','normal','important');style.setProperty('font-family',family,'important');if(['IMG','PICTURE','SVG'].includes(e.tagName.toUpperCase())||e.tagName==='INPUT'&&e.getAttribute('type')==='image')style.setProperty('opacity','0','important');}
  const walker=document.createTreeWalker(document.documentElement,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode())node.textContent=clean(node.textContent||'');
  // Match text across element boundaries before changing individual nodes; keep the page layout.
  for(const visibleOnly of [false,true]){
@@ -30,6 +33,7 @@ function preparePage(){
  const policy=document.createElement('meta');policy.httpEquiv='Content-Security-Policy';policy.content="script-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'";document.head.prepend(policy);
  const style=document.createElement('style');style.textContent='@layer massion-private-capture{*,*::before,*::after,*::marker{animation:none!important;transition:none!important;caret-color:transparent!important}*::before,*::after,*::marker{content:none!important}}';document.head.prepend(style);
  for(const e of document.querySelectorAll('*'))for(const pseudo of ['::before','::after','::marker'])if(!['','none','normal'].includes(getComputedStyle(e,pseudo).content))throw Error('Browser generated content could not be suppressed');
+ for(const e of nodes){if(!e.isConnected)continue;const style=getComputedStyle(e);if(imageProperties.some(property=>style.getPropertyValue(property)!=='none')||!['system-ui','ui-monospace'].includes(style.fontFamily)||['IMG','PICTURE','SVG'].includes(e.tagName.toUpperCase())&&style.opacity!=='0')throw Error('Uninspectable browser pixels remain');}
  if(clean(document.body.innerText)!==document.body.innerText)throw Error('Browser screenshot redaction incomplete');
  return {address:location.href,title:clean(document.title),blocks:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText||'').trim().slice(0,4000)),fields:original.slice(0,64).map(f=>({...f,label:clean(f.label),value:maskBrowserField(f)?'••••':clean(f.value)}))};
 }

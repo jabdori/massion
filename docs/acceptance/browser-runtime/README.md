@@ -69,3 +69,9 @@ The remaining MCP E2E blank-page failure was isolated to agent-browser 0.41.2's 
 Merged main through PR #128 (growth/memory), #133 (monthly-budget E2E) and #134 (release preparation), retaining #117/#129/#132. The browser producers compose with the growth/memory fixture producers; both sets of services, controls, copy and backup validation remain. The new budget E2E journey is preserved and its former gap is cleared. The deny-only browser egress proxy remains around the complete E2E suite.
 
 All 206 related browser, privacy, memory, growth, effect, lineage, fixture and UI tests passed; typecheck passed. Twelve affected screen/theme captures have no new/stale/infrastructure diagnostics: [growth/release merge gate](growth-release-merge-gate.json). The source version is the mainline release candidate; this task performs no tag, release publication or PR merge.
+
+## Uninspectable visual sources and PR #135
+
+The latest security finding demonstrated a private code encoded in an SVG data URL. Captures now neutralize image/picture/SVG paint while retaining their boxes; remove CSS background, border, mask and list images plus uninspectable filters/clipping; and use trusted system font families. Computed styles are checked before capture. The actual PNG test includes encoded data-URL pixels in image, SVG and CSS-background sources; independent private values still produce identical sanitized bytes. The source-page layout and ordinary text remain, while uninspectable graphics (including the reference printer glyph) are intentionally omitted.
+
+PR #135's production first-resize fix is merged. Related tests: 91 passed plus typecheck; all 12 browser interaction states pass. The final six browser screen/theme captures have no new/stale/infrastructure diagnostics. This is still fixture/loopback evidence, not real-site or payment delivery evidence.

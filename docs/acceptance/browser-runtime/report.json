@@ -2,18 +2,6 @@
   "blocking": false,
   "rows": [
     {
-      "screen": "B15",
-      "theme": "dark",
-      "passed": 34,
-      "failed": 1,
-      "warnings": 0,
-      "required": 35,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/dark/B15.png"
-    },
-    {
       "screen": "B4",
       "theme": "dark",
       "passed": 35,
@@ -26,6 +14,18 @@
       "pair": "pairs/dark/B4.png"
     },
     {
+      "screen": "B15",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 1,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B15.png"
+    },
+    {
       "screen": "B7",
       "theme": "dark",
       "passed": 39,
@@ -34,24 +34,11 @@
       "required": 40,
       "visualFailures": [],
       "gaps": [
-        "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
-        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+        "These text-only Works have no named business procedure.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
       ],
       "errors": [],
       "pair": "pairs/dark/B7.png"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "passed": 34,
-      "failed": 1,
-      "warnings": 0,
-      "required": 35,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/light/B15.png"
     },
     {
       "screen": "B4",
@@ -66,6 +53,18 @@
       "pair": "pairs/light/B4.png"
     },
     {
+      "screen": "B15",
+      "theme": "light",
+      "passed": 34,
+      "failed": 1,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B15.png"
+    },
+    {
       "screen": "B7",
       "theme": "light",
       "passed": 39,
@@ -74,9 +73,8 @@
       "required": 40,
       "visualFailures": [],
       "gaps": [
-        "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
-        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+        "These text-only Works have no named business procedure.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
       ],
       "errors": [],
       "pair": "pairs/light/B7.png"
