@@ -114,6 +114,16 @@ export const uiTokensStyle=String.raw`:root{
  --pages-time-column:104px;
  --pages-controls-height:54px;
  --pages-table-header-height:34px;
+ --pages-memory-width:640px;
+ --pages-memory-top:44px;
+ --pages-memory-gutter:24px;
+ --pages-profile-line-height:17px;
+ --pages-diff-bar-width:80px;
+ --pages-diff-bar-height:6px;
+ --pages-diff-add-width:48px;
+ --pages-diff-delete-width:36px;
+ --pages-file-row-height:34px;
+ --pages-sidebar-item-line-height:17px;
  --conversation-max-width:680px;
  --conversation-min-width:480px;
  --type-composer-button-size:13px;
@@ -353,6 +363,11 @@ export const uiTokensStyle=String.raw`:root{
  --pages-popup-padding:16px;
  --pages-popup-border:1px solid var(--line);
  --pages-popup-shadow:0 8px 24px var(--shadow-color);
+ --pages-row-font-weight:500;
+ --pages-regular-font-weight:400;
+ --pages-memory-title-font-size:22px;
+ --pages-memory-title-font-weight:600;
+ --pages-memory-title-line-height:30px;
  --space-0:0px;
  --space-3:3px;
  --space-4:4px;

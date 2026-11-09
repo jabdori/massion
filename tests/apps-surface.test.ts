@@ -68,13 +68,22 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(icon.attributes.get('aria-current'),'page');
  const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,sequence('GitHub','jabdori/massion',copy('sidebar.text.01'),'feat(assistant): answer the owner','#84',copy('sidebar.button.07'),copy('sidebar.link.12')));
  await app.all().find(n=>n.id==='app-row-84')!.fire('click');await settle();
- assert.match(app.node('app-view').textContent,sequence('answer the owner and start Representative Work #84',copy('sidebar.text.01')+' · jabdori',copy('settings.button.08'),'+769 −39',copy('ui.pages.files',{count:2}),'src/assistant-service.ts','+206 −0'));
+ assert.match(app.node('app-view').textContent,sequence('answer the owner and start Representative Work #84',copy('sidebar.text.01'),'jabdori','+769 −39',copy('ui.pages.files',{count:2}),'src/assistant-service.ts','+206'));
+ assert.doesNotMatch(app.node('app-view').textContent,/변경|−0/);
  // The Work room tab: a Work whose title names PR #84 gets a second tab drawn by the app.
  (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
  assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/Files 2/);
  await button(side,copy('sidebar.link.12'))[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,sequence(copy('sidebar.heading.01')));
+});
+
+test('GitHub file deltas retain counts, omit zero deletions and draw only valid bounded proportions',async()=>{
+ const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?page:{title:'PR #84',groups:[{title:'Files 4',rows:[{id:'a',title:'a.ts',meta:'+12 −3'},{id:'b',title:'b.ts',meta:'+0 −0'},{id:'c',title:'c.ts',meta:'opaque metadata'},{id:'d',title:'d.ts',meta:'+3 −0'}]}]});await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ const view=app.node('app-view');assert.match(view.textContent,/\+12 −3.*\+0.*opaque metadata/);assert.doesNotMatch(view.textContent,/−0/);
+ const bars=app.all().filter(n=>n.className==='app-diff-bar');assert.equal(bars.length,3);
+ assert.deepEqual(bars.map(b=>b.children.map(n=>n.style.width)),[['80%','20%'],['0%','0%'],['20%','0%']]);
 });
 
 test('app sidebar search and a folded merged group preserve real row selection without product writes',async()=>{

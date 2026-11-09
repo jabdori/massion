@@ -20,6 +20,10 @@
       "selector": "#results-query",
       "value": "",
       "readySelector": "#results-rows .result-name"
+    },
+    {
+      "action": "click",
+      "selector": "#results-title"
     }
   ],
   "gaps": [],

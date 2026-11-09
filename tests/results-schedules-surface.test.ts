@@ -109,12 +109,14 @@ test('Schedules empty state offers the morning briefing; choosing it creates it 
  assert.doesNotMatch(app.node('side-schedules').textContent,new RegExp(copy('sidebar.button.12')));
  assert.match(staticText('schedules-empty'),sequence(copy('page.heading.09'),copy('settings.combobox.01'),copy('ui.panel.briefing-description')),'B17-empty: icon, title, one example card');
  await app.node('schedule-example-briefing').fire('click');await settle();
- const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.ok(Number.isSafeInteger(sent.body.offset));
+ const sent=state.posted.find(p=>p.path==='/assistant/schedules')!;assert.deepEqual([sent.body.action,sent.body.minute,sent.body.budget],['create',480,{runs:30}]);assert.equal(sent.body.offset+new Date().getTimezoneOffset(),0);
  assert.equal(app.node('schedules-empty').hidden,true);assert.equal(app.node('schedule-detail').hidden,false);
  assert.equal(app.node('schedule-title').textContent,copy('settings.combobox.01'));const detail=app.node('schedule-rows').textContent+app.node('schedule-request').textContent+app.node('schedule-runs').textContent+app.node('schedule-budget').textContent;
  for(const label of [copy('page.columnheader.01'),'하나',copy('ui.panel.next-run'),copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:copy('ui.pages.am',{time:'8:00'})}),copy('ui.panel.destination'),copy('ui.panel.member-conversation',{member:'하나'}),copy('ui.panel.budget'),copy('ui.panel.run-budget',{used:1,count:30}),copy('ui.panel.briefing-request'),copy('ui.pages.briefing-run',{count:1}),copy('ui.panel.view-conversation')])assert.ok(detail.includes(label),label);
  assert.match(staticText('schedule-detail'),sequence(copy('page.button.17'),copy('ui.panel.request'),copy('ui.panel.past-runs')));
- assert.match(app.node('side-schedules').textContent,sequence(copy('sidebar.text.03'),copy('settings.combobox.01'),copy('ui.pages.am',{time:'8:00'}),copy('ui.pages.daily')));
+ assert.equal(app.node('schedule-active').attributes.get('aria-checked'),'true');
+ assert.match(app.node('schedule-rows').textContent,sequence(copy('ui.panel.cycle'),copy('ui.panel.daily-cycle',{time:copy('ui.pages.am',{time:'8:00'})})));
+ assert.match(app.node('side-schedules').textContent,sequence(copy('sidebar.text.03'),copy('settings.combobox.01'),copy('ui.pages.daily')));
 });
 
 test('the Active switch pauses and resumes, Run now runs once, View in conversation opens the conversation',async()=>{

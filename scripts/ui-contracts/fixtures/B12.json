@@ -30,6 +30,10 @@
       "selector": "#memory-query",
       "value": "",
       "readySelector": "#memory-switch-rounding"
+    },
+    {
+      "action": "click",
+      "selector": "#settings-memory-title"
     }
   ],
   "gaps": [],
