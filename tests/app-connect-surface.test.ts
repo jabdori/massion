@@ -140,3 +140,9 @@ test('connection fixtures carry the contract metadata, background Work and real 
   if(['B24-connect','B24-connect-token','B24-connect-mail'].includes(screen))assert.ok(f.steps.some(s=>s.action==='click'&&s.readySelector==='#app-connect-token'),screen);
  }
 });
+
+test('leaving the conversation clears the host token entry before another page opens',async()=>{
+ const {app,state}=fixture();await settle();await open(app);app.node('app-connect-token').value='private-navigation-sentinel';
+ runInContext('shellShow("results")',app.context);
+ assert.equal(app.node('app-connect-token').value,'');assert.equal(app.node('app-connect-panel').hidden,true);assert.equal(state.posts.length,0);
+});

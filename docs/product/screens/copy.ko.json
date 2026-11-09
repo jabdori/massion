@@ -16392,5 +16392,105 @@
    "B22:page"
   ],
   "provenance": "Approved B22 artboard file heading"
+ },
+ "ui.settings.unknown-value": {
+  "ko": "—",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B13-general:settings"
+  ],
+  "provenance": "B13-general approved artboard"
+ },
+ "ui.settings.description": {
+  "ko": "설명",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.models": {
+  "ko": "모델 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.remove-model": {
+  "ko": "{model} 빼기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.provider-count": {
+  "ko": "제공사 {count}곳",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings"
+  ],
+  "provenance": "B14 approved artboard"
+ },
+ "ui.settings.no-spare": {
+  "ko": "추가할 모델 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.member-usage": {
+  "ko": "{member} 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ],
+  "provenance": "B14-usage approved artboard"
+ },
+ "ui.settings.installed-count": {
+  "ko": "설치됨 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ],
+  "provenance": "B23 approved artboard: installed heading and count"
+ },
+ "ui.settings.self-made-count": {
+  "ko": "직접 만든 앱 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ],
+  "provenance": "B23 approved artboard: self-made heading and count"
+ },
+ "ui.settings.subscription": {
+  "ko": "구독",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings"
+  ],
+  "provenance": "B14 approved artboard: CLI route how"
  }
 }

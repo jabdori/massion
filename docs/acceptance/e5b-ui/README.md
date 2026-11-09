@@ -46,3 +46,9 @@ B24/B25 coverage is also recorded in `.runtime/e5b-ui/install-contracts/`: **296
 B24/B25 fixtures now include their actual background Work shapes, follow-up-copy examples and a source identity. The B25 source link reads the exact existing Work using the existing navigation; no Work-pane implementation changed. Screenshot paths are `install-contracts/pairs/{dark,light}/B24*.png` and `B25*.png`.
 
 Native stdio/local-HTTP protocol negotiation and OS secret storage still require the injected host adapters; PR #111 was still open at final verification. MCP tool calls are a host service boundary, not yet wired into model Work execution or its exception projection. The core retains at most 256 call claims in this increment. Those integrations, full-suite CI and the eight pre-existing app-continuation ordering gaps remain follow-up work.
+
+## Main integration
+
+Integrated `main` at `7acf5f1` (Settings PR #109) without rewriting history. The only textual conflict appended independent tests to `apps-surface.test.ts`; both sets were retained. Its new Settings assertion now checks for password inputs inside Settings, while also proving the separate host panel stays hidden and empty. A regression test exposed token entry remaining open when navigating away from the conversation; one shell hook now clears it before opening another page.
+
+Post-integration typecheck passed. Seven affected surface/fixture files, including the imported Settings checks and the shell navigation regression, passed **114/114**. No backend logic changed during integration. The full suite remains CI work; the prior screen evidence and eight explicitly retained continuation-order failures remain unchanged.
