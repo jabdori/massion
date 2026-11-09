@@ -2,10 +2,12 @@ import {randomUUID} from 'node:crypto';
 import {DomainError,hash} from './domain.ts';
 import {boundedModeration as boundedJson} from './discriminator.ts';
 import type {AppManifest} from './apps.ts';
+import type {SecretSlots} from './secret-slots.ts';
+import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
 
 export interface McpTool {name:string;description:string;inputSchema:Record<string,unknown>;readOnly?:boolean}
 export type McpServer=({transport:'stdio';target:string}|{transport:'http';url:string})&{tools:McpTool[]};
-export interface AppSecrets {set(appId:string,slot:string,value:string):Promise<void>}
+export type AppSecrets=Pick<SecretSlots,'set'>;
 /** Host adapters own negotiation, pagination, secret attachment and the approved launcher; no raw spawn fallback. */
 export interface McpAdapter {
  list(request:{requestId:string;appId:string;server:McpServer;signal:AbortSignal}):Promise<unknown>;
@@ -14,7 +16,7 @@ export interface McpAdapter {
  close(request:{requestId:string;appId:string;server:McpServer;reason:'complete'|'cancel'}):Promise<void>;
 }
 export interface McpCall {id:string;appId:string;versionHash:string;name:string;inputHash:string;timeoutMs:number;status:'pending'|'succeeded'|'failed'|'unknown';result?:unknown}
-export const MCP_TIMEOUT_MS=180000;
+export const MCP_TIMEOUT_MS=TOOL_TIMEOUT_MS;
 const exact=(v:unknown,keys:string[],optional:string[]=[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&keys.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>keys.includes(k)||optional.includes(k));
 const validName=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_.-]{1,64}$/.test(v);
 export function validTools(value:unknown):value is McpTool[] {
@@ -45,9 +47,8 @@ export function requireTool(m:AppManifest,name:string):McpTool {
  if(!tool||!m.contributes.tools.includes(name)||!(tool.readOnly===true?m.permissions.read:m.permissions.write).includes(name))throw new DomainError('Tool is outside the declared scope','denied');return tool;
 }
 /** A deadline aborts the adapter; cancellation cannot settle a remote write. Cleanup is bounded independently. */
-export async function mcpRequest<T>(adapter:McpAdapter,appId:string,server:McpServer,timeoutMs:number,run:(signal:AbortSignal,requestId:string)=>Promise<T>,signal?:AbortSignal):Promise<T> {
- const controller=new AbortController(),requestId=randomUUID();let timer:ReturnType<typeof setTimeout>|undefined;
- const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
- try{return await Promise.race([new Promise<never>((_,reject)=>{const fail=()=>reject(new DomainError('MCP call interrupted','conflict'));controller.signal.addEventListener('abort',fail,{once:true});if(controller.signal.aborted)fail();timer=setTimeout(abort,timeoutMs);}),Promise.resolve().then(()=>{if(controller.signal.aborted)throw new DomainError('MCP call interrupted','conflict');return run(controller.signal,requestId);})]);}
- finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);let cleanup:ReturnType<typeof setTimeout>|undefined;try{await Promise.race([Promise.resolve().then(()=>adapter.close({requestId,appId,server,reason:controller.signal.aborted?'cancel':'complete'})).catch(()=>{}),new Promise<void>(resolve=>{cleanup=setTimeout(resolve,1000);})]);}finally{clearTimeout(cleanup);}}
+export async function mcpRequest<T>(adapter:McpAdapter,appId:string,server:McpServer,timeoutMs:number,run:(signal:AbortSignal,requestId:string)=>Promise<T>,signal?:AbortSignal,readOnly=false):Promise<T> {
+ const requestId=randomUUID();let completed=false;
+ try{const result=await callTool(s=>run(s,requestId),{signal,timeoutMs,readOnly});completed=true;return result;}
+ finally{let cleanup:ReturnType<typeof setTimeout>|undefined;try{await Promise.race([Promise.resolve().then(()=>adapter.close({requestId,appId,server,reason:completed?'complete':'cancel'})).catch(()=>{}),new Promise<void>(resolve=>{cleanup=setTimeout(resolve,1000);})]);}finally{clearTimeout(cleanup);}}
 }

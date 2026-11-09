@@ -1,3 +1,4 @@
+import {APP_TIMEOUT_MS,callTool} from './tool-call.ts';
 /** The app worker host side (docs/architecture/apps.md, ADR 0003 §4): one child process per handler call, declared permissions checked on every call, views validated before they leave. */
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
@@ -5,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {DomainError} from './domain.ts';
 import type {AppPackage,AppNetwork,AppView} from './apps.ts';
 
-const RUNNER=fileURLToPath(new URL('./app-runner.mjs',import.meta.url)),TIMEOUT_MS=5000,MAX_CALLS=16,MAX_LINE=256*1024,MAX_BODY=192*1024,MAX_WORKERS=4,SANDBOX_EXEC='/usr/bin/sandbox-exec';
+const RUNNER=fileURLToPath(new URL('./app-runner.mjs',import.meta.url)),TIMEOUT_MS=APP_TIMEOUT_MS,MAX_CALLS=16,MAX_LINE=256*1024,MAX_BODY=192*1024,MAX_WORKERS=4,SANDBOX_EXEC='/usr/bin/sandbox-exec';
 const NODE_ARGS=['--permission','--allow-fs-read='+RUNNER,'--max-old-space-size=64',RUNNER];
 /** How the worker starts with no network: Node 25+ denies it under --permission; on Node 24 only an OS sandbox does (macOS sandbox-exec). Otherwise there is no worker. */
 export const workerCommand=():[string,string[]]|null=>Number(process.versions.node.split('.')[0])>=25?[process.execPath,NODE_ARGS]
@@ -33,29 +34,33 @@ function allowed(pkg:AppPackage,call:{url:unknown;method:unknown;secret:unknown}
 export interface RunResult {view:AppView;calls:number;refused:number;probe?:unknown}
 /** Runs one handler. `probe` asks the worker to report its own confinement (tests). */
 export function runHandler(options:{appId:string;pkg:AppPackage;handler:string;input:unknown;network:AppNetwork|undefined;probe?:boolean;timeoutMs?:number}):Promise<RunResult> {
- const {pkg,network}=options,command=workerCommand();
+ const {pkg,network}=options,command=workerCommand(),timeoutMs=options.timeoutMs??TIMEOUT_MS;
+ if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>TIMEOUT_MS)return Promise.reject(new DomainError('Invalid handler timeout'));
  if(!command)return Promise.reject(new DomainError('Sandbox unavailable','conflict'));
  // ponytail: one process-wide bound; per-app queues when apps run on schedules.
  if(running>=MAX_WORKERS)return Promise.reject(new DomainError('Busy','conflict'));running++;
  return new Promise<RunResult>((resolve,reject)=>{
   const child=spawn(command[0],command[1],{env:{},stdio:['pipe','pipe','ignore']});
+  const controller=new AbortController();
   let buffer='',calls=0,refused=0,probe:unknown,settled=false;
-  const end=(error:Error|null,view?:unknown)=>{if(settled)return;settled=true;running--;clearTimeout(timer);child.kill('SIGKILL');if(error)reject(error);else{try{resolve({view:checkView(view),calls,refused,...(options.probe?{probe}:{})});}catch(e){reject(e);}}};
-  const timer=setTimeout(()=>end(new DomainError('Timed out','conflict')),options.timeoutMs??TIMEOUT_MS);
+  const end=(error:Error|null,view?:unknown)=>{if(settled)return;settled=true;running--;clearTimeout(timer);controller.abort();child.kill('SIGKILL');if(error)reject(error);else{try{resolve({view:checkView(view),calls,refused,...(options.probe?{probe}:{})});}catch(e){reject(e);}}};
+  const timer=setTimeout(()=>end(new DomainError('Timed out','conflict')),timeoutMs);
   const answer=(m:object)=>{if(!settled)child.stdin.write(JSON.stringify(m)+'\n');};
   const onCall=async(m:{id:number;url:unknown;method:unknown;secret:unknown})=>{
+   if(settled)return;
    if(++calls>MAX_CALLS){end(new DomainError('Too many calls','conflict'));return;}
    const reason=allowed(pkg,m);if(reason){refused++;answer({id:m.id,ok:false,error:reason});return;}
+   if(m.method!=='GET'){refused++;answer({id:m.id,ok:false,error:'Write requires durable Work admission'});return;}
    if(!network){answer({id:m.id,ok:false,error:'No network on this host'});return;}
-   try{const r=await network({appId:options.appId,url:String(m.url),method:String(m.method),secret:m.secret===null?null:String(m.secret)});
+   try{const r=await callTool(signal=>network({appId:options.appId,url:String(m.url),method:String(m.method),secret:m.secret===null?null:String(m.secret),signal}),{readOnly:true,signal:controller.signal,timeoutMs});
     if(!Number.isSafeInteger(r.status)||typeof r.body!=='string'||r.body.length>MAX_BODY)throw new Error('Response too large');answer({id:m.id,ok:true,status:r.status,body:r.body});}
-   catch(e){answer({id:m.id,ok:false,error:String((e as Error).message||e).slice(0,200)});}
+   catch{answer({id:m.id,ok:false,error:'App request failed'});}
   };
   child.stdout.setEncoding('utf8');
   child.stdout.on('data',(chunk:string)=>{buffer+=chunk;if(buffer.length>MAX_LINE&&!buffer.includes('\n')){end(new DomainError('Worker line too long','conflict'));return;}
    let at;while((at=buffer.indexOf('\n'))>=0){const raw=buffer.slice(0,at);buffer=buffer.slice(at+1);let m:any;try{m=JSON.parse(raw);}catch{end(new DomainError('Worker protocol error','conflict'));return;}
     if(m?.t==='call'&&Number.isSafeInteger(m.id))void onCall(m);else if(m?.t==='probe')probe=m.probe;else if(m?.t==='done')end(null,m.view);else if(m?.t==='error')end(new DomainError(text(m.message,500)?m.message:'App failed','conflict'));else end(new DomainError('Worker protocol error','conflict'));}});
-  child.on('error',e=>end(e));child.on('exit',()=>end(new DomainError('Worker stopped','conflict')));
+  child.on('error',()=>end(new DomainError('Worker unavailable','conflict')));child.on('exit',()=>end(new DomainError('Worker stopped','conflict')));
   child.stdin.on('error',()=>{});
   child.stdin.write(JSON.stringify({source:pkg.source,handler:options.handler,input:options.input??{},probe:options.probe===true})+'\n');
  });

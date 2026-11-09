@@ -1,6 +1,6 @@
 # MCP apps and connection cards (E5b)
 
-This increment extends the existing apps aggregate, owner decisions, content hashes and drain-aware store. It does not change Settings or the Work pane. PR #111 (E5a) was open at implementation start, so native launching and secret storage remain injected host adapters: absence refuses, with no environment/file fallback. No new dependency or outside call is needed for tests.
+This increment extends the existing apps aggregate, owner decisions, content hashes and drain-aware store. It does not change Settings or the Work pane. PR #111 (E5a) merged during the integration round. MCP now reuses its shared tool deadline and secret-slot interface; the normal host supplies KeychainSecretSlots. Concrete MCP wire transports remain injected host adapters: absence refuses, with no environment/file fallback. No new dependency or outside call is needed for tests.
 
 ## Contract
 
@@ -19,3 +19,8 @@ Protocol reference: https://modelcontextprotocol.io/specification/2026-07-28/ser
 ## Visual-gate chronology follow-up
 
 New conversation commands explicitly opt into recording the host-observed message time. The flag is part of the journaled command, so old command replay retains its original timestamp-free state and source hash. Owner and reply projections can now order app notices between messages without inferring time from a turn start. App receipt rows use the recorded answer time. The remaining app-driven Work, PR-table and total-count producers are documented with code evidence in [the visual residual ledger](../acceptance/e5b/residual-ledger.md).
+
+
+## E5a integration after #111 merged
+
+The second main merge (`1d0d1e3`) keeps the app network AbortSignal and E5a's read-only page-handler policy. MCP request bounds now call the shared `callTool` with the pinned read-only classification instead of a parallel timeout implementation. Connection entry uses `SecretSlots.set({owner: appId, slot}, token)`, including the shared 1024-byte value bound; normal startup supplies `KeychainSecretSlots`. Tests use the real in-memory slot adapter and verify owner/slot isolation and no client/journal echo. Concrete stdio/local-HTTP negotiation and trusted launcher target enrollment remain outside this host-service slice; no raw spawning or secret environment fallback was introduced.

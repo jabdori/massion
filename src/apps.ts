@@ -18,7 +18,7 @@ export interface AppPermissions {read:string[];write:string[];network:string[];f
 export interface AppManifest {kind?:'script'|'mcp';mcp?:McpServer;connection?:{slot:string};format:'massion.app.v1';id:string;name:string;version:string;description:string;permissions:AppPermissions;contributes:{page?:{title:string};roomTab?:{prefix:string};templates:string[];skills:string[];procedures:string[];tools:string[]};handlers:string[]}
 export interface AppPackage {manifest:AppManifest;source:string}
 /** The host's network adapter: it attaches the secret stored for this app's slot itself, keyed by (appId, slot), so one app never names another's secret; the app never receives the value. */
-export type AppNetwork=(request:{appId:string;url:string;method:string;secret:string|null})=>Promise<{status:number;body:string}>;
+export type AppNetwork=(request:{appId:string;url:string;method:string;secret:string|null;signal:AbortSignal})=>Promise<{status:number;body:string}>;
 export interface AppView {frame?:{html:string};title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string}[]}[];fields?:[string,string][]}
 export interface AppCheck {tests:{passed:number;total:number};declaredOnly:boolean;evidence:string}
 export interface AppVersion {hash:string;package:AppPackage;at:number;approvedAt?:number;check?:AppCheck}
@@ -209,7 +209,7 @@ export class AppsService {
   ensure((input.handler==='page'||input.handler==='item')&&cur.package.manifest.handlers.includes(input.handler),'Unknown handler');
   if(cur.package.manifest.kind==='mcp'){
    ensure(input.handler==='page'&&input.ref===undefined,'MCP UI accepts only its declared page');const adapter=this.#mcp;ensure(adapter?.view,'MCP UI adapter unavailable','conflict');await this.#admit();
-   const view=await mcpRequest(adapter,a.id,cur.package.manifest.mcp!,this.#timeout,(signal,requestId)=>adapter.view!({requestId,appId:a.id,server:structuredClone(cur.package.manifest.mcp!),signal}),this.#stop.signal);
+   const view=await mcpRequest(adapter,a.id,cur.package.manifest.mcp!,this.#timeout,(signal,requestId)=>adapter.view!({requestId,appId:a.id,server:structuredClone(cur.package.manifest.mcp!),signal}),this.#stop.signal,true);
    ensure(exact(view,['title','html'])&&line(view.title,120)&&typeof view.html==='string'&&view.html.isWellFormed()&&Buffer.byteLength(view.html)<=65536,'Invalid MCP UI');
    return {title:view.title,groups:[],frame:{html:view.html}} as AppView;
   }
@@ -227,20 +227,20 @@ export class AppsService {
   if(prior){ensure(prior.appId===input.appId&&prior.name===input.name&&prior.inputHash===inputHash,'Tool command identity reused','conflict');return {status:prior.status==='pending'?'unknown':prior.status,...(prior.result!==undefined?{result:prior.result}:{})};}
   const current=async()=>{const a=(await this.#state())?.value.apps.find(a=>a.id===input.appId);ensure(a&&a.current!==null,'App is not installed','conflict');ensure(a.enabled,'App is off','conflict');const v=a.versions[a.current-1]!;ensure(packageHash(v.package)===v.hash,'Package changed after its check','conflict');return v;};
   const v=await current(),m=v.package.manifest,tool=requireTool(m,input.name),adapter=this.#mcp;ensure(adapter,'MCP adapter unavailable','conflict');await this.#admit();
-  const live=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:input.appId,server:structuredClone(m.mcp!),signal}),this.#stop.signal);
+  const live=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:input.appId,server:structuredClone(m.mcp!),signal}),this.#stop.signal,true);
   ensure(validTools(live)&&live.every(t=>m.mcp!.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t])))&&live.some(t=>t.name===input.name),'MCP tool list changed; owner approval required','denied');
   ensure((await current()).hash===v.hash,'App changed during connection','conflict');await this.#admit();
   const claim=await this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'claim-app-tool',call:{id:input.commandId,appId:input.appId,versionHash:v.hash,name:input.name,inputHash,timeoutMs:this.#timeout,status:'pending'}});
   if(claim.status!=='committed')return {status:'unknown'};
   let status:'succeeded'|'failed'|'unknown'=tool.readOnly===true?'failed':'unknown',result:unknown;
-  try{await this.#admit();result=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.call({requestId,appId:input.appId,server:structuredClone(m.mcp!),name:input.name,arguments:structuredClone(input.arguments),signal}),this.#stop.signal);boundedJson(result);status=(result as {isError?:unknown})?.isError===true?'failed':'succeeded';}catch{result=undefined;}
+  try{await this.#admit();result=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.call({requestId,appId:input.appId,server:structuredClone(m.mcp!),name:input.name,arguments:structuredClone(input.arguments),signal}),this.#stop.signal,tool.readOnly===true);boundedJson(result);status=(result as {isError?:unknown})?.isError===true?'failed':'succeeded';}catch{result=undefined;}
   try{const saved=await this.#dispatch(HOST_PREFIX+'-result-'+hash(input.commandId).slice(0,32),ASSISTANT_ACTOR_ID,{type:'settle-app-tool',callId:input.commandId,status,...(result!==undefined?{result}:{})});if(saved.status==='conflict')return {status:'unknown'};}catch{return {status:'unknown'};}
   return {status,...(result!==undefined?{result}:{})};
  }
  beginDrain(){this.#stop.abort();}
  /** The token is never part of a command, fingerprint, projection or adapter error response. */
  async connect(input:unknown):Promise<{status:string;revision?:number}>{
-  ensure(exact(input,['commandId','decisionId','token'])&&id(input.commandId)&&id(input.decisionId)&&typeof input.token==='string'&&input.token.length>0&&input.token.length<=8192&&input.token.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(input.token),'Exact connection fields required');
+  ensure(exact(input,['commandId','decisionId','token'])&&id(input.commandId)&&id(input.decisionId)&&typeof input.token==='string'&&input.token.length>0&&Buffer.byteLength(input.token)<=1024&&input.token.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(input.token),'Exact connection fields required');
   const commandId=this.#caller(input.commandId),decisionId=input.decisionId,existing=this.#connections.get(commandId);if(existing){ensure(existing.decisionId===decisionId,'Connection command identity reused','conflict');return existing.promise;}
   const pending=this.#connect(commandId,decisionId,input.token);this.#connections.set(commandId,{decisionId,promise:pending});try{return await pending;}finally{this.#connections.delete(commandId);}
  }
@@ -252,8 +252,8 @@ export class AppsService {
   if(d.connection){ensure(d.connection.commandId===commandId,'Connection outcome already pending; never resend','conflict');return {status:d.connection.state==='connected'?'replayed':'unknown',revision:s!.revision};}
   ensure(d.state==='open'&&a.current===d.base,'Connection decision changed','conflict');ensure(this.#secrets,'Secret slot adapter unavailable','conflict');if(v.package.manifest.kind==='mcp')ensure(this.#mcp,'MCP adapter unavailable','conflict');ensure(packageHash(v.package)===v.hash,'Package changed after its check','conflict');await this.#admit();
   const claim=await this.#dispatch(commandId,OWNER,{type:'begin-app-connect',decisionId,connectionId:commandId});if(claim.status!=='committed')return {status:'unknown'};
-  try{await checkFeed();const fresh=(await this.#state())?.value.decisions.find(x=>x.id===decisionId);ensure(fresh?.state==='open'&&fresh.connection?.commandId===commandId,'Connection decision changed','conflict');await this.#admit();await this.#secrets.set(a.id,slot,token);}catch{return {status:'unknown'};}finally{token='';}
-  try{await checkFeed();if(v.package.manifest.kind==='mcp'){const server=v.package.manifest.mcp!,adapter=this.#mcp!;const live=await mcpRequest(adapter,a.id,server,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:a.id,server:structuredClone(server),signal}),this.#stop.signal);ensure(validTools(live)&&live.every(t=>server.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t]))),'MCP tool list changed; owner approval required','denied');}await checkFeed();const done=await this.#dispatch('connect-result-'+hash(commandId).slice(0,32),OWNER,{type:'complete-app-connect',decisionId,connectionId:commandId});return {status:done.status,revision:done.revision};}catch{return {status:'unknown'};}
+  try{await checkFeed();const fresh=(await this.#state())?.value.decisions.find(x=>x.id===decisionId);ensure(fresh?.state==='open'&&fresh.connection?.commandId===commandId,'Connection decision changed','conflict');await this.#admit();await this.#secrets.set({owner:a.id,slot},token);}catch{return {status:'unknown'};}finally{token='';}
+  try{await checkFeed();if(v.package.manifest.kind==='mcp'){const server=v.package.manifest.mcp!,adapter=this.#mcp!;const live=await mcpRequest(adapter,a.id,server,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:a.id,server:structuredClone(server),signal}),this.#stop.signal,true);ensure(validTools(live)&&live.every(t=>server.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t]))),'MCP tool list changed; owner approval required','denied');}await checkFeed();const done=await this.#dispatch('connect-result-'+hash(commandId).slice(0,32),OWNER,{type:'complete-app-connect',decisionId,connectionId:commandId});return {status:done.status,revision:done.revision};}catch{return {status:'unknown'};}
  }
  /** Host step: a new catalog version (update). */
  async offer(input:{commandId:string;pkg:AppPackage;origin:'catalog'}){ensure(input.commandId.startsWith(HOST_PREFIX),'Host command identity required');return this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'offer-app',decisionId:appDecisionId(input.commandId),origin:'catalog',pkg:input.pkg});}

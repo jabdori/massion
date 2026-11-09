@@ -1,6 +1,6 @@
 # E5b main integration and blocking visual-gate round
 
-This candidate merges `origin/main` at `094eca4` into `feat/mcp-apps`, without rebasing or rewriting history. The server-options conflict preserves both daemon authentication and E5b's MCP/secret adapter ports. GitHub PR #111 was still open when checked; #112 and #113 are included in this main snapshot.
+This candidate merges `origin/main` through `1d0d1e3` into `feat/mcp-apps`, without rebasing or rewriting history. It includes #111, #112 and #113. The first conflict preserves daemon authentication and MCP/secret adapter ports; the second preserves E5a cancellation on app network calls. MCP reuses E5a tool deadlines and secret slots; normal startup supplies the keychain adapter. All commits in this round are pushed together.
 
 ## Result
 
@@ -34,3 +34,10 @@ node docs/acceptance/e5b-ui/verify.mjs
 ```
 
 The recorded test run used the physical scratchpad TMPDIR prescribed by CODEX-BRIEF. Generated browser configuration/clock files are not committed. Full-suite CI, live accounts, OS keychain, native MCP launching and the independent review are not replaced by these fixture checks.
+
+
+## Final E5a integration checks
+
+After #111 merged, the focused MCP/apps/shared-timeout/slots/runtime/server/daemon-auth checks passed **55 tests, one real-DB skip, zero failures** ([output](e5a-integration-tests.txt)); typecheck passed again. The secret sentinel test now exercises E5a's real `InMemorySecretSlots` API. MCP's duplicate timer implementation was removed. The personal keychain was not mutated and no concrete native MCP transport was invoked. This merge changed no rendered client, fixture or CSS bytes, so the committed visual captures remain the renderer tested in this round.
+
+The final post-#111 conversation/source-lineage, member Work and internal-team rerun passed **124 tests, 2 real-DB skips, zero failures** ([output](post111-conversation-tests.txt)).

@@ -98,4 +98,17 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 
 ## MCP and connection follow-up (E5b)
 
-[MCP apps and connection cards](mcp-apps.md) extends this aggregate with owner-admitted MCP descriptors, pinned tool lists, durable single-send calls, scoped secret entry and opaque-origin app frames. Legacy script packages retain their existing hashes and worker path. Native transport and secret adapters remain unavailable by default pending E5a integration; fixture evidence is not a live-account claim.
+[MCP apps and connection cards](mcp-apps.md) extends this aggregate with owner-admitted MCP descriptors, pinned tool lists, durable single-send calls, scoped secret entry and opaque-origin app frames. Legacy script packages retain their existing hashes and worker path. Concrete MCP wire transports remain host-injected. E5a supplies shared deadlines and the secret-slot interface; the normal host supplies its macOS keychain store. Fixture evidence is not a live-account claim.
+
+## E5a deadline and diagnostic boundary
+
+Every network call receives an AbortSignal and shares the handler's 5-second
+ceiling. Handler completion, timeout or failure aborts outstanding calls and
+terminates the worker. Adapter exceptions become `App request failed`; raw
+credential-bearing diagnostics never reach app code or the client.
+
+The current handler path has no durable Work effect claim, so it refuses all
+non-GET calls even when a manifest declares writes. Declaring a permission is
+not dispatch authority. A future Work tool path must journal the original intent
+and use the same unknown/no-resend semantics before enabling writes. MCP remains
+outside this increment; the shared tool boundary defaults to 180 seconds.

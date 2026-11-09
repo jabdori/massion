@@ -124,3 +124,30 @@ startup rejection/redaction, managed UI, explicit accepted fixture Work, stale
 revision, cancellation/unknown usage, shutdown/restart and no replay. They do not
 prove real provider compatibility, live competence, deployment, secure OS secret
 storage, multi-PC sessions or production caller identity.
+
+## macOS keychain slots (E5a)
+
+An HTTPS connection may instead declare `"credential": {"ref": "owner-ref",
+"slot": "api-token"}`. The keychain identity is `(connection.id, slot)`; the
+reference still binds exact model/discovery endpoints and profile identities.
+The manifest cannot combine `slot` and `environment`, and missing/locked slots
+never fall back to environment. The host-only `KeychainSecretSlots` adapter
+creates, reads and deletes values; there is no client read/write-secret route.
+Values are bounded to 1024 UTF-8 bytes. A slot change changes the manifest hash;
+a value rotation does not. Environment-backed manifests remain development-only.
+
+CLI connections now require a host-installed `CliLauncher` through
+`createHostConnections(..., {cliLaunchers})` (or `ConnectionWorkbench` options).
+Policies pin an absolute binary, signing team/identifier, argument patterns,
+environment names and delegated slots; the normal CLI does not auto-discover or
+trust a PATH binary. Without that binding it refuses execution. Fixture runners
+remain explicitly injected. The desktop packager must provide audited vendor
+identities and permitted subscription authentication before enabling these
+connections. See [secret launcher boundaries](secret-launcher.md).
+
+Keychain ACLs do not implicitly trust the `security` tool. Slot creation defaults
+to an empty trusted-app list; a dedicated host executable can be configured in
+`KeychainSecretSlots`. Reading/updating through the security CLI may require OS
+approval. Unattended desktop operation needs native keychain access in the
+explicitly trusted signed host, not blanket trust for `security` or Node. See the
+[keychain isolation correction](secret-launcher.md#keychain-isolation-correction-glm-review).

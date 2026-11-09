@@ -1,3 +1,5 @@
+import type {CliLauncher} from './cli-launcher.ts';
+import type {CliProtocol} from './cli-agent-providers.ts';
 import {httpDiscriminator} from './discriminator-adapters.ts';
 import {DISCRIMINATOR_POLICY} from './discriminator.ts';
 import type {DiscriminatorResolution} from './discriminator-service.ts';
@@ -41,7 +43,7 @@ export type ProviderType=typeof MODEL_PROVIDER_TYPES[number]['id'];
 export const isCliProvider=(id:string)=>id==='claude-code-cli'||id==='codex-cli';
 export interface ConnectionInput {id:string;label:string;providerType:ProviderType;baseUrl:string;mode:'https'|'local-http-mock';secretRef?:string}
 export interface HostConnectionBindings {revision:string;bindingHash:string;connections:{input:ConnectionInput;models:readonly string[]}[]}
-interface ConnectionOptions {transport:HttpProviderTransport;cliRunner?:CliRunner;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
+interface ConnectionOptions {transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
 export interface DiscoveredModel {id:string;label:string;outputTokenLimit:number|null}
 interface ConnectionState {input:ConnectionInput;configHash:string;models:DiscoveredModel[];discovery:'not-requested'|'models-discovered'|'discovery-failed';generation:number}
 function ensure(v:unknown,m:string):asserts v {if(!v)throw new DomainError(m);}
@@ -96,7 +98,7 @@ export class ConnectionWorkbench implements WorkRuntime {
  private settingsStore(){return this.#scope?this.#options.settings:undefined;}
  #enroll(){this.#connections.clear();this.#profiles.clear();this.#grants=[];this.#routes=[];this.#groups=[];this.#revoked=[];this.#representative=null;this.#enrolling=true;try{for(const entry of this.#options.hostBindings?.connections??[]){this.connect(entry.input);const connection=this.#connections.get(entry.input.id)!;for(const model of entry.models)this.#select(entry.input.id,model,model,connection.configHash);}}finally{this.#enrolling=false;}}
  #writable(){ensure(!this.settingsStore()||this.#saving||this.#enrolling,'Persistent host settings change only through the saving path');}
- private factories(mode:'https'|'local-http-mock'){const options={mode,transport:this.#options.transport,resolveCredential:this.#options.resolveCredential};return [chatProfileFactory(options),nativeProfileFactory('anthropic-messages/v1',options),nativeProfileFactory('gemini-generate-content/v1',options),cliProfileFactory('claude-code-cli/v1',{mode,...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})}),cliProfileFactory('codex-cli/v1',{mode,...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})})];}
+ private factories(mode:'https'|'local-http-mock'){const options={mode,transport:this.#options.transport,resolveCredential:this.#options.resolveCredential};return [chatProfileFactory(options),nativeProfileFactory('anthropic-messages/v1',options),nativeProfileFactory('gemini-generate-content/v1',options),cliProfileFactory('claude-code-cli/v1',{mode,launcher:this.#options.cliLaunchers?.['claude-code-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})}),cliProfileFactory('codex-cli/v1',{mode,launcher:this.#options.cliLaunchers?.['codex-cli/v1'],...(this.#options.cliRunner?{runner:this.#options.cliRunner}:{})})];}
  private catalog(){// One catalog per transport mode avoids protocol aliasing between fixture and live.
   const profiles=[...this.#profiles.values()].map(v=>v.profile);const modes=new Set([...this.#profiles.values()].map(v=>this.#connections.get(v.connectionId)!.input.mode));ensure(modes.size<=1,'Fixture and live profiles cannot share a session');return new ConnectionCatalog(profiles,this.factories([...modes][0]??'https'));
  }

@@ -5,6 +5,7 @@ import type {AppPackage} from '../src/apps.ts';
 import {InMemoryStore} from '../src/storage.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {createWorkbench} from '../src/server.ts';
+import {InMemorySecretSlots} from '../src/secret-slots.ts';
 
 const host={id:'assistant-representative',roles:['assistant' as const]};
 const tools=[{name:'list_prs',description:'List pull requests',inputSchema:{type:'object'},readOnly:true},{name:'comment',description:'Comment on a pull request',inputSchema:{type:'object'},readOnly:false}];
@@ -68,11 +69,11 @@ test('write timeout is durable unknown and never resent across service restart',
 
 async function connectedSetup(slots:any){const store=new InMemoryStore<any>(),service=new AppsService(store,{secrets:slots,mcp:{list:async()=>tools,call:async()=>({}),close:async()=>{}}}),p:any=pkg();p.manifest.permissions.secrets=[{slot:'github-token',label:'GitHub token'}];p.manifest.connection={slot:'github-token'};await service.offer({commandId:'assistant-app-offer',pkg:p,origin:'catalog'});return {store,service,decisionId:appDecisionId('assistant-app-offer')};}
 test('connect writes token once to its own slot; no token or token hash enters journal or readback',async()=>{
- const sentinel='sentinel-private-token-E5b';let writes=0;const slots={set:async(app:string,slot:string,value:string)=>{assert.equal(app,'app-mcp-github');assert.equal(slot,'github-token');assert.equal(value,sentinel);writes++;}};
+ const sentinel='sentinel-private-token-E5b',stored=new InMemorySecretSlots();let writes=0;const slots={set:async(ref:{owner:string;slot:string},value:string)=>{assert.deepEqual(ref,{owner:'app-mcp-github',slot:'github-token'});assert.equal(value,sentinel);await stored.set(ref,value);writes++;}};
  const {store,service,decisionId}=await connectedSetup(slots);
  await assert.rejects(install(service,decisionId),/connect|token/i);
  const input={commandId:'connect',decisionId,token:sentinel};const results=await Promise.all([(service as any).connect(input),(service as any).connect(input)]);
- assert.ok(results.every(r=>r.status==='committed'||r.status==='replayed'));assert.equal(writes,1);assert.equal((await service.read()).apps.length,1);
+ assert.ok(results.every(r=>r.status==='committed'||r.status==='replayed'));assert.equal(writes,1);assert.equal(await stored.read({owner:'app-mcp-github',slot:'github-token'}),sentinel);assert.equal((await service.read()).apps.length,1);
  assert.equal((await service.decisions(null))[0]!.connection!.connected,true);
  assert.ok(!JSON.stringify([results,store.inspect(),await service.read(),await service.decisions(null)]).includes(sentinel));
  validateMissionJournalLineage(store.inspect() as any);

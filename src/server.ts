@@ -22,6 +22,7 @@ import {DECISION_PREFIX,SkillsService} from './skills.ts';
 import {AppsService,DECISION_PREFIX as APP_DECISION_PREFIX} from './apps.ts';
 import type {AppNetwork} from './apps.ts';
 import type {AppSecrets,McpAdapter} from './mcp-apps.ts';
+import {KeychainSecretSlots} from './secret-slots.ts';
 import {ConversationReadError} from './work-conversation.ts';
 import {RuntimeOwnershipError} from './runtime-lifetime.ts';
 import {searchDocuments,readDocument,readDocumentUsage,DocumentReadError} from './documents.ts';
@@ -329,7 +330,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport)});
  await connections.restoreSettings();{const restored=connections.list();if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));}
  stopping.signal.throwIfAborted();
- server=createWorkbench(store,workspaceRoot,{daemonSecret,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
+ server=createWorkbench(store,workspaceRoot,{daemonSecret,appSecrets:new KeychainSecretSlots(),connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  })().catch(error=>{if(error!==stopping.signal.reason)throw error;});
  try{await startup;}catch(error){if(!stopping.signal.aborted)throw error;}
