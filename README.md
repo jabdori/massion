@@ -10,11 +10,36 @@ For installation and everyday use, read the [development guide](docs/guide/READM
 
 ## Current candidate
 
-This clean rebuild has a runnable, tested **development foundation**, not a finished AI product. Its controlled fixture performs actual local file/process effects, rejects an incorrect calculation, revises it, independently checks the result, and accepts an evidence-bound Record. A measured held-out improvement is adopted, applied to a second Work, and reverted without rewriting history. A document-analysis fixture uses the same Work/Records contract.
+The source candidate is **1.0.0-rc.1**, an unsigned, private, single-owner
+**development release candidate**. It provides a continuing conversation with the
+Representative, admitted members and their private conversations, delegated tasks
+with team steps and independent checks, and retained Records. Open a task beside
+the conversation to inspect its progress, criteria and evidence. Known rejections
+can seed a separate correction task; unknown outcomes remain unknown across
+restart and are never silently resent.
 
-The authoritative store is a separate **SurrealDB 3.3.0** service. Actual integration tests cover atomic state/event/audit/outbox writes, concurrent revisions, idempotency, ambiguous commit readback, process crash/reopen, and backup/restore. The in-memory adapter is test-only; there is no file/SQLite production fallback.
+Owner decisions cover lasting effects and permission changes. Implemented paths
+include app installation, bounded MCP writes and reconciliation, payment and
+external-delegation adapters, and monthly output-token budgets with waiting-work
+decisions. Their regression journeys use local fixtures; they do not demonstrate
+live payments, third-party account compatibility or general model quality.
+Read the [changelog](CHANGELOG.md) and [development guide](docs/guide/README.md).
 
-**Evidence boundaries:** most automated model execution and memory-routing evidence uses deterministic fixtures or local HTTP mocks. A separately configured bounded-text provider path exists but is disabled without explicit matching configuration; live evidence is limited to the separately authorized [synthetic CLI smoke](docs/architecture/real-model-smoke.md). They do not demonstrate real model competence, autonomous learning, OS/VM isolation, external dot integration, production authentication, or a complete usable product. Passing storage tests does not close every product requirement. The next local interface increment is documented in [product interface](docs/architecture/product-interface.md). See [acceptance evidence](docs/acceptance/first-slice.md) and [requirements](docs/product/requirements.md).
+The authoritative store is a separate **SurrealDB 3.3.0** service. The macOS
+Electron app uses an authenticated loopback daemon, sandboxed renderers and
+isolated app views. Node **24.19.0 or newer 24.x** and SurrealDB are still installed
+separately. The `mac-dev-package` CI job produces an unsigned app archive and
+headless install-smoke evidence; it does not produce a signed installer or a
+public release. See the [release checklist](docs/guide/release.md).
+
+**Evidence boundaries:** automated browser and durable-store journeys exercise
+local fixtures, including restart, lost receipts and portable restore. The
+separately authorized [E9b live smoke](docs/acceptance/e9b/README.md) records a
+bounded conversation, handoff, independent check and exact result readback. It is
+synthetic evidence, not a claim of production readiness, autonomous learning or
+complete OS isolation. The web workbench remains loopback-only without public
+sign-in; Linux/Node 24 cannot run script apps without the required sandbox.
+Developer ID signing, notarization, tags and publication remain owner work.
 
 ## Install
 
