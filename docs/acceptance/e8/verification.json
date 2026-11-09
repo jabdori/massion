@@ -268,5 +268,20 @@
     "typecheck": "passed",
     "scopedGate": "passed; no new/stale/infrastructure diagnostics or added allowances",
     "additionalGLMReview": false
+  },
+  "expiredClosureSynchronization": {
+    "head": "f4e57352004fdca19e99c37b08231450adb8bc2a",
+    "codeAndSecurityReviews": "no new issues",
+    "ciFailure": "actual SurrealDB normal HTTP owner closure and lost committed ACK reconcile exact identity",
+    "cause": "the legitimate asynchronous zero-usage monthly settlement committed after the journal baseline but before the replay comparison",
+    "fix": "wait for the confirmed settled reservation commit before capturing the full journal baseline; retain exact full-journal equality and zero-provider-call assertions",
+    "productionChanges": false,
+    "relatedFiles": 3,
+    "tests": 54,
+    "passed": 38,
+    "skipped": 16,
+    "failed": 0,
+    "typecheck": "passed",
+    "screenGate": "previous head passed all 150 screen/theme rows; no production UI changes"
   }
 }
