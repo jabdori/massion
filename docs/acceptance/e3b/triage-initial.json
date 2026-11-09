@@ -1,0 +1,3332 @@
+[
+  {
+    "id": "D001",
+    "screen": "B1",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"사이드바 보기\"",
+    "category": "wrong copy",
+    "cause": "Sidebar toggle updates expanded state but not its accessible name",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D002",
+    "screen": "B1",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     textbox  \"답변을 입력하거나 다른 이야기를 하세요\"",
+    "category": "wrong copy",
+    "cause": "Welcome state uses the member-message placeholder instead of approved first-screen prompt",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D003",
+    "screen": "B1",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D004",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D005",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D006",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"사례 보기\"",
+    "category": "unsupported product state",
+    "cause": "No host case-detail/check-rule view",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D007",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D008",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D009",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation text     \"{date}\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D010",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D011",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D012",
+    "screen": "B2",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D013",
+    "screen": "B2-offline",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D014",
+    "screen": "B2-offline",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D015",
+    "screen": "B2-offline",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D016",
+    "screen": "B2-offline",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D017",
+    "screen": "B2-offline-failed",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D018",
+    "screen": "B2-offline-failed",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D019",
+    "screen": "B2-offline-failed",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D020",
+    "screen": "B2-offline-failed",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     status   \"보내지 못함 · 다시 보내기\"",
+    "category": "checker limitation",
+    "cause": "The status already contains the required static span and retry button, but joined matching skips the button",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D021",
+    "screen": "B2-offline-failed",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D022",
+    "screen": "B3",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D023",
+    "screen": "B3",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D024",
+    "screen": "B3",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"반올림 규칙\"",
+    "category": "fixture gap",
+    "cause": "Contract includes a rounding Work/reference absent from both conversation and Work-list responses",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D025",
+    "screen": "B3",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D026",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D027",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D028",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"반올림 규칙\"",
+    "category": "fixture gap",
+    "cause": "Contract includes a rounding Work/reference absent from both conversation and Work-list responses",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D029",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D030",
+    "screen": "B3-run",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D031",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D032",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D033",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D034",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D035",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D036",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D037",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D038",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D039",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D040",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "category": "unsupported product state",
+    "cause": "No browser/page-read runtime metadata",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D041",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         link     \"작업 공간 닫기\"",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D042",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D043",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D044",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D045",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D046",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D047",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 2 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D048",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D049",
+    "screen": "B4",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 730 > 203",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "D050",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D051",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"사이드바 보기\"",
+    "category": "wrong copy",
+    "cause": "Sidebar toggle updates expanded state but not its accessible name",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D052",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D053",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "category": "unsupported product state",
+    "cause": "No browser/page-read runtime metadata",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D054",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "category": "unsupported product state",
+    "cause": "No identity-bound external order inspection",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D055",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
+    "category": "unsupported product state",
+    "cause": "Unknown-effect reconciliation/close does not exist",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D056",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D057",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D058",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D059",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D060",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  region sidebar      status   \"실패\" (found in conversation)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D061",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D062",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D063",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D064",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D065",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D066",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D067",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "category": "fixture gap",
+    "cause": "Fixture message describes steering but has no recorded steer object or timestamp",
+    "disposition": "repair supported steering fixture"
+  },
+  {
+    "id": "D068",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D069",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D070",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D071",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D072",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D073",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "category": "fixture gap",
+    "cause": "Fixture remains in Representative thread while artboard is a member conversation",
+    "disposition": "navigate supported member thread"
+  },
+  {
+    "id": "D074",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D075",
+    "screen": "B6",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D076",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D077",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D078",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D079",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D080",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D081",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D082",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D083",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D084",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D085",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D086",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D087",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D088",
+    "screen": "B6-token",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D089",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D090",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  page         option   \"Enter\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D091",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  page         option   \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D092",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  page         link     \"구성원 관리\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D093",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  page         button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "missing element",
+    "cause": "Approved B11 includes a draft-copy action after the member picker; UI has reply copy only",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D094",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D095",
+    "screen": "B11",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      chars 31 > 25",
+    "category": "fixture gap",
+    "cause": "B11 fixtures inherit unrelated B2 open decisions and Work, adding attention text",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D096",
+    "screen": "B11-quill",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D097",
+    "screen": "B11-quill",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D098",
+    "screen": "B11-quill",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      chars 31 > 25",
+    "category": "fixture gap",
+    "cause": "B11 fixtures inherit unrelated B2 open decisions and Work, adding attention text",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D099",
+    "screen": "B11-quill",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D100",
+    "screen": "B16",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D101",
+    "screen": "B16",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?\"",
+    "category": "wrong copy",
+    "cause": "Activity summary uses a generic decision title rather than the stored request title/question",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D102",
+    "screen": "B16",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D103",
+    "screen": "B16",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D104",
+    "screen": "B16",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D105",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D106",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D107",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D108",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D109",
+    "screen": "B16-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D110",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D111",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D112",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D113",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
+    "category": "wrong copy",
+    "cause": "Activity summary uses a generic decision title rather than the stored request title/question",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D114",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "D115",
+    "screen": "B16-sent",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D116",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D117",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D118",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D119",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D120",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D121",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D122",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D123",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D124",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D125",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D126",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D127",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "category": "fixture gap",
+    "cause": "Fixture message describes steering but has no recorded steer object or timestamp",
+    "disposition": "repair supported steering fixture"
+  },
+  {
+    "id": "D128",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D129",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D130",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D131",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D132",
+    "screen": "B18",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 36 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D133",
+    "screen": "B21",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D134",
+    "screen": "B21",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D135",
+    "screen": "B21",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D136",
+    "screen": "B21",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D137",
+    "screen": "B21",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D138",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D139",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D140",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D141",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"동그라미\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D142",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"네모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D143",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"물방울\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D144",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"육각\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D145",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"마름모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D146",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"구름\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D147",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"세 잎\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D148",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"세모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D149",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D150",
+    "screen": "B21-name",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D151",
+    "screen": "B21-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D152",
+    "screen": "B21-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D153",
+    "screen": "B21-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D154",
+    "screen": "B21-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 36 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D155",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D156",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D157",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D158",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
+    "category": "unsupported product state",
+    "cause": "No member-admission undo command",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D159",
+    "screen": "B21-done-hana",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D160",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D161",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"완료\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D162",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D163",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D164",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D165",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D166",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D167",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D168",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D169",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D170",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D171",
+    "screen": "B26",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D172",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D173",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "D174",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"완료\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D175",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D176",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D177",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D178",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D179",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D180",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D181",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D182",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "D183",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",
+    "category": "unsupported product state",
+    "cause": "No budget waiting/deferred decision API",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "D184",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "D185",
+    "screen": "B26-later",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L001",
+    "screen": "B1",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"사이드바 보기\"",
+    "category": "wrong copy",
+    "cause": "Sidebar toggle updates expanded state but not its accessible name",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L002",
+    "screen": "B1",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     textbox  \"답변을 입력하거나 다른 이야기를 하세요\"",
+    "category": "wrong copy",
+    "cause": "Welcome state uses the member-message placeholder instead of approved first-screen prompt",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L003",
+    "screen": "B1",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L004",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L005",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L006",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"사례 보기\"",
+    "category": "unsupported product state",
+    "cause": "No host case-detail/check-rule view",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L007",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L008",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L009",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation text     \"{date}\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L010",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L011",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L012",
+    "screen": "B2",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L013",
+    "screen": "B2-offline",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L014",
+    "screen": "B2-offline",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L015",
+    "screen": "B2-offline",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L016",
+    "screen": "B2-offline",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L017",
+    "screen": "B2-offline-failed",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L018",
+    "screen": "B2-offline-failed",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L019",
+    "screen": "B2-offline-failed",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L020",
+    "screen": "B2-offline-failed",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     status   \"보내지 못함 · 다시 보내기\"",
+    "category": "checker limitation",
+    "cause": "The status already contains the required static span and retry button, but joined matching skips the button",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L021",
+    "screen": "B2-offline-failed",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L022",
+    "screen": "B3",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L023",
+    "screen": "B3",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L024",
+    "screen": "B3",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"반올림 규칙\"",
+    "category": "fixture gap",
+    "cause": "Contract includes a rounding Work/reference absent from both conversation and Work-list responses",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L025",
+    "screen": "B3",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L026",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L027",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L028",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"반올림 규칙\"",
+    "category": "fixture gap",
+    "cause": "Contract includes a rounding Work/reference absent from both conversation and Work-list responses",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L029",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L030",
+    "screen": "B3-run",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L031",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L032",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"결정 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L033",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L034",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L035",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L036",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L037",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L038",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L039",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L040",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "category": "unsupported product state",
+    "cause": "No browser/page-read runtime metadata",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L041",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         link     \"작업 공간 닫기\"",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L042",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L043",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L044",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{amount}\" (found in conversation)",
+    "category": "missing element",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L045",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L046",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L047",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 2 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L048",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L049",
+    "screen": "B4",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 730 > 203",
+    "category": "extra text",
+    "cause": "B4 payment detail belongs to later Work-pane layout (B7)",
+    "disposition": "later B7"
+  },
+  {
+    "id": "L050",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L051",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"사이드바 보기\"",
+    "category": "wrong copy",
+    "cause": "Sidebar toggle updates expanded state but not its accessible name",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L052",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L053",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "category": "unsupported product state",
+    "cause": "No browser/page-read runtime metadata",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L054",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "category": "unsupported product state",
+    "cause": "No identity-bound external order inspection",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L055",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"닫기\"",
+    "category": "unsupported product state",
+    "cause": "Unknown-effect reconciliation/close does not exist",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L056",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L057",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L058",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L059",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L060",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  region sidebar      status   \"실패\" (found in conversation)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L061",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L062",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L063",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L064",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L065",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L066",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L067",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "category": "fixture gap",
+    "cause": "Fixture message describes steering but has no recorded steer object or timestamp",
+    "disposition": "repair supported steering fixture"
+  },
+  {
+    "id": "L068",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L069",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L070",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L071",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L072",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L073",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "category": "fixture gap",
+    "cause": "Fixture remains in Representative thread while artboard is a member conversation",
+    "disposition": "navigate supported member thread"
+  },
+  {
+    "id": "L074",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L075",
+    "screen": "B6",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L076",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L077",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L078",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L079",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L080",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L081",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L082",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L083",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L084",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L085",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L086",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L087",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L088",
+    "screen": "B6-token",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L089",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L090",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  order  page         option   \"Enter\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L091",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  order  page         option   \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L092",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  order  page         link     \"구성원 관리\" (occurrence already consumed or found earlier)",
+    "category": "checker limitation",
+    "cause": "Listbox accessible name consumes the child heading/option occurrences before their own requirements",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L093",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  order  page         button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "missing element",
+    "cause": "Approved B11 includes a draft-copy action after the member picker; UI has reply copy only",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L094",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L095",
+    "screen": "B11",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      chars 31 > 25",
+    "category": "fixture gap",
+    "cause": "B11 fixtures inherit unrelated B2 open decisions and Work, adding attention text",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L096",
+    "screen": "B11-quill",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L097",
+    "screen": "B11-quill",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L098",
+    "screen": "B11-quill",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      chars 31 > 25",
+    "category": "fixture gap",
+    "cause": "B11 fixtures inherit unrelated B2 open decisions and Work, adding attention text",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L099",
+    "screen": "B11-quill",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L100",
+    "screen": "B16",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L101",
+    "screen": "B16",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?\"",
+    "category": "wrong copy",
+    "cause": "Activity summary uses a generic decision title rather than the stored request title/question",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L102",
+    "screen": "B16",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L103",
+    "screen": "B16",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L104",
+    "screen": "B16",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L105",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L106",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L107",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L108",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L109",
+    "screen": "B16-later",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L110",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L111",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "category": "fixture gap",
+    "cause": "Second activity decision in contract is absent from the fixture",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L112",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L113",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
+    "category": "wrong copy",
+    "cause": "Activity summary uses a generic decision title rather than the stored request title/question",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L114",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Missing turns/times and differing reply counts put briefing/decision/date before the wrong reply",
+    "disposition": "repair fixture state; fix keyed chronological insertion"
+  },
+  {
+    "id": "L115",
+    "screen": "B16-sent",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L116",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L117",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L118",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L119",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L120",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L121",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L122",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L123",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L124",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L125",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L126",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L127",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "category": "fixture gap",
+    "cause": "Fixture message describes steering but has no recorded steer object or timestamp",
+    "disposition": "repair supported steering fixture"
+  },
+  {
+    "id": "L128",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "category": "unsupported product state",
+    "cause": "No named team-role/task-summary model for this exact card",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L129",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L130",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "category": "unsupported product state",
+    "cause": "No owner memory-candidate proposal/apply/discard path",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L131",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L132",
+    "screen": "B18",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 36 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L133",
+    "screen": "B21",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L134",
+    "screen": "B21",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L135",
+    "screen": "B21",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L136",
+    "screen": "B21",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L137",
+    "screen": "B21",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L138",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L139",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L140",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L141",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"동그라미\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L142",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"네모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L143",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"물방울\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L144",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"육각\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L145",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"마름모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L146",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"구름\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L147",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"세 잎\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L148",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  role   dialog:새 구성원 만들기 button   \"세모\" (text exists without the required role)",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L149",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L150",
+    "screen": "B21-name",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L151",
+    "screen": "B21-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L152",
+    "screen": "B21-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L153",
+    "screen": "B21-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L154",
+    "screen": "B21-done",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 36 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L155",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"작업 중\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L156",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L157",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L158",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"되돌리기\"",
+    "category": "unsupported product state",
+    "cause": "No member-admission undo command",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L159",
+    "screen": "B21-done-hana",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L160",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L161",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"완료\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L162",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L163",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L164",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L165",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L166",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L167",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L168",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L169",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L170",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L171",
+    "screen": "B26",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L172",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "category": "fixture gap",
+    "cause": "Contract includes the installed GitHub app but fixture apps is empty; generic title matching consumes account",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L173",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  role   sidebar      switch   \"활동 보기\" (text exists without the required role)",
+    "category": "fixture gap",
+    "cause": "Fixture carries open decisions/unknown Work although this artboard has no attention state",
+    "disposition": "repair fixture state"
+  },
+  {
+    "id": "L174",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"완료\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L175",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L176",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L177",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"실행 중\"",
+    "category": "wrong copy",
+    "cause": "Work-line state is 작업 중; member and Work states are not distinguished",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L178",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L179",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"확인 대기\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L180",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{member}\" (occurrence already consumed or found earlier)",
+    "category": "wrong order",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L181",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "category": "missing element",
+    "cause": "UI presentation does not expose the required element/semantic order",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L182",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       link     \"작업 공간\"",
+    "category": "missing element",
+    "cause": "Workspace toggle is hidden until a tab exists, even with available conversation Work",
+    "disposition": "fix UI"
+  },
+  {
+    "id": "L183",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"다시 묻기\"",
+    "category": "unsupported product state",
+    "cause": "No budget waiting/deferred decision API",
+    "disposition": "capability follow-up"
+  },
+  {
+    "id": "L184",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  budget sidebar      sentences 1 > 0: \"활동 보기, 확인 필요\"",
+    "category": "checker limitation",
+    "cause": "Sentence heuristic treats the noun 필요 in an approved switch label as a sentence",
+    "disposition": "fix checker with regression"
+  },
+  {
+    "id": "L185",
+    "screen": "B26-later",
+    "theme": "light",
+    "diagnostic": "FAIL  budget composer     chars 37 > 27",
+    "category": "extra text",
+    "cause": "Hidden label repeats the textarea aria-label, inflating accessible text",
+    "disposition": "fix UI"
+  }
+]

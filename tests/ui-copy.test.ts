@@ -15,3 +15,8 @@ test('the embedded client uses the same lookup and cannot terminate its script',
  assert.equal(client('pane.textbox.01',{work_title:'원본'}),copy('pane.textbox.01',{work_title:'원본'}));
  assert.equal(uiCopyClient.includes('</script'),false);
 });
+
+test('conversation fidelity copy retains approved artboard provenance',()=>{
+ assert.equal(copy('ui.scroll-bottom'),'맨 아래로');
+ assert.equal(copy('ui.interrupted',{time:'21:12'}),'응답이 끊겼어요 · 21:12');
+});

@@ -1,0 +1,106 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - switch "활동 보기, 확인 필요" [checked=true, ref=e6]
+    - button "검색" [expanded=false, ref=e7]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e17]
+            - StaticText "하나"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e18]
+            - StaticText "퀼"
+        - listitem [level=1]
+          - button "주노" [ref=e19]
+            - StaticText "주노"
+            - status "읽지 않음"
+    - generic
+      - generic
+        - button "우선순위" [expanded=false, ref=e14]
+        - button "정렬" [expanded=false, ref=e15]
+      - list "활동 보기"
+        - listitem [level=1]
+          - button "깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?" [ref=e20]
+            - strong
+              - StaticText "깨지는 테스트 고치기"
+            - StaticText "노트북의 Claude Code에게 처음 맡길까요?"
+            - status
+              - StaticText "읽지 않음"
+        - listitem [level=1]
+          - button "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3." [ref=e21]
+            - strong
+              - StaticText "반올림 규칙 바꾸기"
+            - StaticText "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3."
+            - status
+              - StaticText "읽지 않음"
+        - listitem [level=1]
+          - button "PR #84 검토 읽지 않음 완료" [ref=e22]
+            - strong
+              - StaticText "PR #84 검토"
+            - StaticText "읽지 않음"
+            - StaticText "완료"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e9]
+      - heading "하나" [level=1, ref=e10]
+        - button "하나" [ref=e16]
+      - button "작업 공간" [ref=e11]
+      - button "더 보기" [expanded=false, ref=e12]
+    - region "대화" [ref=e13]
+      - generic
+        - log
+          - paragraph
+            - StaticText "massion 저장소에서 깨지는 테스트 하나 고쳐 줘."
+          - generic
+            - paragraph
+              - StaticText "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
+            - button "복사" [ref=e29]
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - region "노트북의 Claude Code에게 처음 맡길까요?" [ref=e23]
+            - strong
+              - StaticText "노트북의 Claude Code에게 처음 맡길까요?"
+            - StaticText "09:12"
+            - paragraph
+              - StaticText "보낸 요청은 거둘 수 없어요."
+            - DescriptionList
+              - term "받는 곳"
+              - definition
+                - StaticText "Claude Code · 내 노트북"
+              - term "보낼 내용"
+              - definition
+                - StaticText "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
+              - term "보내지 않는 것"
+              - definition
+                - StaticText "기억 · 다른 일 · 연결 키"
+            - button "맡기기" [ref=e30]
+            - button "나중에" [ref=e31]
+          - region "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3." [ref=e24]
+            - strong
+              - StaticText "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3."
+            - StaticText "12:12"
+            - paragraph
+              - StaticText "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요."
+            - DescriptionList
+              - term "지금"
+              - definition
+                - StaticText "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
+              - term "변경 후"
+              - definition
+                - StaticText "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
+            - button "바꾸기" [ref=e32]
+            - button "나중에" [ref=e33]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e25]
+          - button "파일 추가" [disabled, ref=e26]
+          - button "기본 권한" [ref=e27]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e28]

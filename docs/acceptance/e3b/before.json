@@ -1,0 +1,673 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B1",
+      "theme": "dark",
+      "passed": 6,
+      "failed": 6,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [
+        "region composer: [410,812,672,88] != [406,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production conversation has no first-launch suggestion buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B1.png"
+    },
+    {
+      "screen": "B2",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 19,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,780,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 9,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline-failed.png"
+    },
+    {
+      "screen": "B3",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 10,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 11,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 26,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [324,812,492,88] != [324,808,492,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
+      "screen": "B5",
+      "theme": "dark",
+      "passed": 6,
+      "failed": 12,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [
+        "region composer: [410,812,672,88] != [406,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B5.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 23,
+      "warnings": 1,
+      "required": 34,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production exception renderer has no known token-expiry variant or identity-bound retry control; the existing failed-work state is the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6-token.png"
+    },
+    {
+      "screen": "B11",
+      "theme": "dark",
+      "passed": 9,
+      "failed": 13,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The composer has no mention autocomplete listbox or member selection."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B11.png"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "dark",
+      "passed": 10,
+      "failed": 8,
+      "warnings": 2,
+      "required": 17,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B11-quill.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 12,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 11,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-later.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "passed": 10,
+      "failed": 12,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-sent.png"
+    },
+    {
+      "screen": "B18",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 22,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 11,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 19,
+      "warnings": 2,
+      "required": 33,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21-name.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 7,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 11,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production completed member decisions have no member result chip or undo control; this fixture performs no admission."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done-hana.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 17,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
+        "The production UI has no budget-waiting state or disabled budget-increase decision; no budget values or enabled increase action are fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 17,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
+        "The production UI has no budget-waiting/deferred-budget state or corresponding read-only API; no decision is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26-later.png"
+    },
+    {
+      "screen": "B1",
+      "theme": "light",
+      "passed": 6,
+      "failed": 6,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [
+        "region composer: [410,812,672,88] != [406,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production conversation has no first-launch suggestion buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B1.png"
+    },
+    {
+      "screen": "B2",
+      "theme": "light",
+      "passed": 13,
+      "failed": 19,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "light",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,780,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "light",
+      "passed": 13,
+      "failed": 9,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,786.484375,672,72] != [530,754,680,106] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline-failed.png"
+    },
+    {
+      "screen": "B3",
+      "theme": "light",
+      "passed": 13,
+      "failed": 10,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "light",
+      "passed": 13,
+      "failed": 11,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 13,
+      "failed": 26,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [324,812,492,88] != [324,808,492,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
+    },
+    {
+      "screen": "B5",
+      "theme": "light",
+      "passed": 6,
+      "failed": 12,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [
+        "region composer: [410,812,672,88] != [406,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B5.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "passed": 12,
+      "failed": 23,
+      "warnings": 1,
+      "required": 34,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "light",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production exception renderer has no known token-expiry variant or identity-bound retry control; the existing failed-work state is the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6-token.png"
+    },
+    {
+      "screen": "B11",
+      "theme": "light",
+      "passed": 9,
+      "failed": 13,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The composer has no mention autocomplete listbox or member selection."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B11.png"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "light",
+      "passed": 10,
+      "failed": 8,
+      "warnings": 2,
+      "required": 17,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B11-quill.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "passed": 11,
+      "failed": 12,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "passed": 11,
+      "failed": 11,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-later.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "passed": 10,
+      "failed": 12,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-sent.png"
+    },
+    {
+      "screen": "B18",
+      "theme": "light",
+      "passed": 12,
+      "failed": 22,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "light",
+      "passed": 11,
+      "failed": 11,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "light",
+      "passed": 15,
+      "failed": 19,
+      "warnings": 2,
+      "required": 33,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21-name.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "light",
+      "passed": 13,
+      "failed": 7,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "light",
+      "passed": 12,
+      "failed": 11,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production completed member decisions have no member result chip or undo control; this fixture performs no admission."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done-hana.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "passed": 11,
+      "failed": 17,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
+        "The production UI has no budget-waiting state or disabled budget-increase decision; no budget values or enabled increase action are fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light",
+      "passed": 11,
+      "failed": 17,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [
+        "region composer: [534,812,672,88] != [530,808,680,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The conversation does not expose the contract case-detail link or a retry action for an interrupted answer.",
+        "The production UI has no budget-waiting/deferred-budget state or corresponding read-only API; no decision is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26-later.png"
+    }
+  ]
+}

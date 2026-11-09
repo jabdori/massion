@@ -1,0 +1,27 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e6]
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 보기" [expanded=false, ref=e7]
+      - heading "하나" [level=1, ref=e8]
+        - button "하나" [ref=e11]
+      - button "더 보기" [expanded=false, ref=e9]
+    - region "대화" [ref=e10]
+      - generic
+        - log
+          - generic
+            - paragraph
+              - StaticText "안녕하세요, 하나예요. 무엇부터 맡길까요?"
+            - button "복사" [ref=e16]
+      - generic
+        - form
+          - textbox "답변을 입력하거나 다른 이야기를 하세요" [ref=e12]
+          - button "파일 추가" [disabled, ref=e13]
+          - button "기본 권한" [ref=e14]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e15]

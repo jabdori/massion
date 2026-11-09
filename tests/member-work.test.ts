@@ -210,7 +210,7 @@ test('the admission card names the Work to hand when the proposal carries it',as
  const f=await setup(t);const ids:string[]=[];for(const title of ['Discount totals by weekday','Order discount totals']){f.script.push(v1('On it.',title));await f.say(f.assistant,'Please '+title);await f.assistant.idle();ids.push((await f.intake()).works.find(w=>w.title===title)!.id);}
  await assert.rejects(f.members.propose({topic:'Data analysis',workIds:ids,handoff:'a\nb'}),/handoff|fields/i);
  await f.members.propose({topic:'Data analysis',workIds:ids,handoff:'Table totals · total check'});
- assert.deepEqual((await f.members.read()).decisions[0]!.rows.map(r=>r[0]),['This month','Work to hand','Model group']);
+ assert.deepEqual((await f.members.read()).decisions[0]!.rows.map(r=>r[0]),['이번 달','맡길 일','모델 그룹']);
  assert.equal((await f.members.read()).decisions[0]!.rows[1]![1],'Table totals · total check');
  validateMissionJournalLineage(f.store.inspect() as any);
 });

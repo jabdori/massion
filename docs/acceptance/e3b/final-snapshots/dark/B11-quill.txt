@@ -1,0 +1,55 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - switch "활동 보기" [checked=false, ref=e6]
+    - button "검색" [expanded=false, ref=e7]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e14]
+            - StaticText "하나"
+          - list "하나의 작업"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e15]
+            - StaticText "퀼"
+          - list "퀼의 작업"
+        - listitem [level=1]
+          - button "주노" [ref=e16]
+            - StaticText "주노"
+          - list "주노의 작업"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e9]
+      - heading "하나" [level=1, ref=e10]
+        - button "하나" [ref=e13]
+      - button "더 보기" [expanded=false, ref=e11]
+    - region "대화" [ref=e12]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 4일 (수) 21:30"
+          - paragraph
+            - StaticText "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
+          - generic
+            - paragraph
+              - StaticText "TOTAL: 4 cents"
+            - button "복사" [ref=e21]
+          - paragraph
+            - StaticText "@퀼 줄마다 반올림하면 합계가 달라져?"
+          - generic
+            - paragraph
+              - StaticText "네. 줄마다 반올림하면 4센트, 합계에서 한 번 반올림하면 3센트예요."
+            - button "복사" [ref=e22]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e17]
+          - button "파일 추가" [disabled, ref=e18]
+          - button "기본 권한" [ref=e19]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e20]

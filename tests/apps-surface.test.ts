@@ -62,7 +62,7 @@ test('the install card shows its detail line and rows; the done line offers Remo
 
 test('an installed app adds a rail icon; its page lists the app view in the sidebar and opens an item; a matching Work gets the app tab',async()=>{
  const {app}=fixture();await settle();
- const rail=app.node('rail-apps');assert.equal(rail.hidden,false);const icon=rail.children[0]!;assert.equal(icon.attributes.get('aria-label'),'GitHub');
+ const rail=app.node('rail-apps');assert.equal(rail.hidden,false);const icon=rail.children[0]!;assert.equal(icon.attributes.get('aria-label'),'GitHub');assert.equal(icon.children[0]!.className,'app-branch');assert.equal(icon.children[0]!.textContent,'');assert.equal(icon.children[0]!.attributes.get('aria-hidden'),'true');
  await icon.fire('click');await settle();
  assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(icon.attributes.get('aria-current'),'page');
  const side=app.node('side-app');assert.equal(side.hidden,false);assert.match(side.textContent,sequence('GitHub','jabdori/massion','Open','feat(assistant): answer the owner','#84','Merged',copy('sidebar.link.12')));

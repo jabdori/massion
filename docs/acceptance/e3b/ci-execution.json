@@ -1,0 +1,33 @@
+{
+  "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+  "exitCode": 0,
+  "states": 150,
+  "infrastructureErrors": 0,
+  "nodeVersion": "24.21.0",
+  "agentBrowserVersion": "0.41.2",
+  "systemThemes": [
+    "dark",
+    "light"
+  ],
+  "signin": [
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "failed": 4,
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": []
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "failed": 4,
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": []
+    }
+  ],
+  "round": "visual-gate-2"
+}

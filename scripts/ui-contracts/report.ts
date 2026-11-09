@@ -43,3 +43,24 @@ export function isInteractionGap(error:unknown):boolean{
 }
 // Work cards ignore clicks while busy/loading, even after the conversation has rendered.
 export const workbenchReady="typeof chatView !== 'undefined' && chatView !== null && !busy && !loading && !reconnectRequired";
+// Prototype text budgets measure rendered DOM text, not aria-labels or placeholders.
+// Required names/order and forbidden copy still use the independent accessibility snapshot.
+export const visibleTextBudgetExpression=String.raw`(()=>{
+ const regions={rail:[],sidebar:[],header:[],conversation:[],composer:[],pane:[],page:[],settings:[],dialog:[]};
+ const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+ for(let node;node=walker.nextNode();){
+  const parent=node.parentElement,text=node.textContent.replace(/\s+/g,' ').trim();
+  if(!parent||!text||['SCRIPT','STYLE','TEMPLATE'].includes(parent.tagName)||!parent.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))continue;
+  let clipped=false;
+  for(let el=parent;el&&el!==document.body;el=el.parentElement){const style=getComputedStyle(el),rect=el.getBoundingClientRect();if(style.fontSize==='0px'||style.overflow==='hidden'&&rect.width<=1&&rect.height<=1){clipped=true;break;}}
+  if(clipped)continue;
+  const region=parent.closest('[role=dialog],[role=alertdialog]')?'dialog':parent.closest('#rail')?'rail':parent.closest('#sidebar')?'sidebar':parent.closest('#work-pane')?'pane':parent.closest('.band')?'header':parent.closest('#chat-log')?'conversation':parent.closest('.chat-dock')?'composer':parent.closest('#page-settings')?'settings':parent.closest('.page-body')?'page':null;
+  if(region)regions[region].push(text);
+ }
+ return regions;
+})()`;
+
+export function visibleBudgets(rendered:Record<string,string[]>,regions:string[]){
+ const aliases:Record<string,string[]>={page:['page','conversation','header','composer'],settings:['settings','page','conversation','composer']};
+ return Object.fromEntries(regions.map(region=>[region,(aliases[region]??[region.startsWith('dialog:')?'dialog':region]).flatMap(actual=>{const texts=rendered[actual];if(!Array.isArray(texts))throw Error('Missing rendered region: '+actual);return texts;})]));
+}

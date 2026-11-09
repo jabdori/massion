@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {runInContext} from 'node:vm';
 import {copy} from '../src/ui-copy.ts';
 import {workbenchPage} from '../src/workbench.ts';
 import {harness,reply,settle} from './support/workbench-client.ts';
@@ -38,7 +39,7 @@ test('Add member opens the name-and-shape dialog; Cancel sends nothing, Create s
  assert.equal(app.node('member-create').disabled,true,'a name is required');
  app.node('member-name').value='셈';await app.node('member-name').fire('input');assert.equal(app.node('member-preview').textContent,'셈');
  assert.equal(workbenchPage.match(/id="member-shape-/g)!.length,8);await app.node('member-shape-drop').fire('click');
- assert.equal(app.node('member-shape-drop').attributes.get('aria-checked'),'true');assert.equal(app.node('member-shape-round').attributes.get('aria-checked'),'false');assert.deepEqual([app.node('member-look-drop').style.display,app.node('member-look-round').style.display],['','none'],'SVG has no hidden property, so the preview toggles display');
+ assert.equal(app.node('member-shape-drop').attributes.get('aria-pressed'),'true');assert.equal(app.node('member-shape-round').attributes.get('aria-pressed'),'false');assert.deepEqual([app.node('member-look-drop').style.display,app.node('member-look-round').style.display],['','none'],'SVG has no hidden property, so the preview toggles display');
  assert.equal(app.node('member-create').disabled,false);await app.node('member-create').fire('click');await settle();
  assert.deepEqual(state.posted.map(p=>[p.path,p.body.decisionId,p.body.answer,p.body.member]),[['/assistant/decisions','decision:1','act',{name:'셈',shape:'drop'}]]);
  assert.equal(app.node('member-dialog').hidden,true);
@@ -80,7 +81,7 @@ test('a refused Create keeps the dialog, its name and shape, and marks the name;
  app.node('member-name').value='하나';await app.node('member-name').fire('input');await app.node('member-shape-drop').fire('click');
  await app.node('member-create').fire('click');await settle();
  assert.equal(state.posted.length,1);assert.equal(app.node('member-dialog').hidden,false);assert.equal(app.node('member-name').value,'하나');
- assert.equal(app.node('member-name').attributes.get('aria-invalid'),'true');assert.equal(app.node('member-shape-drop').attributes.get('aria-checked'),'true');
+ assert.equal(app.node('member-name').attributes.get('aria-invalid'),'true');assert.equal(app.node('member-shape-drop').attributes.get('aria-pressed'),'true');
  app.node('member-name').value='셈';await app.node('member-name').fire('input');state.decisionStatus=200;await app.node('member-create').fire('click');await settle();
  assert.equal(state.posted.length,2);assert.equal(app.node('member-dialog').hidden,true);
 });
@@ -124,4 +125,33 @@ for(const unavailable of [false,true])test('Send waits through an invalidated ea
  finally{holdMember=false;releaseMember(unavailable?reply({},503):reply(view(true)));await earlier;await sending;await settle();}
  if(unavailable){assert.equal(posted.length,0);assert.equal(app.node('chat-input').value,'Retain this draft until the target is read');}
  else{assert.equal(posted.length,1);assert.deepEqual([posted[0]!.body.member,posted[0]!.body.segment,posted[0]!.body.expectedRevision,posted[0]!.feed],['member-a',7,9,'feed:a']);}
+});
+
+test('the approved shape choices are toggle buttons with one pressed choice',async()=>{
+ for(const shape of ['round','square','drop','hex','diamond','cloud','clover','tri'])assert.match(workbenchPage,new RegExp('id="member-shape-'+shape+'"[^>]*aria-pressed="(?:true|false)"'));
+ const {app}=fixture();await settle();await button(app.node('chat-log'),'구성원 추가')!.fire('click');await app.node('member-shape-drop').fire('click');assert.equal(app.node('member-shape-drop').attributes.get('aria-pressed'),'true');assert.equal(app.node('member-shape-round').attributes.get('aria-pressed'),'false');
+});
+
+
+test('a completed admission names the stored member and opens that exact conversation without a command',async()=>{
+ const {app,state}=fixture({members:[sem],decisions:[{...decision,state:'done',memberId:sem.id,line:'Added: 셈'}]});await settle();
+ const result=byId(app,'chat-system-'+decision.id)!;assert.ok(result.textContent.includes('구성원 추가됨: 셈'));const open=button(result,'셈');assert.ok(open);await open.fire('click');await settle();assert.equal(state.posted.length,0);assert.match(app.node('page-heading').textContent,/셈/);
+});
+
+
+test('visible modal ownership blocks thread shortcuts and direct thread changes without moving a draft',async()=>{
+ const {app,state}=fixture({members:[sem]});await settle();app.node('chat-input').value='Representative draft';await app.node('chat-input').fire('input');
+ await button(byId(app,'chat-decision-decision:1')!,copy('conversation.link.14'))!.fire('click');await settle();app.node('member-name').value='Name draft';await app.node('member-name').fire('input');
+ const original=runInContext('chatDraftKey',app.context),stored=app.storage.get(original);
+ for(const event of [{key:'2',metaKey:true,target:app.node('member-name')},{key:'2',ctrlKey:true,target:app.node('member-name')},{key:'ArrowDown',altKey:true,target:app.node('member-create')},{key:'ArrowUp',altKey:true,target:app.node('member-create')}]){
+  event.target.focus();app.context.modalShortcut={...event,preventDefault(){}};runInContext('shellKeydown(modalShortcut)',app.context);await settle();
+  assert.equal(runInContext('chatThread',app.context),'');assert.equal(runInContext('chatDraftKey',app.context),original);assert.equal(app.context.document.activeElement,event.target);assert.equal(app.storage.get(original),stored);assert.equal(app.node('member-name').value,'Name draft');
+ }
+ assert.equal(runInContext("chatOpenThread('member-a','셈')",app.context),false,'the shared path covers callers other than shortcuts');assert.equal(state.posted.length,0);
+ await app.node('member-close').fire('click');app.context.modalShortcut={key:'2',metaKey:true,preventDefault(){}};runInContext('shellKeydown(modalShortcut)',app.context);await settle();assert.equal(runInContext('chatThread',app.context),'member-a');assert.equal(app.storage.get(original),stored);
+});
+
+test('the shared thread guard detects any visible aria-modal and ignores hidden ancestors',async()=>{
+ const {app}=fixture({members:[sem]});await settle();const wrapper=app.context.document.createElement('div'),dialog=app.context.document.createElement('div');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');wrapper.hidden=true;wrapper.append(dialog);app.node('app').append(wrapper);
+ assert.equal(runInContext("chatOpenThread('member-a','셈')",app.context),true);await settle();wrapper.hidden=false;assert.equal(runInContext("chatOpenThread('')",app.context),false);wrapper.hidden=true;assert.equal(runInContext("chatOpenThread('')",app.context),true);
 });

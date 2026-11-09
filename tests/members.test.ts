@@ -88,7 +88,7 @@ test('producer: rows come from Representative Works run this month; the card is 
  const view=await f.members.read();const card=view.decisions[0]!;
  // Rows follow the Work ID order that also keys the proposal.
  const titles=(ids[0]!<ids[1]!?['Discount totals by weekday','Order discount totals']:['Order discount totals','Discount totals by weekday']).join(' · ');
- assert.deepEqual(card,{id:card.id,at:f.start+1000,title:'Data analysis',question:'Data analysis came up 2 times this month. Add a member for it?',rows:[['This month',titles],['Model group','Default']],action:'Add member',form:'member',state:'open'});
+ assert.deepEqual(card,{id:card.id,at:f.start+1000,title:'Data analysis',question:'Data analysis 일이 이번 달 2번 있었어요. 맡을 구성원을 추가할까요?',rows:[['이번 달',titles],['모델 그룹','기본']],action:'Add member',form:'member',state:'open'});
  assert.equal((await f.members.propose({topic:'Data analysis',workIds:ids})).status,'replayed');
  assert.equal((await f.members.propose({topic:'Data analysis',workIds:[...ids].reverse()})).status,'replayed','the same Works in another order are the same proposal');
  await f.members.decide({commandId:'d-1',decisionId:card.id,answer:'later'});assert.equal((await f.members.read()).decisions[0]!.state,'later');
@@ -96,7 +96,7 @@ test('producer: rows come from Representative Works run this month; the card is 
  await assert.rejects(f.members.decide({commandId:'d-3',decisionId:card.id,answer:'act'}),/name/,'no autonomy: act needs a name and a shape');
  const act={commandId:'d-4',decisionId:card.id,answer:'act',member:{name:'셈',shape:'drop'}};
  await f.members.decide(act);assert.equal((await f.members.decide(act)).status,'replayed','a lost answer replays, admitting once');
- const after=await f.members.read();assert.deepEqual(after.members.map(m=>[m.name,m.look.shape]),[['셈','drop']]);assert.deepEqual([after.decisions[0]!.state,after.decisions[0]!.line],['done','Added: 셈']);
+ const after=await f.members.read();assert.equal(after.decisions[0]!.memberId,after.members[0]!.id);assert.deepEqual(after.members.map(m=>[m.name,m.look.shape]),[['셈','drop']]);assert.deepEqual([after.decisions[0]!.state,after.decisions[0]!.line],['done','구성원 추가됨: 셈']);
 });
 
 test('an identical answer racing a committed one replays instead of refusing the answered decision',async t=>{

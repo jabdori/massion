@@ -27,8 +27,8 @@ const memberLines=(app:ReturnType<typeof harness>)=>{const li=app.all().find(n=>
 test('Work lines come from the host Work list: the Representative\'s and each member\'s running Work, also Work outside the shown segment; activity lists them all',async()=>{
  const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
  await settle();
- assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.split('작업 중')[0]),['Weekly totals'],'the shown segment has no cards; the lines still show');
- assert.deepEqual(memberLines(app).map(t=>t.replace('작업 중','')),['Churn causes']);
+ assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent),['Weekly totals실행 중','Old summary완료'],'the shown segment has no cards; the lines still show');
+ assert.deepEqual(memberLines(app),['Churn causes실행 중','Price table확인 대기']);
  await app.node('activity-toggle').fire('click');
  const titles=kids(app.node('activity-list')).map(li=>li.children[0]!.children.find(c=>c.tagName==='STRONG')!.textContent);assert.deepEqual(titles,['Price table','Churn causes','Weekly totals','Old summary']);
  const marks=kids(app.node('activity-list'))[0]!.children[0]!.children.find(c=>c.className==='marks')!;assert.equal(marks.children[0]!.textContent,'Q','a member Work shows its member');
@@ -39,12 +39,12 @@ test('a slower earlier Work list answer never replaces a newer one; a replaced d
  let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const slow=runInContext('shellWorksLoad()',app.context);
  state.hold=null;state.works=[row({workId:'w2',title:'Second',memberId:null,execution:'active',acceptance:'pending',started:true})];await runInContext('shellWorksLoad()',app.context);await settle();
  release();await slow;await settle();
- assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.replace('작업 중','')),['Second']);
+ assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent.replace('실행 중','')),['Second']);
  state.feedId='feed:b';state.works=[];await runInContext('chatReset()',app.context);await settle();
  assert.deepEqual(kids(app.node('side-work')),[],'the replaced database\'s list is read anew');
 });
 
-test('a Work that ends without an event leaves the lines on the next minute read, also while a member conversation is open',async()=>{
+test('a Work that ends without an event updates its line on the next minute read, also while a member conversation is open',async()=>{
  const {app,state}=fixture({works:[{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true}]});await settle();
  assert.notEqual(runInContext('chatPendingTimer',app.context),0,'a running listed Work keeps the minute read');
  await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
@@ -54,7 +54,7 @@ test('a Work that ends without an event leaves the lines on the next minute read
  const timer=timers.get(runInContext('chatPendingTimer',app.context))!;assert.equal(timer.delay,60000);
  state.works=[row({workId:'w1',title:'Weekly totals',memberId:null,execution:'settled',acceptance:'accepted',started:true,endedAt:T0+240000})];
  timer.run();await settle();
- assert.deepEqual(kids(app.node('side-work')),[],'the Representative\'s line follows the host list, not the last Representative read');
+ assert.deepEqual(kids(app.node('side-work')).map(n=>n.textContent),['Weekly totals완료'],'the Representative\'s line follows the host list, not the last Representative read');
  assert.equal(runInContext('chatPendingTimer',app.context),0,'no running Work remains to poll');
 });
 
@@ -74,14 +74,14 @@ test('a member message that steered a Work carries the steering tag',async()=>{
  const m='c'.repeat(32);
  const {app}=fixture({memberThread:{messages:[{id:'m:'+m,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:assistant-turn:m:'+m,role:'representative',turnId:'assistant-turn:m:'+m,text:'Sure.'}],turns:[{id:'assistant-turn:m:'+m,messageId:'m:'+m,status:'answered',displayStatus:'answered',at:T0,steer:{missionId:'intake',workId:'w1',status:'recorded',title:'Churn causes'}}]}});
  await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
- assert.equal(app.all().find(n=>n.id==='chat-system-steer-assistant-turn:m:'+m)!.textContent,'방향 바꿈: Churn causes');
+ assert.equal(app.all().find(n=>n.id==='chat-system-steer-assistant-turn:m:'+m)!.textContent,'방향 바꿈: Churn causes · '+new Date(T0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}));
 });
 
 test('a changed Work-list feed replaces the old list and rereads member identities',async()=>{
  const {app,state}=fixture({works:[{workId:'w1',title:'Old database',memberId:null,execution:'active',acceptance:'pending',started:true}]});await settle();
  state.feedId='feed:b';state.works=[row({workId:'w2',title:'New database',memberId:'member-q',execution:'active',acceptance:'pending',started:true})];
  await runInContext('shellWorksLoad()',app.context);await settle();
- assert.deepEqual(kids(app.node('side-work')),[]);assert.deepEqual(memberLines(app),['New database작업 중']);
+ assert.deepEqual(kids(app.node('side-work')),[]);assert.deepEqual(memberLines(app),['New database실행 중']);
  assert.equal(runInContext('chatView.feedId',app.context),'feed:b');assert.doesNotMatch(app.node('activity-list').textContent,/Old database/);
 });
 
@@ -109,7 +109,7 @@ test('an off-segment member Work opens the same tab from its line and activity, 
  assert.ok(app.calls.some(c=>c.path==='/missions/intake'),'both entries use the existing Mission reader');
  state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted',endedAt:T0+240000}];
  runInContext('chatEvents([{aggregateId:"intake"}])',app.context);await settle();
- assert.deepEqual(memberLines(app),[]);assert.match(app.node('activity-list').textContent,/Earlier member Work.*완료/);
+ assert.deepEqual(memberLines(app),['Earlier member Work완료']);assert.match(app.node('activity-list').textContent,/Earlier member Work.*완료/);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -135,7 +135,7 @@ test('steering is shown only when recorded, keeps its node on reread and treats 
  const {app}=fixture({memberThread:{messages:[{id:'m:'+id,role:'owner',turnId:null,text:'Annual plans only.'},{id:'r:'+turn.id,role:'representative',turnId:turn.id,text:'Sure.'}],turns:[turn]}});await settle();
  await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.equal(app.all().find(n=>n.id==='chat-system-steer-'+turn.id),undefined);
  steer.status='recorded';await runInContext('readChat()',app.context);await settle();const tag=app.all().find(n=>n.id==='chat-system-steer-'+turn.id)!;
- assert.equal(tag.textContent,'방향 바꿈: <img src=x>');assert.equal(tag.children[0]!.tagName,'SPAN');assert.equal(tag.className,'chat-system');
+ assert.equal(tag.textContent,'방향 바꿈: <img src=x> · '+new Date(T0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}));assert.equal(tag.children[0]!.tagName,'SPAN');assert.equal(tag.className,'chat-system');
  await runInContext('readChat()',app.context);await settle();assert.equal(tag.detaches,0);assert.equal(app.all().find(n=>n.id==='chat-system-steer-'+turn.id),tag);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
@@ -146,22 +146,22 @@ test('a new conversation feed clears old Work even when the replacement list can
  assert.deepEqual(memberLines(app),[]);assert.equal(app.node('activity-list').textContent,'');
 });
 
-test('a waiting Work needs attention and stops sidebar and minute polling, including in member chat',async()=>{
+test('a waiting Work remains inspectable and keeps minute polling, including in member chat',async()=>{
  const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}]});await settle();
- assert.deepEqual(memberLines(app),['Churn causes작업 중']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
+ assert.deepEqual(memberLines(app),['Churn causes실행 중']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
  state.works=[{...state.works[0]!,execution:'waiting'}];await runInContext('readChat()',app.context);await settle();
- assert.deepEqual(memberLines(app),[]);assert.match(app.node('activity-list').textContent,/Churn causes.*대기 중/);assert.equal(runInContext('chatPendingTimer',app.context),0);
- await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.deepEqual(memberLines(app),[]);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.match(app.node('activity-list').textContent,/Churn causes.*확인 대기/);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();assert.deepEqual(memberLines(app),['Churn causes확인 대기']);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
 });
 
-test('card polling and elapsed time require active execution, while start-in-flight keeps its short poll',async()=>{
+test('card polling follows active execution and check waits while start-in-flight keeps the short clock',async()=>{
  const work={...row({workId:'w1',title:'Churn causes',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true}),starting:false};
  const turn={id:work.turnId,messageId:'m:card',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
  const {app,state}=fixture({turns:[turn],messages:[{id:'reply',role:'representative',turnId:turn.id,text:'On it.'}]});await settle();
  const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!;
- assert.match(card.textContent,/대기 중/);assert.doesNotMatch(card.textContent,/\d+분/);assert.equal(runInContext('chatPendingTimer',app.context),0);
+ assert.match(card.textContent,/확인 대기/);assert.match(card.textContent,/\d+분/);assert.notEqual(runInContext('chatPendingTimer',app.context),0);
  const timers=new Map<number,number>();let next=0;app.context.setTimeout=(_run:()=>void,delay:number)=>{timers.set(++next,delay);return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
- for(const [execution,starting,delay] of [['active',false,60000],['waiting',false,0],['queued',false,0],['blocked',false,0],['settled',false,0],['queued',true,10000]] as const){
+ for(const [execution,starting,delay] of [['active',false,60000],['waiting',false,60000],['queued',false,0],['blocked',false,0],['settled',false,0],['queued',true,10000]] as const){
   state.turns[0].work={...work,execution,starting};await runInContext('readChat()',app.context);await settle();
   assert.equal(timers.get(runInContext('chatPendingTimer',app.context))??0,delay,execution+(starting?' starting':''));
  }
@@ -170,7 +170,7 @@ test('card polling and elapsed time require active execution, while start-in-fli
 test('an unresolved member identity stays neutral on its card, activity row and room, then follows the roster',async()=>{
  const work=row({workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}),turn={id:work.turnId,messageId:'m:card',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
  const {app,state}=fixture({works:[work],turns:[turn],messages:[{id:'reply',role:'representative',turnId:turn.id,text:'On it.'}]});state.members=[];await settle();await runInContext('readChat()',app.context);await settle();
- const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!,who=card.children[0]!.children.find(n=>n.className==='chat-card-who')!;
+ const card=app.all().find(n=>n.id==='chat-card-'+turn.id)!,who=app.all().find(n=>card.contains(n)&&n.className==='chat-card-who')!;
  const neutral=(avatar:Node,label?:Node)=>{assert.equal(avatar.textContent,'');assert.equal(avatar.style.background,'var(--agent-0)');assert.equal(avatar.attributes.has('data-shape'),false);if(label)assert.equal(label.textContent,'');};
  neutral(who.children[0]!,who.children[1]!);
  const activityAvatar=()=>kids(app.node('activity-list'))[0]!.children[0]!.children.find(n=>n.className==='marks')!.children[0]!;neutral(activityAvatar());
@@ -272,7 +272,7 @@ test('an already-rendered Apply in another client checks the saved receipt befor
 for(const held of [false,true])test('active member Work stays in the sidebar across Representative / Quill / Representative with recorded steering'+(held?' and held Work reads':''),async()=>{
  const id='8'.repeat(32),turn={id:'assistant-turn:m:'+id,messageId:'m:'+id,status:'answered',displayStatus:'answered',steer:{missionId:'intake',workId:'w1',title:'Churn causes',status:'recorded'}};
  const {app,state}=fixture({works:[{workId:'w1',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true}],memberThread:{messages:[{id:turn.messageId,role:'owner',turnId:null,text:'Annual plans only.'}],turns:[turn]}});await settle();
- const visible=()=>{assert.equal(app.node('side-members').hidden,false);assert.deepEqual(memberLines(app),['Churn causes작업 중']);assert.equal(state.works[0]!.execution,'active');};visible();
+ const visible=()=>{assert.equal(app.node('side-members').hidden,false);assert.deepEqual(memberLines(app),['Churn causes실행 중']);assert.equal(state.works[0]!.execution,'active');};visible();
  let release=()=>{};if(held){state.hold=new Promise<void>(r=>{release=r;});void runInContext('shellWorksLoad()',app.context);}
  try{
   await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');visible();await settle();visible();assert.equal(app.node('page-heading').textContent,'QQuill');assert.match(app.node('chat-log').textContent,/방향 바꿈: Churn causes/);
@@ -287,8 +287,8 @@ for(const chatStatus of [200,503])test('the initial global Work list lands acros
  assert.equal(state.worksCalls,1);assert.deepEqual(memberLines(app),[],'the first Work list has not arrived');
  state.chatHold=new Promise<void>(r=>{releaseChat=r;});state.chatStatus=chatStatus;await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
  try{
-  releaseWorks();await settle();assert.equal(state.worksCalls,1,'no newer list request superseded the held one');assert.deepEqual(memberLines(app),['Churn causes작업 중'],'global Work is not bound to the selected conversation');
-  state.hold=null;state.worksStatus=503;releaseChat();await settle();assert.deepEqual(memberLines(app),['Churn causes작업 중'],'an unavailable subsequent read keeps the received list');
+  releaseWorks();await settle();assert.equal(state.worksCalls,1,'no newer list request superseded the held one');assert.deepEqual(memberLines(app),['Churn causes실행 중'],'global Work is not bound to the selected conversation');
+  state.hold=null;state.worksStatus=503;releaseChat();await settle();assert.deepEqual(memberLines(app),['Churn causes실행 중'],'an unavailable subsequent read keeps the received list');
   assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
  }finally{releaseWorks();releaseChat();await settle();}
 });
@@ -351,4 +351,26 @@ test('a stale negative read cannot erase an exact committed confirmation respons
  const {app,state,apply,posts,line,open}=steeringFixture();await open();state.postBody={status:'recorded'};state.turn.steer.status='not_recorded';
  await apply()!.fire('click');await settle();assert.equal(line()!.textContent,'방향 바꿈: Churn causes');assert.equal(apply(),undefined);assert.equal(posts().length,1);
  state.turn.steer.status='recorded';await runInContext('readChat()',app.context);await settle();assert.equal(runInContext('chatSteering.size',app.context),0);assert.equal(line()!.textContent,'방향 바꿈: Churn causes');
+});
+
+test('a late global Work list activates a recorded steering link without another conversation read',async()=>{
+ const turn={id:'assistant-turn:m:late',messageId:'m:late',status:'answered',displayStatus:'answered',steer:{missionId:'intake',workId:'w1',status:'recorded',title:'Finished result'}};
+ const {app,state}=fixture({memberThread:{messages:[{id:'m:late',role:'owner',turnId:null,text:'Change the scope.'}],turns:[turn]}});await settle();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ const line=app.all().find(n=>n.id==='chat-system-steer-'+turn.id)!;assert.equal(line.children[0]!.tagName,'SPAN');const reads=app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length;
+ state.works=[row({workId:'w1',title:'Finished result',memberId:'member-q',execution:'settled',acceptance:'accepted',started:true})];
+ let release=()=>{};state.hold=new Promise<void>(resolve=>{release=resolve;});const pending=runInContext('shellWorksLoad()',app.context);await settle();assert.equal(line.children[0]!.tagName,'SPAN');release();await pending;await settle();
+ assert.equal(line.children[0]!.tagName,'BUTTON');assert.equal(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,reads);assert.equal(runInContext('chatPendingTimer',app.context),0);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+for(const projection of ['turn','shell'] as const)test('a fake clock refreshes an eventless waiting Work from '+projection,async()=>{
+ const work=row({workId:'clocked',title:'Clocked check',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true}),turn={id:work.turnId,messageId:'m:clocked',status:'answered',displayStatus:'answered',proposal:{title:work.title},work};
+ const {app,state}=fixture(projection==='turn'?{turns:[turn],messages:[{id:'r:clocked',role:'representative',turnId:turn.id,text:'Checking.'}]}:{works:[work]});await settle();
+ let now=T0+60000;app.context.Date=class extends Date{static now(){return now;}};
+ const timers=new Map<number,{run:()=>void;delay:number}>();let sequence=0;app.context.setTimeout=(run:()=>void,delay:number)=>{const id=++sequence;timers.set(id,{run,delay});return id;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ await runInContext('readChat()',app.context);await settle();const timer=timers.get(runInContext('chatPendingTimer',app.context));assert.equal(timer?.delay,60000,'waiting has the same minute clock as active execution');
+ const reads=app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length,lists=state.worksCalls;
+ if(projection==='turn')assert.match(app.all().find(n=>n.id==='chat-card-'+turn.id)!.textContent,/1분/);else state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted',endedAt:T0+180000}];
+ now+=120000;timer!.run();await settle();assert.ok(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length>reads);assert.ok(state.worksCalls>lists);
+ if(projection==='turn'){assert.match(app.all().find(n=>n.id==='chat-card-'+turn.id)!.textContent,/3분/);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))?.delay,60000);}else{assert.deepEqual(memberLines(app),['Clocked check완료']);assert.equal(runInContext('chatPendingTimer',app.context),0);}
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });

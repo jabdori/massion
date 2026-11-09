@@ -1,0 +1,37 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "passed": 0,
+      "failed": 0,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [],
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": [
+        "Command failed: agent-browser --config /Users/code/orca/workspaces/massion/e3b-conversation/.runtime/e3b-signin-repro/browser-config.json --session massion-contract-9a6c5264-b1-signin-dark --color-scheme dark --allowed-domains 127.0.0.1 --json wait #chat-log\n\n{\"success\":false,\"data\":null,\"error\":\"Wait timed out after 5000ms\"}\n"
+      ],
+      "pair": null
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "passed": 0,
+      "failed": 0,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [],
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": [
+        "Command failed: agent-browser --config /Users/code/orca/workspaces/massion/e3b-conversation/.runtime/e3b-signin-repro/browser-config.json --session massion-contract-9a6c5264-b1-signin-light --color-scheme light --allowed-domains 127.0.0.1 --json wait #chat-log\n\n{\"success\":false,\"data\":null,\"error\":\"Wait timed out after 5000ms\"}\n"
+      ],
+      "pair": null
+    }
+  ]
+}

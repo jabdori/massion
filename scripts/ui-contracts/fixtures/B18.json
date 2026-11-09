@@ -11,13 +11,14 @@
     }
   ],
   "gaps": [
-    "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+    "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
   ],
   "reuse": [
     "tests/apps-surface.test.ts",
     "tests/surface-shell.test.ts",
     "tests/members-surface.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3b completion: existing B3/B18/B22-room/B8-done domain fixture Work reused; no commands or external effects"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -31,7 +32,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -40,13 +41,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -67,6 +76,18 @@
               "text": "지난 90일 해지 건부터 볼게요."
             },
             {
+              "id": "m:direction",
+              "role": "owner",
+              "turnId": null,
+              "text": "기업 고객은 따로 봐 줘."
+            },
+            {
+              "id": "r:direction",
+              "role": "representative",
+              "turnId": "assistant-turn:m:direction",
+              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+            },
+            {
               "id": "m:pricing",
               "role": "owner",
               "turnId": null,
@@ -79,16 +100,16 @@
               "text": "가격 표를 정리하고 확인을 기다리고 있어요."
             },
             {
-              "id": "m:direction",
+              "id": "m:memory",
               "role": "owner",
               "turnId": null,
-              "text": "기업 고객은 따로 봐 줘."
+              "text": "앞으로 표 금액은 원 단위로 써 줘."
             },
             {
-              "id": "r:direction",
+              "id": "r:memory",
               "role": "representative",
-              "turnId": null,
-              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+              "turnId": "assistant-turn:m:memory",
+              "text": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             }
           ]
         },
@@ -130,6 +151,16 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           },
@@ -159,8 +190,38 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
+          },
+          {
+            "id": "assistant-turn:m:direction",
+            "messageId": "m:direction",
+            "at": 1793839920000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "steer": {
+              "missionId": "intake",
+              "workId": "churn",
+              "status": "recorded",
+              "title": "이탈 원인 조사"
+            }
+          },
+          {
+            "id": "assistant-turn:m:memory",
+            "messageId": "m:memory",
+            "at": 1793842860000,
+            "status": "answered",
+            "displayStatus": "answered"
           }
         ],
         "decisions": [],
@@ -208,6 +269,25 @@
             "steps": {
               "done": 1,
               "total": 3
+            }
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 3,
+            "workId": "pr84",
+            "title": "PR #84 검토",
+            "memberId": "member-juno",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "started": true,
+            "startedAt": 1793855280000,
+            "endedAt": null,
+            "turnId": "assistant-turn:m:pr84",
+            "segment": 1,
+            "steps": {
+              "done": 1,
+              "total": 5
             }
           }
         ]
@@ -472,6 +552,93 @@
                     "text": "확인 결과를 기다리기"
                   }
                 ]
+              },
+              {
+                "id": "pr84",
+                "title": "PR #84 검토",
+                "missionVersion": 1,
+                "missionSnapshot": {
+                  "version": 1,
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "constraints": []
+                },
+                "criteria": {
+                  "version": 1,
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1"
+                },
+                "execution": "active",
+                "acceptance": "pending",
+                "tasks": [
+                  {
+                    "id": "pr84:root",
+                    "parentId": null,
+                    "status": "active"
+                  }
+                ],
+                "attempts": [
+                  {
+                    "id": "pr84:attempt:1",
+                    "number": 1,
+                    "criteria": {
+                      "version": 1,
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1"
+                    },
+                    "status": "active",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1"
+                    ]
+                  }
+                ],
+                "assignments": [
+                  {
+                    "id": "pr84:executor",
+                    "actorId": "executor",
+                    "role": "executor",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  },
+                  {
+                    "id": "pr84:verifier",
+                    "actorId": "verifier",
+                    "role": "verifier",
+                    "taskId": "pr84:root",
+                    "model": {
+                      "provider": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "configVersion": "fixture-v1",
+                      "reason": "Deterministic UI fixture; no model invocation",
+                      "evidenceClass": "fixture"
+                    },
+                    "extensionVersion": "fixture-v1"
+                  }
+                ],
+                "effects": [
+                  {
+                    "id": "pr84:effect",
+                    "taskId": "pr84:root",
+                    "status": "succeeded",
+                    "target": "PR #84 검토",
+                    "authority": "소유자가 맡긴 일",
+                    "receipt": "고정된 화면 검증 데이터"
+                  }
+                ],
+                "appliedMemoryVersions": [],
+                "budget": {
+                  "limit": 8,
+                  "reserved": 1,
+                  "measured": 1
+                }
               }
             ],
             "memories": [],
@@ -676,6 +843,93 @@
                   "text": "확인 결과를 기다리기"
                 }
               ]
+            },
+            {
+              "id": "pr84",
+              "title": "PR #84 검토",
+              "missionVersion": 1,
+              "missionSnapshot": {
+                "version": 1,
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "constraints": []
+              },
+              "criteria": {
+                "version": 1,
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1"
+              },
+              "execution": "active",
+              "acceptance": "pending",
+              "tasks": [
+                {
+                  "id": "pr84:root",
+                  "parentId": null,
+                  "status": "active"
+                }
+              ],
+              "attempts": [
+                {
+                  "id": "pr84:attempt:1",
+                  "number": 1,
+                  "criteria": {
+                    "version": 1,
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1"
+                  },
+                  "status": "active",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1"
+                  ]
+                }
+              ],
+              "assignments": [
+                {
+                  "id": "pr84:executor",
+                  "actorId": "executor",
+                  "role": "executor",
+                  "taskId": "pr84:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                },
+                {
+                  "id": "pr84:verifier",
+                  "actorId": "verifier",
+                  "role": "verifier",
+                  "taskId": "pr84:root",
+                  "model": {
+                    "provider": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "configVersion": "fixture-v1",
+                    "reason": "Deterministic UI fixture; no model invocation",
+                    "evidenceClass": "fixture"
+                  },
+                  "extensionVersion": "fixture-v1"
+                }
+              ],
+              "effects": [
+                {
+                  "id": "pr84:effect",
+                  "taskId": "pr84:root",
+                  "status": "succeeded",
+                  "target": "PR #84 검토",
+                  "authority": "소유자가 맡긴 일",
+                  "receipt": "고정된 화면 검증 데이터"
+                }
+              ],
+              "appliedMemoryVersions": [],
+              "budget": {
+                "limit": 8,
+                "reserved": 1,
+                "measured": 1
+              }
             }
           ],
           "memories": [],
@@ -695,7 +949,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -704,13 +958,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -794,6 +1056,16 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           },
@@ -823,6 +1095,16 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }
@@ -842,7 +1124,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -851,13 +1133,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -878,6 +1168,18 @@
               "text": "지난 90일 해지 건부터 볼게요."
             },
             {
+              "id": "m:direction",
+              "role": "owner",
+              "turnId": null,
+              "text": "기업 고객은 따로 봐 줘."
+            },
+            {
+              "id": "r:direction",
+              "role": "representative",
+              "turnId": "assistant-turn:m:direction",
+              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+            },
+            {
               "id": "m:pricing",
               "role": "owner",
               "turnId": null,
@@ -890,16 +1192,16 @@
               "text": "가격 표를 정리하고 확인을 기다리고 있어요."
             },
             {
-              "id": "m:direction",
+              "id": "m:memory",
               "role": "owner",
               "turnId": null,
-              "text": "기업 고객은 따로 봐 줘."
+              "text": "앞으로 표 금액은 원 단위로 써 줘."
             },
             {
-              "id": "r:direction",
+              "id": "r:memory",
               "role": "representative",
-              "turnId": null,
-              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+              "turnId": "assistant-turn:m:memory",
+              "text": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
             }
           ]
         },
@@ -941,6 +1243,16 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           },
@@ -970,20 +1282,45 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
+          },
+          {
+            "id": "assistant-turn:m:direction",
+            "messageId": "m:direction",
+            "at": 1793839920000,
+            "status": "answered",
+            "displayStatus": "answered",
+            "steer": {
+              "missionId": "intake",
+              "workId": "churn",
+              "status": "recorded",
+              "title": "이탈 원인 조사"
+            }
+          },
+          {
+            "id": "assistant-turn:m:memory",
+            "messageId": "m:memory",
+            "at": 1793842860000,
+            "status": "answered",
+            "displayStatus": "answered"
           }
         ],
         "decisions": [],
         "briefings": [],
         "member": {
           "id": "member-quill",
-          "name": "퀼",
-          "look": {
-            "shape": "drop",
-            "color": "agent-1"
-          },
-          "modelGroup": "research"
+          "name": "퀼"
         }
       }
     },
@@ -998,7 +1335,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -1007,13 +1344,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -1097,6 +1442,16 @@
               "steps": {
                 "done": 1,
                 "total": 5
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           },
@@ -1126,6 +1481,16 @@
               "steps": {
                 "done": 1,
                 "total": 3
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
               }
             }
           }
@@ -1136,7 +1501,7 @@
           "id": "member-quill",
           "name": "퀼",
           "look": {
-            "shape": "drop",
+            "shape": "square",
             "color": "agent-1"
           },
           "modelGroup": "research"

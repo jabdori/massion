@@ -10,7 +10,7 @@ if (!snapPath || !contractPath) { console.error('usage: node contract-check.mjs 
 const raw = readFileSync(snapPath, 'utf8');
 let snap;
 try { snap = JSON.parse(raw); } catch { snap = null; }
-if (!snap || typeof snap.data?.snapshot === 'string') snap = { tree: parseText(snap ? snap.data.snapshot : raw) };
+if (!snap || typeof snap.data?.snapshot === 'string') snap = { ...snap, tree: parseText(snap ? snap.data.snapshot : raw) };
 /** agent-browser snapshot text: '  - role "name" [attrs]' per line, two spaces per level. */
 function parseText(text) {
   const root = { role: 'webarea', children: [] }, stack = [[-1, root]];
@@ -73,6 +73,14 @@ const tree = (function walk(n, region, depth, path) {
 const ALIAS = { conversation: ['conversation'], page: ['page', 'conversation', 'header', 'composer'], settings: ['settings', 'page', 'conversation', 'composer'], header: ['header'],
   rail: ['rail'], sidebar: ['sidebar'], pane: ['pane'], composer: ['composer'] };
 const inRegion = (region, actual) => (ALIAS[region] || [region]).includes(actual) || region.startsWith('dialog') && actual === 'dialog';
+const visibleTextBudget = snap.visibleTextBudget;
+if (visibleTextBudget !== undefined) {
+  const known = new Set([...Object.keys(ALIAS), 'dialog', ...contract.regions.map(region => region.region)]);
+  const valid = visibleTextBudget && typeof visibleTextBudget === 'object' && !Array.isArray(visibleTextBudget)
+    && Object.entries(visibleTextBudget).every(([region, texts]) => known.has(region) && Array.isArray(texts) && texts.every(text => typeof text === 'string' && text.trim().length > 0))
+    && Object.keys(contract.text_budget || {}).every(region => Object.hasOwn(visibleTextBudget, region));
+  if (!valid) { console.error('invalid visibleTextBudget: expected arrays of nonempty strings for known regions, including every contract budget region'); process.exit(2); }
+}
 
 // Canonical occurrences belong to tree positions; container labels are only views.
 const views = [];
@@ -96,7 +104,7 @@ function buildOccurrences(node) {
     }
     for (const span of mapped.sort((a, b) => a.start - b.start)) { own(span.start); spans.push(span); from = span.end; }
     own(text.length);
-    const result = { text, node, spans }; if (text && spans.length) views.push(result);
+    const result = { text, node, spans, field }; if (text && spans.length) views.push(result);
     return result;
   }
   const name = view(node.name, 'name', children, !STRUCTURAL.has(node.role));
@@ -110,6 +118,7 @@ function buildOccurrences(node) {
   }
   const ordered = children.flatMap((child, index) => [...slots[index], child]).concat(slots.at(-1));
   if (node.desc) view(node.desc, 'description', ordered, false);
+  if (node.role === 'status' && has(node, child => CONTROL.has(child.role))) view(children.map(child => child.text).join(' '), 'content', children, false);
   return ordered;
 }
 function segments(text) {
@@ -164,18 +173,28 @@ function candidates(el) {
     }
     const match = sub.exec(text); return match?.[0].length ? { index: match.index, length: match[0].length } : null;
   };
-  const add = (refs, node, text) => {
+  const add = (refs, node, text, consumed = refs) => {
     if (!refs.length) return;
     const key = (structural ? node.path + ':' : '') + refs.map(unit => unit.id).join(',');
-    if (seen.has(key)) return; seen.add(key); result.push({ units: refs, node, text });
+    if (seen.has(key)) return; seen.add(key);
+    const anchor = el.role === 'listbox';
+    const first = anchor ? units.find(unit => unit.occurrence.node.path === node.path || unit.occurrence.node.path.startsWith(node.path + '.')) : consumed[0];
+    const start = first.order - (anchor ? 0.5 : 0);
+    result.push({ units: refs, node, text, start, end: anchor ? start : consumed.at(-1).order });
   };
   for (const view of views) {
     if (!roleMatches(el.role, view.node)) continue;
+    const compoundStatus = el.role === 'status' && view.node.role === 'status' && has(view.node, child => CONTROL.has(child.role));
+    if (compoundStatus && view.field !== 'content') continue;
     for (const unit of references(view)) if (hit(unit.text)) add([unit], view.node, unit.text);
     if (standalone) continue;
     for (const segment of [...segments(view.text), { text: view.text, start: 0 }]) {
       const match = hit(segment.text);
-      if (match && represented(view, segment.start + match.index, segment.start + match.index + match.length)) add(references(view, segment.start + match.index, segment.start + match.index + match.length), view.node, segment.text);
+      if (match && represented(view, segment.start + match.index, segment.start + match.index + match.length)) {
+        const refs = references(view, segment.start + match.index, segment.start + match.index + match.length);
+        const action = compoundStatus ? refs.findIndex(unit => has(view.node, child => CONTROL.has(child.role) && (unit.occurrence.node.path === child.path || unit.occurrence.node.path.startsWith(child.path + '.')))) : -1;
+        add(refs, view.node, segment.text, action > 0 ? refs.slice(0, action) : refs);
+      }
     }
   }
   if (!standalone && TEXT_ROLES.has(el.role)) for (let i = 0; i < units.length; i++) {
@@ -189,7 +208,7 @@ function candidates(el) {
       add(refs, refs[0].occurrence.node, text); break;
     }
   }
-  return result.sort((a, b) => a.units[0].order - b.units[0].order || a.units.at(-1).order - b.units.at(-1).order);
+  return result.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
 const fails = [], warns = [], rows = [];
@@ -199,10 +218,10 @@ for (const reg of contract.regions) {
     if (!el.required) continue;
     const label = `${reg.region.padEnd(12)} ${el.role.padEnd(8)} ${JSON.stringify(el.text)}`;
     const all = candidates(el), pool = all.filter(candidate => candidate.units.every(unit => inRegion(reg.region, unit.occurrence.node.region)));
-    const after = pool.find(candidate => candidate.units[0].order > last && (TEXT_ROLES.has(el.role) || !usedNodes.has(candidate.node.path)));
+    const after = pool.find(candidate => candidate.start > last && (TEXT_ROLES.has(el.role) || !usedNodes.has(candidate.node.path)));
     if (after) {
       if (!TEXT_ROLES.has(el.role)) usedNodes.add(after.node.path);
-      last = after.units.at(-1).order; rows.push(`  ok    ${label} -> ${after.node.role} ${JSON.stringify(after.text)}`); continue;
+      last = after.end; rows.push(`  ok    ${label} -> ${after.node.role} ${JSON.stringify(after.text)}`); continue;
     }
     if (pool.length) fails.push(`order  ${label} (occurrence already consumed or found earlier)`);
     else if (all.length) fails.push(`region ${label} (found in ${all[0].units[0].occurrence.node.region})`);
@@ -230,18 +249,18 @@ for (const pattern of contract.forbidden || []) {
     }
   }
 }
-const isSentence = text => text.length >= 12 && text.includes(' ') && /[.?!]$|(요|다|죠|까)[.?!]?$/.test(text);
+const isSentence = text => text.length >= 12 && text.includes(' ') && /[.?!]$|(?<!필)요$|(?:다|죠|까)$/.test(text);
 const SHELL = new Set(['rail', 'sidebar', 'header', 'composer']);
 for (const [region, budget] of Object.entries(contract.text_budget || {})) {
-  const texts = occurrences.filter(occurrence => inRegion(region, occurrence.node.region)).map(occurrence => occurrence.text);
+  const texts = visibleTextBudget === undefined ? occurrences.filter(occurrence => inRegion(region, occurrence.node.region)).map(occurrence => occurrence.text) : visibleTextBudget[region];
   const got = { chars: texts.reduce((sum, text) => sum + text.length, 0), strings: texts.length, sentences: texts.filter(isSentence).length, longest: Math.max(0, ...texts.map(text => text.length)) };
   const out = SHELL.has(region) || region === 'pane' ? fails : warns, tag = `budget ${region.padEnd(12)}`;
   if (got.sentences > budget.sentences) out.push(`${tag} sentences ${got.sentences} > ${budget.sentences}: ${JSON.stringify(texts.find(isSentence).slice(0, 90))}`);
   if (got.longest > Math.max(budget.longest * 1.25, 24)) out.push(`${tag} longest string ${got.longest} > ${Math.round(Math.max(budget.longest * 1.25, 24))} chars`);
   if (got.chars > budget.chars * 1.3 + 20) out.push(`${tag} chars ${got.chars} > ${Math.round(budget.chars * 1.3 + 20)}`);
-  rows.push(`  budget ${region.padEnd(12)} app ${JSON.stringify(got)} proto ${JSON.stringify(budget)}`);
+  rows.push(`  budget ${region.padEnd(12)} app ${JSON.stringify(got)} proto ${JSON.stringify(budget)}${visibleTextBudget === undefined ? '' : ' source visibleTextBudget'}`);
 }
-if (!nodes.some(node => ['statictext', 'text'].includes(node.role))) warns.push('snapshot has no explicit text nodes; budgets use accessible-label fallbacks.');
+if (visibleTextBudget === undefined && !nodes.some(node => ['statictext', 'text'].includes(node.role))) warns.push('snapshot has no explicit text nodes; budgets use accessible-label fallbacks.');
 console.log(`contract ${contract.artboard} (${contract.title}) vs ${snapPath}`);
 rows.forEach(row => console.log(row)); warns.forEach(warning => console.log('  warn  ' + warning)); fails.forEach(failure => console.log('  FAIL  ' + failure));
 const required = contract.regions.reduce((sum, region) => sum + region.elements.filter(el => el.required).length, 0);

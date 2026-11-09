@@ -1,0 +1,71 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 49,
+      "warnings": 1,
+      "required": 78,
+      "visualFailures": [
+        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 19,
+      "failed": 20,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [
+        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
+        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 30,
+      "failed": 49,
+      "warnings": 1,
+      "required": 78,
+      "visualFailures": [
+        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 19,
+      "failed": 20,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [
+        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
+        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    }
+  ]
+}

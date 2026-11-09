@@ -13,7 +13,9 @@
   "reuse": [
     "tests/surface-shell.test.ts",
     "tests/conversation-cards.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3b completion: existing B3/B18/B22-room/B8-done domain fixture Work reused; no commands or external effects",
+    "B5 core snapshot: Application create/admit/activate/assign/admit-effect/receipt/expire commands; original run ownership and committed effect receipt; replay verified in tests/assistant-conversation.test.ts"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -27,7 +29,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -36,13 +38,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -60,7 +70,7 @@
               "id": "r:toner",
               "role": "representative",
               "turnId": "assistant-turn:m:toner",
-              "text": "지난 주문과 같은 토너를 찾았어요."
+              "text": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
             }
           ]
         },
@@ -87,7 +97,7 @@
             },
             "work": {
               "missionId": "intake",
-              "missionRevision": 3,
+              "missionRevision": 13,
               "workId": "toner",
               "title": "프린터 토너 주문",
               "memberId": null,
@@ -96,12 +106,27 @@
               "unknown": true,
               "started": true,
               "startedAt": 1793855280000,
-              "endedAt": null,
+              "endedAt": 1793855520000,
               "turnId": "assistant-turn:m:toner",
               "segment": 1,
               "steps": {
-                "done": 1,
-                "total": 3
+                "done": 0,
+                "total": 0
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
+              },
+              "exception": {
+                "at": 1793855520000,
+                "runId": "b5-run",
+                "fact": "payment-response-unknown"
               }
             }
           }
@@ -117,7 +142,7 @@
         "works": [
           {
             "missionId": "intake",
-            "missionRevision": 3,
+            "missionRevision": 13,
             "workId": "toner",
             "title": "프린터 토너 주문",
             "memberId": null,
@@ -126,17 +151,32 @@
             "unknown": true,
             "started": true,
             "startedAt": 1793855280000,
-            "endedAt": null,
+            "endedAt": 1793855520000,
             "turnId": "assistant-turn:m:toner",
             "segment": 1,
             "steps": {
-              "done": 1,
-              "total": 3
+              "done": 0,
+              "total": 0
+            },
+            "exception": {
+              "at": 1793855520000,
+              "runId": "b5-run",
+              "fact": "payment-response-unknown"
+            },
+            "progress": {
+              "make": {
+                "done": 0,
+                "total": 0
+              },
+              "check": {
+                "done": 0,
+                "total": 0
+              }
             }
           },
           {
             "missionId": "intake",
-            "missionRevision": 3,
+            "missionRevision": 13,
             "workId": "churn",
             "title": "이탈 원인 조사",
             "memberId": "member-quill",
@@ -151,6 +191,11 @@
             "steps": {
               "done": 2,
               "total": 5
+            },
+            "exception": {
+              "at": null,
+              "runId": null,
+              "fact": null
             }
           }
         ]
@@ -223,7 +268,7 @@
         "feedId": "fixture:B2",
         "cursor": 1,
         "snapshot": {
-          "revision": 3,
+          "revision": 13,
           "value": {
             "id": "intake",
             "purpose": "맡긴 일",
@@ -320,7 +365,37 @@
                 "budget": {
                   "limit": 8,
                   "reserved": 1,
-                  "measured": null
+                  "measured": null,
+                  "unit": "output-tokens"
+                },
+                "blocker": {
+                  "code": "runtime_unavailable",
+                  "detail": "Host run deadline elapsed. Original effects and reservations remain; no remote stop, success or replay is inferred."
+                },
+                "endedAt": 1793855520000,
+                "runtimeInterruption": {
+                  "dispatchId": "fixture-dispatch",
+                  "observedAt": 1793855520000,
+                  "pendingEffectIds": [],
+                  "reason": "deadline",
+                  "runId": "b5-run",
+                  "unknownEffectIds": [
+                    "toner:effect"
+                  ]
+                },
+                "runtimeRun": {
+                  "authorizationId": "fixture-only",
+                  "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                  "id": "b5-run",
+                  "inputHash": "13f7972f5f224fa6679e8ec92914eb7c9be42e30c94639c0c71341c7af352a72",
+                  "mode": "mock-http",
+                  "outputTokenCap": 1,
+                  "ownership": {
+                    "deadlineAt": 1793855520000,
+                    "dispatchId": "fixture-dispatch",
+                    "hostSessionId": "fixture-host",
+                    "startedAt": 1793855280000
+                  }
                 }
               },
               {
@@ -421,7 +496,7 @@
     "/missions/intake": {
       "status": 200,
       "body": {
-        "revision": 3,
+        "revision": 13,
         "value": {
           "id": "intake",
           "purpose": "맡긴 일",
@@ -518,7 +593,37 @@
               "budget": {
                 "limit": 8,
                 "reserved": 1,
-                "measured": null
+                "measured": null,
+                "unit": "output-tokens"
+              },
+              "blocker": {
+                "code": "runtime_unavailable",
+                "detail": "Host run deadline elapsed. Original effects and reservations remain; no remote stop, success or replay is inferred."
+              },
+              "endedAt": 1793855520000,
+              "runtimeInterruption": {
+                "dispatchId": "fixture-dispatch",
+                "observedAt": 1793855520000,
+                "pendingEffectIds": [],
+                "reason": "deadline",
+                "runId": "b5-run",
+                "unknownEffectIds": [
+                  "toner:effect"
+                ]
+              },
+              "runtimeRun": {
+                "authorizationId": "fixture-only",
+                "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                "id": "b5-run",
+                "inputHash": "13f7972f5f224fa6679e8ec92914eb7c9be42e30c94639c0c71341c7af352a72",
+                "mode": "mock-http",
+                "outputTokenCap": 1,
+                "ownership": {
+                  "deadlineAt": 1793855520000,
+                  "dispatchId": "fixture-dispatch",
+                  "hostSessionId": "fixture-host",
+                  "startedAt": 1793855280000
+                }
               }
             },
             {
@@ -626,7 +731,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -635,13 +740,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -659,7 +772,7 @@
               "id": "r:toner",
               "role": "representative",
               "turnId": "assistant-turn:m:toner",
-              "text": "지난 주문과 같은 토너를 찾았어요."
+              "text": "지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요."
             }
           ]
         },
@@ -686,7 +799,7 @@
             },
             "work": {
               "missionId": "intake",
-              "missionRevision": 3,
+              "missionRevision": 13,
               "workId": "toner",
               "title": "프린터 토너 주문",
               "memberId": null,
@@ -695,12 +808,27 @@
               "unknown": true,
               "started": true,
               "startedAt": 1793855280000,
-              "endedAt": null,
+              "endedAt": 1793855520000,
               "turnId": "assistant-turn:m:toner",
               "segment": 1,
               "steps": {
-                "done": 1,
-                "total": 3
+                "done": 0,
+                "total": 0
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 0
+                },
+                "check": {
+                  "done": 0,
+                  "total": 0
+                }
+              },
+              "exception": {
+                "at": 1793855520000,
+                "runId": "b5-run",
+                "fact": "payment-response-unknown"
               }
             }
           }

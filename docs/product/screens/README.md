@@ -95,6 +95,17 @@ Only the explicitly allowlisted generated contracts, copy, visual JSON and
 screenshots were imported from the private source. Extension and visual-review
 notes were read as context and are not copied into the repository.
 
+## Visible text and accessible names
+
+The runner preserves raw `.txt` snapshots and writes `.json` snapshots containing
+independent rendered-text budget evidence (`visibleTextBudget`). Required names,
+roles, ordering and forbidden-copy checks still use the AX tree. Only text
+budgets use the measured visible DOM text, matching the artboard extraction;
+accessible-only icon names and placeholders are not extra visible copy. Hidden
+text is excluded and equal visible siblings are counted separately. Invalid or
+incomplete evidence fails closed. Old snapshots keep the AX-based fallback.
+See [the harness contract](../../architecture/ui-contract-harness.md#visible-text-budgets-and-accessibility-evidence).
+
 ## Copy lint and limits
 
 `scripts/check.mjs` reports visible literal candidates in `src/*panel.ts`, `src/surface-shell.ts`, `src/workbench.ts`,

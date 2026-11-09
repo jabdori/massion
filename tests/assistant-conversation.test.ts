@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHostConnections,parseHostManifest} from '../src/host-connections.ts';
@@ -10,15 +10,15 @@ import {CommitOutcomeUnknownError,InMemoryHostSettings,InMemoryStore} from '../s
 import type {HostSettingsStore,Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
-import {AssistantService,ASSISTANT_INSTRUCTION} from '../src/assistant-service.ts';
+import {AssistantService,ASSISTANT_INSTRUCTION,workException} from '../src/assistant-service.ts';
 import {RunUnsettledError} from '../src/configured-runtime.ts';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,assistantRunId,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 import type {AssistantSegment} from '../src/assistant-conversation.ts';
 import {providerRequestHash} from '../src/provider-dispatch.ts';
 import {providerRequestId} from '../src/http-provider.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
-import {hash} from '../src/domain.ts';
-import type {Mission} from '../src/domain.ts';
+import {hash,workInputHash} from '../src/domain.ts';
+import type {Command,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 
@@ -301,7 +301,7 @@ test('31: the conversation is the first section, needs no setup, updates one car
  const start=()=>card.children.find(c=>c.textContent==='시작')!;assert.match(card.textContent,/Summarize the notes.*시작 전 · 작업 중/);assert.equal(start().hidden,false);
  assert.ok(log().endsWith('ThanksYou are welcome.'),'an answered turn without work has no badge');
  const count=cards().length;turns.at(-2).work={...turns.at(-2).work,execution:'active',started:true};mission={...mission,works:[work('active')]};revision=3;cursor=2;events=[{cursor:2,aggregateId:'intake',revision:3}];
- await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/작업 중/);assert.equal(start().hidden,true);
+ await app.tick();await settle();assert.equal(cards().length,count);assert.equal(app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+'b'.repeat(32)),card);assert.match(card.textContent,/실행 중/);assert.equal(start().hidden,true);
  await card.children.find(c=>c.className==='chat-card-open')!.fire('click');await settle();assert.equal((app.context as any).document.activeElement.id,'work-heading-'+workId);
  assert.doesNotMatch(log(),/assistant/i);
 });
@@ -508,7 +508,7 @@ test('8b: the read gives each turn its start, and each Work its run start, steps
  const view=await s.read(),segment=(await f.store.load(segmentId(1)))!.value as AssistantSegment,work=(await f.intake()).works[0]!;
  assert.equal(view.turns[0]!.at,segment.turns[0]!.ownership!.startedAt);
  assert.equal(view.turns[0]!.work!.startedAt,work.runtimeRun!.ownership!.startedAt);assert.equal(typeof view.turns[0]!.work!.startedAt,'number');
- const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.equal(view.turns[0]!.work!.unknown,false);
+ const steps=work.tasks.filter(t=>t.parentId!==null);assert.deepEqual(view.turns[0]!.work!.steps,{done:steps.length,total:steps.length},'the root task only contains the steps');assert.ok(steps.length>=2);assert.deepEqual(view.turns[0]!.work!.progress,{make:{done:1,total:1},check:{done:1,total:1}});assert.equal(view.turns[0]!.work!.evidenceCount,work.verdict?.evidence.length??null);assert.equal(view.turns[0]!.work!.unknown,false);
 });
 
 test('25b: an interrupted run reads as unknown, also after a plain cancel, until the owner quarantines it (ADR 0002 §8)',async t=>{
@@ -517,6 +517,38 @@ test('25b: an interrupted run reads as unknown, also after a plain cancel, until
  const owner=new Application(f.store as Store<Mission>,[{id:'local-owner',roles:['owner']}]),send=async(commandId:string,command:any)=>{const snap=(await f.store.load('intake'))!;return owner.dispatch({missionId:'intake',commandId,expectedRevision:snap.revision,actorId:'local-owner',command});};
  const workId=(await f.intake()).works[0]!.id;await send('cancel-25b',{type:'cancel',workId});
  await Promise.all([m.drain(),s.drain()]);let work=(await s.read()).turns[0]!.work!;assert.equal(work.execution,'cancelled');assert.equal(work.unknown,true);assert.equal(work.steps.done,0);
+ const original=(await f.intake()).works[0]!,journal=structuredClone((f.store as InMemoryStore<any>).inspect());
+ assert.deepEqual(work.exception,{at:original.runtimeInterruption!.observedAt,runId:original.runtimeRun!.id,fact:null});
+ assert.deepEqual((await s.works()).works.find(w=>w.workId===original.id)!.exception,work.exception);
+ await s.read();assert.deepEqual((f.store as InMemoryStore<any>).inspect(),journal);
  await send('quarantine-25b',{type:'quarantine-runtime',workId,runId:(await f.intake()).works[0]!.runtimeRun!.id,reason:'Checked with the vendor',acknowledgeUncertainOutcome:true});
  work=(await s.read()).turns[0]!.work!;assert.equal(work.unknown,false);
+});
+
+test('B5 exception metadata comes from committed effects and original interruption, without exposing receipts',async()=>{
+ const fixture=JSON.parse(await readFile(new URL('../scripts/ui-contracts/fixtures/B5.json',import.meta.url),'utf8')),snapshot=fixture.routes['/missions/intake'].body;
+ const store=new InMemoryStore<Mission>(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:'executor',roles:['executor']},{id:'representative',roles:['representative']}],()=>1793855520000);
+ const {id,purpose,scope,constraints,criteria}=snapshot.value;await app.create({id,purpose,scope,constraints,criteria},'local-owner','b5-create');let n=0;
+ const send=async(command:Command,actorId='local-owner')=>{const result=await app.dispatch({missionId:id,commandId:'b5-'+(++n),expectedRevision:(await store.load(id))!.revision,actorId,command});assert.equal(result.status,'committed');};
+ for(const original of snapshot.value.works as Mission['works']){
+  await send({type:'admit-work',workId:original.id,title:original.title,budget:original.budget.limit});
+  if(original.id==='toner'){const work=(await store.load(id))!.value.works.find(w=>w.id==='toner')!;await send({type:'activate-runtime',workId:work.id,run:{id:'b5-run',authorizationId:'fixture-only',criteriaHash:hash(work.criteria),inputHash:workInputHash(work),mode:'mock-http',outputTokenCap:1,ownership:{hostSessionId:'fixture-host',dispatchId:'fixture-dispatch',startedAt:1793855280000,deadlineAt:1793855520000}}});}
+  for(const assignment of original.assignments)await send({type:'assign',workId:original.id,assignment});
+  for(const effect of original.effects){await send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:original.budget.reserved},'executor');await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status as 'unknown'|'succeeded',receipt:effect.receipt!,usage:original.budget.measured},'executor');}
+  if(original.id==='toner')await send({type:'expire-runtime',workId:'toner',runId:'b5-run',dispatchId:'fixture-dispatch',observedAt:1793855520000},'representative');
+ }
+ const committed=(await store.load(id))!,work=committed.value.works.find(w=>w.id==='toner')!,before=structuredClone(work);
+ assert.deepEqual(workException(work),{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});assert.deepEqual(work,before);
+ for(const [name,change] of [
+  ['title only',(w:Mission['works'][number])=>{w.title='결제 요청';w.effects[0]!.target='provider/model';}],
+  ['provider JSON receipt',(w:Mission['works'][number])=>{w.effects[0]!.receipt=JSON.stringify({reason:'응답 없음 · 다시 보내지 않음',output:'private provider payload'});}],
+  ['extra receipt text',(w:Mission['works'][number])=>{w.effects[0]!.receipt+=' private provider payload';}],
+  ['multiple unknown effects',(w:Mission['works'][number])=>{w.effects.push({...w.effects[0]!,id:'another-unknown'});}],
+  ['known effect',(w:Mission['works'][number])=>{w.effects[0]!.status='succeeded';}],
+ ] as const){const candidate=structuredClone(work);change(candidate);assert.deepEqual(workException(candidate),{at:1793855520000,runId:'b5-run',fact:null},name);}
+ assert.deepEqual(workException({...work,runtimeRun:undefined,runtimeInterruption:undefined,effects:[]}),{at:null,runId:null,fact:null});
+ assert.deepEqual(snapshot,committed);assert.deepEqual(fixture.routes['/read-state?mission=intake'].body.snapshot,committed);
+ for(const path of ['/assistant/conversation','/assistant/conversation?segment=1']){const view=fixture.routes[path].body,turn=view.turns[0];assert.equal(turn.at,1793855280000);assert.equal(turn.work.missionRevision,committed.revision);assert.deepEqual(turn.work.exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});assert.deepEqual(turn.work.steps,{done:0,total:0});assert.equal(view.segment.messages[1].text,'지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요.');assert.ok(view.members.every((m:any)=>m.look.shape==='square'));}
+ const listed=fixture.routes['/assistant/works'].body.works;assert.ok(listed.every((w:any)=>w.missionRevision===committed.revision));assert.deepEqual(listed.find((w:any)=>w.workId==='toner').exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});
+ validateMissionJournalLineage(structuredClone(store.inspect()) as any);
 });

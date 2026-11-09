@@ -1,0 +1,185 @@
+{
+  "source": ".runtime/ui-contracts",
+  "fullCiStates": 150,
+  "states": [
+    {
+      "screen": "B1",
+      "theme": "dark"
+    },
+    {
+      "screen": "B2",
+      "theme": "dark"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "dark"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "dark"
+    },
+    {
+      "screen": "B3",
+      "theme": "dark"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "dark"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark"
+    },
+    {
+      "screen": "B5",
+      "theme": "dark"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "dark"
+    },
+    {
+      "screen": "B11",
+      "theme": "dark"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "dark"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark"
+    },
+    {
+      "screen": "B18",
+      "theme": "dark"
+    },
+    {
+      "screen": "B21",
+      "theme": "dark"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "dark"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "dark"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "dark"
+    },
+    {
+      "screen": "B26",
+      "theme": "dark"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark"
+    },
+    {
+      "screen": "B1",
+      "theme": "light"
+    },
+    {
+      "screen": "B2",
+      "theme": "light"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "light"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "light"
+    },
+    {
+      "screen": "B3",
+      "theme": "light"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "light"
+    },
+    {
+      "screen": "B4",
+      "theme": "light"
+    },
+    {
+      "screen": "B5",
+      "theme": "light"
+    },
+    {
+      "screen": "B6",
+      "theme": "light"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "light"
+    },
+    {
+      "screen": "B11",
+      "theme": "light"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "light"
+    },
+    {
+      "screen": "B16",
+      "theme": "light"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light"
+    },
+    {
+      "screen": "B18",
+      "theme": "light"
+    },
+    {
+      "screen": "B21",
+      "theme": "light"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "light"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "light"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "light"
+    },
+    {
+      "screen": "B26",
+      "theme": "light"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light"
+    }
+  ],
+  "visualAssertions": ".runtime/conversation-visual-gate/measurements.json",
+  "round": "visual-gate-2",
+  "baselineCommit": "ae5d611"
+}

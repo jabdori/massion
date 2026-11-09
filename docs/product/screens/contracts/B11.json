@@ -17,7 +17,7 @@
    "screenshot": "shots/light/B11.png"
   }
  },
- "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'. Owner visual gate on PR106 withdraws the composer-edge copy control requirement (page order 10); the required reply Copy action is unchanged.",
  "regions": [
   {
    "region": "rail",
@@ -203,8 +203,9 @@
     {
      "role": "button",
      "text": "복사",
-     "required": true,
-     "order": 10
+     "required": false,
+     "order": 10,
+     "note": "PR106 owner visual gate: remove the composer-edge copy ornament; reply Copy remains required. The artboard screenshot has no editor copy control."
     },
     {
      "role": "button",
