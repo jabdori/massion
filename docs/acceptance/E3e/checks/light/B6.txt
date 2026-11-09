@@ -1,0 +1,43 @@
+contract B6 (B6 실패) vs /Users/code/orca/workspaces/massion/e3e-remaining/.runtime/e3e-projection-final/snapshots/light/B6.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{work_title}" -> button "이탈 원인 조사"
+  ok    sidebar      status   "실패" -> statictext "실패"
+  ok    sidebar      link     "{work_title}" -> button "경쟁사 가격"
+  ok    sidebar      status   "확인 대기" -> statictext "확인 대기"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      status   "읽지 않음" -> status "읽지 않음"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation text     "{date}" -> statictext "11월 5일 (목)"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "다시 시도" -> button "다시 시도"
+  ok    conversation button   "닫기" -> button "닫기"
+  ok    composer     textbox  "퀼에게 메시지 보내기" -> textbox "퀼에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":30,"strings":8,"sentences":0,"longest":9} proto {"chars":19,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
+  budget header       app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":0,"strings":0,"sentences":0,"longest":0} source visibleTextBudget
+  budget conversation app {"chars":297,"strings":35,"sentences":6,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  warn  budget conversation sentences 6 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+  warn  budget conversation longest string 36 > 34 chars
+  FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"
+  FAIL  missing conversation link     "방향 바꿈: {work_title} · {time}"
+  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
+  FAIL  missing conversation button   "남기기"
+  FAIL  missing conversation button   "지우기"
+FAIL: 5 failures, 2 warnings, 34 required elements

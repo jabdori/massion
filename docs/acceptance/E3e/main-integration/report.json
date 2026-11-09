@@ -1,0 +1,61 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "passed": 25,
+      "failed": 2,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26-later.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "passed": 25,
+      "failed": 2,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26-later.png"
+    }
+  ]
+}

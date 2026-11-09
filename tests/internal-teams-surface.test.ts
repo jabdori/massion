@@ -35,6 +35,7 @@ function fixture(){
 test('only worker steps become role chips after the member and before Check; compact progress stays flat and worker results follow under member identity',async()=>{
  const {app,open,progress,people,results}=fixture();await open();
  assert.deepEqual(people()!.children.map(n=>n.textContent),['퀼퀼','조사','분류','설문','요약','확인']);
+ assert.equal(app.all().find(n=>n.className==='room-progress')?.textContent,'2/4');
  const list=progress();assert.ok(list);assert.equal(list.children.length,4);assert.ok(list.children.every(n=>n.tagName==='LI'));
  assert.deepEqual(list.children.map(n=>n.textContent),['해지 내역 수집','고객 분류','설문 발송건너뜀 · 기존 설문','원인 요약선행 단계 · 고객 분류']);
  assert.ok(list.children.every(n=>n.children.every(child=>child.children.length===0)),'compact rows have no nested identity or result blocks');
@@ -60,7 +61,7 @@ test('step labels and results stay text; root, executor and verifier results do 
 
 test('Work without steps keeps its existing participants and procedure',async()=>{
  const {app,state,open,progress,people}=fixture();state.work.tasks=state.work.tasks.slice(0,3);await open();
- assert.equal(people()!.textContent,'퀼퀼확인');assert.equal(progress()!.children.length,3);
+ assert.equal(people()!.textContent,'퀼퀼확인');assert.equal(progress()!.children.length,3);assert.equal(app.all().find(n=>n.className==='room-progress')?.textContent,'0/2');
 });
 
 test('unresolved members stay unnamed and Representative Work uses the existing Representative identity',async()=>{

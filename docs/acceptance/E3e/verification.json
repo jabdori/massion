@@ -1,0 +1,41 @@
+{
+  "before": {
+    "matches": 1042,
+    "required": 1292,
+    "contractFailures": 250,
+    "visualFailures": 4,
+    "infrastructureErrors": 0
+  },
+  "after": {
+    "matches": 1014,
+    "required": 1292,
+    "contractFailures": 278,
+    "visualFailures": 4,
+    "infrastructureErrors": 0
+  },
+  "tests": {
+    "node": "24.21.0",
+    "passed": 226,
+    "skipped": 4,
+    "failed": 0,
+    "log": "Related ten-file test command in README.md"
+  },
+  "typecheck": "passed",
+  "copyFindings": 0,
+  "designFindings": 0,
+  "workPaneBrowserChecks": 20,
+  "memberDialogBrowserChecks": 2,
+  "notRun": [
+    "Full test suite and full 75-screen/two-theme capture: CI owns these under the owner verification budget.",
+    "Real provider, external delegation, payment, credential and deployment tests."
+  ],
+  "captureCorrections": [
+    "The first final capture attempt correctly failed on stale selectors for removed fictitious decisions; B16/B26 were recaptured with real visible ready nodes, with timeouts/error policy unchanged.",
+    "B6 and B21-name were recaptured after the member-card/date fix and approved shape selection.",
+    "The native time assertion was corrected to include the existing same-revision Work-list timestamp fallback, then all twenty checks passed."
+  ],
+  "environmentCorrections": [
+    "Used a real /private/tmp TMPDIR to satisfy the artifact symlink boundary.",
+    "Linked the already installed /Users/code/massion/node_modules as required by CODEX-BRIEF.md; isolated copy-lint fixtures then resolve TypeScript. No dependencies or boundary checks changed."
+  ]
+}

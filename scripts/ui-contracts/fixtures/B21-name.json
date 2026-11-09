@@ -13,6 +13,10 @@
       "selector": "#member-name",
       "action": "fill",
       "value": "셈"
+    },
+    {
+      "action": "click",
+      "selector": "#member-shape-drop"
     }
   ],
   "gaps": [],
@@ -131,7 +135,7 @@
               ],
               [
                 "모델 그룹",
-                "분석 · 새로 만듦"
+                "기본"
               ]
             ],
             "action": "구성원 추가",
@@ -1065,7 +1069,7 @@
               ],
               [
                 "모델 그룹",
-                "분석 · 새로 만듦"
+                "기본"
               ]
             ],
             "action": "구성원 추가",

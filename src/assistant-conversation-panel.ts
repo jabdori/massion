@@ -69,11 +69,10 @@ function chatCard(turn){
   card.chatWho=element('span',undefined,'chat-card-who');const avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');card.chatElapsed=element('span');card.chatWho.append(avatar,element('span','${representativeName}'),card.chatElapsed);
   head.append(card.chatWho);open.append(card.chatRing,main);open.addEventListener('click',()=>void shellOpenWork(turn.id));
   card.chatStart=element('button',copy('ui.start'),'secondary');card.chatStart.type='button';card.chatStart.setAttribute('data-write','');card.chatStart.addEventListener('click',()=>void startChatWork(turn.id));card.append(open,card.chatStart);chatCards.set(turn.id,card);}
- const w=turn.work,steps=w&&w.steps,progress=w&&w.progress,running=chatElapsedWork(w)&&Number.isSafeInteger(w.startedAt);
+ const w=turn.work,steps=w&&w.steps,running=chatElapsedWork(w)&&Number.isSafeInteger(w.startedAt);
  card.chatTitle.textContent=w?w.title:turn.proposal.title;card.chatState.textContent=chatKind(turn)==='failed'?copy('conversation.status.02'):chatCardLabel(turn);card.chatWho.hidden=card.chatChips.hidden=!w;
  shellWorkIdentity(card.chatWho.children[0],card.chatWho.children[1],w);card.chatWho.children[0].hidden=card.chatWho.children[1].hidden=!!chatThread&&w?.memberId===chatThread;
- const counts=progress&&['make','check'].every(k=>progress[k]&&Number.isSafeInteger(progress[k].done)&&Number.isSafeInteger(progress[k].total)&&progress[k].done>=0&&progress[k].total>=progress[k].done)&&progress.make.total+progress.check.total>0;
- card.chatSteps.textContent=counts?copy('dialog.button.06')+' '+progress.make.done+'/'+progress.make.total+' · '+copy('settings.chip.02')+' '+progress.check.done+'/'+progress.check.total:steps&&Number.isSafeInteger(steps.done)&&Number.isSafeInteger(steps.total)&&steps.total>0?steps.done+'/'+steps.total:'';card.chatSteps.hidden=!card.chatSteps.textContent;
+ card.chatSteps.textContent=steps&&Number.isSafeInteger(steps.done)&&Number.isSafeInteger(steps.total)&&steps.done>=0&&steps.total>=steps.done&&steps.total>0?steps.done+'/'+steps.total:'';card.chatSteps.hidden=!card.chatSteps.textContent;
  if(chatKind(turn)==='failed'&&Number.isSafeInteger(w?.evidenceCount))card.chatSteps.textContent=copy('ui.check-evidence',{count:w.evidenceCount+'건'});
  card.chatElapsed.textContent=chatKind(turn)==='failed'&&Number.isSafeInteger(w?.startedAt)&&Number.isSafeInteger(w?.endedAt)?chatTime(w.startedAt)+' – '+chatTime(w.endedAt):running?copy('ui.minutes',{duration:Math.max(1,Math.round((Date.now()-w.startedAt)/60000))}):'';
  card.chatSteps.hidden=!card.chatSteps.textContent;
@@ -175,7 +174,7 @@ function chatBriefing(b,turns){const own=Array.isArray(b.turns)?b.turns:[],named
  return chatKeyed('briefing-'+b.id,'div','chat-briefing',JSON.stringify([b.title,b.at,named.map(turn=>[turn.id,turn.work.title,chatCardLabel(turn)])]),()=>{const head=element('p'),list=element('ul');head.append(element('strong',b.title),element('span',' | '+chatDay(b.at)+' '+chatTime(b.at)));
   for(const turn of named){const item=element('li');item.append(chatButton(turn.work.title,()=>shellOpenWork(turn.id),''),element('span',' '+chatCardLabel(turn)));list.append(item);}return [head,list];});}
 function chatRoomTurns(){
- const room=paneTabs.find(t=>t.key===paneActive);if(!chatThread||!room?.workId||chatRep?.feedId!==chatView?.feedId)return [];
+ if(!chatThread||chatRep?.feedId!==chatView?.feedId||shellWorksFeed!==chatView.feedId)return [];
  return chatRep.turns.filter(t=>t.work?.memberId===chatThread).flatMap(t=>{const work=shellWorks.find(w=>w.turnId===t.id&&w.missionId===t.work.missionId&&w.workId===t.work.workId);if(!work)return [];const current={...t.work,...work};if(t.work.missionRevision!==work.missionRevision){delete current.steps;delete current.progress;delete current.evidenceCount;}return [{...t,work:current}];});
 }
 function chatSlot(turn){const kind=chatKind(turn);if(kind==='card'||kind==='failed'){const handoff=turn.work?.memberId&&Number.isSafeInteger(turn.at)?[chatSystem('handoff-'+turn.id,copy('conversation.text.05',{work_title:turn.work.title,time:chatTime(turn.at)}))]:[];return [...handoff,chatCard(turn)];}const shown=turn.work?[chatFold(turn)]:[];
@@ -196,7 +195,7 @@ function renderChat(){
  const attached=new Set((view.segment?.messages||[]).map(m=>m.turnId||'assistant-turn:'+m.id));
  const extraWorks=[...view.turns,...chatRoomTurns().filter(t=>!view.turns.some(v=>v.id===t.id))].filter(t=>t.proposal&&!attached.has(t.id)&&Number.isSafeInteger(t.at)).flatMap(t=>chatSlot(t).map(node=>({at:t.at,node:()=>node})));
  const extras=chatSegment?[]:[...extraWorks,...chatDecisions().map(d=>({at:d.at,node:()=>chatDecision(d)})),...chatBriefings().map(b=>({at:b.at,node:()=>chatBriefing(b,turns)})),...chatRunExceptions().map(e=>({at:e.at,node:()=>chatRunException(e)}))].sort((a,b)=>a.at-b.at);
- const dated=(at,node,withTime=false)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=withTime||view.turns.length&&view.turns.every(t=>!t.proposal)&&!(chatThread&&paneTabs.some(t=>t.key===paneActive&&t.workId))?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
+ const dated=(at,node,withTime=false)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=withTime||view.turns.length&&view.turns.every(t=>!t.proposal)&&!(chatThread&&(chatRoomTurns().length||paneTabs.some(t=>t.key===paneActive&&t.workId)))?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
  for(const message of view.segment?view.segment.messages:[]){
   const turn=message.role==='owner'?turns.get('assistant-turn:'+message.id):turns.get(message.turnId);
   if(message.role==='owner'&&turn&&Number.isSafeInteger(turn.at))while(extras.length&&extras[0].at<turn.at){const extra=extras.shift();dated(extra.at,extra.node());}
@@ -256,7 +255,7 @@ async function chatRetry(turnId){const turn=chatView?.turns.find(t=>t.id===turnI
 
 /** Close records the owner's cancel once at the card's revision; whatever the answer, the next read says how it ended and nothing is retried. */
 async function chatCloseWork(turnId){
- const own=chatView?.turns.find(t=>t.id===turnId),turn=own??chatRoomTurns().find(t=>t.id===turnId);if(!turn?.work||chatClosing.has(turnId))return;const work=turn.work,guarded=!own||paneTabs.some(t=>t.key===paneActive&&t.missionId===work.missionId&&t.workId===work.workId);if(guarded&&(snapshot?.value.id!==work.missionId||snapshot.revision!==work.missionRevision||!snapshot.value.works.some(w=>w.id===work.workId)||work.unknown))return;chatClosing.add(turnId);renderChat();if(guarded){try{await sendCommand({type:'cancel',workId:work.workId});}finally{chatClosing.delete(turnId);await readChat();}return;}
+ const own=chatView?.turns.find(t=>t.id===turnId),turn=own??chatRoomTurns().find(t=>t.id===turnId);if(!turn?.work||chatClosing.has(turnId))return;const work=turn.work,guarded=paneTabs.some(t=>t.key===paneActive&&t.missionId===work.missionId&&t.workId===work.workId);if(guarded&&(snapshot?.value.id!==work.missionId||snapshot.revision!==work.missionRevision||!snapshot.value.works.some(w=>w.id===work.workId)||work.unknown))return;chatClosing.add(turnId);renderChat();if(guarded){try{await sendCommand({type:'cancel',workId:work.workId});}finally{chatClosing.delete(turnId);await readChat();}return;}
  try{await write('/missions/'+encodeURIComponent(work.missionId)+'/commands',{commandId:crypto.randomUUID(),expectedRevision:work.missionRevision,command:{type:'cancel',workId:work.workId}},work.missionId,copy('legacy.cancellation-recorded'));}
  catch{}finally{chatClosing.delete(turnId);await readChat();renderChat();}
 }

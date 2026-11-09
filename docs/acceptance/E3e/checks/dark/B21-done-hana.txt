@@ -1,0 +1,30 @@
+contract B21-done-hana (B21-done 구성원 추가 후 · 하나에 남은 기록) vs /Users/code/orca/workspaces/massion/e3e-remaining/.runtime/e3e-after/snapshots/dark/B21-done-hana.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{work_title}" -> button "이탈 원인 조사"
+  ok    sidebar      status   "실행 중" -> statictext "실행 중"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      link     "{member}" -> button "셈"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation link     "{member}" -> button "복사"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":28,"strings":9,"sentences":0,"longest":11} proto {"chars":14,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":77,"strings":6,"sentences":2,"longest":27} proto {"chars":46,"strings":5,"sentences":1,"longest":27} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  warn  budget conversation sentences 2 > 1: "지난달 주문 데이터로 요일별 할인 합계 뽑아 줘."
+  FAIL  missing conversation link     "되돌리기"
+FAIL: 1 failures, 1 warnings, 22 required elements
