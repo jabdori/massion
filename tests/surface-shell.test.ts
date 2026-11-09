@@ -471,3 +471,15 @@ test('a member room shows its assigned failed Work and Close keeps one cancellat
  const one=close.fire('click'),two=close.fire('click');await settle();assert.equal(posts,1);finish();await Promise.all([one,two]);await settle();await close.fire('click');assert.equal(posts,1);
  runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await close.fire('click');await settle();assert.equal(posts,1,'returning to the Representative cannot resend an unknown cancellation');
 });
+
+for(const projected of [false,true])test((projected?'projected member':'Representative')+' Start uses one original Work request and keeps an unknown outcome fenced across views',async()=>{
+ let finish!:()=>void;const held=new Promise<void>(resolve=>finish=resolve);let posts=0;
+ const {app}=fixture([{workId:'a',title:'Unstarted request',memberId:'member-quill',execution:'queued',acceptance:'pending',started:false}],(path,options)=>{if(path==='/missions/intake/run'&&options?.method==='POST'){posts++;return held.then(()=>({}));}});
+ await settle();await openTurn(app,0).fire('click');await settle();await app.tick();
+ if(projected)runInContext("chatRep.turns[0].at=Date.now();chatThread='member-quill';chatView={...chatView,turns:[],segment:{...chatView.segment,messages:[]}};renderChat()",app.context);
+ const card=app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+String(1).repeat(32))!,start=card.children.find(n=>n.tagName==='BUTTON'&&n.textContent==='시작')!;
+ assert.ok(start);assert.equal(start.hidden,false);await start.fire('click');await start.fire('click');await settle();assert.equal(posts,1);
+ const body=JSON.parse(app.calls.find(c=>c.path==='/missions/intake/run'&&c.options?.method==='POST')!.options.body);assert.equal(body.workId,'a');assert.equal(body.expectedRevision,2);assert.ok(body.commandId);
+ finish();await settle();assert.equal(runInContext('unknownOperation?.commandId',app.context),body.commandId);
+ runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await start.fire('click');await settle();assert.equal(posts,1,'an unknown run request cannot be resent after switching views');
+});

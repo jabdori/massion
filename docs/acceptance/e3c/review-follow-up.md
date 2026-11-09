@@ -41,7 +41,7 @@ The regression checks a pinned production-shaped profile/catalog, verifies the r
 
 Only missing producing capabilities and their strict-order diagnostics remain in the scoped ledger. Visual changes A–J are implemented changes, not capability deferrals. The original strict contracts remain unchanged; the Record layout follows the explicit visual-gate request to avoid a repeated body heading, and its generic Record data remains present.
 
-Final local verification: full150 exit0 with zero infrastructure errors; both B22 setups reached their actual nested evidence state; native visual/interaction checks20/20 passed; focused regressions109 passed; complete suite1,576 passed,340 skipped, one previously documented local macOS portable-inventory failure. No CI error policy, checker rule, timeout or contract was weakened.
+Final local verification: full150 exit0 with zero infrastructure errors; both B22 setups reached their actual nested evidence state; native visual/interaction checks20/20 passed; focused regressions111 passed; complete suite1,578 passed,340 skipped, one previously documented local macOS portable-inventory failure. No CI error policy, checker rule, timeout or contract was weakened.
 
 ## Subsequent P2: command feedback visibility
 
@@ -49,4 +49,14 @@ The generic Work-room sibling filter also hid the existing live `#status` region
 
 A regression rejects the actual Stop command with a revision conflict, verifies that Work stays active, and checks that the existing warning reports the conflict without an automatic retry or unknown-command reclassification. Native browser assertions additionally verify both error and warning visibility in compact/wide rooms at 1440px and 390px in both themes, after scrolling the pane. Normal helper text is hidden again when cleared. These 16 viewport/tone assertions issue zero product commands and do not synthesize a provider outcome. The full 150-state CI-command gate is repeated before the follow-up push.
 
-Command-feedback follow-up verification: repeated full150 exit0 with zero infrastructure errors on the final inputs; native cases20/20 and viewport/tone feedback assertions16/16 passed; complete suite1,576 passed,340 skipped,one known local portable-inventory failure.
+Command-feedback follow-up verification: repeated full150 exit0 with zero infrastructure errors on the final inputs; native cases20/20 and viewport/tone feedback assertions16/16 passed; complete suite1,578 passed,340 skipped,one known local portable-inventory failure.
+
+## Subsequent P2: projected Work Start
+
+The Start handler also used only the current member conversation, so a projected unstarted Work displayed a control that could not resolve its original turn. It now resolves the same current room projection as the renderer, Retry, Close and unknown review. Existing busy/sending/in-flight guards remain; already-started, unknown, accepted/stale/failed and closed Work cannot be started by a stale control.
+
+Both the Representative and projected-room Start use the existing durable `write(..., longRun=true)` boundary for the same `/missions/:id/run` command. The original Work ID/revision and one operation identity are persisted before the request, admission receipts release the existing owner-write fence, and an unresolved request cannot be resent with a new identity after a view switch. This adds no run API, resume operation, model route or automatic retry. The global write-control lock disables Start while a command outcome is unresolved.
+
+Two regressions reproduce overlapping actual Start clicks in both views, verify the original Work/revision payload, then return an unknown response and change back to the Representative. Each scenario retains the original pending command identity and exactly one POST. Both tests failed before the fix (projected Start sent no request; direct Start had no durable unknown fence) and pass after the shared-path correction. All Work-card action handlers were checked for the same projection boundary. The complete 150-state CI-command gate is run again before this follow-up push.
+
+Start follow-up final verification: full150 exit0, zero infrastructure errors, final inputs unchanged; focused111 passed; complete suite1,578 passed,340 skipped,one known local portable-inventory failure. The legacy lost-response unit fixture now supplies the real initial read-state handshake instead of relying on an unready client sending a direct request; its original focus/node/label/lost-response assertions remain.

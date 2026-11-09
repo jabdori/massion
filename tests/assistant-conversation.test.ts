@@ -365,6 +365,7 @@ test('31b: lost responses read back as unknown, rereads keep nodes and focus, an
   if(path.startsWith('/assistant/conversation')){conversationReads++;if(fail){fail--;return reply({error:'down'},503);}return reply(view());}
   if(path==='/assistant/messages'){posts.push(options.body);throw new Error('Failed to fetch');}
   if(path==='/missions/intake/run'){await new Promise<void>(r=>hold=r);return reply({error:'busy'},409);}
+  if(path==='/read-state')return reply({feedId:'feed:a',cursor,snapshot:null});
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor,events});
   return reply({error:'Not configured'},503);
  });

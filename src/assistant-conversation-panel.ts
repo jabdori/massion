@@ -68,7 +68,7 @@ function chatCard(turn){
   card.chatChips=element('span',undefined,'chat-chips');card.chatChips.append(element('span',copy('ui.write'),'chip'),element('span',copy('settings.chip.02'),'chip check'));card.chatSteps=element('span',undefined,'chat-steps');main.append(head,card.chatChips,card.chatSteps);
   card.chatWho=element('span',undefined,'chat-card-who');const avatar=element('span','${representativeName.slice(0,1)}','avatar');avatar.setAttribute('aria-hidden','true');card.chatElapsed=element('span');card.chatWho.append(avatar,element('span','${representativeName}'),card.chatElapsed);
   head.append(card.chatWho);open.append(card.chatRing,main);open.addEventListener('click',()=>void shellOpenWork(turn.id));
-  card.chatStart=element('button',copy('ui.start'),'secondary');card.chatStart.type='button';card.chatStart.addEventListener('click',()=>void startChatWork(turn.id));card.append(open,card.chatStart);chatCards.set(turn.id,card);}
+  card.chatStart=element('button',copy('ui.start'),'secondary');card.chatStart.type='button';card.chatStart.setAttribute('data-write','');card.chatStart.addEventListener('click',()=>void startChatWork(turn.id));card.append(open,card.chatStart);chatCards.set(turn.id,card);}
  const w=turn.work,steps=w&&w.steps,progress=w&&w.progress,running=chatElapsedWork(w)&&Number.isSafeInteger(w.startedAt);
  card.chatTitle.textContent=w?w.title:turn.proposal.title;card.chatState.textContent=chatKind(turn)==='failed'?copy('conversation.status.02'):chatCardLabel(turn);card.chatWho.hidden=card.chatChips.hidden=!w;
  shellWorkIdentity(card.chatWho.children[0],card.chatWho.children[1],w);card.chatWho.children[0].hidden=card.chatWho.children[1].hidden=!!chatThread&&w?.memberId===chatThread;
@@ -77,7 +77,7 @@ function chatCard(turn){
  if(chatKind(turn)==='failed'&&Number.isSafeInteger(w?.evidenceCount))card.chatSteps.textContent=copy('ui.check-evidence',{count:w.evidenceCount+'건'});
  card.chatElapsed.textContent=chatKind(turn)==='failed'&&Number.isSafeInteger(w?.startedAt)&&Number.isSafeInteger(w?.endedAt)?chatTime(w.startedAt)+' – '+chatTime(w.endedAt):running?copy('ui.minutes',{duration:Math.max(1,Math.round((Date.now()-w.startedAt)/60000))}):'';
  card.chatSteps.hidden=!card.chatSteps.textContent;
- card.chatStart.hidden=!(w&&!w.started&&w.acceptance==='pending'&&w.execution!=='cancelled'&&!chatStarting.has(turn.id));return card;
+ card.chatStart.disabled=busy||loading||reconnectRequired||chatSending||!!unknownOperation||!!recoveryProblem;card.chatStart.hidden=!(w&&!w.started&&w.acceptance==='pending'&&w.execution!=='cancelled'&&!chatStarting.has(turn.id));return card;
 }
 function chatButton(label,run,className='secondary'){const button=element('button',label,className);button.type='button';button.addEventListener('click',()=>void run());return button;}
 /** Rebuilds a keyed node's content only when what it says changed, so rereads keep focus on its buttons. */
@@ -242,10 +242,10 @@ function chatReset(){protocol.invalidate('chat-view');++chatGeneration;++shellWo
 function chatWorkTurn(turnId){const listed=shellWorks.find(w=>w.turnId===turnId);if(listed)return {id:turnId,work:listed};if(!chatRep)return;return chatRep.turns.find(t=>t.id===turnId)??(Array.isArray(chatRep.briefings)?chatRep.briefings:[]).flatMap(b=>b&&Array.isArray(b.turns)?b.turns:[]).find(t=>t&&t.id===turnId);}
 async function openChatWork(turnId){const turn=chatWorkTurn(turnId);if(!turn||!turn.work||busy||loading)return;const loaded=await loadMission(turn.work.missionId);if(!loaded||!snapshot||snapshot.value.id!==turn.work.missionId)return;document.getElementById('work-heading-'+turn.work.workId)?.focus();}
 async function startChatWork(turnId){
- const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||busy||chatSending||chatStarting.has(turnId))return;const work=turn.work;
+ const turn=chatView?.turns.find(t=>t.id===turnId)??chatRoomTurns().find(t=>t.id===turnId);if(!turn?.work||busy||loading||reconnectRequired||unknownOperation||recoveryProblem||chatSending||chatStarting.has(turnId))return;const work=turn.work;if(work.started||work.unknown||work.acceptance!=='pending'||['cancelled','settled'].includes(work.execution))return;
  // One request per card at a time; the card label from the reread, not a status line, says how it ended.
  chatStarting.add(turnId);renderChat();
- try{await request('/missions/'+encodeURIComponent(work.missionId)+'/run',{method:'POST',headers:{'Content-Type':'application/json',...(feedId?{'X-Massion-Feed':feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),workId:work.workId,expectedRevision:work.missionRevision})},130000);}
+ try{await write('/missions/'+encodeURIComponent(work.missionId)+'/run',{commandId:crypto.randomUUID(),workId:work.workId,expectedRevision:work.missionRevision},work.missionId,copy('legacy.run-finished-inspect-its-execution-and-independent'),true);}
  catch{}finally{chatStarting.delete(turnId);await readChat();renderChat();}
 }
 /** Retry sends nothing: the owner's original request goes back into the input so the conditions can change before a new Send.

@@ -12,8 +12,8 @@
   "aggregate": {
     "command": "TMPDIR=/private/tmp/e3c-tests node --test --test-concurrency=4 tests/*.test.ts",
     "exitCode": 1,
-    "tests": 1917,
-    "pass": 1576,
+    "tests": 1919,
+    "pass": 1578,
     "fail": 1,
     "skipped": 340,
     "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
@@ -51,7 +51,7 @@
   },
   "regressions": {
     "focusedCommand": "node --test tests/work-room-visual.test.ts tests/conversation-visual-gate.test.ts tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/ui-tokens.test.ts tests/ui-contract-fixtures.test.ts",
-    "passed": 109,
+    "passed": 111,
     "failed": 0,
     "projectedUnknownReviewAddedCases": 6,
     "b22NativeSetupCases": 2,
@@ -68,6 +68,18 @@
         "warning"
       ],
       "normalHelpersHidden": true
+    },
+    "start": {
+      "views": [
+        "Representative",
+        "projected member room"
+      ],
+      "overlapPostsPerView": 1,
+      "unknownCommandPersisted": true,
+      "viewSwitchResends": 0,
+      "endpoint": "/missions/:id/run",
+      "newApi": false,
+      "path": "existing durable long-run writer"
     }
   }
 }
