@@ -72,7 +72,7 @@ export class CliLauncher {
    // Truncated output can end inside a secret; retain no partial output in that case.
    return {...result,stdout:result.overflow||result.timedOut||result.aborted?'':redact(result.stdout),stderr:values.length?'':result.stderr};
   },{signal:call.signal,readOnly:this.#policy.readOnly,timeoutMs:call.timeoutMs});}
-  catch(error){if(error instanceof ToolCallError)return empty({spawned:started,timedOut:error.timedOut,aborted:!error.timedOut});if(!started)throw unavailable();return empty({spawned:true});}
+  catch(error){if(error instanceof ToolCallError)return empty({spawned:started,timedOut:error.timedOut,aborted:!error.timedOut});return empty({spawned:started});}
   finally{for(const name of Object.keys(env))delete env[name];values.length=0;}
  }
 }

@@ -50,13 +50,13 @@ test('argument patterns reject option injection, extra args and unsigned/unavail
  const launcher=new CliLauncher(policy(),secrets,{prepare:async()=>async()=>{},runner:async()=>assert.fail('not dispatched')});
  for(const args of [['read','--write'],['write','item'],['read','item','extra'],['read','$(id)'],['read','item\n']])await assert.rejects(launcher.launch(randomUUID(),invocation(args)),/arguments/);
  const denied=new CliLauncher(policy(),secrets,{prepare:async()=>{throw new Error('sensitive-signature-output');}});
- await assert.rejects(denied.launch('unsigned',invocation()),e=>e instanceof Error&&e.message==='CLI launcher unavailable'&&!e.cause);
+ assert.deepEqual(await denied.launch('unsigned',invocation()),{...ok(),spawned:false,exitCode:null});
 });
 
 test('post-check executable changes refuse launch and raw runner errors never escape',async()=>{
  const secrets=new InMemorySecretSlots(),sentinel=randomUUID();await secrets.set(slot,sentinel);
  const replaced=new CliLauncher(policy(),secrets,{prepare:async()=>async()=>{throw new Error(sentinel);},runner:async()=>assert.fail('replaced binary cannot start')});
- await assert.rejects(replaced.launch('replaced',invocation()),/CLI launcher unavailable/);
+ assert.deepEqual(await replaced.launch('replaced',invocation()),{...ok(),spawned:false,exitCode:null});
  const broken=new CliLauncher(policy(),secrets,{prepare:async()=>async()=>{},runner:async()=>{throw new Error(sentinel);}});
  const result=await broken.launch('broken',invocation());assert.equal(result.spawned,true);assert.equal(result.exitCode,null);assert.ok(!JSON.stringify(result).includes(sentinel));
 });
@@ -87,5 +87,5 @@ test('overflow or timeout never returns a secret prefix from truncated output',a
 test('real macOS signature verification refuses an untrusted team before reading slots', {skip:process.platform!=='darwin'},async()=>{
  const secrets=new InMemorySecretSlots();let reads=0;secrets.read=async()=>{reads++;return 'fixture';};
  const launcher=new CliLauncher({...policy(),command:'/bin/echo',args:['read']},secrets);
- await assert.rejects(launcher.launch('bad-team',{...invocation(['read']),command:'/bin/echo'}),/CLI launcher unavailable/);assert.equal(reads,0);
+ assert.deepEqual(await launcher.launch('bad-team',{...invocation(['read']),command:'/bin/echo'}),{...ok(),spawned:false,exitCode:null});assert.equal(reads,0);
 });
