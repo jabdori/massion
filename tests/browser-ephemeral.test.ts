@@ -162,3 +162,12 @@ test('HTTP live queries are no-store and closing or replacing the daemon drops i
  await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await imageVisible(server.browserSessions,false);
  const restarted=createWorkbench(s.store,'.',{scheduleIntervalMs:0});await imageVisible(restarted.browserSessions,false);await restarted.browserSessions.drain();
 });
+
+test('a held observation commit cannot resurrect pixels after Work stops and reactivates',async t=>{
+ const s=await fixture(t),commit=s.store.commit.bind(s.store);let entered!:()=>void,release!:()=>void;const reached=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);t.after(release);
+ s.store.commit=async input=>{const result=await commit(input);if(input.commandId.startsWith('assistant-browser:')){entered();await held;}return result;};
+ const capturing=s.service.capture(request);await reached;
+ await s.send({type:'receipt',workId:'work',effectId:'effect',outcome:'unknown',receipt:'Held observation crossed a stop',usage:null},'executor');
+ await s.send({type:'reconcile-effect',workId:'work',effectId:'effect',outcome:'succeeded',receipt:'Work reactivated'});
+ release();assert.equal((await capturing).status,'committed');await imageVisible(s.service,false);assert.equal(s.calls(),1);
+});

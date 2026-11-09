@@ -19,3 +19,9 @@ B15 uses live images while active. B4 payment approval is `waiting`, so it uses 
 ## Limits
 
 The live owner-visible image may contain CSS-drawn secrets; it is not certified clean. This is precisely why its bytes are absent from every persistence/evidence path. Only fixtures and loopback sites were used; no live third-party site, payment or model call occurred. The optional real adapter remains off by default. No PR merge, tag or release is performed.
+
+## Lifecycle and reflected-format follow-up
+
+Head-specific review reproduced a delayed commit response that could reinsert an image after stop/reactivation, and a narrow-screen navigation path that hid the pane without clearing pixels. Pending captures now carry a one-way invalidation token across the dispatch, and pane-away navigation clears the read and rejects late responses. Both failed before their fixes and pass afterward.
+
+A separate structural privacy finding used invisible format separators inside a reflected code. Matching now removes Unicode format/default-ignorable code points for comparison and maps each match back to original UTF-16 offsets. Five separator classes (including supplementary variation selectors), standalone card/token patterns and a real browser reflection fixture are covered. The 99 affected tests and typecheck pass; no new page PNG is written.

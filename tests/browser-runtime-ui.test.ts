@@ -232,3 +232,11 @@ test('response history takes precedence over an older snapshot history',async()=
 for(const reason of ['settled','cancelled','waiting','disconnect'])test('live image is removed on '+reason,async()=>{const {app,state}=fixture();await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();assert.ok(find(app,'browser-screenshot'));if(reason==='disconnect')runInContext('requireReconnect()',app.context);else{state.mission.works[0].execution=reason;await runInContext("loadMission('mission:1')",app.context);await settle();}assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);assert.equal(runInContext('!!browserRead?.session?.page?.screenshot',app.context),false);});
 
 test('history renders only sanitized structure after restart without a live image',async()=>{const {app,state}=fixture();delete state.session.page.screenshot;state.session.pages=state.session.pages.map(({screenshot,...p}:any)=>p);await settle();await checkout(app);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);assert.match(pane(app).textContent,/Observed checkout/);assert.match(pane(app).textContent,/••••/);assert.doesNotMatch(pane(app).textContent,/never show this/);});
+
+for(const pending of [false,true])test('narrow navigation clears images and rejects '+(pending?'in-flight':'cached')+' pixels',async()=>{
+ const {app,state}=fixture();runInContext('window.matchMedia=()=>({matches:true})',app.context);const hold=deferred();if(pending)state.browser=()=>hold.promise;
+ await settle();await checkout(app);if(!pending)assert.ok(find(app,'browser-screenshot'));
+ runInContext("shellShow('settings')",app.context);assert.equal(runInContext('paneVisible()',app.context),false);
+ if(pending){hold.release(reply({feedId:state.feed,revision:2,session:state.session}));await settle();}
+ assert.equal(runInContext('browserRead===null',app.context),true);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);
+});

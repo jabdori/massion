@@ -38,3 +38,5 @@ test('private text ranges join whitespace and mask overlapping values without ex
 test('document guard failures prevent screenshot creation before and after DOM redaction',async()=>{
  for(const failAt of [1,2]){let inspections=0,shots=0;await assert.rejects(captureBrowserPage(async()=>({result:raw}),{screenshot:async()=>{shots++;return png;},assertDocument:async()=>{if(++inspections===failAt)throw Error('Unsafe document');return 1;}}),/Unsafe document/);assert.equal(shots,0);}
 });
+
+test('format-separated card and token patterns are removed without a matching input field',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:['4111\u200b1111\u20601111\uFE0F1111','token=pri\u200bvate'],fields:[]});assert.deepEqual(page.blocks,['••••','••••']);});
