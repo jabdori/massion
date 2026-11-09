@@ -35,3 +35,7 @@ New records retain the exact execution choice, original input hash, Work revisio
 ## Live admission observation during reconciliation
 
 The host supplies admission activity as a callback. Snapshot construction samples it after loading the budget and Work facts, and every reconciler refresh samples it again. A run beginning outside recovery during an earlier reservation's cleanup therefore keeps its fresh claim until activation, rather than being mistaken for an abandoned claim. The pure planner still receives a captured boolean; live host state is read only at the snapshot boundary.
+
+## Admission-owned runtime cleanup
+
+A runtime completion or failed admission invokes the same reconciler scoped to its own Mission, Work, run ID and reservation revision. It has no authority to fence another instance's fresh claim. Host-wide startup/read recovery remains unscoped and supplies the live-admission observer. Both entry points use the same pure reservation policy; scope only limits which plans a caller executes.

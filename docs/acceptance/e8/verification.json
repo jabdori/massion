@@ -238,5 +238,35 @@
     "red": "live reservation was released before activation, causing its revision to conflict",
     "green": "live reservation stays reserved; activation accepts with exactly two role calls; known settlement releases remaining exposure",
     "scope": "Observe host activity after loading every initial/refreshed snapshot; pure planning still consumes a boolean fact. No additional GLM review."
+  },
+  "admissionOwnedCleanup": {
+    "reviewHead": "fe644575ad92eb97571d4f2de02d1cd103654a68",
+    "finding": 4517005238,
+    "reviewHeadCI": "all passed",
+    "reviewHeadActualDB": {
+      "passed": 2269,
+      "skipped": 36,
+      "failed": 0
+    },
+    "cleanupScope": [
+      "missionId",
+      "workId",
+      "runId",
+      "revision"
+    ],
+    "regressions": [
+      "runtime completion cleanup cannot revoke another instance activation",
+      "runtime reservation-ack-loss cleanup cannot revoke another instance activation"
+    ],
+    "red": "both cleanup paths released the other live claim and advanced its Work revision before activation",
+    "green": "both paths preserve the other reservation and revision, then the original activation completes with no resend",
+    "relatedFiles": 8,
+    "tests": 276,
+    "passed": 240,
+    "skipped": 36,
+    "failed": 0,
+    "typecheck": "passed",
+    "scopedGate": "passed; no new/stale/infrastructure diagnostics or added allowances",
+    "additionalGLMReview": false
   }
 }

@@ -1,6 +1,6 @@
 {
-  "src/monthly-budget.ts": "2b7d865e34ed6100894cc73b74206f6e7fea8ab7757addd237c0f50a17ab7f56",
-  "src/configured-runtime.ts": "23b29d0778b10e15403fd6ec39951fd1ae38575d42d32e5ce8a342ebb62c6ce7",
+  "src/monthly-budget.ts": "d0d50e6b375aad4cfeab2d4e8ffc9177ca3dcf805b5b06f99b2fea26f932dd1a",
+  "src/configured-runtime.ts": "1aab44559028056e028c73050e2f2711b32092b5de426946f00954e4a2f566c6",
   "src/server.ts": "c33251ec26cbaae3cb80f174bca21ec7a9d388c1e47b0cfc503b1c2df7660106",
   "src/domain.ts": "9fdb1578a2e524d9bf3457e1f90ca98dc59f8ceb1c745e69fdb05e124e30fdac",
   "src/settings-panel.ts": "30d585a90838f6e813bf78d70563824029145cef7537ba22e7912e7ba02f2dcb",

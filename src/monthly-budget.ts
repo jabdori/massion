@@ -147,10 +147,10 @@ export class MonthlyBudgetService {
    if(result.status==='conflict')continue;const reservation=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(reservation.state==='waiting')await this.reconcile(await this.snapshot(()=>true));return {status:result.status==='replayed'?'replayed':reservation.state==='waiting'?'waiting':'reserved',reservation};
   }throw new DomainError('Monthly budget admission contention');
  }
- async reconcile(initial?:MonthlySnapshot,run?:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>,admitting:()=>boolean=()=>initial?.admitting??false){
+ async reconcile(initial?:MonthlySnapshot,run?:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>,admitting:()=>boolean=()=>initial?.admitting??false,only?:Pick<Reservation,'missionId'|'workId'|'runId'|'revision'>){
   let snapshot=initial??await this.snapshot(admitting);const attempted=new Set<string>(),errors:unknown[]=[];
   for(let step=0;step<8*((snapshot.budget?.value.reservations.length??0)+1);step++){
-   const plans=reconcileMonthly(snapshot).filter(p=>p.kind!=='hold'),plan=plans.find(p=>p.kind!=='run'||run&&!attempted.has(hash([p.reservation.missionId,p.reservation.workId,p.reservation.runId])));if(!plan)break;
+   const plans=reconcileMonthly(snapshot).filter(p=>p.kind!=='hold'&&(!only||p.reservation.missionId===only.missionId&&p.reservation.workId===only.workId&&p.reservation.runId===only.runId&&p.reservation.revision===only.revision)),plan=plans.find(p=>p.kind!=='run'||run&&!attempted.has(hash([p.reservation.missionId,p.reservation.workId,p.reservation.runId])));if(!plan)break;
    const r=plan.reservation,mission=plan.mission!,w=mission?.value.works.find(w=>w.id===r.workId);if(!w||!snapshot.budget)break;
    const observed=snapshot;
    try{if(plan.kind==='run'&&ready&&!await ready(r,mission.revision)){attempted.add(hash([r.missionId,r.workId,r.runId]));continue;}await withAdmissionFeed(snapshot.feedId,async()=>{
