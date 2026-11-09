@@ -67,3 +67,8 @@ B18-room-b 40, B22-room 13, B22-room-steps 18, including pane text budgets. Thes
 are recorded failures, not a claim of prototype parity. See
 [screen evidence](../acceptance/q14-ui/README.md). The complete suite and complete
 screen catalog remain CI-owned per the brief's verification budget.
+
+After integrating main `094eca4` (desktop daemon authentication), typecheck passed
+again and the affected member/runtime/fixture batch passed 100 of 103 tests,
+with three environment-gated skips. The eight headless screen flows passed again
+with the same recorded prototype-contract failures; screenshots were regenerated.
