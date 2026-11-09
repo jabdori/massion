@@ -1,14 +1,214 @@
 {
   "screen": "B26",
   "extends": "B7-done",
-  "description": "Monthly-budget capability fallback using existing exact Work reads; no budget approval or pause is simulated.",
-  "readySelector": "#chat-log",
+  "description": "Monthly budget decision from the production owner budget service; no provider call or invented price.",
+  "readySelector": ".chat-decision",
   "steps": [],
-  "gaps": [
-    "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated."
-  ],
+  "gaps": [],
   "reuse": [
-    "B7-done: current production-read-shaped Work sources, accepted fixture artifact and independent verdict.",
-    "E3e visual gate: do not inherit B2 rounding evaluation messages into budget screens."
-  ]
+    "src/monthly-budget.ts: MonthlyBudgetService.configure/admit/read",
+    "scripts/ui-contracts/monthly-budget-fixtures.ts",
+    "B7-done: existing Work sidebar and immutable artifact reads"
+  ],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "open",
+            "budget": {
+              "revision": 2,
+              "limit": 128
+            }
+          }
+        ],
+        "briefings": [],
+        "exceptions": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "open",
+            "budget": {
+              "revision": 2,
+              "limit": 128
+            }
+          }
+        ],
+        "briefings": [],
+        "exceptions": []
+      }
+    },
+    "/assistant/usage": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 5,
+        "revision": 2,
+        "period": "2026-11",
+        "timezone": "Asia/Seoul",
+        "unit": "output-tokens",
+        "limit": 0,
+        "spent": 0,
+        "usageBounded": true,
+        "knownOutputTokens": 0,
+        "inputTokens": 0,
+        "cost": null,
+        "reserved": 0,
+        "members": [],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "open",
+            "budget": {
+              "revision": 2,
+              "limit": 128
+            }
+          }
+        ]
+      }
+    }
+  }
 }

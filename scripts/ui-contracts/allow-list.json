@@ -2375,56 +2375,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"변경\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings status \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"새로고침\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
       "screen": "B15",
       "theme": "dark",
       "kind": "contract",
@@ -3423,46 +3373,6 @@
       "category": "capability",
       "reason": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
       "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-dark"
-    },
-    {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-dark"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-later-dark"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B2",
@@ -5835,56 +5745,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"변경\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings status \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"새로고침\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
       "screen": "B15",
       "theme": "light",
       "kind": "contract",
@@ -6883,66 +6743,6 @@
       "category": "capability",
       "reason": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
       "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-light"
-    },
-    {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-light"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-later-light"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
-    },
-    {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
     },
     {
       "screen": "B7-churn",

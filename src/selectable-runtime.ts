@@ -73,7 +73,7 @@ export class SelectableTextRuntime implements WorkRuntime {
   if(this.#draining)return {status:'blocked',snapshot,reason:'Local host is draining; no new run is admitted.'};let admission=this.admission(snapshot,workId,expectedRevision,choice,owned);if(!owned&&admission.ready)admission=busy?hostBusyPreflight(admission):{...admission,ready:false,diagnostics:[{code:'work_already_started',message:'At request admission this Work already had a local dispatch.'}]};if(!admission.ready)return rejectedRun(admission,snapshot);
   const prepared=this.prepare({...snapshot.value,criteria:work.criteria},choice);
   if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
-  const key=`${missionId}\0${workId}`;this.#active.set(key,prepared.runtime);return prepared.runtime.run(missionId,workId,runId,expectedRevision,undefined,activationActorId);
+  const key=`${missionId}\0${workId}`;this.#active.set(key,prepared.runtime);return prepared.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
  }
  owns(missionId:string,workId:string,runId:string){return this.#active.get(`${missionId}\0${workId}`)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(`${missionId}\0${workId}`)?.interrupt(missionId,workId);}
