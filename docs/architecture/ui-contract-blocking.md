@@ -25,6 +25,12 @@ The runner writes evidence before gating; reports/artifacts publish on failure.
 reason entry is supplied in `--reasons <json>`; justify additions in the PR.
 Never regenerate from incomplete or infrastructure-failed captures.
 
+For the post-PR #121/#122 refresh, merge current main and use its latest complete
+CI artifact. Remove resolved exceptions first, then admit only exact live
+occurrences reasoned by the room and pane-step-time residual ledgers through
+the explicit addition flag. Preserve unmatched diagnostics in the PR body and
+`docs/acceptance/E3f/unclassified.json`; do not extend pending-slice ownership.
+
 Implementation and verification:
 
 1. Add failing gate tests for allowed/new/stale/infra occurrences, multiplicity,

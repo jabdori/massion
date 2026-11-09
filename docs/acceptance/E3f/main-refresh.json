@@ -1,22 +1,29 @@
 {
   "source": {
-    "commit": "dd0c48b7311560e9eb0576e2624b6c605d59de13",
-    "run": "https://github.com/jabdori/massion/actions/runs/42647827305",
-    "artifact": 13689216372
+    "commit": "e6cd313b16def56dcc596878cadbdcf56876d6e1",
+    "run": "https://github.com/jabdori/massion/actions/runs/42653256831",
+    "artifact": 13690982174
   },
   "capture": {
     "rows": 150,
-    "contract": 840,
-    "visual": 18,
-    "gaps": 146,
+    "contract": 826,
+    "visual": 16,
+    "gaps": 136,
     "infrastructure": 0
   },
-  "previousEntries": 970,
-  "removedStaleEntries": 24,
-  "addedRoomLedgerEntries": 36,
-  "currentEntries": 982,
-  "pendingSliceEntries": 176,
-  "unclassified": 22,
+  "previousEntries": 982,
+  "removedStaleEntries": 30,
+  "retainedRoomLedgerEntries": 36,
+  "addedPaneLedgerEntries": 22,
+  "currentEntries": 974,
+  "allowed": {
+    "contract": 822,
+    "visual": 16,
+    "gaps": 136,
+    "copy": 0
+  },
+  "pendingSliceEntries": 152,
+  "unclassified": 4,
   "stale": 0,
   "gateExit": 1
 }

@@ -1,19 +1,9 @@
 {
   "source": {
-    "commit": "dd0c48b7311560e9eb0576e2624b6c605d59de13",
-    "run": "https://github.com/jabdori/massion/actions/runs/42647827305"
+    "commit": "e6cd313b16def56dcc596878cadbdcf56876d6e1",
+    "run": "https://github.com/jabdori/massion/actions/runs/42653256831"
   },
   "entries": [
-    {
-      "screen": "B1",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production conversation has no first-launch suggestion buttons.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production conversation has no first-launch suggestion buttons.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
     {
       "screen": "B2",
       "theme": "dark",
@@ -3555,26 +3545,6 @@
       "ledger": "docs/acceptance/E3d1/remaining.md"
     },
     {
-      "screen": "B21-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"복사\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "A newly admitted member has no automatic greeting; the truthful empty conversation has no reply to copy.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-dark"
-    },
-    {
-      "screen": "B21-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B21-done-hana",
       "theme": "dark",
       "kind": "contract",
@@ -3853,16 +3823,6 @@
       "category": "capability",
       "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B1",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production conversation has no first-launch suggestion buttons.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production conversation has no first-launch suggestion buttons.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
     },
     {
       "screen": "B2",
@@ -7405,26 +7365,6 @@
       "ledger": "docs/acceptance/E3d1/remaining.md"
     },
     {
-      "screen": "B21-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"복사\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "A newly admitted member has no automatic greeting; the truthful empty conversation has no reply to copy.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-light"
-    },
-    {
-      "screen": "B21-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B21-done-hana",
       "theme": "light",
       "kind": "contract",
@@ -7705,126 +7645,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B1-first",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"맡기기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"맡기기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page heading \"Massion\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"Claude로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page button \"ChatGPT로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page link \"다른 방법으로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no first-launch sign-in page or provider login buttons.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
       "screen": "B24",
       "theme": "dark",
       "kind": "contract",
@@ -8583,126 +8403,6 @@
       "category": "pending-slice",
       "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
       "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
-    },
-    {
-      "screen": "B1-first",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"맡기기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"맡기기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-first-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page heading \"Massion\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"Claude로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page button \"ChatGPT로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page link \"다른 방법으로 계속하기\"",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
-    },
-    {
-      "screen": "B1-signin",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no first-launch sign-in page or provider login buttons.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
     },
     {
       "screen": "B24",
@@ -10044,6 +9744,418 @@
         "src/assistant-conversation-panel.ts:7",
         "docs/product/screens/contracts/B22-room-steps.json",
         "docs/acceptance/E3d2/full150.json:819"
+      ]
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 4,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 5,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "legacy worker-role and room-order limitation",
+      "reason": "The generic Q13 output renderer now puts the recorded role before its producing member. This legacy B7-fail fixture has root/executor/verifier tasks and no Task.step metadata or worker room-message sequence, so the second required research-role occurrence still has no identity-bound producer. A role is not inferred from the Work title or fabricated as a room message.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#legacy-research-role-order",
+      "sources": [
+        "src/work-room-panel.ts:59",
+        "src/work-room-panel.ts:70",
+        "scripts/ui-contracts/fixtures/B7-fail.json:626",
+        "docs/product/screens/contracts/B7-fail.json"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 4,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 4,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 5,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "legacy worker-role and room-order limitation",
+      "reason": "The generic Q13 output renderer now puts the recorded role before its producing member. This legacy B7-fail fixture has root/executor/verifier tasks and no Task.step metadata or worker room-message sequence, so the second required research-role occurrence still has no identity-bound producer. A role is not inferred from the Work title or fabricated as a room message.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#legacy-research-role-order",
+      "sources": [
+        "src/work-room-panel.ts:59",
+        "src/work-room-panel.ts:70",
+        "scripts/ui-contracts/fixtures/B7-fail.json:626",
+        "docs/product/screens/contracts/B7-fail.json"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{time}\" (found in conversation)",
+      "occurrence": 4,
+      "category": "unrecorded step timestamp",
+      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
+      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
       ]
     }
   ]

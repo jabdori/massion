@@ -18,11 +18,11 @@ kinds among the original 244 unclassified occurrences only.
 
 - Screens: `B1-signin`, `B1-first*`.
 - Owner: `feat/first-experience`, now
-  [E7 PR #119](https://github.com/jabdori/massion/pull/119) (open when checked;
-  PR was pending in the lead's original decision).
-- Pending-slice occurrences: 24.
-- Reason: The open first-experience slice owns these sign-in and first-work failures
-  and gaps.
+  [E7 PR #119](https://github.com/jabdori/massion/pull/119) (now merged).
+- Original pending-slice occurrences: 24; current occurrences: zero.
+- The complete main CI capture after landing resolves all 24 sign-in and
+  first-work exceptions. Removal-only regeneration removed them; the original
+  ownership approval does not authorize new failures.
 
 ## E8
 
@@ -46,3 +46,12 @@ That work landed in [PR #121](https://github.com/jabdori/massion/pull/121), main
 rewriting published history. Its [residual ledger](../room-residuals/README.md)
 supplies the reasons for remaining room/browser diagnostics; the refreshed E3f
 baseline uses the complete CI capture from that main commit.
+
+The latest refresh uses main `e6cd313b16def56dcc596878cadbdcf56876d6e1` and
+[CI run 42653256831](https://github.com/jabdori/massion/actions/runs/42653256831).
+It retains all 36 live room-ledger entries and admits the 22 exact
+[pane residuals](../pane-step-times/remaining.json) from
+[PR #122](https://github.com/jabdori/massion/pull/122). After removing E7's 24
+resolved pending entries, 152 pending entries remain (150 E5b, two E8).
+Four new B24-connect-mail diagnostics have no matched occurrence reason and
+remain blocked; the historical B24 ownership scope is not a blanket waiver.

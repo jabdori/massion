@@ -1,42 +1,48 @@
 # E3f blocking gate evidence
 
-Current baseline source: origin/main `dd0c48b7311560e9eb0576e2624b6c605d59de13`,
+Current baseline source: origin/main `e6cd313b16def56dcc596878cadbdcf56876d6e1`,
 including [PR #121](https://github.com/jabdori/massion/pull/121),
-[CI run 42647827305](https://github.com/jabdori/massion/actions/runs/42647827305),
-artifact `13689216372` (`ui-contracts`). Main was merged into this branch without
-rewriting published history. No UI, contract, artboard, fixture or threshold is
-changed by E3f relative to that main commit.
+[PR #119](https://github.com/jabdori/massion/pull/119) and
+[PR #122](https://github.com/jabdori/massion/pull/122),
+[CI run 42653256831](https://github.com/jabdori/massion/actions/runs/42653256831),
+artifact `13690982174` (`ui-contracts`). Main was merged into this branch without
+rewriting published history. No UI, contract, checker, artboard, fixture or
+threshold is changed by E3f relative to that main commit.
 
-The complete main capture has 150 rows: 840 contract failures, 18 visual failures,
-146 gaps and zero infrastructure errors. Main's report-only CI success is not a
+The complete main capture has 150 rows: 826 contract failures, 16 visual failures,
+136 gaps and zero infrastructure errors. Main's report-only CI success is not a
 claim that these contracts pass. Current copy lint has zero findings.
 
 ## Refreshed exceptions
 
-The previous allow-list had 970 entries. Removal-only regeneration deleted 24
-stale entries. The explicitly authorized addition path then admitted 36 exact
-current occurrences from [the room ledger](../room-residuals/remaining.json),
-with categories, reasons, section links and source references from
-[its explanation](../room-residuals/README.md). All 36 matched the new full CI
-capture; scoped historical captures were not substituted for it.
+The previous allow-list had 982 entries. Removal-only regeneration deleted 30
+stale entries after E7 landed: 24 pending E7 entries and six earlier B1/B21-done
+entries. The explicitly authorized addition path admitted 22 exact current
+occurrences from [the pane ledger](../pane-step-times/remaining.json), with
+categories, reasons, section links and source references from
+[its explanation](../pane-step-times/README.md). Twenty concern unrecorded
+per-step timestamps; two concern the legacy B7-fail research-role order without
+worker metadata. No timestamp or role was invented to satisfy a contract.
+All 22 matched the new full CI capture; scoped historical captures were not
+substituted for it. PR #121's 36 room-ledger exceptions remain live and unchanged.
 
-The result is 982 exceptions: 818 contract failures, 18 visual failures and 146
-gaps. Existing E3b/E3c/E3d1/E3d2/E3e reason provenance is retained for live entries.
-The 176 lead-authorized `pending-slice` entries remain: 150 for E5b PR #114,
-24 for E7 PR #119 and two for E8 PR #117. Their owning slices must remove entries
-resolved when they land; see [the ownership ledger](pending-slices.md).
+The result is 974 exceptions: 822 contract failures, 16 visual failures and 136
+gaps. Existing E3b/E3c/E3d1/E3d2/E3e and room reason provenance is retained for
+live entries. The remaining 152 lead-authorized `pending-slice` entries are 150
+for E5b PR #114 and two for E8 PR #117. No E7 pending entry remains; see
+[the ownership ledger](pending-slices.md).
 
 **The baseline is still red:** [unclassified.json](unclassified.json) contains
-22 contract occurrences, all in B7, B7-done, B7-fail and B7-unknown. Twenty are
-pane-time requirements now reported as found in the conversation; two are the
-second `조사` order occurrence in B7-fail (one per theme). Existing historical
-reasons for the first occurrence do not automatically waive a second one. These
-exact new identities have no matched occurrence reason and are listed individually
-in the PR body. No B22-room/B22-room-steps/B15 diagnostic remains unclassified.
+four contract occurrences in B24-connect-mail: missing header button `더 보기`
+and conversation `연결` text without the required button role, once per theme.
+Neither the existing residual ledgers nor the historical pending-slice approval
+reasons these new identities. They remain unallowed and are listed individually
+in the PR body. No room or pane-step-time diagnostic remains unclassified.
 
-[main-refresh.json](main-refresh.json) records the source, capture totals,
-24 removals, 36 additions and final gate result: exit 1, 22 unallowed, zero stale
-exceptions and zero infrastructure errors. No reason was invented to pass CI.
+[main-refresh.json](main-refresh.json) records source, capture totals, 30 removals,
+22 additions and the final gate result: exit 1, four unallowed, zero stale
+exceptions and zero infrastructure errors. No new pending-slice exception was
+added to hide the B24 findings.
 
 ## Regeneration
 
@@ -54,13 +60,14 @@ is outside `.runtime/ui-contracts`. Incomplete/duplicate screen-theme coverage,
 missing checker output, inconsistent counts and infrastructure errors prohibit
 an update. Review the list diff before committing; CI never auto-updates it.
 
-This refresh used the explicit addition flag justified by PR #121's published
-ledger and the lead's integration request:
+This refresh used the explicit addition flag justified by PR #122's published
+ledger and the lead's integration request. Source commit/run metadata was updated
+to the downloaded artifact's provenance after regeneration:
 
 ```sh
-UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-dd0c48b node scripts/ui-contracts/gate.ts --update
-UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-dd0c48b node scripts/ui-contracts/gate.ts --update --allow-additions --reasons docs/acceptance/room-residuals/remaining.json
-UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-dd0c48b node scripts/ui-contracts/gate.ts
+UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts --update
+UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts --update --allow-additions --reasons docs/acceptance/pane-step-times/remaining.json
+UI_CONTRACTS_OUTPUT=.runtime/ui-contracts-main-e6cd313 node scripts/ui-contracts/gate.ts
 ```
 
 Other additions require the same explicit flag, complete current identities,
@@ -72,11 +79,12 @@ separately authorized; this refresh does not widen their ownership scope.
 
 After merging main, Node 24.21.0: 135 focused harness/copy tests and TypeScript
 static checking pass. The gate was run against the downloaded complete main CI
-capture and produced the exact residuals above. Assertion checks verify that the
-176 pending-slice entries remain and B22/B15 classification is complete. The full
-suite and fresh PR all-screen capture remain CI's responsibility under the owner's
-verification budget. No repeated local browser capture or UI review is claimed.
+capture and produced the exact residuals above. Assertion checks verify exact
+ledger matching, 30 removals, 22 additions, 36 retained room entries, 152 remaining
+pending entries, zero copy findings and equality with the complete capture gate.
+The full suite and fresh PR all-screen capture remain CI's responsibility under
+the owner's verification budget. No local browser capture or new screenshot
+review is claimed.
 
-The earlier main branch-protection API returned HTTP 404 (branch not protected).
 This change makes the job fail; requiring its status before merge remains an
 owner repository setting. No PR merge or deployment is performed by E3f.

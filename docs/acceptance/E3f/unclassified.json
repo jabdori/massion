@@ -1,156 +1,30 @@
 [
   {
-    "screen": "B7",
+    "screen": "B24-connect-mail",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "diagnostic": "missing header button \"더 보기\"",
     "occurrence": 1
   },
   {
-    "screen": "B7-done",
+    "screen": "B24-connect-mail",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "diagnostic": "role conversation button \"연결\" (text exists without the required role)",
     "occurrence": 1
   },
   {
-    "screen": "B7-done",
-    "theme": "dark",
+    "screen": "B24-connect-mail",
+    "theme": "light",
     "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-done",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 3
-  },
-  {
-    "screen": "B7-done",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 4
-  },
-  {
-    "screen": "B7-done",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 5
-  },
-  {
-    "screen": "B7-fail",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "diagnostic": "missing header button \"더 보기\"",
     "occurrence": 1
   },
   {
-    "screen": "B7-unknown",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 3
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 4
-  },
-  {
-    "screen": "B7",
+    "screen": "B24-connect-mail",
     "theme": "light",
     "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "diagnostic": "role conversation button \"연결\" (text exists without the required role)",
     "occurrence": 1
-  },
-  {
-    "screen": "B7-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B7-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 3
-  },
-  {
-    "screen": "B7-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 4
-  },
-  {
-    "screen": "B7-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 5
-  },
-  {
-    "screen": "B7-fail",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 3
-  },
-  {
-    "screen": "B7-unknown",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "region pane text \"{time}\" (found in conversation)",
-    "occurrence": 4
   }
 ]
