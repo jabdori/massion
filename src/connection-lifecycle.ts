@@ -81,6 +81,11 @@ export class ConnectionLifecycle {
  async #admit(){if(this.#stop.signal.aborted)throw new HostDrainError();await this.#options.admit?.();if(this.#stop.signal.aborted)throw new HostDrainError();}
  #target(command:LifecycleCommand){const target=this.#connections.list().connections.find(c=>c.id===command.connectionId);ensure(target&&target.configHash===command.expectedConfigHash,'Connection changed; refresh before lifecycle command','conflict');return target;}
  async #state(){const s=await this.#store.load(CONNECTION_LIFECYCLE_ID);return {revision:s?.revision??0,value:state(s?.value)};}
+ async outcome(input:unknown){
+  exact(input,['commandId','connectionId','expectedConfigHash','kind']);ensure(id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.connectionId)&&digest(input.expectedConfigHash)&&['replace-key','recheck'].includes(input.kind),'Invalid lifecycle receipt identity');
+  const read=await this.#store.readState(CONNECTION_LIFECYCLE_ID),attempt=state(read.snapshot?.value).attempts.find(a=>a.commandId===input.commandId);
+  return {feedId:read.feedId,commandId:input.commandId,status:!attempt?'unknown':attempt.connectionId!==input.connectionId||attempt.configHash!==input.expectedConfigHash||attempt.kind!==input.kind?'conflict':attempt.status==='pending'||attempt.kind==='replace-key'&&attempt.status==='unknown'?'unknown':'settled'};
+ }
  async read(){
   const feedId=(await this.#store.readState()).feedId,s=await this.#state();
   const connections=await Promise.all(this.#connections.list().connections.map(async c=>{

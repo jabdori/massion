@@ -96,3 +96,8 @@ Carry the lifecycle's original feed into key replacement and check it again afte
 cache waits, immediately before the secret write. A database replacement during
 cache invalidation refuses the write without admitting any replacement-database
 operation; pre-call and post-call checks alone cannot guard this asynchronous gap.
+
+Lost key/recheck replies retain only command ID, connection ID, expected config
+hash and lifecycle kind. A feed-fenced lifecycle receipt query unlocks confirmed
+terminal outcomes; unknown credential writes stay fenced. No API-key value enters
+this recovery map, a URL, storage, command identity or journal.

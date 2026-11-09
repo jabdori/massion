@@ -350,3 +350,20 @@ workbench and recheck it immediately before the secret adapter. The regression
 failed with one stale key write; after the fix, writes and replacement-database
 operations are both zero. All 35 affected cache/lifecycle/HTTP checks and typecheck
 pass. No credential bytes are added to durable command identity or metadata.
+
+## Lost credential-response reconciliation
+
+Reproduce a completed key replacement whose HTTP reply is lost: repeated lifecycle
+reads showed stored bytes but controls stayed locked. Retain only the command ID,
+connection ID, expected config hash and lifecycle kind, then query the exact
+same-feed durable attempt. Confirmed terminal outcomes unlock; pending/unknown
+credential writes remain fenced. Unknown read-only rechecks can settle as failed
+observations without resending. Reject mismatched identities and query key fields.
+The regression failed first; all 46 related client/lifecycle/cache/HTTP checks and
+typecheck pass. The recovery map and browser storage contain no key value.
+
+The actual-host browser now drops both completed connection replies in addition
+to both committed member replies. All nine states pass without resending an owner
+write; no external adapter is called and no secret enters the journal. Fresh
+reconnect contrast is 16.46:1 dark / 17.65:1 light; the interaction report and
+captures are regenerated evidence.

@@ -29,6 +29,9 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
  assert.equal((await request('/assistant/members?commandId=x&commandId=y&action=archive')).status,400);
  const target=connections.list().connections[0]!,path='/connections/'+encodeURIComponent(target.id)+'/key',hash=target.configHash,body={commandId:'replace',expectedConfigHash:hash,apiKey:'fixture-http-secret'},old=await request(path,body,'old-feed');assert.equal(old.status,409);assert.equal(writes,0);
  const response=await request(path,body);const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.status,'completed');assert.equal(writes,1);
+ const receiptInput={commandId:body.commandId,connectionId:target.id,expectedConfigHash:hash,kind:'replace-key'},receipt=await request('/connections/lifecycle?'+new URLSearchParams(receiptInput));assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'settled');
+ const mismatched=await request('/connections/lifecycle?'+new URLSearchParams({...receiptInput,expectedConfigHash:'0'.repeat(64)}));assert.equal((await mismatched.json()).status,'conflict');assert.equal(writes,1);
+ assert.equal((await request('/connections/lifecycle?'+new URLSearchParams({...receiptInput,apiKey:'must-not-be-accepted'}))).status,400);
  assert.doesNotMatch(JSON.stringify([result,await (await request('/connections/lifecycle')).json(),store.inspect()]),/fixture-http-secret/);
  await request(path,body);assert.equal(writes,1);validateMissionJournalLineage(store.inspect());
  const replace=connections.replaceKey.bind(connections);connections.replaceKey=async()=>{throw new DomainError('Active conversation prevents this key write','conflict');};

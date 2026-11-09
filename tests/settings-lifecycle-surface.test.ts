@@ -44,6 +44,21 @@ test('a superseded read-only recheck is settled while a stale key write stays fe
  }
 });
 
+test('a lost completed key reply reconciles its non-secret identity before enabling controls',async()=>{
+ const configHash='a'.repeat(64),posted:any[]=[];let answer!:(value:any)=>void,confirmed=false,stored=false;
+ const app=harness(async(path,options)=>{
+  if(options?.method==='POST'){posted.push(JSON.parse(options.body));return new Promise(resolve=>answer=resolve);}
+  if(path.startsWith('/connections/lifecycle?'))return reply({feedId:'feed:a',commandId:posted[0].commandId,status:confirmed?'settled':'unknown'});
+  if(path==='/connections')return reply({configHash,connections:[{id:'api',label:'API',providerType:'openai',configHash,credentialConfigured:stored}],modelGroups:[],runtime:{connections:[],defaultRoutes:[]}});
+  if(path==='/connections/lifecycle')return reply({feedId:'feed:a',connections:[{connectionId:'api',configHash,canReplaceKey:true,credentialWriteStatus:stored?'stored':'idle',observation:null}]});
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});return reply({});
+ });await settle();await open(app,'connections');await byId(app,'settings-connection-key-api').fire('click');byId(app,'settings-key-value').value='fixture-lost-key';const saving=byId(app,'settings-key-save').fire('click');await settle();stored=true;answer(Promise.reject(Error('Lost key reply')));await saving;await settle();
+ assert.equal(byId(app,'settings-connection-key-api').disabled,true,'Slot presence alone cannot reconcile this command');
+ const retained=runInContext('JSON.stringify([...settingsConnectionUnknown.values()])',app.context);assert.doesNotMatch(retained,/fixture-lost-key|apiKey/);assert.ok(retained.includes(posted[0].commandId));assert.ok(!JSON.stringify([...app.storage]).includes('fixture-lost-key'));
+ confirmed=true;await runInContext('settingsLoad("connections")',app.context);assert.equal(byId(app,'settings-connection-key-api').disabled,false);assert.equal(runInContext("settingsLifecycleLocked('connection:api')",app.context),false);assert.equal(posted.length,1);
+});
+
 test('member archive uses the owner command and a stored response refreshes the member list',async()=>{
  const {app,state}=fixture();await settle();await open(app,'members');await byId(app,'settings-member-member-quill').fire('click');
  const archive=byId(app,'settings-member-archive');assert.ok(archive);const first=archive.fire('click');await settle();

@@ -36,6 +36,7 @@ test('unknown key write is redacted and never resent by a replay, new identity o
  const f=await fixture(t),service=new lifecycleModule.ConnectionLifecycle(f.store,f.connections);let writes=0;
  f.secrets.set=async()=>{writes++;throw Error('fixture-secret-from-keychain');};
  assert.equal((await service.replaceKey({...f.command,apiKey:'fixture-secret-value'})).status,'unknown');
+ assert.equal((await service.outcome({...f.command,kind:'replace-key'})).status,'unknown');
  const fresh=new lifecycleModule.ConnectionLifecycle(f.store,f.connections);
  assert.equal((await fresh.replaceKey({...f.command,apiKey:'fixture-secret-value'})).status,'unknown');
  await assert.rejects(fresh.replaceKey({...f.command,commandId:'replace-another',apiKey:'fixture-secret-value'}),/unresolved/);

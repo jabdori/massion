@@ -41,7 +41,7 @@ export const settingsStyle=String.raw`.settings-stack{max-width:var(--settings-c
 export const settingsClient=String.raw`
 const settingsLabels=${JSON.stringify(Object.fromEntries(sections.map(([id,label])=>[id,label])))};
 const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
-const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set(),settingsMemberUnknown=new Map(),settingsDeviceUnknown=new Map();
+const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set(),settingsMemberUnknown=new Map(),settingsDeviceUnknown=new Map(),settingsConnectionUnknown=new Map();
 let settingsConnectionLifecycle=null,settingsKeyConnection='',settingsMembers=null,settingsDevices=null,settingsDataEpoch=-1,settingsDataFeed='',settingsDevicePicker=false,settingsActionError='';
 function settingsInvalidate(){settingsDataEpoch=-1;settingsUsage=null;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
 let settingsUsage=null,settingsBudgetDraft=null,settingsBudgetStatus='';
@@ -65,7 +65,10 @@ async function settingsLoad(name){
   settingsCatalog=await read('/connections');
   if(reconcileUnknown&&settingsCatalog&&Array.isArray(settingsCatalog.modelGroups)&&typeof settingsCatalog.configHash==='string'&&settingsCatalog.configHash){settingsGroupUnknown=false;settingsGroupError='';}
  }
- if(name==='connections')settingsConnectionLifecycle=await read('/connections/lifecycle');
+ if(name==='connections'){
+  for(const [identity,input] of settingsConnectionUnknown)if(identity===settingsLifecycleKey('connection:'+input.connectionId)&&settingsUnknown.has(identity)){const outcome=await read('/connections/lifecycle?'+new URLSearchParams(input));if(outcome?.feedId===feed&&outcome.commandId===input.commandId&&outcome.status==='settled'){settingsUnknown.delete(identity);settingsConnectionUnknown.delete(identity);}}
+  settingsConnectionLifecycle=await read('/connections/lifecycle');
+ }
  if(name==='memory'){const id=settingsCatalog&&settingsCatalog.representative&&settingsCatalog.representative.intakeMissionId;settingsMission=id?await read('/missions/'+encodeURIComponent(id)):null;}
  if(name==='devices'){
   for(const [identity,input] of settingsDeviceUnknown)if(identity===settingsLifecycleKey('device:'+input.deviceId)&&settingsUnknown.has(identity)){const outcome=await read('/assistant/devices?'+new URLSearchParams(input));if(outcome?.feedId===feed&&outcome.commandId===input.commandId&&outcome.status==='settled'){settingsUnknown.delete(identity);settingsDeviceUnknown.delete(identity);}}
@@ -88,7 +91,7 @@ const settingsLifecycleKey=key=>String(chatView&&chatView.feedId)+':'+key;
 const settingsLifecycleLocked=key=>settingsPending.has(settingsLifecycleKey(key))||settingsUnknown.has(settingsLifecycleKey(key));
 async function settingsLifecyclePost(key,path,body){
  const identity=settingsLifecycleKey(key);if(settingsLifecycleLocked(key)||settingsDataEpoch!==connectionEpoch)return false;
- const epoch=connectionEpoch,feed=chatView&&chatView.feedId,commandId=crypto.randomUUID(),unknown=()=>{settingsUnknown.add(identity);if(path==='/assistant/members')settingsMemberUnknown.set(identity,{commandId,memberId:body.memberId,action:body.action});if(path==='/assistant/devices')settingsDeviceUnknown.set(identity,{commandId,deviceId:body.deviceId,action:body.action});};settingsPending.add(identity);settingsActionError='';renderSettings();let ok=false;
+ const epoch=connectionEpoch,feed=chatView&&chatView.feedId,commandId=crypto.randomUUID(),unknown=()=>{settingsUnknown.add(identity);if(path==='/assistant/members')settingsMemberUnknown.set(identity,{commandId,memberId:body.memberId,action:body.action});if(path==='/assistant/devices')settingsDeviceUnknown.set(identity,{commandId,deviceId:body.deviceId,action:body.action});if(key.startsWith('connection:')&&(path.endsWith('/key')||path.endsWith('/recheck')))settingsConnectionUnknown.set(identity,{commandId,connectionId:key.slice('connection:'.length),expectedConfigHash:body.expectedConfigHash,kind:path.endsWith('/key')?'replace-key':'recheck'});};settingsPending.add(identity);settingsActionError='';renderSettings();let ok=false;
  try{const {response,body:result}=await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify({commandId,...body})});
   if(epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)){unknown();return false;}
   if(response.ok&&result&&(['committed','replayed','completed','settled','saved','checked'].includes(result.status)||result.status==='stale'&&path.endsWith('/recheck')))ok=true;
