@@ -3,19 +3,26 @@ import {lstat,unlink,open} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {validAuthValue} from '../src/daemon-auth.ts';
 
 export function daemonFiles(packaged:boolean,resources:string,directory:string){
  return {runner:join(packaged?resources:directory,'daemon-runner.mjs'),entry:packaged?join(resources,'core/src/server.ts'):resolve(directory,'../../src/server.ts')};
 }
 
-export function control(socket:string,command:'status'|'drain'):Promise<{status:string;pid?:number;origin?:string}>{
+export function control(socket:string,command:'status'|'drain'|'credentials'):Promise<{status:string;pid?:number;origin?:string;secret?:string}>{
  return new Promise((resolve,reject)=>{
   const client=connect(socket);let body='';
   client.setTimeout(command==='drain'?12000:1000,()=>client.destroy(new Error('Daemon control timeout')));
   client.on('connect',()=>client.end(command+'\n'));client.on('error',reject);
   client.on('data',chunk=>{body+=chunk;if(body.length>1024)client.destroy(new Error('Invalid daemon control reply'));});
-  client.on('end',()=>{try{const reply=JSON.parse(body);if(!['running','drained','unsettled'].includes(reply.status))throw new Error('Invalid daemon control reply');resolve(reply);}catch(error){reject(error);}});
+  client.on('end',()=>{try{const reply=JSON.parse(body);if(!['running','drained','unsettled'].includes(reply.status))throw new Error();resolve(reply);}catch{reject(new Error('Invalid daemon control reply'));}});
  });
+}
+export async function daemonCredential(socket:string,origin:string){
+ const file=await lstat(socket);
+ if(!file.isSocket()||file.uid!==process.getuid?.()||(file.mode&0o077)!==0)throw new Error('Private daemon authentication socket required');
+ const reply=await control(socket,'credentials');
+ if(reply.origin!==origin||!validAuthValue(reply.secret))throw new Error('Daemon authentication unavailable');return reply.secret;
 }
 export async function drainDaemon(socket:string,origin:string){
  const status=await control(socket,'status');

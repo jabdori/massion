@@ -15,8 +15,12 @@ npm start --prefix desktop
 ```
 
 The default daemon origin is `http://127.0.0.1:8765`. Set
-`MASSION_DAEMON_ORIGIN` to another explicit `http://127.0.0.1:<port>` to attach
-to an existing host. No remote hosts, redirects or fallback transport are allowed.
+`MASSION_DAEMON_ORIGIN` to another explicit `http://127.0.0.1:<port>` when starting
+the managed daemon there. Reattachment requires this user's authenticated
+supervisor at the same origin. A bare `npm start` host or a process impersonating
+protocol v1 is refused; no commands are sent to an unauthenticated port.
+Stop an older unauthenticated daemon once and let the updated app relaunch it;
+there is no compatibility fallback that bypasses this check.
 
 To let the app start the existing server, provide its normal `MASSION_SURREAL_RPC`
 and optional `MASSION_SURREAL_NAMESPACE` / `MASSION_SURREAL_DATABASE` settings.
@@ -28,8 +32,7 @@ its working directory, so new runtime artifacts live there under `.runtime/`.
 
 Closing every window leaves the daemon and exception observer running. Reopen
 through the app icon, another launch or a notification. Explicit **Quit** asks
-the managed daemon to drain. A manually started host is attached without taking
-ownership; stop it with its existing CLI signal/drain path. A drain timeout is
+the managed daemon to drain. A drain timeout is
 unsettled, not success: the supervisor retains its lock until the child exits.
 
 The daemon's private control socket and PID record live under Electron's
@@ -37,6 +40,15 @@ The daemon's private control socket and PID record live under Electron's
 socket may be reclaimed only by the single-instance launcher; a live PID is
 never killed to take ownership. The supervisor's kernel socket lock prevents
 two starters from serving. There is no launch-at-login installation in E4.
+
+Every supervisor launch creates a random 256-bit key, held in memory and passed
+to the core on an anonymous pipe. The shell obtains it only through the owner's
+0600 control socket in the 0700 app-data directory. The key is never stored in
+the PID record, environment, arguments, logs or renderer. Each HTTP request first
+verifies a fresh, origin-bound HMAC server proof, then sends a derived client
+proof and application data on that exact TCP connection. A replacement socket,
+another port's proof, or a missing key is refused without a command retry.
+The supervised server also rejects unauthenticated legacy routes and feed reads.
 
 ## Verify without opening a window on the owner's machine
 
@@ -81,7 +93,7 @@ host. The UI keeps its existing client, SSE catch-up, generation fences and
 write barrier. The preload exposes only a typed focus subscription and a fixed
 ready acknowledgement; it exposes no IPC object, arbitrary channel, path or URL.
 The generated host adapter calls existing Work and decision opening functions.
-`src/` is unchanged.
+Screen code is unchanged; the core adds the supervisor authentication guard.
 
 Notifications read the existing global conversation Work list and owner-decision
 views every 10 seconds, including while windows are closed. Normal progress and
@@ -93,7 +105,7 @@ notification permission; fixture tests verify selection and click-to-focus,
 not a real macOS notification center.
 
 This is the loopback development transport explicitly requested by E4. The
-user-only command socket, production daemon authentication, installer discovery,
+user-only command socket transport, installer discovery,
 an installed-core Restart action and signed distribution remain outside this PR.
 The existing protocol's `update-needed` and `restart-needed` states are passed
 through without admitting writes; this shell never guesses an installed version.

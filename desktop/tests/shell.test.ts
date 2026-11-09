@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {randomBytes} from 'node:crypto';
+import {daemonGuard} from '../../src/daemon-auth.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -31,10 +33,10 @@ test('untrusted URLs, subframes and renderer capabilities stay outside the host 
 
 for(const state of ['ready','update-needed','restart-needed'] as const)test('desktop uses existing version negotiation: '+state,async t=>{
  const root=await mkdtemp(join(tmpdir(),'desktop-protocol-'));
- const store=new InMemoryStore<any>(),server=createWorkbench(store,root,{scheduleIntervalMs:0,protocol:state==='ready'?{}:{supported:{min:2,max:2},...(state==='restart-needed'?{supported:{min:1,max:1},installed:{min:2,max:2}}:{})}});
+ const secret=randomBytes(32).toString('hex'),store=new InMemoryStore<any>(),server=createWorkbench(store,root,{daemonSecret:secret,scheduleIntervalMs:0,protocol:state==='ready'?{}:{supported:{min:2,max:2},...(state==='restart-needed'?{supported:{min:1,max:1},installed:{min:2,max:2}}:{})}});
  server.listen(0,'127.0.0.1');await once(server,'listening');const port=(server.address() as {port:number}).port;
  t.after(async()=>{await server.drain();await rm(root,{recursive:true,force:true});});
- const client=createProtocolClient(daemonTransport('http://127.0.0.1:'+port),state==='restart-needed'?{min:2,max:2}:{min:1,max:1});
+ const client=createProtocolClient(daemonTransport('http://127.0.0.1:'+port,async()=>secret),state==='restart-needed'?{min:2,max:2}:{min:1,max:1});
  assert.equal((await client.connection()).state,state);
  if(state==='ready')assert.equal((await client.query('/health',{scope:'health'})).body.status,'ready');
  else await assert.rejects(client.dispatch('/fixture-run',{body:'{}'}),/update or restart/);
@@ -42,16 +44,17 @@ for(const state of ['ready','update-needed','restart-needed'] as const)test('des
 });
 
 test('proxy forwards one command, refuses redirects and never exposes non-protocol routes',async t=>{
- let requests=0;const server=createServer((req,res)=>{requests++;if(req.url==='/protocol/connect'){res.writeHead(302,{Location:'http://example.org/'});res.end();return;}req.resume();req.on('end',()=>res.destroy());});
+ const secret=randomBytes(32).toString('hex'),credential=async()=>secret,authenticate=daemonGuard(secret);
+ let requests=0;const server=createServer((req,res)=>{if(!authenticate(req,res))return;requests++;if(req.url==='/protocol/connect'){res.writeHead(302,{Location:'http://example.org/'});res.end();return;}req.resume();req.on('end',()=>res.destroy());});
  server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+(server.address() as {port:number}).port;
  t.after(()=>server.close());
- await assert.rejects(proxyProtocol(new Request(appOrigin+'/protocol/connect',{method:'POST',body:'{}'}),base));
- await assert.rejects(proxyProtocol(new Request(appOrigin+'/protocol/request',{method:'POST',body:'{}'}),base));
+ await assert.rejects(proxyProtocol(new Request(appOrigin+'/protocol/connect',{method:'POST',body:'{}'}),base,credential));
+ await assert.rejects(proxyProtocol(new Request(appOrigin+'/protocol/request',{method:'POST',body:'{}'}),base,credential));
  assert.equal(requests,2);
- assert.equal((await proxyProtocol(new Request(appOrigin+'/health'),base)).status,403);
- assert.equal((await proxyProtocol(new Request(appOrigin+'/protocol/request',{method:'PUT'}),base)).status,403);
+ assert.equal((await proxyProtocol(new Request(appOrigin+'/health'),base,credential)).status,403);
+ assert.equal((await proxyProtocol(new Request(appOrigin+'/protocol/request',{method:'PUT'}),base,credential)).status,403);
  assert.equal(requests,2);
- assert.throws(()=>daemonTransport('https://example.org'),/loopback/i);
+ assert.throws(()=>daemonTransport('https://example.org',credential),/loopback/i);
 });
 
 test('only owner exceptions notify; progress, duplicate revisions and stale feeds stay quiet',()=>{

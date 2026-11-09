@@ -6,7 +6,7 @@ import {promisify} from 'node:util';
 import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowRequest,validSender,contentPolicy} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
-import {control,prepareControl,launchDaemon,drainDaemon,daemonFiles} from './daemon.ts';
+import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential} from './daemon.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
 
@@ -16,7 +16,8 @@ export async function startDesktop(){
  if(!app.requestSingleInstanceLock()){app.quit();return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
  const directory=app.getPath('userData'),socket=join(directory,'daemon.sock');
- const client=createProtocolClient(daemonTransport(origin)),tracker=new ExceptionTracker();
+ const credential=()=>daemonCredential(socket,origin);
+ const client=createProtocolClient(daemonTransport(origin,credential)),tracker=new ExceptionTracker();
  let window:BrowserWindow|null=null,ready=false,pending:OwnerException|undefined,quitting=false,reading=false;
  let timer:ReturnType<typeof setTimeout>|undefined;
  const notifications=new Map<string,Notification>();
@@ -57,14 +58,10 @@ export async function startDesktop(){
  const html=await readFile(join(import.meta.dirname,'index.html'),'utf8'),csp=contentPolicy(html);
  await ses.protocol.handle('massion',request=>{
   if(isAppURL(request.url)&&request.method==='GET')return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':csp,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-  return proxyProtocol(request,origin).catch(()=>new Response(null,{status:503}));
+  return proxyProtocol(request,origin,credential).catch(()=>new Response(null,{status:503}));
  });
  async function connectDaemon(){
-  try{await client.connection();return;}catch(error){
-   // Only a refused TCP connection permits startup; a malformed reply still belongs to an existing host.
-   if((error as {cause?:{code?:string}}).cause?.code!=='ECONNREFUSED')return;
-  }
-  try{await control(socket,'status');return;}catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))throw error;}
+  try{await credential();return;}catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))throw error;}
   if(!process.env.MASSION_SURREAL_RPC)throw new Error('Set MASSION_SURREAL_RPC before starting the desktop daemon');
   await prepareControl(socket);
   const node=process.env.MASSION_NODE_BINARY??'node';

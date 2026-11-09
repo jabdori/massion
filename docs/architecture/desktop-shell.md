@@ -4,7 +4,8 @@ Implements the E4 brief against ADR 0005 using the existing loopback development
 daemon and protocol client. This is an unsigned development app, not the later
 authenticated socket transport or signed release. No screen or core write path
 changes. Build the existing workbench into the app; serve it at `massion://app/`.
-Only the three existing protocol endpoints cross from main to loopback HTTP.
+Only the three existing protocol endpoints carry application data from main to
+loopback HTTP; a private main-process handshake authenticates each connection.
 The renderer never receives a daemon address, filesystem API or arbitrary IPC.
 
 ## Boundaries and implementation plan
@@ -22,8 +23,8 @@ The renderer never receives a daemon address, filesystem API or arbitrary IPC.
    socket lock is authoritative (unlike a reusable PID). Only the single-instance
    launcher reclaims a refused stale socket. A live holder is never replaced.
    Closing windows keeps the daemon and notification observer alive. Explicit
-   app quit requests bounded drain through the supervisor; an externally started
-   host remains externally owned. Never retry a command on reconnect.
+   app quit requests bounded drain through the supervisor; unauthenticated
+   external hosts are refused. Never retry a command on reconnect.
 4. Read the existing protocol for exception notifications only: unknown Work
    outcomes, failed/stale/blocked Work, and open owner decisions. Deduplicate
    by feed, identity and exception, never ordinary revision/progress. Invalidate
@@ -89,3 +90,42 @@ the macOS arm64 build and its three actual-resource checks passed. Linux x86-64
 Node 24.19.0 / Electron 45.2.3 passed the full Xvfb smoke with GPU acceleration
 disabled, including both screenshots and all existing security assertions.
 Evidence: `/private/tmp/massion-e4-review-evidence/`.
+
+## PR 112 daemon authentication
+
+The security review found that a v1 response on a loopback port did not prove
+ownership: another OS user could occupy the port. The supervisor now creates a
+fresh 256-bit key in memory per launch, sends it to the core through anonymous
+descriptor 3 (closed and its environment marker removed immediately), and makes
+it available to main only over its owner's 0600 socket in the private app-data
+directory. Status, PID records and logs never contain the key. Missing or unsafe
+credentials fail closed; bare development hosts can no longer be attached.
+
+Each request opens a dedicated connection and asks for a fresh HMAC-SHA256 server
+proof. Both nonces, the server's actual loopback port and the role are bound to
+the proof. Main verifies it before sending application headers/body and pins the
+next request to the same physical TCP socket; connection replacement fails before
+write. A different client-role proof authenticates every request on that socket.
+The key itself never crosses HTTP. This blocks captured-proof replay, reflection,
+cross-port relaying and post-handshake port takeover without command retries.
+Normal protocol version/generation/feed checks remain in place after authentication.
+
+The core guard precedes all product reads/writes, including legacy routes and SSE.
+The standalone browser development host remains explicitly unauthenticated when
+not launched by the supervisor; the desktop refuses it. This is per-OS-user local
+authentication, not remote TLS or protection from another process of the same OS
+user. The fixture smoke now uses the real supervisor and authenticated server guard.
+
+Verification targets: v1-speaking impostor receives no owner payload/key; wrong
+key and unauthenticated requests are rejected; closed/changed socket and a proof
+relayed from another port are refused; fresh launches rotate keys; socket mode,
+log secrecy, authenticated SSE and existing incompatibility states remain intact.
+
+After merging `origin/main`, both typechecks passed. Focused desktop, protocol,
+server and fixture tests passed 38 cases, with the one opt-in SurrealDB restart
+case skipped. The macOS package and all three actual-resource checks passed.
+The initial server-fixture run rejected macOS's symlinked temporary path; rerunning
+with the required physical `TMPDIR=/private/tmp` passed without a code change.
+Linux x86-64 Node 24.19.0 / Electron 45.2.3 passed the complete headless smoke
+against the real supervisor and authenticated fixture daemon, including SSE,
+window close/reopen, focus, security checks and explicit-quit drain.
