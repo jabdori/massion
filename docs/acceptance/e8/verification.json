@@ -67,5 +67,42 @@
     "native": "Offline decision and offline Settings save consume no keys; the 256 draft survives and saves after reconnect",
     "notRun": "Full repository suite, actual DB, live providers; CI-owned or environment-gated",
     "unknownKeyRule": "Only proven unsent transport or explicit rejection releases a key; unchanged revision alone does not prove rollback"
+  },
+  "round2QueuedRecovery": {
+    "baseCommit": "f0e0957",
+    "coreCommit": "e953577",
+    "integratedMain": "ab5c145",
+    "integrationCommit": "f72f4bc",
+    "relatedFiles": 15,
+    "tests": 341,
+    "passed": 329,
+    "failed": 0,
+    "skipped": 12,
+    "finalContextTest": {
+      "tests": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "copyLintFindings": 0,
+    "screenRows": 6,
+    "requiredOccurrencesPassed": 176,
+    "contractFailures": 0,
+    "geometryFailures": 0,
+    "infrastructureErrors": 0,
+    "scope": [
+      "queued interruption before activation",
+      "reserved interruption before activation",
+      "activation-vs-recovery CAS",
+      "reservation generation cleanup",
+      "busy-host deferral and recovery"
+    ],
+    "openReviewFindings": [
+      4514954044,
+      4514954056,
+      4514954074,
+      4514966445,
+      4514966451
+    ]
   }
 }

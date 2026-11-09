@@ -34,6 +34,14 @@ All six normal-state artboard/application pairs were refreshed from integration 
 
 **Unknown outcomes:** an unchanged revision is not proof that a command in flight cannot still commit. Offline and protocol failures before command transport release their key; explicit pre-commit server refusals are marked rejected. An already dispatched request with no confirmed outcome retains its key and shows `확인 중…`. Reads and restart reconcile the previously accepted budget grant without replaying an admitted runtime/effect.
 
+## GLM round 2: interrupted queued recovery
+
+The HIGH on `f0e0957` is addressed in [round-2 recovery evidence](round2-recovery.md). Recovery now includes the exact pristine queued Work as well as budget-paused Work under its done decision, using the deterministic run identity. It fences an older activation before releasing a stale reservation, binds cleanup to its original Work revision and revalidates runtime readiness. Initial or recovered work waits while the host is busy. Admitted runtime/effect evidence remains a no-replay boundary.
+
+Main `ab5c145` was integrated. Fifteen related files passed **329 tests**, with **12 environment-gated skips**, **zero failures** (341 tests). The final active-conversation test-context adjustment passed **5/5**; typecheck, copy lint and whitespace passed. All six pairs were refreshed from `f72f4bc`: **176/176 required occurrences**, zero contract/geometry/infrastructure failures. Full tests and actual-database checks remain CI/environment-owned.
+
+**This is not a whole-PR approval.** Separate newer findings on discriminator accounting, input changes before the pause, owner-expired accounting and restored-journal authorization remain open; see the explicit list in [round2-recovery.md](round2-recovery.md). The last issue is a reported restore-security blocker. Do not merge while those findings remain unresolved.
+
 ## Artboard / application pairs
 
 The artboard is on the left, the application on the right. Known B26 amounts fill the artboard's slots with locale-formatted numbers without unit text; unknown values and provider quota percentages stay as `—`. Increase and Change use their recorded owner commands.
