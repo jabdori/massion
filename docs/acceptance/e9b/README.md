@@ -1,5 +1,51 @@
 # E9b acceptance evidence
 
+## Current v3 result and product correction
+
+The owner requested a production fix after the initial v2 timeout. The 2-second
+constant came from `POLICY_V1` and was inherited by v2; `ConfiguredTextRuntime`
+also awaited the complete moderation call before the next room turn. New v3
+reservations default to 60 seconds and pin the trusted host's optional
+`discriminatorTimeoutMs` override (positive whole milliseconds up to 60,000).
+Historical v1/v2 deadlines and records are unchanged. New timeouts/cancellations
+record `unconfirmed`, never a relaxed rule or applied outcome.
+
+Room model calls now run as tracked background jobs. Only journal writes join
+the shared runtime write queue, including across subsequent Work in the same
+connection manager. One pending shadow call skips later moments; it does not
+queue more model calls or block a challenge, answer or independent check. Late
+answers record against the original reservation after acceptance without
+rewriting its Record. Host drain also aborts shadow calls whose room has already
+finished. Feed replacement and the drain-aware store still fence late writes.
+
+The real rerun used the original 20 cases and model pair, with the same 120-call
+cap: **20 valid answers, 12/20 agreement (60%), zero false relaxations, 50 calls,
+891,504 reported input tokens and 3,126 output tokens**. It took 289,883 ms;
+discriminator replies took 3,660–9,711 ms. No missing usage, timeout, unknown
+call or retry occurred. Eight cases missed a stricter proposal; there were zero
+spurious stricter proposals. This is execution completion, not an accuracy gate
+pass: keep moderation shadow-only. It is a small controlled moment-2/3 set,
+not per-language calibration or a four-arm quality study. Monetary cost remains
+unknown. The eight misses are listed in the generated report.
+
+Current evidence: [v3 evaluation](evaluation-v3.md) and
+[fixed labels, typed answers and calls](evaluation-v3.json). The real rerun uses
+the changed service/policy and the same evaluation path. The earlier release
+smoke below remains evidence for the main baseline; it was not rerun after this
+runtime correction. Updated runtime behavior is covered by the fixture checks.
+
+Final local verification on Node 24.21.0: typecheck passed; the related
+discriminator/evaluation/smoke/member/runtime/host/backup/selection batch passed
+173 tests, skipped six environment-gated tests and failed none (179 total).
+Slow fake tests prove acceptance before a held answer, immutable accepted
+Records after late recording, cancellation after room completion, and successful
+progress of a next room while the prior shadow answer is recorded. Historical
+two-second policies still replay without another call. The final Markdown-only
+wording correction was regenerated from the script template and recorded JSON,
+without another model invocation. Full suite and screen contracts remain CI-owned.
+
+## Historical v2 run and baseline release smoke
+
 Run on 2026-11-10 KST (2026-11-09 UTC), using Node 24.21.0, SurrealDB 3.3.0,
 the existing owner-provided OpenCodeX router at `http://127.0.0.1:10100/v1`,
 and the existing Codex CLI. Baseline main: `3ffdf51eb63188ee05d2f64e5198f565b90a7bad`

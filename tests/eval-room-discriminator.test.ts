@@ -19,11 +19,11 @@ test('fixed cases cover both moments, three languages and both stricter labels w
  }
 });
 
-test('the unchanged shadow timeout is a failed observation, retains restrictions, and never retries',async()=>{
+test('a bounded shadow timeout is a failed observation, retains restrictions, and never retries',async()=>{
  let calls=0;
  const adapter:ReturnType<typeof fixtureDiscriminator>={pin,async invoke(_q,_input,signal){calls++;await new Promise<void>((_,reject)=>signal.addEventListener('abort',()=>reject(Error('fixture abort')),{once:true}));throw Error('unreachable');}};
- const result=await evaluateCase(CASES[11]!,member,adapter,new AbortController().signal);
- assert.equal(result.status,'timeout');assert.equal(result.agrees,false);assert.equal(result.applied,false);assert.equal(result.falseRelax,false);assert.equal(calls,1);
+ const result=await evaluateCase(CASES[11]!,member,adapter,new AbortController().signal,20);
+ assert.equal(result.status,'unconfirmed');assert.equal(result.agrees,false);assert.equal(result.applied,false);assert.equal(result.falseRelax,false);assert.equal(calls,1);
 });
 
 test('member output drift fails before moderation instead of scoring an invalid label',async()=>{
