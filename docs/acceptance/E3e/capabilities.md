@@ -1,5 +1,11 @@
 # Producer and dependency evidence
 
+> **Historical evidence:** The forty captures and Q13-open statements below describe
+> `b8f1f20`. Main 094eca4 (including Q13) is now integrated. See
+> [the current blocking visual-gate ledger](residuals.md#main-integration-and-blocking-visual-gate-2026-11-09)
+> and [main-integration/](main-integration/) for this round; old counts are not
+> current-merge acceptance claims.
+
 The candidate is based on main `7acf5f1385f5b5f3895bc3357861df1616f303f2`.
 GitHub PR [#113](https://github.com/jabdori/massion/pull/113), **internal teams per Work
 (Q13)**, was **OPEN**, with no merge commit, when checked during this run. Do not

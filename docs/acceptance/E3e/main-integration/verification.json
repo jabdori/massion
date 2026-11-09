@@ -1,0 +1,30 @@
+{
+  "base": "094eca4",
+  "historicalVisualHead": "b8f1f205862a2af53ffcbe9c983d89e7549b27e2",
+  "mergeMethod": "merge origin/main; no rebase or history rewrite",
+  "typecheck": "passed with Node 24.21.0",
+  "relatedTests": {
+    "files": 16,
+    "passed": 314,
+    "skipped": 6,
+    "failed": 0
+  },
+  "copyLintFindings": 0,
+  "budgetCaptures": {
+    "runs": 4,
+    "contractFailures": 6,
+    "visualFailures": 0,
+    "infrastructureErrors": 0,
+    "calculationTextPresent": false
+  },
+  "blockingVisualItems": [
+    "B4 payment decision and browser/checkout pane: no payment/checkout producer or approval handler",
+    "B16 external-device decision and second priority item: no external-send/readback or Representative rounding-change producer",
+    "B26 monthly-budget decision and budget-wait separator: no monthly aggregate or corresponding owner decision handler"
+  ],
+  "review": "Lead independent review/visual gate in progress; not claimed complete",
+  "notRun": [
+    "Full tests and all 75 contracts; CI owns these under the verification budget",
+    "Additional desktop/daemon tests: inherited main implementation was not changed"
+  ]
+}

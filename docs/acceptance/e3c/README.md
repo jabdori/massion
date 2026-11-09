@@ -13,6 +13,14 @@ The 276 diagnostics comprise 104 missing/region checks and 172 strict-order casc
 
 [Review corrections A–J](review-follow-up.md) · [All 150 rows](full150.json) · [Full-run receipt](full150-execution.json) · [Baseline causes](before-failures.md) · [Before](before.json) · [After report](after.md) · [After JSON](after.json) · [Fixture provenance and negative transition evidence](fixture-evidence.md) · [Verification receipt](verification.json) · [Interaction assertions](interactions.json)
 
+## Q13 follow-up
+
+[Internal teams](../../architecture/internal-teams.md) adds named worker steps,
+participant role chips, dependencies, skips and attributed results to the existing
+B7/B8 Work read. [Scoped Q13 captures](../q13-ui/README.md) close six exact
+B7-churn occurrences in the [residual ledger](after-failures.md); all original
+E3c counts and screenshots below remain historical evidence, not a new full run.
+
 ## Delivered view and safeguards
 
 - Exact Work status, recorded source/run/end times, participant chips, actual task progress and stages, pinned criteria, current artifact-bound verdict, retained Record, discussion/instruction flow and existing Stop. Per visual-gate correction A, budget metadata remains in technical inspection; the room has no standalone budget line. The expanded strip shows actual assignee/model identities and an exact-bound connection label (or an unknown label if unavailable). Missing named business roles and shopping facts are not inferred from text.

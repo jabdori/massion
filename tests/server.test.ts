@@ -65,3 +65,16 @@ test('actual SurrealDB HTTP restart preserves user Work and durable event cursor
   const next=await (await fetch(base+'/events?after='+observed.cursor)).json() as {events:{commandId:string;cursor:number}[]};assert.equal(next.events.length,1);assert.equal(next.events[0]?.commandId,`${id}:cancel`);assert.equal(next.events[0]?.cursor,observed.cursor+1);
  }finally{server.close();await once(server,'close');await rm(root,{recursive:true,force:true});}
 });
+
+test('unproduced payment, external-member and monthly-budget decisions cannot admit as member decisions',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'massion-missing-decisions-')),store=new InMemoryStore<Mission>(),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+ server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+ try{
+  const view=await (await fetch(base+'/assistant/conversation')).json() as {decisions:unknown[]};assert.deepEqual(view.decisions,[]);
+  for(const decisionId of ['payment','delegate','budget'])for(const answer of ['act','later','ask']){
+   const response=await fetch(base+'/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:'visual-'+decisionId+'-'+answer,decisionId,answer})});
+   assert.equal(response.status,400,decisionId+' '+answer);assert.equal((await response.json() as {error:string}).error,answer==='act'?'Exact decision answer fields required with a name and a shape':'Only a proposal starts the members record');
+  }
+  assert.equal((await store.readEvents(0)).events.length,0);
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});

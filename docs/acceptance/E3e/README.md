@@ -1,5 +1,11 @@
 # E3e evidence
 
+> **Historical evidence:** The forty captures and Q13-open statements below describe
+> `b8f1f20`. Main 094eca4 (including Q13) is now integrated. See
+> [the current blocking visual-gate ledger](residuals.md#main-integration-and-blocking-visual-gate-2026-11-09)
+> and [main-integration/](main-integration/) for this round; old counts are not
+> current-merge acceptance claims.
+
 The requested remaining conversation states and supported polish are implemented
 above current main without new commands, dependencies, providers or owner grants.
 This is a reviewable UI slice, **not full visual/workflow fidelity**. Open Q13

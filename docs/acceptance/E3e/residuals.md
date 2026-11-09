@@ -2,6 +2,37 @@
 
 No checker, contract, threshold, ordering rule or CI switch was relaxed. Every remaining diagnostic below is still failed. These are proposed allow-list candidates for the lead to review before switching the gate to blocking; no allow-list is installed by this PR. Copy lint has **zero findings**, so this slice needs no copy-lint exception.
 
+## Main integration and blocking visual gate (2026-11-09)
+
+The tables below this section are the **b8f1f20 historical capture**, not a new
+measurement of the merge candidate. Q13 is now merged through main 094eca4; the
+old “Q13 is open” dependency descriptions no longer describe current code.
+The merge retains Q13 task roles/results and E3e legacy child counts/current
+verdict evidence. Current blocking findings are recorded explicitly below.
+None of these missing decision producers has been replaced by a decorative card
+or an automatic owner approval.
+
+| Blocking visual requirement | Exact missing producer / handler, and why the existing path cannot perform it |
+| --- | --- |
+| **B4:** `34,000원 결제할까요?`, amount rows and the browser/checkout pane | The Representative GET `/assistant/conversation` [server.ts:140](../../../src/server.ts#L140) supplies only `MembersService.read().decisions` and `AppsService.decisions(null)`; it has no payment proposal/approval projection. POST `/assistant/decisions` [server.ts:150](../../../src/server.ts#L150) routes `skill-decision:` to skills, `app-decision:` to apps, and every other ID to `MembersService.decide`. A payment ID therefore reaches member admission, whose `act` requires `{member:{name,shape}}` [members.ts:104](../../../src/members.ts#L104); adding the generic payment card would submit to the wrong operation. `PermissionsService.act` [permissions.ts:56](../../../src/permissions.ts#L56) only adds/removes a standing `what/kind` rule: it does not bind an order, amount, instrument, run or one-time payment receipt. `Effect` [domain.ts:28](../../../src/domain.ts#L28) has no typed checkout/order/amount source. The bundled [app catalog](../../../src/app-catalog.ts#L13) contains GitHub only; [appsRoomTabs](../../../src/apps-panel.ts#L76) opens installed app item handlers, with no browser-session/checkout producer. The displayed exact Work pane is a fallback, **not** the required checkout. Both the missing decision and checkout remain blocking. |
+| **B16:** `노트북의 Claude Code에게 처음 맡길까요?` and **two** priority items | The same Representative decision read has no external-device request, remote member admission, transmission identity or remote receipt. `MembersService` creates product-owned local named members and their local thread; it has no external endpoint/device fields or remote send transition [members.ts:54](../../../src/members.ts#L54). A bare `delegate` card ID reaches that member-only answer handler. The `delegate` permission-rule kind is a standing rule, not a remote-send producer. The second artboard priority item is the rounding/check-rule change: [SkillsService.decisions](../../../src/skills.ts#L165) produces `skill-decision:<candidate>` only for a named member with a stored evaluated candidate; it is included in **member** reads, not the Representative decision list. No evaluated candidate binding or Representative rounding-rule proposal produces that second row. One available activity item is not equivalent to the two requested priority decisions. Both missing items remain blocking. |
+| **B26:** `이번 달 예산을 다 썼어요`, `지금 / 늘린 뒤 / 멈춘 일`, and `예산 대기` | There is no monthly budget aggregate, currency/accounting period projection, budget-paused Work collection, monthly increase proposal or corresponding decision/defer/reopen command. Existing POST `/missions/:id/work-budget` [server.ts:196](../../../src/server.ts#L196) maps to `revise-budget`, which requires a fresh Work with no runtime/effects/assignments/artifact/verdict/Record and no task progress [domain.ts:272](../../../src/domain.ts#L272); it cannot resume an already paused monthly-budget Work. [Schedule budgets](../../../src/schedules.ts#L108) count cumulative briefing runs, not monthly currency. `budget_exceeded` in [ExecutionGate](../../../src/domain.ts#L37) is a per-execution blocker, not the absent monthly decision or paused-feed separator. `chatDecision`/`chatDecide` can display/submit existing cards, but the server has no handler for a monthly-budget decision ID. This card and the budget-wait separator remain blocking. |
+
+The actual loopback HTTP regression in [server.test.ts](../../../tests/server.test.ts)
+tries `act`, `later` and `ask` for all three unproduced decision IDs against the
+existing decision route. All nine return 400 and produce zero events; `act`
+requires member fields and the other answers have no stored member proposal.
+This is evidence of the missing path, not a passing business-workflow test.
+
+**Fixed in this round:** B26/B26-later no longer inherit B2's rounding-evaluation
+messages. Their source fixture now reuses the exact B7-done read projection;
+`TOTAL: 3 cents` / `TOTAL: 4 cents` and associated calculation prompts are absent
+from every resolved fixture response. The regression checks both loaded routes
+and conversation messages. No global rendering filter hides legitimate results.
+The four fresh both-theme captures are in [main-integration/](main-integration/);
+the decision/attention/reopen diagnostics are still reported, with no infrastructure
+errors. Existing historical screenshots below are intentionally not overwritten.
+
 ## B3-run (dark)
 
 | Occurrence | Diagnostic | Classification and evidence |

@@ -1,0 +1,22 @@
+{
+  "screen": "B8-teams",
+  "extends": "B7-teams",
+  "description": "Q13 expanded flow using the same exact Work read as B7-teams.",
+  "steps": [
+    {
+      "selector": "#side-member-member-quill",
+      "action": "click",
+      "readySelector": "[id=\"chat-m:78d7cb72144445a05f97c847ddb3c0e9\"]"
+    },
+    {
+      "selector": "[id=\"side-line-intake/assistant-236a368dfcf6f32eaeb68fb0\"]",
+      "action": "click",
+      "readySelector": "#work-heading-assistant-236a368dfcf6f32eaeb68fb0"
+    },
+    {
+      "selector": "#pane-widen",
+      "action": "click",
+      "readySelector": "#app.wide"
+    }
+  ]
+}

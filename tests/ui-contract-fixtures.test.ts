@@ -232,3 +232,15 @@ test('E3e member room reads reuse exact host Work sources and child tasks',async
   assert.ok(member.turns.every((t:any)=>!t.work&&!t.proposal&&!t.outcome),screen+' member discussion cannot admit Work');
  }
 });
+
+test('B26 budget fallbacks never expose the unrelated rounding evaluation conversation',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B26','B26-later']){
+  const fixture=await loadFixture(screen);
+  assert.doesNotMatch(JSON.stringify(fixture),/TOTAL: [34] cents/);
+  for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
+   const view=response.body as any;
+   assert.doesNotMatch(JSON.stringify(view.segment?.messages??[]),/TOTAL: [34] cents|3센트 상품|반올림/);
+  }
+ }
+});

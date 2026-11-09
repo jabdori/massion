@@ -34,7 +34,7 @@ single independent review. Screen fixtures establish no real provider outcome.
 
 Reference: [MDN summary disclosure semantics](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/summary).
 
-## Candidate findings
+## Original candidate findings (b8f1f20)
 
 Current main does not contain Q13: PR 113 is still open. The named-team and skipped
 step carry-over is therefore a dependency, not permission to invent new fields.
@@ -44,3 +44,21 @@ draft-only Retry / durable Close behavior. B21 fixtures retain the actual defaul
 model group, selected shape and empty initial thread. Unsupported payment/remote
 approvals were removed. Final captures intentionally expose more contract failures
 than the overclaiming baseline; see `docs/acceptance/E3e/` for every occurrence.
+
+
+## Main integration and blocking visual feedback
+
+Merge origin/main 094eca4 without rewriting branch history. Preserve the now-merged
+Q13 worker display and E3e failure details/legacy progress; team dependencies inherit
+normal text color, while actual failed/unknown rows retain their error color.
+Keep both sets of additive copy keys. Add team/legacy counter assertions to the
+existing Q13 surface test. Desktop/daemon changes are inherited unchanged.
+
+Remove B26's unrelated rounding example through fixture reuse, not a renderer
+filter. Payment, external-device and monthly-budget decision producers remain
+absent even after Q13: the exact read/answer dispatch and non-equivalence of
+permission rules/fresh Work budget edits are recorded in the current residual
+ledger. These three cards and the B4 checkout/B16 priority items/B26 separator
+remain blocking. Typecheck and related tests validate integration; the lead's
+independent review and visual gate cover the updated candidate. Do not rerun the
+whole suite or overwrite the original forty captures as if they measured it.

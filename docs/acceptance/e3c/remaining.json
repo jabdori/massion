@@ -166,51 +166,6 @@
     ]
   },
   {
-    "id": "R012",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  missing pane         text     \"요약\"",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": false,
-    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R013",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R014",
-    "screen": "B7-churn",
-    "theme": "dark",
-    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
     "id": "R015",
     "screen": "B7-churn",
     "theme": "dark",
@@ -2296,51 +2251,6 @@
       "src/assistant-service.ts:63",
       "src/server.ts:135",
       "src/assistant-conversation.ts:17"
-    ]
-  },
-  {
-    "id": "R155",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  missing pane         text     \"요약\"",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": false,
-    "reason": "A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R156",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"절차\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
-    ]
-  },
-  {
-    "id": "R157",
-    "screen": "B7-churn",
-    "theme": "light",
-    "diagnostic": "FAIL  order  pane         text     \"{progress}\" (occurrence already consumed or found earlier)",
-    "category": "unsupported product capability",
-    "boundary": "business-procedure",
-    "strictOrderCascade": true,
-    "reason": "Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.",
-    "sources": [
-      "src/domain.ts:25",
-      "src/domain.ts:29",
-      "src/configured-runtime.ts:222"
     ]
   },
   {
