@@ -1,478 +1,156 @@
 [
   {
-    "screen": "B7-churn",
+    "screen": "B7",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "order pane text \"절차\" (occurrence already consumed or found earlier)",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 1
   },
   {
-    "screen": "B7-churn",
+    "screen": "B7-done",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 1
   },
   {
-    "screen": "B8-done",
+    "screen": "B7-done",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "budget pane longest string 78 > 29 chars",
-    "occurrence": 1
-  },
-  {
-    "screen": "B8-fail",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "budget pane longest string 78 > 24 chars",
-    "occurrence": 1
-  },
-  {
-    "screen": "B15",
-    "theme": "dark",
-    "kind": "visual",
-    "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B15",
-    "theme": "dark",
-    "kind": "visual",
-    "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 2
   },
   {
-    "screen": "B22-room",
+    "screen": "B7-done",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order pane link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 3
   },
   {
-    "screen": "B22-room",
+    "screen": "B7-done",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 4
   },
   {
-    "screen": "B22-room",
+    "screen": "B7-done",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "missing pane status \"읽는 중\"",
-    "occurrence": 1
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 5
   },
   {
-    "screen": "B22-room",
-    "theme": "dark",
-    "kind": "visual",
-    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
+    "screen": "B7-fail",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
     "occurrence": 2
   },
   {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "missing pane text \"하나가 넘김 · {time}\"",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "role pane listitem \"확인\" (text exists without the required role)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
+    "screen": "B7-unknown",
     "theme": "dark",
     "kind": "contract",
     "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 1
   },
   {
-    "screen": "B22-room-steps",
+    "screen": "B7-unknown",
     "theme": "dark",
     "kind": "contract",
     "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 2
   },
   {
-    "screen": "B22-room-steps",
+    "screen": "B7-unknown",
     "theme": "dark",
     "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "dark",
-    "kind": "visual",
-    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B7-churn",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order pane text \"절차\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B7-churn",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B8-done",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "budget pane longest string 78 > 29 chars",
-    "occurrence": 1
-  },
-  {
-    "screen": "B8-fail",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "budget pane longest string 78 > 24 chars",
-    "occurrence": 1
-  },
-  {
-    "screen": "B15",
-    "theme": "light",
-    "kind": "visual",
-    "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B15",
-    "theme": "light",
-    "kind": "visual",
-    "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order pane link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 3
   },
   {
-    "screen": "B22-room",
-    "theme": "light",
+    "screen": "B7-unknown",
+    "theme": "dark",
     "kind": "contract",
-    "diagnostic": "missing pane status \"읽음\"",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 4
   },
   {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "missing pane status \"읽는 중\"",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room",
-    "theme": "light",
-    "kind": "visual",
-    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-    "occurrence": 2
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "missing pane text \"하나가 넘김 · {time}\"",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "role pane listitem \"확인\" (text exists without the required role)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
-    "theme": "light",
-    "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
-    "occurrence": 1
-  },
-  {
-    "screen": "B22-room-steps",
+    "screen": "B7",
     "theme": "light",
     "kind": "contract",
     "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 1
   },
   {
-    "screen": "B22-room-steps",
+    "screen": "B7-done",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 1
+  },
+  {
+    "screen": "B7-done",
     "theme": "light",
     "kind": "contract",
     "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 2
   },
   {
-    "screen": "B22-room-steps",
+    "screen": "B7-done",
     "theme": "light",
     "kind": "contract",
-    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 3
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 4
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 5
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
     "occurrence": 2
   },
   {
-    "screen": "B22-room-steps",
+    "screen": "B7-unknown",
     "theme": "light",
-    "kind": "visual",
-    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
     "occurrence": 1
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 2
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 3
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{time}\" (found in conversation)",
+    "occurrence": 4
   }
 ]

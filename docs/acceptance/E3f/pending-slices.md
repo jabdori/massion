@@ -39,7 +39,10 @@ complete capture, then `node scripts/ui-contracts/gate.ts --update`; the stale-e
 rule rejects any retained entry whose diagnostic no longer occurs. Slice ownership
 alone never permits a resolved exception to remain or a new diagnostic to be added.
 
-Keep `B22-room`, `B22-room-steps`, `B7-churn`, `B8-done`, `B8-fail` and `B15`
-unclassified (68 occurrences). Another agent owns their ledger/fixes. After those
-changes land, update this branch from main without rewriting published history,
-capture main's current complete evidence and regenerate the baseline accordingly.
+The lead initially kept `B22-room`, `B22-room-steps`, `B7-churn`, `B8-done`,
+`B8-fail` and `B15` unclassified (68 occurrences) for another agent's ledger/fixes.
+That work landed in [PR #121](https://github.com/jabdori/massion/pull/121), main
+`dd0c48b7311560e9eb0576e2624b6c605d59de13`, and was merged into this branch without
+rewriting published history. Its [residual ledger](../room-residuals/README.md)
+supplies the reasons for remaining room/browser diagnostics; the refreshed E3f
+baseline uses the complete CI capture from that main commit.
