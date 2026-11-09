@@ -1,0 +1,155 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e9]
+    - generic
+      - button "내 계정" [expanded=false, ref=e10]
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 보기" [expanded=false, ref=e11]
+      - heading "하나" [level=1, ref=e12]
+        - button "하나" [ref=e19]
+      - button "작업 공간" [ref=e13]
+      - button "더 보기" [expanded=false, ref=e14]
+    - region "대화" [ref=e15]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "PR #84 검토"
+          - generic
+            - paragraph
+              - StaticText "PR #84 검토"
+            - button "복사" [ref=e27]
+          - button "4분 동안 작업 ›" [ref=e20]
+          - paragraph
+            - StaticText "경쟁사 가격도 확인해 줘."
+          - generic
+            - paragraph
+              - StaticText "가격 표를 정리하고 확인을 기다리고 있어요."
+            - button "복사" [ref=e28]
+          - paragraph
+            - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
+          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e29]
+            - strong
+              - StaticText "경쟁사 가격"
+            - StaticText "확인 대기"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "퀼"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "만들기 0/1 · 확인 0/1"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e30]
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e31]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실행 중"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "퀼"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "만들기 0/1 · 확인 0/1"
+          - paragraph
+            - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+          - generic
+            - paragraph
+              - StaticText "지난 주문과 같은 토너를 찾았어요."
+            - button "복사" [ref=e32]
+          - button "프린터 토너 주문 실행 중 작업 중 하나 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e33]
+            - strong
+              - StaticText "프린터 토너 주문"
+            - StaticText "실행 중"
+            - status "작업 중"
+              - StaticText "하"
+            - StaticText "하나"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "만들기 0/1 · 확인 0/1"
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e21]
+          - button "파일 추가" [disabled, ref=e22]
+          - button "기본 권한" [ref=e23]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e24]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "프린터 토너 주문" [selected, ref=e16]
+      - button "프린터 토너 주문 닫기" [ref=e17]
+        - StaticText "×"
+    - button "좁히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e18]
+        - generic
+          - article
+            - StaticText "실행 중"
+            - time
+              - StaticText "4분"
+            - heading "프린터 토너 주문" [level=3, ref=e25]
+            - button "중지" [ref=e26]
+            - StaticText "만든 쪽"
+            - strong
+              - StaticText "claude-sonnet-5-5"
+            - StaticText "확인한 쪽"
+            - strong
+              - StaticText "gpt-6.1-terra"
+            - StaticText "연결"
+            - strong
+              - StaticText "fixture"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "기준"
+              - paragraph
+                - StaticText "요청한 결과와 근거 확인"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "확인"
+              - paragraph
+                - StaticText "확인 전"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "전송 1회 보장"
+              - paragraph
+                - StaticText "작성 · 완료"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "기록"
+                - StaticText "없음"
+              - paragraph
+                - StaticText "기록"
+              - paragraph
+                - StaticText "없음"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "흐름"
+              - list
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "프린터 토너 주문"
+            - group
+              - DisclosureTriangle "확인 전" [expanded=false]
+                - StaticText "확인 전"
+            - StaticText "예산 1 / 8 토큰"

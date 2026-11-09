@@ -174,6 +174,10 @@ function chatDecision(d){
 function chatBriefing(b,turns){const own=Array.isArray(b.turns)?b.turns:[],named=b.turnIds.map(id=>turns.get(id)??own.find(turn=>turn&&turn.id===id)).filter(turn=>turn&&turn.work);
  return chatKeyed('briefing-'+b.id,'div','chat-briefing',JSON.stringify([b.title,b.at,named.map(turn=>[turn.id,turn.work.title,chatCardLabel(turn)])]),()=>{const head=element('p'),list=element('ul');head.append(element('strong',b.title),element('span',' | '+chatDay(b.at)+' '+chatTime(b.at)));
   for(const turn of named){const item=element('li');item.append(chatButton(turn.work.title,()=>shellOpenWork(turn.id),''),element('span',' '+chatCardLabel(turn)));list.append(item);}return [head,list];});}
+function chatRoomTurns(){
+ const room=paneTabs.find(t=>t.key===paneActive);if(!chatThread||!room?.workId||chatRep?.feedId!==chatView?.feedId)return [];
+ return chatRep.turns.filter(t=>t.work?.memberId===chatThread).flatMap(t=>{const work=shellWorks.find(w=>w.turnId===t.id&&w.missionId===t.work.missionId&&w.workId===t.work.workId);if(!work)return [];const current={...t.work,...work};if(t.work.missionRevision!==work.missionRevision){delete current.steps;delete current.progress;delete current.evidenceCount;}return [{...t,work:current}];});
+}
 function chatSlot(turn){const kind=chatKind(turn);if(kind==='card'||kind==='failed'){const handoff=turn.work?.memberId&&Number.isSafeInteger(turn.at)?[chatSystem('handoff-'+turn.id,copy('conversation.text.05',{work_title:turn.work.title,time:chatTime(turn.at)}))]:[];return [...handoff,chatCard(turn)];}const shown=turn.work?[chatFold(turn)]:[];
  if(kind==='unknown'||kind==='failed')shown.push(chatException(turn,kind));else if(kind==='closed')shown.push(chatSystem('closed:'+turn.id,copy('ui.closed-title',{title:turn.work.title})));return shown;}
 async function chatCopy(text){const generation=chatGeneration;try{await navigator.clipboard.writeText(text);}catch{if(generation===chatGeneration)chatShow(copy('ui.unavailable'));}}
@@ -190,9 +194,9 @@ function renderChat(){
  // Decisions and briefings sit before the first owner message that started after them; a date line opens each day.
  // ponytail: they carry no segment, so an earlier segment shows none; filter by the segment's time span if old ones are missed there.
  const attached=new Set((view.segment?.messages||[]).map(m=>m.turnId||'assistant-turn:'+m.id));
- const extraWorks=view.turns.filter(t=>t.proposal&&!attached.has(t.id)&&Number.isSafeInteger(t.at)).flatMap(t=>chatSlot(t).map(node=>({at:t.at,node:()=>node})));
+ const extraWorks=[...view.turns,...chatRoomTurns().filter(t=>!view.turns.some(v=>v.id===t.id))].filter(t=>t.proposal&&!attached.has(t.id)&&Number.isSafeInteger(t.at)).flatMap(t=>chatSlot(t).map(node=>({at:t.at,node:()=>node})));
  const extras=chatSegment?[]:[...extraWorks,...chatDecisions().map(d=>({at:d.at,node:()=>chatDecision(d)})),...chatBriefings().map(b=>({at:b.at,node:()=>chatBriefing(b,turns)})),...chatRunExceptions().map(e=>({at:e.at,node:()=>chatRunException(e)}))].sort((a,b)=>a.at-b.at);
- const dated=(at,node,withTime=false)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=withTime||view.turns.length&&view.turns.every(t=>!t.proposal)?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
+ const dated=(at,node,withTime=false)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=withTime||view.turns.length&&view.turns.every(t=>!t.proposal)&&!(chatThread&&paneTabs.some(t=>t.key===paneActive&&t.workId))?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
  for(const message of view.segment?view.segment.messages:[]){
   const turn=message.role==='owner'?turns.get('assistant-turn:'+message.id):turns.get(message.turnId);
   if(message.role==='owner'&&turn&&Number.isSafeInteger(turn.at))while(extras.length&&extras[0].at<turn.at){const extra=extras.shift();dated(extra.at,extra.node());}
@@ -203,7 +207,7 @@ function renderChat(){
   else if(!chatThread&&turn.proposal)items.push(...chatSlot(turn));
  }
  for(const extra of extras)dated(extra.at,extra.node());
- for(const turn of view.turns)if(turn.proposal&&chatKind(turn)==='failed')items.push(chatException(turn,'failed'));
+ for(const turn of [...view.turns,...chatRoomTurns().filter(t=>!view.turns.some(v=>v.id===t.id))])if(turn.proposal&&chatKind(turn)==='failed')items.push(chatException(turn,'failed'));
  const log=$('chat-log');if(!stick&&items.some(n=>n.className==='chat-reply'&&!previousReplies.has(n)))chatNewReply=true;
  // Moves only nodes out of place, so a slot that changes kind or an entry placed in between keeps focus elsewhere and the live log announces only what is new.
  const keep=new Set(items);for(const node of [...log.children])if(!keep.has(node))node.remove();items.forEach((node,index)=>{if(log.children[index]!==node)log.insertBefore(node,log.children[index]??null);});
@@ -246,14 +250,14 @@ async function startChatWork(turnId){
 }
 /** Retry sends nothing: the owner's original request goes back into the input so the conditions can change before a new Send.
  * Typed text and a draft whose result is unknown are kept: the draft's command ID is what lets Send replay it instead of sending it twice. */
-async function chatRetry(turnId){const turn=chatView&&chatView.turns.find(t=>t.id===turnId),message=turn&&chatView.segment&&chatView.segment.messages.find(m=>m.id===turn.messageId),key=chatDraftKey;if(!message||turn.displayStatus==='unknown'||turn.work?.unknown||turn.outcome?.work?.status==='unknown')return;
+async function chatRetry(turnId){const turn=chatView?.turns.find(t=>t.id===turnId)??chatRoomTurns().find(t=>t.id===turnId),source=turn?.work&&snapshot?.value.id===turn.work.missionId?snapshot.value.works.find(w=>w.id===turn.work.workId)?.assistantSource:null,message=turn&&(chatView.segment?.messages.find(m=>m.id===turn.messageId)??(source?.messageId===turn.messageId?source.message:null)??chatRep?.segment?.messages.find(m=>m.id===turn.messageId)),key=chatDraftKey;if(!message||turn.displayStatus==='unknown'||turn.work?.unknown||turn.outcome?.work?.status==='unknown')return;
  await withRecoveryLock(()=>{if(chatDraftKey!==key)return;const input=$('chat-input');if(chatDraft().commandId||input.value.trim()&&input.value!==message.text){input.focus();return;}input.value=message.text;
  if(!storage.set(key,JSON.stringify({text:message.text,commandId:'',target:null,delivery:'not-delivered'})))chatShow(copy('ui.recovery-blocked'));input.focus();chatControls();},false);}
 
 /** Close records the owner's cancel once at the card's revision; whatever the answer, the next read says how it ended and nothing is retried. */
 async function chatCloseWork(turnId){
- const turn=chatView&&chatView.turns.find(t=>t.id===turnId);if(!turn||!turn.work||chatClosing.has(turnId))return;const work=turn.work;chatClosing.add(turnId);renderChat();
- try{await request('/missions/'+encodeURIComponent(work.missionId)+'/commands',{method:'POST',headers:{'Content-Type':'application/json',...(feedId?{'X-Massion-Feed':feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:work.missionRevision,command:{type:'cancel',workId:work.workId}})});}
+ const own=chatView?.turns.find(t=>t.id===turnId),turn=own??chatRoomTurns().find(t=>t.id===turnId);if(!turn?.work||chatClosing.has(turnId))return;const work=turn.work,guarded=!own||paneTabs.some(t=>t.key===paneActive&&t.missionId===work.missionId&&t.workId===work.workId);if(guarded&&(snapshot?.value.id!==work.missionId||snapshot.revision!==work.missionRevision||!snapshot.value.works.some(w=>w.id===work.workId)||work.unknown))return;chatClosing.add(turnId);renderChat();if(guarded){try{await sendCommand({type:'cancel',workId:work.workId});}finally{chatClosing.delete(turnId);await readChat();}return;}
+ try{await write('/missions/'+encodeURIComponent(work.missionId)+'/commands',{commandId:crypto.randomUUID(),expectedRevision:work.missionRevision,command:{type:'cancel',workId:work.workId}},work.missionId,copy('legacy.cancellation-recorded'));}
  catch{}finally{chatClosing.delete(turnId);await readChat();renderChat();}
 }
 /** A decision answer is sent once; a lost answer is not resent, the next read shows the decision's state. */

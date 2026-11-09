@@ -1,0 +1,323 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-churn.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-unknown.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 25,
+      "failed": 11,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 14,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-unknown.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 5,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-churn.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-unknown.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 25,
+      "failed": 11,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "passed": 22,
+      "failed": 14,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-unknown.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 30,
+      "failed": 5,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "node": "24.21.0",
+  "typecheck": {
+    "command": "npm run typecheck",
+    "exitCode": 0
+  },
+  "sourceCheck": {
+    "command": "node scripts/check.mjs",
+    "exitCode": 0,
+    "copyFindings": 0
+  },
+  "aggregate": {
+    "command": "TMPDIR=<physical macOS directory> node --test --test-concurrency=4 tests/*.test.ts",
+    "exitCode": 1,
+    "tests": 1899,
+    "pass": 1558,
+    "fail": 1,
+    "skipped": 340,
+    "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
+    "failureSource": "tests/portable-backup.test.ts:137"
+  },
+  "ui": {
+    "command": "UI_CONTRACTS_OUTPUT=.runtime/e3c-delivery node scripts/ui-contracts/run.mjs B7 B7-churn B7-done B7-fail B7-unknown B8 B8-done B8-fail B8-unknown B4",
+    "exitCode": 0,
+    "states": 20,
+    "required": 848,
+    "passed": 566,
+    "failed": 282,
+    "visualFailures": 0,
+    "infrastructureErrors": 0
+  },
+  "interactions": {
+    "command": "node scripts/ui-contracts/verify-work-pane.mjs",
+    "exitCode": 0,
+    "cases": 8,
+    "productCommands": 0
+  },
+  "steeringProbe": {
+    "command": "node docs/acceptance/e3c/steering-continuation.mjs",
+    "exitCode": 0
+  },
+  "transientFailure": {
+    "command": "npm test (concurrent with browser/source checks)",
+    "failure": "deadline during final acceptance acknowledgment preserves committed Record: Lifetime fixture deadline",
+    "isolatedRerun": "node --test tests/runtime-lifetime.test.ts: 12 passed, 2 skipped, 0 failures",
+    "finalAggregate": "The complete final suite with four workers, run after browser capture, retains only the documented portable-inventory failure. No runtime test or timeout changed."
+  }
+}

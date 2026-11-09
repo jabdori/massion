@@ -34,7 +34,7 @@ function fixture(works:Work[],extra?:(path:string,options:any,state:{works:Work[
   turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',proposal:{title:w.title},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,memberId:w.memberId??null,unknown:w.unknown??false,startedAt:w.startedAt??null,endedAt:w.endedAt??null,segment:w.segment??1}});});
   return {feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns};};
  const app=harness(async(path,options)=>{
-  const handled=extra?.(path,options,state,mission);if(handled)return reply(handled);
+  const handled=await extra?.(path,options,state,mission);if(handled)return reply(handled);
   if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.map(t=>({memberId:null,unknown:false,startedAt:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:state.cursor,events:state.events});
@@ -396,4 +396,78 @@ test('first-seen accepted Work stays unread until opened and busy members suppre
  state.works=[{...state.works[0]!,execution:'active',acceptance:'pending'}];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(dot.hidden,true);assert.equal(JSON.parse(app.storage.get('massion.workbench.seen')!)['intake/accepted'],'','busy rendering does not acknowledge Work');
  state.works=[{...state.works[0]!,execution:'settled',acceptance:'accepted'}];await runInContext('shellWorksLoad()',app.context);await settle();assert.equal(dot.hidden,false);
  await find(app,'side-line-intake/accepted').fire('click');await settle();assert.equal(dot.hidden,true);assert.equal(JSON.parse(app.storage.get('massion.workbench.seen')!)['intake/accepted'],'완료');assert.equal(app.calls.filter(c=>c.options.method==='POST').length,0);
+});
+
+test('a Work tab presents the exact room state, task progress and criteria instead of the Mission dashboard',async()=>{
+ const {app}=fixture([{workId:'work:a',title:'Current request',execution:'active',acceptance:'pending',started:true,startedAt:Date.now()-60000,stored:{tasks:[{id:'root',parentId:null,status:'active'},{id:'child',parentId:'root',status:'settled',result:'Recorded result'}]}}]);
+ await settle();await openTurn(app,0).fire('click');await settle();
+ const room=app.all().find(n=>n.id==='work-card-work:a')!;
+ assert.match(room.className,/work-room/);assert.match(room.textContent,/절차/);assert.match(room.textContent,/1\/2/);assert.match(room.textContent,/Recorded result/);
+ assert.ok(app.all().some(n=>n.id==='work-room-stop-work:a'&&n.textContent==='중지'));
+ await app.node('pane-widen').fire('click');assert.equal(app.node('pane-widen').attributes.get('aria-label'),'좁히기');
+ assert.match(room.textContent,/Answer the owner request/);assert.equal(app.node('mission-panel').className,'panel room');
+ const now=Date.now()+120000;runInContext('globalThis.Date=class extends Date{static now(){return '+now+'}};renderShell()',app.context);assert.equal(app.all().find(n=>n.id==='work-room-time-work:a')!.textContent,'3분');
+ await openTurn(app,0).fire('click');await settle();const stale=app.all().find(n=>n.id==='work-room-stop-work:a')!;await app.node('pane-close').fire('click');await stale.fire('click');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0,'a detached room cannot submit Stop');
+});
+
+test('Stop reuses one existing cancellation identity for overlapping clicks and keeps unknown effects unknown',async()=>{
+ let finish!:()=>void;const held=new Promise<void>(resolve=>finish=resolve);let posts=0;
+ const {app,state}=fixture([{workId:'work:a',title:'Active request',execution:'active',acceptance:'pending',started:true,stored:{effects:[{id:'effect:a',taskId:'root',status:'unknown',target:'Original target',authority:'owner'}]}}],(path,options)=>{
+  if(path==='/missions/intake/commands'&&options?.method==='POST'){posts++;return held.then(()=>({}));}
+ });
+ await settle();await openTurn(app,0).fire('click');await settle();
+ await app.tick();const stop=app.all().find(n=>n.id==='work-room-stop-work:a');assert.ok(stop);assert.equal(runInContext('reconnectRequired',app.context),false);
+ const one=stop.fire('click'),two=stop.fire('click');await settle();assert.equal(posts,1);finish();await Promise.all([one,two]);await settle();
+ const sent=app.calls.filter(c=>c.path==='/missions/intake/commands');assert.equal(sent.length,1);assert.deepEqual(JSON.parse(sent[0]!.options.body).command,{type:'cancel',workId:'work:a'});
+ assert.equal((state.works[0]!.stored!.effects as any[])[0].status,'unknown');
+ await stop.fire('click');await settle();assert.equal(posts,1,'an unknown response never authorizes another send');
+});
+
+test('same-revision Work and Mission tab switches rebuild the matching presentation',async()=>{
+ const {app}=fixture([{workId:'a',title:'First',execution:'active',acceptance:'pending',started:true},{workId:'b',title:'Second',execution:'active',acceptance:'pending',started:true}]);
+ await settle();await openTurn(app,0).fire('click');await settle();await openTurn(app,1).fire('click');await settle();
+ assert.equal(app.all().find(n=>n.id==='work-card-b')!.className,'work-room');
+ runInContext("paneOpen('intake','','Owner requests')",app.context);assert.equal(app.all().find(n=>n.id==='work-card-a')!.className,'work-card');assert.equal(app.node('mission-panel').className,'panel');
+ await openTurn(app,0).fire('click');await settle();assert.equal(app.all().find(n=>n.id==='work-card-a')!.className,'work-room');
+});
+
+test('a historical passed verdict cannot label a new artifact checked',async()=>{
+ const {app}=fixture([{workId:'a',title:'Changed result',execution:'active',acceptance:'stale',started:true,stored:{artifact:{id:'artifact:a',version:2,sha256:'new'},verdict:{id:'verdict:a',status:'passed',artifactVersion:1,artifactSha256:'old',criteriaVersion:1,evidence:[]}}}]);
+ await settle();await openTurn(app,0).fire('click');await settle();
+ assert.equal(app.all().find(n=>n.id==='work-room-check-a')!.textContent,'확인 전');
+ const card=app.all().find(n=>n.id==='work-card-a')!;const detail=card.children.find(n=>n.className==='room-detail')!;assert.doesNotMatch(detail.textContent,/1\/1|완료/);
+});
+
+test('the Work snapshot retains its end time while the global Work list is behind',async()=>{
+ const start=Date.UTC(2026,10,5,0,40),end=start+120000;
+ const {app,state}=fixture([{workId:'a',title:'Finished result',execution:'settled',acceptance:'failed',started:true,stored:{endedAt:end,runtimeRun:{id:'run:a',ownership:{startedAt:start}}}}]);
+ await settle();await openTurn(app,0).fire('click');await settle();
+ assert.equal(app.all().find(n=>n.id==='work-room-time-a')!.textContent,runInContext('chatTime('+start+')+" – "+chatTime('+end+')',app.context));
+ state.revision++;runInContext('snapshot.revision++',app.context);runInContext('renderMission()',app.context);assert.equal(app.all().find(n=>n.id==='work-room-time-a')!.textContent,runInContext('chatTime('+start+')+" – "+chatTime('+end+')',app.context));
+});
+
+test('a room reads its original handoff from an older segment and rejects late source reads after a tab switch',async()=>{
+ const turn=(n:number)=>'assistant-turn:m:'+String(n).repeat(32),source=(n:number)=>({segmentId:'assistant-conversation:1',turnId:turn(n),messageId:'m:'+String(n).repeat(32),memberId:'member-quill',message:{text:'Original '+n}});
+ let release!:(body:unknown)=>void,reads=0;
+ const {app}=fixture([{workId:'a',title:'First',execution:'active',acceptance:'pending',started:true,stored:{assistantSource:source(1)}},{workId:'b',title:'Second',execution:'active',acceptance:'pending',started:true,stored:{assistantSource:source(2)}}],path=>{
+  if(path!=='/assistant/conversation?segment=1')return;
+  reads++;if(reads===1)return new Promise(resolve=>release=resolve);
+  return {feedId:'feed:a',segment:{number:1,messages:[{id:source(2).messageId,role:'owner',text:'Original 2'}]},turns:[{id:turn(2),messageId:source(2).messageId,at:Date.UTC(2026,10,5,0,42),work:{missionId:'intake',workId:'b',missionRevision:2}}]};
+ });
+ await settle();await app.tick();await openTurn(app,0).fire('click');await settle();assert.equal(reads,1);
+ const old=app.all().find(n=>n.id==='work-room-handoff-a')!;await openTurn(app,1).fire('click');await settle();const current=app.all().find(n=>n.id==='work-room-handoff-b')!;
+ assert.equal(current.hidden,false);assert.match(current.textContent,/하나가 넘김/);
+ const label=current.textContent;release({feedId:'feed:a',segment:{number:1,messages:[{id:source(1).messageId,role:'owner',text:'Original 1'}]},turns:[{id:turn(1),messageId:source(1).messageId,at:Date.UTC(2026,10,5,0,40),work:{missionId:'intake',workId:'a',missionRevision:2}}]});await settle();assert.equal(old.hidden,true);assert.equal(current.textContent,label);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('a member room shows its assigned failed Work and Close keeps one cancellation after an unknown reply',async()=>{
+ let finish!:()=>void;const held=new Promise<void>(resolve=>finish=resolve);let posts=0;
+ const {app}=fixture([{workId:'a',title:'Failed request',memberId:'member-quill',execution:'settled',acceptance:'failed',started:true}],(path,options)=>{if(path==='/missions/intake/commands'&&options?.method==='POST'){posts++;return held.then(()=>({}));}});
+ await settle();await openTurn(app,0).fire('click');await settle();await app.tick();
+ runInContext("chatRep.turns[0].at=Date.now();chatThread='member-quill';chatView={...chatView,turns:[],segment:{...chatView.segment,messages:[]}};renderChat()",app.context);
+ const card=app.all().find(n=>n.id==='chat-exception-assistant-turn:m:'+String(1).repeat(32));assert.ok(card);
+ const actions=card.children.find(n=>n.className==='chat-actions')!,retry=actions.children[0]!,close=actions.children[1]!;
+ await retry.fire('click');await settle();assert.equal(app.node('chat-input').value,'Do Failed request');assert.equal(posts,0);
+ const one=close.fire('click'),two=close.fire('click');await settle();assert.equal(posts,1);finish();await Promise.all([one,two]);await settle();await close.fire('click');assert.equal(posts,1);
+ runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await close.fire('click');await settle();assert.equal(posts,1,'returning to the Representative cannot resend an unknown cancellation');
 });

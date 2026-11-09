@@ -1,0 +1,167 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e11]
+    - generic
+      - button "내 계정" [expanded=false, ref=e12]
+  - complementary "구성원과 작업"
+    - switch "활동 보기" [checked=true, ref=e7]
+    - button "검색" [expanded=false, ref=e8]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e24]
+            - StaticText "하나"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e25]
+            - StaticText "퀼"
+            - status "작업 중"
+        - listitem [level=1]
+          - button "주노" [ref=e26]
+            - StaticText "주노"
+            - status "읽지 않음"
+    - generic
+      - generic
+        - button "우선순위" [expanded=false, ref=e21]
+        - button "정렬" [expanded=false, ref=e22]
+      - list "활동 보기"
+        - listitem [level=1]
+          - button "경쟁사 가격 작업 중 읽지 않음 확인 대기" [ref=e27]
+            - strong
+              - StaticText "경쟁사 가격"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "읽지 않음"
+            - StaticText "확인 대기"
+        - listitem [level=1]
+          - button "이탈 원인 조사 작업 중 읽지 않음 실행 중" [ref=e28]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "읽지 않음"
+            - StaticText "실행 중"
+        - listitem [level=1]
+          - button "프린터 토너 주문 완료" [ref=e29]
+            - strong
+              - StaticText "프린터 토너 주문"
+            - StaticText "완료"
+        - listitem [level=1]
+          - button "PR #84 검토 읽지 않음 완료" [ref=e30]
+            - strong
+              - StaticText "PR #84 검토"
+            - StaticText "읽지 않음"
+            - StaticText "완료"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e13]
+      - heading "하나" [level=1, ref=e14]
+        - button "하나" [ref=e23]
+      - button "작업 공간" [ref=e15]
+      - button "더 보기" [expanded=false, ref=e16]
+    - region "대화" [ref=e17]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "PR #84 검토"
+          - generic
+            - paragraph
+              - StaticText "PR #84 검토"
+            - button "복사" [ref=e38]
+          - button "4분 동안 작업 ›" [ref=e31]
+          - paragraph
+            - StaticText "경쟁사 가격도 확인해 줘."
+          - generic
+            - paragraph
+              - StaticText "가격 표를 정리하고 확인을 기다리고 있어요."
+            - button "복사" [ref=e39]
+          - paragraph
+            - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
+          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e40]
+            - strong
+              - StaticText "경쟁사 가격"
+            - StaticText "확인 대기"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "퀼"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "만들기 0/1 · 확인 0/1"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e41]
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 만들기 0/1 · 확인 0/1" [ref=e42]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실행 중"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "퀼"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "만들기 0/1 · 확인 0/1"
+          - paragraph
+            - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+          - generic
+            - paragraph
+              - StaticText "지난 주문과 같은 토너를 찾았어요."
+            - button "복사" [ref=e43]
+          - button "1분 동안 작업 ›" [ref=e32]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e33]
+          - button "파일 추가" [disabled, ref=e34]
+          - button "기본 권한" [ref=e35]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e36]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "프린터 토너 주문" [selected, ref=e18]
+      - button "프린터 토너 주문 닫기" [ref=e19]
+        - StaticText "×"
+    - button "넓히기" [ref=e9]
+    - button "작업 공간 닫기" [ref=e10]
+    - tabpanel
+      - region "미션" [ref=e20]
+        - generic
+          - article
+            - StaticText "완료"
+            - time
+              - StaticText "14:08 – 14:08"
+            - heading "프린터 토너 주문" [level=3, ref=e37]
+            - StaticText "하나"
+            - StaticText "확인"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "절차"
+                - StaticText "3/3"
+              - list
+                - listitem [level=1]
+                  - image "완료"
+                  - StaticText "프린터 토너 주문"
+                  - time
+                    - StaticText "14:08"
+                - listitem [level=1]
+                  - image "완료"
+                  - StaticText "작성"
+                - listitem [level=1]
+                  - image "완료"
+                  - StaticText "확인"
+            - group
+              - DisclosureTriangle "확인 완료" [expanded=false]
+                - StaticText "확인 완료"
+            - StaticText "예산 2 / 8 토큰"
