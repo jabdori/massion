@@ -15,11 +15,12 @@ import {InMemoryStore,SurrealStore,createHttpRpcTransport,initializeSurrealSchem
 import type {Store} from '../src/storage.ts';
 import {ProductService} from '../src/product.ts';
 import {ProviderRegistry} from '../src/providers.ts';
+import {apply} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
 import {createWorkbench} from '../src/server.ts';
 
 const artifactText='The review has two open blockers: missing coverage and an unresolved dependency.';
-interface MockOptions {outputTokens?:number;forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
+interface MockOptions {reviewChecks?:unknown;outputTokens?:number;forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
 async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=new InMemoryStore<Mission>()){
  const calls:{model:string;prompt:any;correlation:string}[]=[];let release!:(value?:unknown)=>void;const held=new Promise(resolve=>{release=resolve;});
  const modelServer=createServer(async(req,res)=>{let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);calls.push({model:body.model,prompt,correlation:String(req.headers['x-client-request-id'])});
@@ -28,7 +29,7 @@ async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=n
   let content=artifactText;
   if(body.model==='verifier-v1'){
    if(options.tamperBeforeReview)await options.tamperBeforeReview();
-   content=JSON.stringify({artifactSha256:options.forgeHash?'0'.repeat(64):prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:options.failReview?'failed':'passed',checks:[{criterion:prompt.criteria.description,passed:!options.failReview,quote:'two open blockers',reason:options.failReview?'Mock independent review found inadequate detail':'Mock review confirms the bounded acceptance claim'}]});
+   content=JSON.stringify({artifactSha256:options.forgeHash?'0'.repeat(64):prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:options.failReview?'failed':'passed',checks:options.reviewChecks??[{criterion:prompt.criteria.description,passed:!options.failReview,quote:'two open blockers',reason:options.failReview?'Mock independent review found inadequate detail':'Mock review confirms the bounded acceptance claim'}]});
   }
   res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'chatcmpl-mock',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content,refusal:null}}],usage:{prompt_tokens:20,completion_tokens:options.outputTokens??5,total_tokens:20+(options.outputTokens??5)}}));
  });modelServer.listen(0,'127.0.0.1');await once(modelServer,'listening');const address=modelServer.address();assert.ok(address&&typeof address==='object');const endpoint=`http://127.0.0.1:${address.port}/v1/chat/completions`;
@@ -49,8 +50,20 @@ test('configured application path executes HTTP mock, verifies exact artifact, a
  assert.ok(w.record?.artifactSnapshot);assert.equal(JSON.parse(w.effects[0]!.receipt!).output,artifactText,'provider result remains durable before artifact write');
  assert.equal((await s.product.run(s.missionId,s.workId,'retry-different-id',result.snapshot.revision)).status,'already-started');assert.equal(s.calls.length,2);
 });
+test('Work telemetry retains host times and independently checked predicates through journal replay',async t=>{
+ const s=await setup(t);await s.admit();const result=await s.product.run(s.missionId,s.workId,'telemetry',2),w=result.snapshot.value.works[0]!;
+ assert.equal(result.status,'settled',result.reason??'Expected settled Work');assert.ok(Number.isSafeInteger(w.admittedAt));
+ for(const task of w.tasks.filter(t=>t.parentId!==null)){assert.ok(Number.isSafeInteger(task.startedAt));assert.ok(task.endedAt!>=task.startedAt!,JSON.stringify(task));}
+ assert.ok(w.verdict!.checkedAt!>=w.tasks.find(t=>t.id===s.workId+':verifier')!.startedAt!);
+ assert.deepEqual(w.verdict!.predicates,[{criterion:w.criteria.description,passed:true,quote:'two open blockers',reason:'Mock review confirms the bounded acceptance claim'}]);
+ assert.deepEqual(w.record!.verdict,w.verdict);
+ const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts'),operations=(s.store as InMemoryStore<Mission>).inspect();validateMissionJournalLineage(operations);
+ const index=operations.findIndex(op=>(op.events[0] as any).type==='verify'),event=operations[index]!.events[0] as any;
+ assert.throws(()=>apply(operations[index-1]!.value,{...event.command,verdict:{...event.command.verdict,checkedAt:0}},{id:event.actor,roles:['verifier']}),/host-owned/);
+ assert.throws(()=>apply(operations[index-1]!.value,{...event.command,verdict:{...event.command.verdict,predicates:[{...event.command.verdict.predicates[0],passed:false}]}},{id:event.actor,roles:['verifier']}),/predicates/);
+});
 test('forged passed verdict cannot accept a different artifact binding',async t=>{
- const s=await setup(t,{forgeHash:true});await s.admit();const result=await s.product.run(s.missionId,s.workId,'run',2);const w=result.snapshot.value.works[0]!;assert.equal(w.acceptance,'failed');assert.equal(w.record,undefined);assert.equal(s.calls.length,2);
+ const s=await setup(t,{forgeHash:true});await s.admit();const result=await s.product.run(s.missionId,s.workId,'run',2);const w=result.snapshot.value.works[0]!;assert.equal(w.acceptance,'failed');assert.equal(w.record,undefined);assert.equal(w.verdict?.predicates,undefined);assert.equal(s.calls.length,2);
 });
 test('independent failed judgment settles execution without accepting a Record',async t=>{
  const s=await setup(t,{failReview:true});await s.admit();const result=await s.product.run(s.missionId,s.workId,'run',2);assert.equal(result.snapshot.value.works[0]?.execution,'settled');assert.equal(result.snapshot.value.works[0]?.acceptance,'failed');
@@ -194,6 +207,16 @@ test('missing pinned memory blocks configured run before intent, budget or mock 
  assert.equal(result.status,'blocked');assert.match(result.reason??'',/missing/);assert.equal(s.calls.length,0);assert.deepEqual(await s.store.load(s.missionId),before);
 });
 
+for(const checks of [[],[{criterion:'Wrong criterion',passed:true,quote:'two open blockers',reason:'Wrong binding'}],[{criterion:'Identify two open blockers',passed:true,quote:'not in the artifact',reason:'Invented quote'}]])test('invalid check predicates never become detailed pass evidence: '+JSON.stringify(checks),async t=>{
+ const s=await setup(t,{reviewChecks:checks});await s.admit();const result=await s.product.run(s.missionId,s.workId,'invalid-checks',2),w=result.snapshot.value.works[0]!;
+ assert.equal(w.acceptance,'failed');assert.equal(w.verdict!.predicates,undefined);assert.equal(w.record,undefined);
+});
+test('a mixed independent check preserves each pass and failure without accepting the result',async t=>{
+ const checks=[{criterion:'Identify two open blockers',passed:true,quote:'missing coverage',reason:'First blocker identified'},{criterion:'Identify two open blockers',passed:false,quote:'unresolved dependency',reason:'Second blocker lacks detail'}];
+ const s=await setup(t,{failReview:true,reviewChecks:checks});await s.admit();const result=await s.product.run(s.missionId,s.workId,'mixed-checks',2),w=result.snapshot.value.works[0]!;
+ assert.deepEqual(w.verdict!.predicates,checks);assert.equal(w.acceptance,'failed');assert.equal(w.record,undefined);
+});
+
 test('monthly admission pauses before any model call and a fresh owner increase resumes once through HTTP',async t=>{
  const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const s=await setup(t);await s.admit();const budget=new MonthlyBudgetService(s.store);
  await budget.configure({commandId:'monthly-configure',expectedRevision:0,limit:127,timezone:'Asia/Seoul'});
@@ -204,6 +227,8 @@ test('monthly admission pauses before any model call and a fresh owner increase 
  const body={commandId:'monthly-raise',decisionId:d.id,answer:'act',expectedRevision:d.budget.revision,limit:d.budget.limit};const post=()=>fetch(origin+'/assistant/decisions',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
  const responses=await Promise.all([post(),post()]);assert.ok(responses.every(r=>r.status===200));const deadline=Date.now()+3000;while((await s.store.load(s.missionId))!.value.works[0]!.acceptance!=='accepted'&&Date.now()<deadline)await new Promise(r=>setTimeout(r,5));assert.equal(s.calls.length,2,JSON.stringify((await s.store.load(s.missionId))!.value.works[0]));assert.equal((await s.store.load(s.missionId))!.value.works[0]!.acceptance,'accepted');
  assert.equal((await post()).status,200);assert.equal(s.calls.length,2);const usage=await budget.read();assert.equal(usage.spent,10);assert.equal(usage.inputTokens,40);assert.equal(usage.reserved,0);assert.equal(usage.cost,null);
+ const resumed=(await s.store.load(s.missionId))!.value.works[0]!;assert.ok(Number.isSafeInteger(resumed.admittedAt));assert.equal(resumed.admittedAt,paused.snapshot.value.works[0]!.admittedAt);assert.ok(Number.isSafeInteger(resumed.verdict!.checkedAt));assert.equal(resumed.verdict!.predicates?.length,1);assert.deepEqual(resumed.record!.verdict,resumed.verdict);
+ const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect());
 });
 
 test('a definite activation rejection releases only its unused monthly reservation for a later explicit run',async t=>{

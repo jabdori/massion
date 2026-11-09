@@ -1,0 +1,213 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e9]
+    - generic
+      - button "내 계정" [expanded=false, ref=e10]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기" [checked=false, ref=e11]
+      - button "검색" [expanded=false, ref=e12]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e22]
+            - StaticText "하나"
+          - list "하나의 작업"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e23]
+            - StaticText "퀼"
+            - status "작업 중"
+          - list "퀼의 작업"
+            - listitem [level=2]
+              - button "이탈 원인 조사" [ref=e31]
+                - StaticText "이탈 원인 조사"
+                - status
+                  - StaticText "실행 중"
+            - listitem [level=2]
+              - button "경쟁사 가격" [ref=e32]
+                - StaticText "경쟁사 가격"
+                - status
+                  - StaticText "확인 대기"
+        - listitem [level=1]
+          - button "주노" [ref=e24]
+            - StaticText "주노"
+            - status "작업 중"
+          - list "주노의 작업"
+            - listitem [level=2]
+              - button "PR #84 검토" [ref=e33]
+                - StaticText "PR #84 검토"
+                - status
+                  - StaticText "실행 중"
+  - main "퀼 작업 중" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e13]
+      - heading "퀼" [level=1, ref=e14]
+        - button "퀼" [expanded=false, ref=e21]
+        - status
+          - StaticText "작업 중"
+      - button "작업 공간" [ref=e15]
+      - button "더 보기" [expanded=false, ref=e16]
+    - region "대화" [ref=e17]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "하나가 넘김: 경쟁사 가격 · 13:50"
+          - button "경쟁사 가격 확인 대기 22분 조사 표 정리 확인 출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1" [ref=e34]
+            - strong
+              - StaticText "경쟁사 가격"
+            - StaticText "확인 대기"
+            - StaticText "22분"
+            - StaticText "조사"
+            - StaticText "표 정리"
+            - StaticText "확인"
+            - StaticText "출처 고르기 3/3 가격 모으기 3/3 표 만들기 1/1 확인 0/1"
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실행 중 4분 조사 분류 요약 확인 2/4" [ref=e35]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실행 중"
+            - StaticText "4분"
+            - StaticText "조사"
+            - StaticText "분류"
+            - StaticText "요약"
+            - StaticText "확인"
+            - StaticText "2/4"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:11"
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e36]
+          - paragraph
+            - StaticText "기업 고객은 따로 봐 줘."
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:11"
+            - paragraph
+              - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
+            - button "복사" [ref=e37]
+          - paragraph
+            - StaticText "앞으로 표 금액은 원 단위로 써 줘."
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:12"
+            - paragraph
+              - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+            - button "복사" [ref=e38]
+      - generic
+        - form
+          - textbox "퀼에게 메시지 보내기" [ref=e25]
+          - button "파일 추가" [disabled, ref=e26]
+          - button "기본 권한" [ref=e27]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e28]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "경쟁사 가격" [selected, ref=e18]
+      - button "경쟁사 가격 닫기" [ref=e19]
+        - StaticText "×"
+    - button "넓히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e20]
+        - generic
+          - article
+            - StaticText "확인 대기"
+            - time
+              - StaticText "22분"
+            - button "중지" [ref=e29]
+            - heading "경쟁사 가격" [level=3, ref=e30]
+            - paragraph
+              - StaticText "하나가 넘김 · 13:50"
+            - list
+              - listitem "퀼" [level=1, ref=e39]
+                - StaticText "퀼"
+              - listitem "조사" [level=1, ref=e40]
+              - listitem "표 정리" [level=1, ref=e41]
+              - listitem "확인" [level=1, ref=e42]
+                - StaticText "확인"
+            - list "절차"
+              - listitem "출처 고르기 · 퀼 · 조사 · 완료" [level=1, ref=e44]
+                - StaticText "출처 고르기"
+                - StaticText "3/3"
+                - time
+                  - StaticText "13:52"
+              - listitem "가격 모으기 · 퀼 · 조사 · 완료" [level=1, ref=e45]
+                - StaticText "가격 모으기"
+                - StaticText "3/3"
+                - StaticText "조사"
+                - time
+                  - StaticText "14:00"
+                - StaticText "C사"
+                - StaticText "연간 요금만 공개"
+              - listitem "요약 · 퀼 · 요약 · 건너뜀 · 표만 요청" [level=1, ref=e46]
+                - StaticText "요약"
+                - StaticText "건너뜀 · 표만 요청"
+                - time
+                  - StaticText "14:00"
+              - listitem "표 만들기 · 퀼 · 표 정리 · 완료" [level=1, ref=e47]
+                - StaticText "표 만들기"
+                - StaticText "1/1"
+                - StaticText "표 정리"
+                - time
+                  - StaticText "14:07"
+              - listitem [level=1]
+                - StaticText "확인"
+                - StaticText "0/1"
+                - StaticText "대기"
+              - listitem [level=1]
+                - StaticText "기록"
+                - StaticText "다음 단계"
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "조사"
+              - time
+                - StaticText "13:52"
+              - paragraph
+                - StaticText "세 곳 요금제 페이지에서 월 요금만 모아 줘."
+            - article
+              - StaticText "조사"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:00"
+              - paragraph
+                - StaticText "A사 2개, B사 3개 요금제예요. C사는 연간 요금만 있어요."
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "표 정리"
+              - time
+                - StaticText "14:02"
+              - paragraph
+                - StaticText "C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로."
+            - article
+              - StaticText "표 정리"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:07"
+              - paragraph
+                - StaticText "표 1개, 요금제 6개예요."
+            - group
+              - button "확인 대기" [expanded=false, ref=e43]
+                - strong
+                  - StaticText "확인 대기"

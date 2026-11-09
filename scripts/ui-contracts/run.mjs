@@ -22,12 +22,11 @@ const config=join(out,'browser-config.json');await writeFile(config,'{}\n');
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));
 Object.assign(env,{AGENT_BROWSER_DEFAULT_TIMEOUT:'5000',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000',AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',TZ:'Asia/Seoul'});
 const run=async(command,args,options={})=>exec(command,args,{cwd:root,env,timeout:45000,maxBuffer:8*1024*1024,...options});
-const rows=[],runId=randomUUID().slice(0,8);
+const rows=[],sessionRoot=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion'])).stdout.trim(),runId=randomUUID().slice(0,8);
 for(const theme of ['dark','light'])for(const screen of (requested.length?requested:screens)){
  const contract=await json(join(specs,'contracts',screen+'.json'));
  const row={screen,theme,passed:0,failed:0,warnings:0,required:contract.regions.reduce((sum,r)=>sum+r.elements.filter(e=>e.required).length,0),visualFailures:[],gaps:[],errors:[],pair:null};
- rows.push(row);let host;
- const session=`massion-contract-${runId}-${screen.toLowerCase()}-${theme}`;
+ rows.push(row);let host;const session=sessionRoot+'-contracts-'+runId+'-'+screen.toLowerCase()+'-'+theme;
  const browser=async(...args)=>{const {stdout}=await run('agent-browser',['--config',config,'--session',session,'--color-scheme',theme,'--allowed-domains','127.0.0.1','--json',...args]);const result=JSON.parse(stdout);if(!result.success)throw Error(result.error||stdout);return result.data;};
  try{
   const fixture=await loadFixture(screen);row.gaps.push(...fixture.gaps);
