@@ -7,6 +7,8 @@
   ],
   "scriptExecuted": false,
   "identicalMaskedPixels": true,
+  "independentFieldValues": true,
+  "noPrivateQueryValues": true,
   "splitNodeReflection": true,
   "hiddenSeparatorReflection": true,
   "spacedReflection": true,
