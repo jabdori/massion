@@ -1,0 +1,65 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e6]
+      - button "설정" [ref=e9]
+      - LabelText
+        - searchbox "설정 검색" [ref=e20]
+      - button "일반" [ref=e10]
+        - StaticText "일반"
+      - button "기억" [ref=e11]
+        - StaticText "기억"
+      - button "구성원" [ref=e12]
+        - StaticText "구성원"
+      - button "기기" [ref=e13]
+        - StaticText "기기"
+      - button "연결" [ref=e14]
+        - StaticText "연결"
+      - button "사용량" [ref=e15]
+        - StaticText "사용량"
+      - button "앱" [ref=e16]
+        - StaticText "앱"
+      - button "개선" [ref=e17]
+        - StaticText "개선"
+      - button "권한" [ref=e18]
+        - StaticText "권한"
+  - main "설정" [ref=e2]
+    - region "사용량" [ref=e19]
+      - heading "사용량" [level=2, ref=e21]
+      - generic
+        - heading "이번 주기" [level=3, ref=e22]
+        - strong
+          - StaticText "사용률"
+        - StaticText "—"
+        - status "이번 주기 사용률 —"
+        - strong
+          - StaticText "초기화 시각"
+        - StaticText "—"
+        - heading "구성원" [level=3, ref=e23]
+        - strong
+          - StaticText "하나"
+        - StaticText "—"
+        - status "하나 사용률 —"
+        - strong
+          - StaticText "퀼"
+        - StaticText "—"
+        - status "퀼 사용률 —"
+        - strong
+          - StaticText "주노"
+        - StaticText "—"
+        - status "주노 사용률 —"
+        - strong
+          - StaticText "월 예산"
+        - StaticText "—"
+        - button "변경" [ref=e24]
+        - StaticText "마지막 업데이트 시각"
+        - status
+          - StaticText "—"
+        - button "새로고침" [ref=e25]

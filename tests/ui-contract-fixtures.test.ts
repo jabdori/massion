@@ -228,9 +228,9 @@ test('B22 steps setup opens the Work room without expanding legacy evidence',asy
  const work=(fixture.routes['/missions/intake']!.body as any).value.works[0];assert.deepEqual(work.tasks.filter((t:any)=>t.step).map((t:any)=>t.step.title),['읽기','테스트 돌리기']);
 });
 
-test('E6c effect fixtures use production decisions; budget fallbacks still never fabricate a decision',async()=>{
+test('E6c effect fixtures use production decision sources',async()=>{
  const {loadFixture}=await hostModule();
- for(const screen of ['B4','B16','B16-sent','B16-later','B26','B26-later']){
+ for(const screen of ['B4','B16','B16-sent','B16-later']){
   const fixture=await loadFixture(screen);
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
@@ -266,3 +266,7 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
 test('memory screen candidates come from answered production turns and remain owner proposals',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B6','B7-churn','B7-fail','B18','B18-room-b']){const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any,turn=view.turns.find((t:any)=>t.memoryCandidate);assert.equal(turn.status,'answered');assert.equal(turn.memoryCandidate.status,'proposed');assert.equal(turn.memoryCandidate.memberId,'member-quill');assert.ok(view.segment.messages.some((m:any)=>m.turnId===turn.id));}});
 
 test('rule capture keeps the proposal visible and briefings refer to decisions instead of phantom Work',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B2','B9','B9-restart','B9-update']){const f=await loadFixture(screen),view=f.routes['/assistant/conversation']!.body as any,summaries=f.routes['/assistant/works']!.body as any;assert.deepEqual(f.captureScroll,{selector:'#chat-scroll',top:0});assert.equal(view.decisions.find((d:any)=>d.ruleChange).ruleChange.revision,(f.routes['/missions/intake']!.body as any).revision);assert.ok(!summaries.works.some((w:any)=>w.workId==='rounding-work'));assert.ok(view.briefings.some((b:any)=>b.decisionIds.includes(view.decisions.find((d:any)=>d.ruleChange).id)));}});
+
+test('E8 monthly decision fixtures carry the production budget read and explicit owner deferral',async()=>{
+ const {loadFixture}=await hostModule();for(const screen of ['B26','B26-later']){const fixture=await loadFixture(screen),conversation=fixture.routes['/assistant/conversation']!.body as any,usage=fixture.routes['/assistant/usage']!.body as any;assert.equal(conversation.decisions.length,1);const d=conversation.decisions[0];assert.ok(d.id.startsWith('monthly-budget:'));assert.equal(d.state,screen==='B26'?'open':'later');assert.equal(d.budget.revision,usage.revision);assert.equal(usage.unit,'output-tokens');assert.equal(usage.cost,null);assert.deepEqual(fixture.gaps,[]);assert.doesNotMatch(JSON.stringify(conversation),/TOTAL: [34] cents/);}
+});
