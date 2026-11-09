@@ -4,10 +4,12 @@ Payment and external-member decisions use the production Work effect reducer, de
 
 ## Verification
 
-- Targeted Node 24 tests cover effect/owner authority, exact pinned requests, overlapping commands, expiry/input changes, feed replacement, host drain, timeout/late receipt, inert journal replay, the normal HTTP route and UI generation guards.
+- **155/155 targeted tests passed on Node v24.21.0 after merging `origin/main` (`395193e`, merge `aa14e4b`).** Tests cover effect/owner authority, exact pinned requests, overlapping commands, expiry/input changes, feed replacement, host drain, timeout/late receipt, inert journal replay, the normal HTTP route and UI generation guards.
 - `npm run typecheck` passes; UI copy lint reports no findings.
 - [Browser interaction](interaction.json): later → ask → act through the rendered UI and production service; exactly one fixture transmission, remote arrival recorded as `received`, Work outcome still `unknown`, reload without another send. This is a synthetic loopback test transport; the normal server route is separately tested.
 - [Contract report](report.md), [raw report](report.json), `checks/`, `snapshots/`, `visual/`, `screenshots/`, and `pairs/` retain B4, B16, B16-sent and B16-later in dark and light. Pairs place the approved artboard on the left and the application on the right. All eight pairs were inspected.
+
+Reproduction: `TMPDIR=/private/tmp node --test tests/effect-decisions.test.ts tests/backup-lineage.test.ts tests/conversation-cards.test.ts tests/surface-shell.test.ts tests/effect-decisions-ui.test.ts tests/ui-contract-fixtures.test.ts tests/members.test.ts tests/member-rooms.test.ts tests/work-room-visual.test.ts`; `UI_CONTRACTS_BLOCKING=0 UI_CONTRACTS_OUTPUT=docs/acceptance/e6c node scripts/ui-contracts/run.mjs B4 B16 B16-sent B16-later`.
 
 ## Residuals
 

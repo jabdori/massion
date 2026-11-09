@@ -36,15 +36,7 @@
             - status
               - StaticText "읽지 않음"
         - listitem [level=1]
-          - button "깨지는 테스트 고치기 작업 중 읽지 않음 결정 대기" [ref=e21]
-            - strong
-              - StaticText "깨지는 테스트 고치기"
-            - status "작업 중"
-              - StaticText "하"
-            - StaticText "읽지 않음"
-            - StaticText "결정 대기"
-        - listitem [level=1]
-          - button "PR #84 검토 읽지 않음 완료" [ref=e22]
+          - button "PR #84 검토 읽지 않음 완료" [ref=e21]
             - strong
               - StaticText "PR #84 검토"
             - StaticText "읽지 않음"
@@ -60,14 +52,14 @@
       - generic
         - log
           - paragraph
+            - StaticText "11월 5일 (목) 09:12"
+          - paragraph
             - StaticText "massion 저장소에서 깨지는 테스트 하나 고쳐 줘."
           - generic
             - paragraph
               - StaticText "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
-            - button "복사" [ref=e28]
-          - paragraph
-            - StaticText "11월 5일 (목)"
-          - region "노트북의 Claude Code에게 처음 맡길까요?" [ref=e23]
+            - button "복사" [ref=e27]
+          - region "노트북의 Claude Code에게 처음 맡길까요?" [ref=e22]
             - strong
               - StaticText "노트북의 Claude Code에게 처음 맡길까요?"
             - StaticText "09:12"
@@ -84,12 +76,12 @@
               - term "주의"
               - definition
                 - StaticText "보낸 요청은 거둘 수 없어요."
-            - button "맡기기" [ref=e29]
-            - button "나중에" [ref=e30]
+            - button "맡기기" [ref=e28]
+            - button "나중에" [ref=e29]
       - generic
         - form
-          - textbox "하나에게 메시지 보내기" [ref=e24]
-          - button "파일 추가" [disabled, ref=e25]
-          - button "기본 권한" [ref=e26]
+          - textbox "하나에게 메시지 보내기" [ref=e23]
+          - button "파일 추가" [disabled, ref=e24]
+          - button "기본 권한" [ref=e25]
             - StaticText "기본 권한"
-          - button "보내기" [ref=e27]
+          - button "보내기" [ref=e26]

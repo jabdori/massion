@@ -12,10 +12,12 @@ Owner admission and dispatch claims use the drain-aware owner store. Already-sta
 
 ## Plan and verification
 
-- [ ] Add failing fixture-only tests for exact payment/handoff approval, pause, rejection/deferral, expiry/input changes, overlapping commands, lost claim/reply, receipt identity and restart/lineage.
-- [ ] Extend domain effect transitions, backup lineage, the host decision service and existing server route; no new public producer route.
-- [ ] Reuse the conversation decision UI and pane tokens for checkout, admission, sent and deferred states. Test generation/feed fencing and run the four affected contracts in both themes with agent-browser.
-- [ ] Generate fixture data from actual transitions/readers, retain artboard/app pairs in `docs/acceptance/e6c/`, and update only resolved E3e residuals. The unrelated rounding proposal remains a residual.
-- [ ] Run typecheck and related tests only (the owner's verification budget); CI owns full-suite/contracts. Merge current origin/main, push `feat/effect-decisions`, open the requested PR and request `@codex review`; do not merge.
+- [x] Add failing fixture-only tests for exact payment/handoff approval, pause, rejection/deferral, expiry/input changes, overlapping commands, lost claim/reply, receipt identity and restart/lineage.
+- [x] Extend domain effect transitions, backup lineage, the host decision service and existing server route; no new public producer route.
+- [x] Reuse the conversation decision UI and pane tokens for checkout, admission, sent and deferred states. Test generation/feed fencing and run the four affected contracts in both themes with agent-browser.
+- [x] Generate fixture data from actual transitions/readers, retain artboard/app pairs in `docs/acceptance/e6c/`, and update only resolved E3e residuals. The unrelated rounding proposal remains a residual.
+- [x] Run typecheck and related tests only (the owner's verification budget), and merge current origin/main. CI owns full-suite/contracts.
+
+Delivery: push `feat/effect-decisions`, open the requested PR and request `@codex review`; do not merge.
 
 No real money, remote device, credentials, autonomous hiring, general browser automation or new retry mechanism is included. The fixture adapter proves dispatch semantics, not provider delivery or payment competence.

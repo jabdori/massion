@@ -21,9 +21,9 @@ contract B16 (B16 외부 구성원 · 묻기) vs /Users/code/orca/workspaces/mas
   ok    composer     button   "기본 권한" -> button "기본 권한"
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget sidebar      app {"chars":93,"strings":17,"sentences":1,"longest":27} proto {"chars":97,"strings":7,"sentences":2,"longest":41} source visibleTextBudget
+  budget sidebar      app {"chars":72,"strings":14,"sentences":1,"longest":27} proto {"chars":97,"strings":7,"sentences":2,"longest":41} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":232,"strings":15,"sentences":4,"longest":44} proto {"chars":234,"strings":19,"sentences":4,"longest":42} source visibleTextBudget
+  budget conversation app {"chars":238,"strings":15,"sentences":4,"longest":44} proto {"chars":234,"strings":19,"sentences":4,"longest":42} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
 FAIL: 1 failures, 0 warnings, 22 required elements
