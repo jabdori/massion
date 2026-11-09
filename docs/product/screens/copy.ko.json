@@ -16536,86 +16536,6 @@
   ],
   "provenance": "E6c recorded checkout; B4 approved artboard labels."
  },
- "ui.checkout.heading": {
-  "ko": "주문 / 결제",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.destination": {
-  "ko": "배송지",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.method": {
-  "ko": "결제 수단",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.shipping": {
-  "ko": "배송비",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.total": {
-  "ko": "합계",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.quantity": {
-  "ko": "수량 {count}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.krw": {
-  "ko": "{amount}원",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
- "ui.checkout.reject": {
-  "ko": "취소",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B4:pane"
-  ],
-  "provenance": "E6c recorded checkout; B4 approved artboard labels."
- },
  "ui.checkout.subtotal": {
   "ko": "상품 금액",
   "roles": [
@@ -16856,16 +16776,6 @@
   ],
   "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
  },
- "ui.effect.external.scope": {
-  "ko": "{instruction} · {scope}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "B16:conversation"
-  ],
-  "provenance": "E6c owner-approved payment and external-member contracts; recorded effects only."
- },
  "ui.effect.external.later": {
   "ko": "{who}에게 맡기기",
   "roles": [
@@ -17068,5 +16978,45 @@
    "B22-room:conversation",
    "B22-room-steps:conversation"
   ]
+ },
+ "ui.effect.external.request-one": {
+  "ko": "요청 한 문장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.request-many": {
+  "ko": "요청 {count}문장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.payload": {
+  "ko": "{request} · 저장소 이름 {repository} · 테스트 이름 {count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
+ },
+ "ui.effect.external.payload-scope": {
+  "ko": "{request} · 범위 {scope}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B16:conversation"
+  ],
+  "provenance": "E6c visual review: summary derived from pinned transmitted fields."
  }
 }

@@ -34,14 +34,16 @@ test('payment pauses atomically; overlapping approval runs the pinned effect onc
  const results=await Promise.all([1,2].map(()=>s.service.decide({commandId:'pay',decisionId:id,answer:'act'})));
  assert.ok(results.every(r=>['committed','replayed'].includes(r.status)));assert.equal(calls.length,1);assert.deepEqual(calls[0].request,payment);
  assert.equal((await s.read()).effects[0]!.status,'succeeded');await s.service.decide({commandId:'pay',decisionId:id,answer:'act'});assert.equal(calls.length,1);
- await assert.rejects(s.service.decide({commandId:'pay',decisionId:id,answer:'reject'}),/identity|conflict/i);
+ await assert.rejects(s.service.decide({commandId:'pay',decisionId:id,answer:'later'}),/identity|conflict/i);
 });
 
 test('later and ask retain history; rejection closes the original step without a payment',async()=>{
  const s=await setup();await s.propose();const id=(await s.read()).effects[0]!.id;
- for(const answer of ['later','ask','reject'] as const)await s.service.decide({commandId:answer,decisionId:id,answer});
- const e=(await s.read()).effects[0]!;assert.equal(e.ownerDecision!.state,'rejected');assert.deepEqual(e.ownerDecision!.answers.map(a=>a.answer),['later','ask','reject']);
- await assert.rejects(s.service.decide({commandId:'late-pay',decisionId:id,answer:'act'}),/open|decision/i);
+ for(const answer of ['later','ask'] as const)await s.service.decide({commandId:answer,decisionId:id,answer});
+ await assert.rejects(s.service.decide({commandId:'reject',decisionId:id,answer:'reject'}),/Exact decision answer/);
+ const refused=apply((await s.store.load('intake'))!.value,{type:'answer-owner-effect',workId:'work',effectId:id,answer:'reject'},{id:'local-owner',roles:['owner']},{observedAt:NOW}).value;
+ const e=refused.works[0]!.effects[0]!;assert.equal(e.ownerDecision!.state,'rejected');assert.deepEqual(e.ownerDecision!.answers.map(a=>a.answer),['later','ask','reject']);
+ assert.throws(()=>apply(refused,{type:'answer-owner-effect',workId:'work',effectId:id,answer:'act'},{id:'local-owner',roles:['owner']},{observedAt:NOW}),/open|decision/i);
  await assert.rejects(s.propose({...payment,total:35000,subtotal:32000}),/identity|conflict/i);
 });
 
@@ -136,4 +138,11 @@ test('HTTP owner answer held in a read is refused if host drain begins before ad
  const store=new Proxy(s.store,{get(target,key){if(key==='load')return async(id:string)=>{if(hold&&id==='intake'){hold=false;entered();await gate;}return target.load(id);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  const server=createWorkbench(store,'.',{connections:{list:()=>({representative:{intakeMissionId:'intake'}})} as unknown as ConnectionWorkbench,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const sending=fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/decisions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'defer',decisionId:id,answer:'later'})});await ready;const drained=server.drain();release();assert.equal((await sending).status,503);await drained;assert.equal((await s.read()).effects[0]!.ownerDecision!.state,'open');
+});
+
+
+test('external content summary derives from the pinned payload without showing the literal instruction',async()=>{
+ const s=await setup();await s.propose({...external,repository:{name:'massion',tests:['tests/domain.test.ts']}});
+ const d=(await s.service.decisions())[0]!;assert.equal(d.rows.find(r=>r[0]==='받는 곳')![1],'Claude Code · 내 노트북');
+ assert.equal(d.rows.find(r=>r[0]==='보낼 내용')![1],'요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개');assert.ok(!JSON.stringify(d.rows).includes(external.instruction));
 });

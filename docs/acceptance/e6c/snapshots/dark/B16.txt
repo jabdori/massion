@@ -69,7 +69,7 @@
                 - StaticText "Claude Code · 노트북"
               - term "보낼 내용"
               - definition
-                - StaticText "massion 저장소에서 깨지는 테스트 하나 고쳐 줘. · massion 저장소"
+                - StaticText "요청 한 문장 · 저장소 이름 massion · 테스트 이름 1개"
               - term "보내지 않는 것"
               - definition
                 - StaticText "기억 · 다른 일 · 연결 키"
@@ -78,6 +78,7 @@
                 - StaticText "보낸 요청은 거둘 수 없어요."
             - button "맡기기" [ref=e28]
             - button "나중에" [ref=e29]
+            - link "기기 보기" [ref=e30]
       - generic
         - form
           - textbox "하나에게 메시지 보내기" [ref=e23]

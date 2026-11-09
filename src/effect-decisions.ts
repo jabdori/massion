@@ -11,7 +11,7 @@ import {HostDrainError} from './runtime-lifetime.ts';
 
 export const EFFECT_DECISION_PREFIX='effect-decision:',EFFECT_HOST='effect-decision-host',EFFECT_COMMAND_PREFIX='assistant-effect:';
 export interface PaymentRequest {kind:'payment';adapterId:string;checkoutId:string;item:string;quantity:number;subtotal:number;shipping:number;total:number;currency:'KRW';merchant:string;origin:string;destination:string;method:string;expiresAt:number;cancellation:string;pagesRead:number;startedAt:number}
-export interface ExternalMemberRequest {kind:'external-member';adapterId:string;deviceId:string;deviceName:string;agentId:string;agentName:string;instruction:string;scope:string}
+export interface ExternalMemberRequest {kind:'external-member';adapterId:string;deviceId:string;deviceName:string;agentId:string;agentName:string;instruction:string;scope:string;repository?:{name:string;tests:string[]}}
 export type OwnerEffectRequest=PaymentRequest|ExternalMemberRequest;
 export type EffectAnswer='act'|'later'|'ask'|'reject';
 export interface EffectReceipt {idempotencyKey:string;remoteId:string;outcome:'succeeded'|'failed'|'received';detail:string}
@@ -36,7 +36,8 @@ export function validateEffectRequest(r:OwnerEffectRequest):void {
   ensure([r.quantity,r.subtotal,r.shipping,r.total,r.expiresAt,r.pagesRead,r.startedAt].every(integer)&&r.quantity>0&&r.total>0&&r.total===r.subtotal+r.shipping&&r.currency==='KRW'&&r.expiresAt>r.startedAt,'Invalid payment amounts or expiry');
   let origin:URL;try{origin=new URL(r.origin);}catch{throw new DomainError('Invalid checkout origin');}ensure(origin.protocol==='https:'&&origin.origin===r.origin&&!origin.username&&!origin.password,'Exact HTTPS checkout origin required');
  }else{
-  exact(r,['kind','adapterId','deviceId','deviceName','agentId','agentName','instruction','scope']);
+  exact(r,['kind','adapterId','deviceId','deviceName','agentId','agentName','instruction','scope',...(Object.hasOwn(r,'repository')?['repository']:[])]);
+  if(Object.hasOwn(r,'repository')){exact(r.repository,['name','tests']);ensure(line(r.repository.name)&&Array.isArray(r.repository.tests)&&r.repository.tests.length<=32&&r.repository.tests.every(line)&&new Set(r.repository.tests).size===r.repository.tests.length,'Invalid transmitted repository fields');}
   ensure(r.kind==='external-member'&&[r.adapterId,r.deviceId,r.agentId].every(id)&&[r.deviceName,r.agentName,r.instruction,r.scope].every(line),'Invalid external member request');
  }
 }
@@ -105,7 +106,7 @@ export class EffectDecisionsService {
   return this.#dispatch(missionId,EFFECT_COMMAND_PREFIX+'propose:'+effectId.slice(EFFECT_DECISION_PREFIX.length),{type:'propose-owner-effect',...proposal,effectId},false);
  }
  async decide(input:unknown):Promise<CommitResult<Mission>>{
-  exact(input,['commandId','decisionId','answer']);ensure(id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.decisionId)&&['act','later','ask','reject'].includes(input.answer),'Exact decision answer required');
+  exact(input,['commandId','decisionId','answer']);ensure(id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.decisionId)&&['act','later','ask'].includes(input.answer),'Exact decision answer required');
   const {commandId,decisionId,answer}=structuredClone(input) as {commandId:string;decisionId:string;answer:EffectAnswer},missionId=this.#intake();ensure(missionId,'Intake Mission unavailable');const snapshot=await this.#store.load(missionId),w=snapshot?.value.works.find(w=>w.effects.some(e=>e.id===decisionId&&e.ownerDecision));ensure(w,'Unknown effect decision');
   const c:EffectDecisionCommand={type:'answer-owner-effect',workId:w.id,effectId:decisionId,answer};
   const result=await this.#dispatch(missionId,commandId,c,true);
@@ -144,7 +145,8 @@ export class EffectDecisionsService {
   return snapshot.value.works.flatMap(w=>w.effects.flatMap(e=>{
    const d=e.ownerDecision;if(!d)return [];const r=d.request,payment=r.kind==='payment',money=(n:number)=>copy('ui.effect.money',{amount:n.toLocaleString('ko-KR')}),who=payment?'':copy('ui.effect.external.who',{device:r.deviceName,agent:r.agentName}),time=(at:number)=>new Date(at).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false});
    const question=payment?copy('ui.effect.payment.question',{amount:money(r.total)}):copy('ui.effect.external.question',{who}),state=d.state==='open'?'open':d.state==='later'?'later':'done';
-   const rows=payment?[[copy('ui.effect.payment.item'),r.item],[copy('ui.effect.payment.merchant'),r.merchant+' · '+r.origin],[copy('ui.effect.payment.amount'),copy('ui.effect.payment.total-method',{amount:money(r.total),method:r.method})],[copy('ui.effect.payment.expiry'),copy('ui.effect.payment.until',{time:time(r.expiresAt)})],[copy('conversation.link.25'),r.cancellation]]:[[copy('ui.effect.external.destination'),copy('ui.effect.external.target',{agent:r.agentName,device:r.deviceName})],[copy('ui.effect.external.content'),copy('ui.effect.external.scope',{instruction:r.instruction,scope:r.scope})],[copy('ui.effect.external.excluded'),copy('ui.effect.external.excluded-value')],[copy('ui.effect.external.caution'),copy('ui.effect.external.irreversible')]];
+   const sentenceCount=payment?0:[...new Intl.Segmenter('ko',{granularity:'sentence'}).segment(r.instruction)].filter(s=>s.segment.trim()).length,requestSummary=copy(sentenceCount===1?'ui.effect.external.request-one':'ui.effect.external.request-many',sentenceCount===1?{}:{count:sentenceCount});
+   const rows=payment?[[copy('ui.effect.payment.item'),r.item],[copy('ui.effect.payment.merchant'),r.merchant+' · '+r.origin],[copy('ui.effect.payment.amount'),copy('ui.effect.payment.total-method',{amount:money(r.total),method:r.method})],[copy('ui.effect.payment.expiry'),copy('ui.effect.payment.until',{time:time(r.expiresAt)})],[copy('conversation.link.25'),r.cancellation]]:[[copy('ui.effect.external.destination'),copy('ui.effect.external.target',{agent:r.agentName,device:r.deviceName})],[copy('ui.effect.external.content'),r.repository?copy('ui.effect.external.payload',{request:requestSummary,repository:r.repository.name,count:r.repository.tests.length}):copy('ui.effect.external.payload-scope',{request:requestSummary,scope:r.scope})],[copy('ui.effect.external.excluded'),copy('ui.effect.external.excluded-value')],[copy('ui.effect.external.caution'),copy('ui.effect.external.irreversible')]];
    const line=d.state==='later'?(payment?copy('ui.effect.payment.action',{amount:money(r.total)}):copy('ui.effect.external.later',{who})):d.state==='rejected'?copy('ui.effect.rejected'):d.dispatch?(payment?copy(e.status==='succeeded'?'ui.effect.payment.paid':e.status==='failed'?'ui.effect.payment.failed':'ui.effect.unknown'):d.receipt?.outcome==='received'?copy('ui.effect.external.sent',{who,time:time(d.dispatch.at)}):copy(d.receipt?.outcome==='failed'?'ui.effect.external.failed':'ui.effect.unknown')):copy('ui.effect.waiting');
    return [{id:e.id,at:d.at,title:w.title,question,rows,action:payment?copy('ui.effect.payment.action',{amount:money(r.total)}):copy('conversation.button.08'),state,line,effect:{kind:r.kind,missionId:snapshot.value.id,workId:w.id,effectId:e.id,status:e.status,request:structuredClone(r),...(d.dispatch?{claimedAt:d.dispatch.at}:{}),...(d.receipt?{receipt:structuredClone(d.receipt)}:{}),...(d.answers.length?{answer:d.answers.at(-1)!.answer}:{})}}];
   }));

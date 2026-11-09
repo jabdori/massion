@@ -15,7 +15,7 @@ rounding and other producers below remain absent.
 
 | Blocking visual requirement | Exact missing producer / handler, and why the existing path cannot perform it |
 | --- | --- |
-| **B4:** payment decision, amount rows and checkout pane | **Resolved by E6c (fixture adapter):** [effect-decisions.ts](../../../src/effect-decisions.ts) atomically pauses the Work, pins checkout facts and records owner approval and single dispatch; [server.ts](../../../src/server.ts) routes `effect-decision:` through the existing decision endpoint. The checkout pane reads those retained fields; no real payment or live browser session is claimed. [Evidence](../e6c/README.md). |
+| **B4:** payment decision, amount rows and checkout pane | **Resolved by E6c (fixture adapter):** [effect-decisions.ts](../../../src/effect-decisions.ts) atomically pauses the Work, pins checkout facts and records owner approval and single dispatch; [server.ts](../../../src/server.ts) routes `effect-decision:` through the existing decision endpoint. The decision card reads those retained fields. Following visual review, the browser tab shows unavailable because no page snapshot producer exists; its three page-amount slots and member chip remain unsupported. No real payment or live browser session is claimed. [Evidence](../e6c/README.md). |
 | **B16:** external-member admission and two priority items | **Admission, transmission identity, received/unknown and later/ask resolved by E6c (fixture adapter).** [Producer and receipt boundary](../../../src/effect-decisions.ts), [conversation and activity](../../../src/assistant-conversation-panel.ts), [evidence](../e6c/README.md). The second priority item, a Representative rounding/check-rule proposal backed by an evaluated candidate, remains absent and blocking. Its missing row also causes the B16-sent order diagnostic. |
 | **B26:** `이번 달 예산을 다 썼어요`, `지금 / 늘린 뒤 / 멈춘 일`, and `예산 대기` | There is no monthly budget aggregate, currency/accounting period projection, budget-paused Work collection, monthly increase proposal or corresponding decision/defer/reopen command. Existing POST `/missions/:id/work-budget` [server.ts:196](../../../src/server.ts#L196) maps to `revise-budget`, which requires a fresh Work with no runtime/effects/assignments/artifact/verdict/Record and no task progress [domain.ts:272](../../../src/domain.ts#L272); it cannot resume an already paused monthly-budget Work. [Schedule budgets](../../../src/schedules.ts#L108) count cumulative briefing runs, not monthly currency. `budget_exceeded` in [ExecutionGate](../../../src/domain.ts#L38) is a per-execution blocker, not the absent monthly decision or paused-feed separator. `chatDecision`/`chatDecide` can display/submit existing cards, but the server has no handler for a monthly-budget decision ID. This card and the budget-wait separator remain blocking. |
 
@@ -48,9 +48,10 @@ errors. Existing historical screenshots below are intentionally not overwritten.
 | 2 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
 | 3 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
 | 4 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 5 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 6 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 7 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
+| 5 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 6 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 7 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 8 | `FAIL order pane chip "{member}"` | The unavailable browser view has no page identity overlay; the owner review forbids inventing a page from checkout text. [Current checks](../e6c/README.md). |
 
 ## B6 (dark)
 
@@ -274,9 +275,10 @@ errors. Existing historical screenshots below are intentionally not overwritten.
 | 2 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
 | 3 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
 | 4 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 5 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 6 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
-| 7 | Resolved in E6c | Production owner-effect transitions and decision reads now supply this occurrence in both themes. [Current checks and pairs](../e6c/README.md). |
+| 5 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 6 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 7 | `FAIL region pane text "{amount}" (found in conversation)` | **Page snapshot producer absent.** Payment facts remain on the real decision card; the browser pane shows unavailable per the owner's visual review, without a text reconstruction. [Current checks](../e6c/README.md). |
+| 8 | `FAIL order pane chip "{member}"` | The unavailable browser view has no page identity overlay; the owner review forbids inventing a page from checkout text. [Current checks](../e6c/README.md). |
 
 ## B6 (light)
 

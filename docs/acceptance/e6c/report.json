@@ -4,12 +4,14 @@
     {
       "screen": "B4",
       "theme": "dark",
-      "passed": 35,
-      "failed": 0,
+      "passed": 31,
+      "failed": 4,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
-      "gaps": [],
+      "gaps": [
+        "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback."
+      ],
       "errors": [],
       "pair": "pairs/dark/B4.png"
     },
@@ -58,12 +60,14 @@
     {
       "screen": "B4",
       "theme": "light",
-      "passed": 35,
-      "failed": 0,
+      "passed": 31,
+      "failed": 4,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
-      "gaps": [],
+      "gaps": [
+        "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback."
+      ],
       "errors": [],
       "pair": "pairs/light/B4.png"
     },
