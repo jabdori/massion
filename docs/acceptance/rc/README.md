@@ -226,3 +226,20 @@ The final actual-host browser run passes all nine captured states after dropping
 exactly two committed member reply bodies. Fresh reconnect contrast is 16.46:1
 dark and 17.50:1 light; outside adapter calls and journaled secret values remain
 zero. `interaction/report.json` contains the new measurements.
+
+## Growth and memory main integration
+
+Merge main `4601116` / PR #128, retaining rule-change decisions, member memory
+candidates, exact source pins, backup lineage, memory history and responsive
+Settings navigation. Resolve the four shared files by preserving both features;
+fixture composition now runs effect/lifecycle/growth/memory producers in sequence.
+The upstream ledger removes 70 more entries: main 560, integrated 460. Both sides'
+removals and R-C producer reasons remain intact.
+
+132 related growth/memory/member/device/HTTP/fixture/backup checks pass without
+skips; typecheck passes. All 22 R-C screen/theme pairs remain 670/708 with zero
+geometry/token/infrastructure failures and no new/stale exceptions. Six affected
+R-D screens in both themes have no new/stale diagnostics either; retained gaps
+are documented in `main-growth-integration.json`. The member candidate producer
+saves explicit Mission memory, but still provides no member Settings list or
+forget command. No member-memory ownership or builtin skill provenance is guessed.

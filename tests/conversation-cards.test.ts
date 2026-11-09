@@ -97,7 +97,7 @@ test('a briefing is one grey card whose bullets link to Work with its current st
  const day2=T0+24*3600000;
  const {app}=fixture([{text:'Find churn causes',at:T0,work:{workId:'work:a',title:'Churn causes',execution:'active',acceptance:'pending',started:true}},{text:'Morning',at:day2+3600000}],{briefings:[{id:'briefing:1',at:day2,title:'Morning briefing',turnIds:[turnId(1),'assistant-turn:missing']}]});await settle();
  const brief=byId(app,'chat-briefing-briefing:1')!;assert.ok(brief);
- assert.ok(brief.textContent.startsWith('Morning briefing | 11월 6일 (금)'));
+ assert.ok(brief.textContent.startsWith('아침 브리핑 | 11월 6일 (금)'));
  assert.match(brief.textContent,/Churn causes 실행 중/);assert.doesNotMatch(brief.textContent,/missing/);
  const dates=shown(app).filter(n=>n.className==='chat-date').map(n=>n.textContent);assert.equal(dates.length,2);assert.equal(dates[1],'11월 6일 (금)');
  const order=shown(app);assert.ok(order.indexOf(brief)>order.findIndex(n=>n.className==='chat-date'&&n.textContent===dates[1])&&order.indexOf(brief)<order.findIndex(n=>n.textContent==='Morning'));
