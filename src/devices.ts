@@ -82,5 +82,5 @@ export class DevicesService {
   });
  }
  beginDrain(){this.#stop.abort();}
- async drain(){this.beginDrain();await Promise.allSettled([...this.#active]);}
+ async drain(){this.beginDrain();const results=await Promise.allSettled([...this.#active]);for(const result of results)if(result.status==='rejected')throw result.reason;const state=await this.#store.load(DEVICES_ID) as Snapshot<DevicesState>|null;ensure(!state?.value.operations.some(o=>o.status==='unknown'),'Device outcome remains unknown during shutdown','conflict');}
 }

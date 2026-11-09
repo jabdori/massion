@@ -21,7 +21,8 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
  const connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>{throw Error('No environment access');},transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  const request=(path:string,body?:unknown,feed?:string)=>fetch(origin+path,body?{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(body)}:undefined);
- for(const path of ['/assistant/members','/assistant/devices','/connections/lifecycle']){const response=await request(path);assert.equal(response.status,200,path);assert.equal(typeof (await response.json()).feedId,'string');}
+ for(const path of ['/assistant/members','/assistant/devices','/connections/lifecycle','/assistant/members?commandId=unknown-archive&memberId=member-fixture&action=archive']){const response=await request(path);assert.equal(response.status,200,path);assert.equal(typeof (await response.json()).feedId,'string');}
+ assert.equal((await request('/assistant/members?commandId=x&commandId=y&action=archive')).status,400);
  const target=connections.list().connections[0]!,path='/connections/'+encodeURIComponent(target.id)+'/key',hash=target.configHash,body={commandId:'replace',expectedConfigHash:hash,apiKey:'fixture-http-secret'},old=await request(path,body,'old-feed');assert.equal(old.status,409);assert.equal(writes,0);
  const response=await request(path,body);const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.status,'completed');assert.equal(writes,1);
  assert.doesNotMatch(JSON.stringify([result,await (await request('/connections/lifecycle')).json(),store.inspect()]),/fixture-http-secret/);
@@ -38,9 +39,9 @@ test('remote device HTTP commands retain the external-member decision and never 
  await app.create({id:'intake',purpose:'Remote fixture',scope:'fixture',constraints:[],criteria:{version:1,description:'Check independently',oracle:'fixture/v1'}},'local-owner','create-device-intake');
  await app.dispatch({missionId:'intake',commandId:'admit-device-work',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'remote',title:'Read repository',budget:8}});
  await app.dispatch({missionId:'intake',commandId:'assign-device-work',expectedRevision:2,actorId:'local-owner',command:{type:'assign',workId:'remote',assignment:{id:'remote:executor',taskId:'remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Device HTTP fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
- let deliveries=0,connects=0,connected=false;
+ let deliveries=0,connects=0,connected=false,connectStarted:(()=>void)|undefined,heldConnect:Promise<void>|undefined;
  const connections={list:()=>({representative:{intakeMissionId:'intake'}})} as unknown as ConnectionWorkbench;
- const server=createWorkbench(store,root,{connections,scheduleIntervalMs:0,effectAdapters:[{id:'remote-adapter',kind:'external-member',async send(input){deliveries++;return {idempotencyKey:input.idempotencyKey,remoteId:'arrival',outcome:'received',detail:'Arrival only'};}}],deviceAdapters:[{id:'remote-adapter',async inspect(){return {status:connected?'connected':'offline'};},async connect(){connects++;connected=true;return {status:'connected'};},async disconnect(){connected=false;return {status:'offline'};}}]});
+ const server=createWorkbench(store,root,{connections,scheduleIntervalMs:0,effectAdapters:[{id:'remote-adapter',kind:'external-member',async send(input){deliveries++;return {idempotencyKey:input.idempotencyKey,remoteId:'arrival',outcome:'received',detail:'Arrival only'};}}],deviceAdapters:[{id:'remote-adapter',async inspect(){return {status:connected?'connected':'offline'};},async connect(){connects++;connectStarted?.();await heldConnect;connected=true;return {status:'connected'};},async disconnect(){connected=false;return {status:'offline'};}}]});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  await server.effectDecisions.propose({missionId:'intake',workId:'remote',taskId:'remote:root',stepId:'handoff',request:{kind:'external-member',adapterId:'remote-adapter',deviceId:'laptop',deviceName:'Laptop',agentId:'codex',agentName:'Codex',instruction:'Read repository',scope:'fixture repository'}});
  const decisionId=(await server.effectDecisions.decisions())[0]!.id,post=(path:string,body:unknown)=>fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -54,6 +55,9 @@ test('remote device HTTP commands retain the external-member decision and never 
  const known=(await (await fetch(origin+'/assistant/devices')).json()).devices[0];assert.equal(known.admitted,true);assert.equal(known.decisionId,decisionId);assert.equal(known.agent,'Codex');
  assert.equal((await post('/assistant/devices',{commandId:'disconnect-laptop',deviceId:'laptop',action:'disconnect'})).status,200);assert.equal(connected,false);
  assert.equal(deliveries,1);assert.equal((await store.load('intake'))!.value.works[0].effects[0].status,'unknown');validateMissionJournalLineage(store.inspect());
+ let release!:()=>void;const started=new Promise<void>(resolve=>{connectStarted=resolve;});heldConnect=new Promise<void>(resolve=>{release=resolve;});t.after(()=>release());
+ const pending=post('/assistant/devices',{commandId:'connect-during-drain',deviceId:'laptop',action:'connect'});await started;
+ const draining=server.drain();release();assert.equal((await pending).status,200);assert.deepEqual(await draining,{status:'unsettled',timedOut:false});validateMissionJournalLineage(store.inspect());
 });
 
 test('shutdown reports an unconfirmed key write as unsettled instead of drained',{timeout:3000},async t=>{
@@ -67,8 +71,9 @@ test('shutdown reports an unconfirmed key write as unsettled instead of drained'
  assert.ok(store.inspect().some(o=>o.value.kind==='connection-lifecycle'&&o.value.attempts.some((a:any)=>a.commandId==='write-before-drain'&&a.status==='pending')));assert.doesNotMatch(JSON.stringify(store.inspect()),/drain-fixture-key/);
 });
 
-test('an app read cannot label replacement-database state with its original HTTP feed',async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false;
- const store=new Proxy(original,{get(_target,key){if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+test('app and member receipt reads cannot label replacement-database state with their original HTTP feed',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false,flipLookup=false;
+ const store=new Proxy(original,{get(_target,key){if(key==='lookupOperation')return async(input:any)=>{if(flipLookup){active=replacement;flipLookup=false;}return active.lookupOperation(input);};if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());armed=true;const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps'),body=await response.json();assert.equal(response.status,503);assert.equal(body.reason,'feed');assert.equal(body.apps,undefined);
+ active=original;flipLookup=true;const receipt=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/members?commandId=lost-archive&action=archive&memberId=member-fixture');assert.equal(receipt.status,503);assert.equal((await receipt.json()).reason,'feed');
 });

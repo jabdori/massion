@@ -50,3 +50,17 @@ residuals for unavailable producers/executors. Fixture member names are Korean.
 Connectivity retains an approved device binding when a later Work merely
 proposes another handoff. The complete approved request remains the target; a new
 pending request cannot substitute another adapter or grant itself Work authority.
+
+## Shutdown and uncertain member receipts
+
+Device drain checks durable connectivity operations after waiting for active
+adapters. Unknown outcomes or rejected in-flight operations reject drain, so the
+existing host drain aggregation reports unsettled rather than a clean CLI exit.
+No adapter is invoked by the drain check.
+
+Member archive/restore has no external effect. Settings retains the exact command
+ID, action and member ID after a lost answer, asks the existing members GET for
+its fingerprint-matched receipt, and clears only that feed-scoped uncertainty
+lock after confirmation. Reading the current archived state alone is insufficient;
+unknown receipts remain fenced. The next read supplies the current member view
+before an inverse owner action is exposed. No uncertain command is resent.

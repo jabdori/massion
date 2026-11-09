@@ -22,6 +22,16 @@ async function setup(store:Store<any>=new InMemoryStore<any>()){
  for(const [commandId,command,actor] of steps){const {value,events}=applyMembers(prior,command,actor,{observedAt:now});await store.commit({id:MEMBERS_ID,expectedRevision:revision++,commandId,fingerprint:hash({actorId:actor.id,command}),value,events,outbox:[]});prior=value;}
  return {store,service,memberId,setNow:(at:number)=>{now=at;}};
 }
+
+test('member lifecycle receipt query matches the exact command without writing or exposing its snapshot',async()=>{
+ const f=await setup(),input={commandId:'archive-receipt',memberId:f.memberId,action:'archive'};
+ assert.deepEqual(await f.service.outcome(input),{commandId:input.commandId,status:'unknown'});
+ await f.service.act(input);const before=(f.store as InMemoryStore<any>).inspect();
+ assert.deepEqual(await f.service.outcome(input),{commandId:input.commandId,status:'replayed'});
+ assert.deepEqual(await f.service.outcome({...input,action:'unarchive'}),{commandId:input.commandId,status:'conflict'});
+ await assert.rejects(f.service.outcome({...input,extra:true}),/Exact member/);
+ assert.deepEqual((f.store as InMemoryStore<any>).inspect(),before);
+});
 const action=(memberId:string,which:'archive'|'unarchive'='archive',commandId:string=which)=>({commandId,action:which,memberId});
 
 test('archive is owner-only, exact, reversible and retains identity and admission lineage',async()=>{

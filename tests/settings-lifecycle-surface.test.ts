@@ -5,10 +5,11 @@ import {harness,reply,settle} from './support/workbench-client.ts';
 
 const member={id:'member-quill',name:'퀼',look:{shape:'square',color:'agent-1'},modelGroup:'default',archivedAt:null,workCount:2,scheduleCount:0,lastActiveAt:1000};
 function fixture(){
- const state={posted:[] as {path:string;body:any}[],pending:null as ((value:any)=>void)|null,members:[member],devices:[{id:'laptop',name:'내 노트북',agent:'Codex',status:'offline',available:true,admitted:true,decisionId:'remote'}]};
+ const state={posted:[] as {path:string;body:any}[],pending:null as ((value:any)=>void)|null,members:[member],archived:[] as (typeof member)[],receipts:new Set<string>(),devices:[{id:'laptop',name:'내 노트북',agent:'Codex',status:'offline',available:true,admitted:true,decisionId:'remote'}]};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});return new Promise(resolve=>{state.pending=resolve;});}
-  if(path==='/assistant/members')return reply({feedId:'feed:a',revision:1,members:state.members,archived:[]});
+  if(path.startsWith('/assistant/members?')){const commandId=new URL('http://fixture'+path).searchParams.get('commandId')!;return reply({feedId:'feed:a',commandId,status:state.receipts.has(commandId)?'replayed':'unknown'});}
+  if(path==='/assistant/members')return reply({feedId:'feed:a',revision:1,members:state.members,archived:state.archived});
   if(path==='/assistant/devices')return reply({feedId:'feed:a',revision:0,devices:state.devices});
   if(path==='/connections')return reply({connections:[],modelGroups:[],runtime:{connections:[],defaultRoutes:[]},configHash:'hash-a'});
   if(path==='/assistant/skills')return reply({skills:[],improvements:[]});
@@ -31,6 +32,17 @@ test('member archive uses the owner command and a stored response refreshes the 
  const archive=byId(app,'settings-member-archive');assert.ok(archive);const first=archive.fire('click');await settle();
  assert.equal(state.posted[0]!.path,'/assistant/members');assert.deepEqual({...state.posted[0]!.body,commandId:'fixed'},{commandId:'fixed',memberId:'member-quill',action:'archive'});
  state.members=[];state.pending!(reply({status:'committed',revision:2}));await first;await settle();assert.ok(!byId(app,'settings-member-member-quill'));
+});
+
+for(const action of ['archive','unarchive'] as const)test('lost '+action+' response unlocks the inverse only after its exact receipt is confirmed',async()=>{
+ const {app,state}=fixture();if(action==='unarchive'){state.members=[];state.archived=[member];}await settle();await open(app,'members');
+ const first=runInContext(`settingsLifecyclePost('member:member-quill','/assistant/members',{memberId:'member-quill',action:'${action}'})`,app.context);await settle();
+ const commandId=state.posted[0]!.body.commandId;state.members=action==='archive'?[]:[member];state.archived=action==='archive'?[member]:[];
+ state.pending!(Promise.reject(Error('Lost member response')));await first;await settle();
+ assert.equal(runInContext("settingsLifecycleLocked('member:member-quill')",app.context),true,'State alone cannot certify the command');
+ state.receipts.add(commandId);await runInContext('settingsLoad("members")',app.context);
+ assert.equal(runInContext("settingsLifecycleLocked('member:member-quill')",app.context),false);assert.equal(state.posted.length,1);
+ const inverse=runInContext(`settingsLifecyclePost('member:member-quill','/assistant/members',{memberId:'member-quill',action:'${action==='archive'?'unarchive':'archive'}'})`,app.context);await settle();assert.equal(state.posted.length,2);assert.notEqual(state.posted[1]!.body.commandId,commandId);state.pending!(reply({status:'committed',revision:3}));await inverse;
 });
 
 test('late lifecycle reads cannot replace a newer device read or survive a database feed change',async()=>{

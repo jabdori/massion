@@ -39,7 +39,7 @@ export const settingsStyle=String.raw`.settings-stack{max-width:var(--settings-c
 export const settingsClient=String.raw`
 const settingsLabels=${JSON.stringify(Object.fromEntries(sections.map(([id,label])=>[id,label])))};
 const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
-const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set();
+const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set(),settingsMemberUnknown=new Map();
 let settingsConnectionLifecycle=null,settingsKeyConnection='',settingsMembers=null,settingsDevices=null,settingsDataEpoch=-1,settingsDataFeed='',settingsDevicePicker=false,settingsActionError='';
 function settingsInvalidate(){settingsDataEpoch=-1;settingsUsage=null;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
 let settingsUsage=null,settingsBudgetDraft=null,settingsBudgetStatus='';
@@ -69,7 +69,10 @@ async function settingsLoad(name){
  if(name==='permissions')settingsRules=await read('/assistant/permissions');
  if(name==='apps')settingsApps=await read('/assistant/apps');
  if(name==='members'||name==='improvements')settingsSkills=await read('/assistant/skills');
- if(name==='members'){settingsMembers=await read('/assistant/members');settingsApps=await read('/assistant/apps');}
+ if(name==='members'){
+  for(const [identity,input] of settingsMemberUnknown)if(identity===settingsLifecycleKey('member:'+input.memberId)&&settingsUnknown.has(identity)){const outcome=await read('/assistant/members?'+new URLSearchParams(input));if(outcome?.feedId===feed&&outcome.commandId===input.commandId&&['committed','replayed'].includes(outcome.status)){settingsUnknown.delete(identity);settingsMemberUnknown.delete(identity);}}
+  settingsMembers=await read('/assistant/members');settingsApps=await read('/assistant/apps');
+ }
  }catch(error){if(error===settingsStale)return;throw error;}
  if(settingsShown===name)renderSettings();
 }
@@ -80,12 +83,12 @@ const settingsLifecycleKey=key=>String(chatView&&chatView.feedId)+':'+key;
 const settingsLifecycleLocked=key=>settingsPending.has(settingsLifecycleKey(key))||settingsUnknown.has(settingsLifecycleKey(key));
 async function settingsLifecyclePost(key,path,body){
  const identity=settingsLifecycleKey(key);if(settingsLifecycleLocked(key)||settingsDataEpoch!==connectionEpoch)return false;
- const epoch=connectionEpoch,feed=chatView&&chatView.feedId;settingsPending.add(identity);settingsActionError='';renderSettings();let ok=false;
- try{const {response,body:result}=await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});
-  if(epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)){settingsUnknown.add(identity);return false;}
+ const epoch=connectionEpoch,feed=chatView&&chatView.feedId,commandId=crypto.randomUUID(),unknown=()=>{settingsUnknown.add(identity);if(path==='/assistant/members')settingsMemberUnknown.set(identity,{commandId,memberId:body.memberId,action:body.action});};settingsPending.add(identity);settingsActionError='';renderSettings();let ok=false;
+ try{const {response,body:result}=await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify({commandId,...body})});
+  if(epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)){unknown();return false;}
   if(response.ok&&result&&['committed','replayed','completed','settled','saved','checked'].includes(result.status))ok=true;
-  else if(!response.ok&&result?.outcome==='rejected')settingsActionError=copy('ui.panel.unavailable');else settingsUnknown.add(identity);
- }catch(error){if(error?.commandNotSent===true)settingsActionError=copy('ui.panel.unavailable');else settingsUnknown.add(identity);}finally{settingsPending.delete(identity);if(epoch===connectionEpoch&&feed===(chatView&&chatView.feedId))await settingsLoad(settingsShown);}
+  else if(!response.ok&&result?.outcome==='rejected')settingsActionError=copy('ui.panel.unavailable');else unknown();
+ }catch(error){if(error?.commandNotSent===true)settingsActionError=copy('ui.panel.unavailable');else unknown();}finally{settingsPending.delete(identity);if(epoch===connectionEpoch&&feed===(chatView&&chatView.feedId))await settingsLoad(settingsShown);}
  return ok;
 }
 function settingsDevicesView(){

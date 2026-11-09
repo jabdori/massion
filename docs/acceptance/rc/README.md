@@ -204,3 +204,25 @@ The delayed-source and bounded-churn regressions failed before the correction;
 60 related app/MCP/lifecycle HTTP tests then passed. An additional exact overlapping
 install regression passes (61 checks combined), and typecheck passes. The E2E
 assertion remains HTTP 200; no browser or network policy was relaxed.
+
+## Shutdown and member-response review
+
+The real HTTP device regression reproduced a running adapter interrupted by drain
+while the host reported drained. Device drain now rejects durable unknown outcomes
+and rejected active work; the existing host aggregation reports unsettled. The
+archived/restored client regressions reproduced a lost response locking the inverse
+action after repeated successful reads. Settings now reconciles the exact original
+command fingerprint through a read-only, feed-fenced receipt query. Current state
+alone and unknown/mismatched receipts never unlock or resend that command.
+
+Both client regressions and the HTTP drain regression failed before the fixes.
+54 related member/device/app-presence/backup/structure checks pass, and typecheck
+passes. Additional actual HTTP assertions reject duplicate query fields and
+replacement-database receipts. The local browser script drops both committed
+member response bodies and requires archive/restore recovery without replaying
+an owner action; screenshots retain the existing nine state/theme names.
+
+The final actual-host browser run passes all nine captured states after dropping
+exactly two committed member reply bodies. Fresh reconnect contrast is 16.46:1
+dark and 17.50:1 light; outside adapter calls and journaled secret values remain
+zero. `interaction/report.json` contains the new measurements.

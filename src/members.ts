@@ -89,6 +89,10 @@ function card(state:MembersState,d:MemberDecision){
  return {id:d.id,at:d.at,title:d.topic,question:copy('ui.member-proposal-question',{topic:d.topic,count:d.count}),rows:[[copy('ui.this-month'),titles],...(d.handoff?[[copy('ui.member-work'),d.handoff]]:[]),[copy('settings.heading.03'),copy('settings.text.01')]],action:'Add member',form:'member',state:d.state,...(d.state==='done'?{line:copy('ui.member-added',{member:member?.name??d.topic}),...(member?{memberId:member.id}:{})}:{})};
 }
 const OWNER='local-owner';
+function lifecycleCommand(input:unknown):{commandId:string;command:MembersCommand}{
+ ensure(exact(input,['commandId','action','memberId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&['archive','unarchive'].includes(input.action as string),'Exact member lifecycle fields required');
+ return {commandId:input.commandId,command:{type:input.action==='archive'?'archive-member':'unarchive-member',memberId:input.memberId}};
+}
 export class MembersService {
  readonly #groupWrites=new Map<string,Promise<CommitResult<MembersState>>>();
  readonly #store:Store<any>;readonly #intake:()=>string|undefined;readonly #clock:()=>number;
@@ -132,8 +136,10 @@ export class MembersService {
  }
  async member(memberId:string){return (await this.#state())?.value.members.find(m=>m.id===memberId);}
  async act(input:unknown):Promise<CommitResult<MembersState>>{
-  ensure(exact(input,['commandId','action','memberId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&['archive','unarchive'].includes(input.action as string),'Exact member lifecycle fields required');
-  return this.#dispatch(input.commandId,OWNER,{type:input.action==='archive'?'archive-member':'unarchive-member',memberId:input.memberId});
+  const {commandId,command}=lifecycleCommand(input);return this.#dispatch(commandId,OWNER,command);
+ }
+ async outcome(input:unknown){
+  const {commandId,command}=lifecycleCommand(input),result=await this.#store.lookupOperation({id:MEMBERS_ID,commandId,fingerprint:fingerprint(OWNER,command)});return {commandId,status:result.status};
  }
  /** Host-only step for the Representative (no HTTP route, so no caller can write a Representative proposal): the host writes the rows from Representative Works whose run started this calendar month (UTC). */
  async propose(input:unknown):Promise<CommitResult<MembersState>>{

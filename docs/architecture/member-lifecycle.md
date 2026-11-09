@@ -1,5 +1,11 @@
 # Member lifecycle
 
+Lost archive/restore responses retain the exact command identity in Settings.
+The existing members GET accepts that commandId/action/memberId as an optional
+receipt query, checks the original fingerprint without writing, and fences its
+feed. Only a confirmed durable receipt clears that member's uncertainty lock;
+fresh member state alone never certifies the command. No automatic resend occurs.
+
 Owner archive/unarchive extends the existing members aggregate and command
 dispatcher. Admission remains exclusively an answer to an existing decision.
 Archive retains identity, home, decisions, Work, Records and conversation segments;
