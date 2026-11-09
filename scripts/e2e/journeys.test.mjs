@@ -14,6 +14,7 @@ import {stopOwnedChild} from '../../tests/support/owned-process.ts';
 import {exportPortableBackup,restorePortableBackup} from '../../src/portable-backup.ts';
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
+import {browserCommand} from './browser-command.mjs';
 
 const run=promisify(execFile),out=resolve('.runtime/e2e');
 // No skip: a missing database/browser must fail the required CI job.
@@ -28,8 +29,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
  const browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{}));
  const browser=async(...args)=>{
-  const result=JSON.parse((await run('agent-browser',['--config',browserConfig,'--session',session,'--allowed-domains','127.0.0.1','--json',...args],{env,timeout:35000,maxBuffer:4e6})).stdout);
-  assert.ok(result.success,result.error);if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return result.data;
+  const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--allowed-domains','127.0.0.1','--json',...args],{env,timeout:35000,maxBuffer:4e6}));
+  if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;
  };
  const wait=async code=>browser('wait','--fn',code);
  const entry=fileURLToPath(new URL('./daemon.ts',import.meta.url)),configPath=join(root,'host.json'),argv=[process.execPath,entry,configPath];
