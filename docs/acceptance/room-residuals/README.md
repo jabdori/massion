@@ -154,3 +154,12 @@ The mechanical design detector returned no findings on the two changed UI files.
 Full-suite, full-catalog and blocking-copy checks belong to CI under the brief's
 verification budget. No real model, external app action, browser-form submission,
 deployment or merge was performed. Full prototype parity remains follow-up.
+
+
+## R-E visual follow-up: file/check data boundary
+
+The current branch still has no host-owned per-file read receipts in Task/Work or the bundled GitHub AppView. The file rows are GitHub diff rows; named reading steps and their 4/11 task count do not identify which files a member actually read. The per-file `읽음` / `읽는 중` markers and `{member}가 읽음 n/N` header therefore remain omitted. Existing `unsupported file-read telemetry` allow-list occurrences retain this reason.
+
+R-A [PR #129](https://github.com/jabdori/massion/pull/129), head `63c4ea97f073472bc5fa7196f418b7a9a84008fe`, was open and unmerged when this scope was checked. Its work-telemetry module validates generic step progress and check predicates, which are not per-file read receipts or GitHub CI results. No unmerged telemetry schema is guessed or copied into this branch. A future integration must bind actual file-read events to the same Work, member, repository/PR/head and filename before drawing those states.
+
+The bundled app also does not fetch a commit-head check result. `+769 −39` is retained without a made-up field label, but `✓ verify 통과` is omitted until a real head-bound producer exists; see [A16 source evidence](../E3d2/review-follow-up.md#missing-check-status-a16).

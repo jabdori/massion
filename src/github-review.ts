@@ -1,8 +1,21 @@
 import {DomainError,pinnedWorkSources} from './domain.ts';
 import type {Mission,DocumentVersion} from './domain.ts';
+import type {Store} from './storage.ts';
+import {MissionCatalogChangedError} from './mission-catalog.ts';
+import type {MissionCatalogReader} from './mission-catalog.ts';
 
 export interface GithubTarget {repository:string;number:number;headSha:string;url:string}
 export interface GithubReview {missionId:string;workId:string;title:string;memberId:string|null;progress:{done:number;total:number};reading:boolean;deadlineAt:number}
+/** 대화 출처와 무관하게 같은 피드의 카탈로그 페이지에서 작업이 있는 미션을 읽습니다. */
+export async function readGithubReviewMissions(store:Store<Mission>,catalog:MissionCatalogReader,feedId:string):Promise<Mission[]> {
+ const missions:Mission[]=[];let page=await catalog.readCatalog({feedId}),after='';const cursor=page.cursor;
+ for(;;){
+  if(page.feedId!==feedId)throw new MissionCatalogChangedError('feed');if(page.cursor!==cursor)throw new MissionCatalogChangedError('cursor');
+  for(const item of page.items)if(item.workCount>0){const read=await store.readState(item.missionId);if(read.feedId!==feedId)throw new MissionCatalogChangedError('feed');if(read.snapshot)missions.push(read.snapshot.value);}
+  if(page.nextAfter===null)return missions;
+  if(page.nextAfter<=after)throw new MissionCatalogChangedError('cursor');after=page.nextAfter;page=await catalog.readCatalog({after,cursor,feedId});
+ }
+}
 export function validGithubTarget(value:unknown):value is GithubTarget {
  const v=value as GithubTarget;
  return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===4&&Object.keys(v).every(k=>['repository','number','headSha','url'].includes(k))&&typeof v.repository==='string'&&/^[A-Za-z0-9_-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(v.repository)&&!v.repository.split('/').some(x=>/^\.+$/.test(x))&&Number.isSafeInteger(v.number)&&v.number>0&&v.number<1e9&&typeof v.headSha==='string'&&/^[a-f0-9]{40}$/.test(v.headSha)&&v.url==='https://github.com/'+v.repository+'/pull/'+v.number;

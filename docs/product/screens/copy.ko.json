@@ -1,4 +1,9 @@
 {
+ "ui.schedules.weekly-expenses-description": {"ko":"지난주 지출을 항목별로 묶기","roles":["text"],"used_in":["B17-empty:page"],"provenance":"Approved B17-empty template description"},
+ "ui.schedules.price-watch-description": {"ko":"원하는 값 아래로 내려가면 알림","roles":["text"],"used_in":["B17-empty:page"],"provenance":"Approved B17-empty template description"},
+ "ui.schedules.monthly-subscriptions-description": {"ko":"이번 달 구독 결제 목록","roles":["text"],"used_in":["B17-empty:page"],"provenance":"Approved B17-empty template description"},
+ "ui.schedules.meeting-preparation-description": {"ko":"회의 전날 저녁에 자료 모으기","roles":["text"],"used_in":["B17-empty:page"],"provenance":"Approved B17-empty template description"},
+ "ui.schedules.weekend-groceries-description": {"ko":"금요일마다 장보기 목록 만들기","roles":["text"],"used_in":["B17-empty:page"],"provenance":"Approved B17-empty template description"},
  "ui.schedules.dispatch": {"ko":"예약한 요청입니다. 기존 작업 생성·확인 절차로 맡겨 주세요.\n{request}","roles":["text"],"used_in":["B17:conversation"],"provenance":"R-E retained owner schedule request"},
  "ui.schedules.weekly-expenses-title": {"ko":"주간 지출 정리","roles":["text"],"used_in":["B17:page","B17-empty:page"],"provenance":"R-E owner-created schedule template"},
  "ui.schedules.weekly-expenses-request": {"ko":"지난주 제공한 지출을 항목별로 묶고 금액마다 출처를 남겨 주세요. 없는 영수증은 만들지 마세요.","roles":["text"],"used_in":["B17:page","B17-empty:page"],"provenance":"R-E owner-created schedule template"},

@@ -765,7 +765,7 @@ async function readEventPage() {
       if (!activity.some(old => old.cursor === event.cursor)) activity.push(event);
       if (event.aggregateId === selectedId && (!snapshot || event.revision > snapshot.revision)) eventRefreshNeeded = true;
     }
-    chatEvents(body.events); schedulesEvents(body.events); resultsEvents(body.events);
+    chatEvents(body.events); schedulesEvents(body.events); resultsEvents(body.events); appsEvents(body.events);
     if (unknownOperation) unknownOperation.reconcileCursor = body.cursor;
     activity.sort((a,b) => a.cursor - b.cursor);
     if (receiptObserved()) { const commandId = unknownOperation.commandId; confirmOperation(unknownOperation); await clearPending(unknownOperation); controls(); report(copy("legacy.durable-receipt-found-for-refreshing-current-state",{commandId:commandId}),'success'); eventRefreshNeeded = true; }

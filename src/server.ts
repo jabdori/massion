@@ -22,7 +22,7 @@ import {LoginConnections} from './connection-logins.ts';
 import {copy} from './ui-copy.ts';
 import {MembersService} from './members.ts';
 import {SchedulesService,scheduleWorkProducer} from './schedules.ts';
-import {githubReviews} from './github-review.ts';
+import {githubReviews,readGithubReviewMissions} from './github-review.ts';
 import {PermissionsService} from './permissions.ts';
 import {DECISION_PREFIX,SkillsService} from './skills.ts';
 import {AppsService,DECISION_PREFIX as APP_DECISION_PREFIX} from './apps.ts';
@@ -159,10 +159,13 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
     const body=await readBody();if(Object.keys(body).some(k=>!['app','handler','ref'].includes(k)))throw new RequestError(400,'Only app, handler and an optional ref are accepted');
     const feedId=mutationFeed!,view=await apps.view({app:body.app,handler:body.handler,...('ref' in body?{ref:body.ref}:{})});
     if(body.app==='app-github'){
-     const works=await assistant.works(),missions:Mission[]=[];
-     if(works.feedId!==feedId)throw new RequestError(409,'Database changed during app read');
-     const ids=new Set(works.works.map(w=>w.missionId)),intake=options.connections?.list().representative?.intakeMissionId;if(intake)ids.add(intake);
-     for(const id of ids){const read=await store.readState(id);if(read.feedId!==feedId)throw new RequestError(409,'Database changed during app read');if(read.snapshot)missions.push(read.snapshot.value);}
+     let missions:Mission[]=[];
+     if(options.catalog){try{missions=await readGithubReviewMissions(store,options.catalog,feedId);}catch(error){if(error instanceof MissionCatalogChangedError)throw new RequestError(409,'Database changed during app read');throw error;}}
+     else{
+      const works=await assistant.works();if(works.feedId!==feedId)throw new RequestError(409,'Database changed during app read');
+      const ids=new Set(works.works.map(w=>w.missionId)),intake=options.connections?.list().representative?.intakeMissionId;if(intake)ids.add(intake);
+      for(const id of ids){const read=await store.readState(id);if(read.feedId!==feedId)throw new RequestError(409,'Database changed during app read');if(read.snapshot)missions.push(read.snapshot.value);}
+     }
      const reviews=(target:NonNullable<typeof view.github>)=>missions.flatMap(m=>githubReviews(m,target,Date.now()));
      if(view.github)view.reviews=reviews(view.github);for(const group of view.groups)for(const row of group.rows)if(row.github)row.reviews=reviews(row.github);
     }

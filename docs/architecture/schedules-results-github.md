@@ -29,3 +29,7 @@ The bundled GitHub app is version 1.4.1. Existing installations expose the avail
 See [R-E acceptance evidence](../acceptance/R-E/README.md) for the final checks, contract exception removals and limits.
 
 Admission uncertainty includes an answered Representative turn whose outcome was not durably recorded. Missing outcomes and missing/failed source reads never become known rejection or retry permission. GitHub commit subjects are bounded to the view's field limit before validation; the display uses a shorter line with the bounded subject available for hover/accessibility. Cursor/deadline refresh tracks item-selection generation and preserves an owner's newer selection.
+
+The final scope extension discovers review Missions through the host's existing native Mission catalog, traversing its feed/cursor-bound pages before projecting current exact Work sources. It does not add an index or a new owner write. Hosts without the catalog port keep the prior conversation/intake fallback; the normal Surreal host already supplies this port.
+
+The visual follow-up preserves the approved B17-empty/B22/B22-room artboards: consistent template icon/title/description structure, a top-right bordered external action, and an accessible review strip without duplicate visible status copy. Check and file-read facts require actual producers; absence is recorded in the residual ledger rather than inferred from filenames or task progress.

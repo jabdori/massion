@@ -78,9 +78,8 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
  assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/파일 2/);
- const source=button(app.node('pane-app'),'GitHub')[0];assert.ok(source,'the app item has a source navigation control before its heading');
- assert.equal(app.node('pane-app').children[0],source);
- await source.fire('click');await settle();assert.equal(app.node('page-app').hidden,false);assert.equal(posted.length,0);
+ assert.equal(button(app.node('pane-app'),'GitHub').length,0,'the GitHub room omits the extra internal navigation above the heading');
+ await icon.fire('click');await settle();assert.equal(app.node('page-app').hidden,false);assert.equal(posted.length,0);
  await button(side,copy('sidebar.link.12'))[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,sequence(copy('sidebar.heading.01')));
 });
 
@@ -90,6 +89,35 @@ test('GitHub file deltas retain counts, omit zero deletions and draw only valid 
  const view=app.node('app-view');assert.match(view.textContent,/\+12 −3.*\+0.*opaque metadata/);assert.doesNotMatch(view.textContent,/−0/);
  const bars=app.all().filter(n=>n.className==='app-diff-bar');assert.equal(bars.length,3);
  assert.deepEqual(bars.map(b=>b.children.map(n=>n.style.width)),[['80%','20%'],['0%','0%'],['20%','0%']]);
+});
+
+test('GitHub page and room share a heading external link, full PR identity and numeric deltas',async()=>{
+ const target={repository:'jabdori/massion',number:84,headSha:'cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66',url:'https://github.com/jabdori/massion/pull/84'};
+ const {app,posted}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?page:{...item,github:target});await settle();
+ await app.node('rail-apps').children[0]!.fire('click');await settle();
+ (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
+ await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
+ for(const id of ['app-view','pane-app']){
+  const view=app.node(id),header=view.children[0]!,heading=header.children.find(n=>n.tagName==='H2'),external=header.children.find(n=>n.tagName==='A');
+  assert.ok(heading,'the title and external link share the leading heading row');assert.ok(external);
+  assert.equal(heading.textContent,item.title);assert.equal(heading.attributes.get('title'),item.title);assert.equal(heading.attributes.get('aria-label'),item.title);
+  assert.equal(heading.children.at(-1)!.textContent,'#84','the PR number remains separate from the truncatable title');
+  assert.equal(external.textContent,copy('page.link.03',{work_title:'GitHub'}));assert.equal(external.attributes.get('href'),target.url);assert.equal(external.attributes.get('target'),'_blank');assert.equal(external.attributes.get('rel'),'noopener noreferrer');
+  assert.ok(external.children.some(n=>n.className==='page-glyph glyph-external'&&n.attributes.get('aria-hidden')==='true'));
+  const state=view.children.find(n=>n.className==='app-meta app-pr-meta')!.children[0]!;
+  assert.ok(state.children.some(n=>n.className==='page-glyph glyph-pull-request'&&n.attributes.get('aria-hidden')==='true'));
+  assert.equal(view.children.find(n=>n.className==='app-changes')?.textContent,'+769 −39');assert.doesNotMatch(view.textContent,/변경|verify/);
+  assert.equal(button(view,'GitHub').length,0);
+ }
+ assert.equal(posted.length,0);
+});
+
+test('generic room apps retain their internal source navigation',async()=>{
+ const {app}=fixture(true,[],[],[],[{id:'app-notes',name:'Notes',page:true,item:true,roomTab:'Note #'}],b=>({title:b.handler==='item'?'Selected note':'Notes',groups:[]}));await settle();
+ (app.context as any).paneOpen('mission:m','work:w','Note #7');await settle();
+ await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
+ const source=button(app.node('pane-app'),'Notes')[0];assert.ok(source);assert.equal(app.node('pane-app').children[0],source);
+ await source.fire('click');await settle();assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('app-view').textContent,'Notes');
 });
 
 test('app sidebar search and a folded merged group preserve real row selection without product writes',async()=>{
@@ -257,7 +285,12 @@ test('GitHub links use exact host review identities and show retained commits',a
  const {app,posted}=fixture(true,[],[],[{id:'member-juno',name:'주노'}],undefined,b=>b.handler==='page'?{...page,groups:[{...page.groups[0],rows:[{...page.groups[0]!.rows[0],github:target,reviews:[review]}]},page.groups[1]]}:{...item,github:target,reviews:[review],groups:[...item.groups,{title:'Commits 1',rows:[{id:target.headSha,title:'Change',meta:'cf2a4b3 · 2026-11-05 10:28'}]}]});await settle();
  await app.node('rail-apps').children[0]!.fire('click');await settle();
  const external=app.all().find(n=>n.tagName==='A'&&n.attributes.get('href')===target.url);assert.ok(external);assert.equal(external.attributes.get('rel'),'noopener noreferrer');
- assert.match(app.node('side-app').textContent,/주노가 보는 중/);assert.match(app.node('app-view').textContent,/PR #84 검토 주노 · 실행 중 읽기 4\/11.*작업 중.*커밋 1.*Change.*10:28/);
+ const side=app.node('side-app'),row=app.all().find(n=>n.id==='app-row-84')!,reviewing=app.all().find(n=>row.parentElement!.contains(n)&&n.attributes.get('role')==='status');
+ assert.doesNotMatch(side.textContent,/주노가 보는 중/);assert.ok(reviewing,'review status stays adjacent to the existing PR control without entering its accessible name');assert.equal(reviewing.attributes.get('aria-label'),copy('ui.apps.reviewing',{member:'주노'}));assert.equal(reviewing.attributes.get('data-busy'),'true');assert.equal(reviewing.textContent,'');
+ assert.match(app.node('app-view').textContent,/PR #84 검토.*주노 · 실행 중.*읽기 4\/11.*커밋 1.*Change.*10:28/);assert.doesNotMatch(app.node('app-view').textContent,/작업 중/);
+ const strip=app.node('app-view').children.find(n=>n.className==='app-review')!,busy=app.all().find(n=>strip.contains(n)&&n.attributes.get('role')==='status');
+ assert.ok(busy);assert.equal(busy.attributes.get('aria-label'),copy('sidebar.status.05'));assert.equal(busy.attributes.get('data-busy'),'true');assert.equal(busy.textContent,'');
+ assert.ok(app.all().some(n=>strip.contains(n)&&n.className==='page-glyph glyph-chevron'&&n.attributes.get('aria-hidden')==='true'));
  const link=app.all().find(n=>n.attributes.get('role')==='link'&&n.textContent.startsWith('PR #84 검토'));assert.ok(link);await link.fire('click');await settle();
  assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);assert.equal(posted.length,0);
 });
@@ -305,4 +338,32 @@ test('a completed page refresh preserves a PR selected while that refresh was pe
  await app.node('rail-apps').children[0]!.fire('click');await settle();runInContext('void appsRefresh()',app.context);await settle();
  await app.all().find(n=>n.id==='app-group-1')!.fire('click');await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();assert.equal(app.node('app-view').textContent,'Selected PR 83');
  release(page);await settle();assert.equal(app.node('app-view').textContent,'Selected PR 83');assert.equal(runInContext('appItem',app.context),'83');
+});
+
+test('a PR room tab never borrows the date of a different sidebar selection',async()=>{
+ const dated={...page,groups:[page.groups[0],{...page.groups[1],rows:[{...page.groups[1]!.rows[0],meta:'#83 · 2026-11-04 09:17'}]}]};
+ const {app}=fixture(true,[],[],[],undefined,b=>b.handler==='page'?dated:{...item,title:b.ref==='84'?item.title:'Other PR #83'});await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();await app.all().find(n=>n.id==='app-group-1')!.fire('click');await app.all().find(n=>n.id==='app-row-83')!.fire('click');await settle();
+ (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
+ assert.match(app.node('pane-app').textContent,/11월 5일 10:28/);assert.doesNotMatch(app.node('pane-app').textContent,/11월 4일 09:17/);
+});
+
+test('an untracked ordinary Mission event refreshes the visible GitHub review without owner writes',async()=>{
+ const state={cursor:1,events:[] as any[],review:false},posts:any[]=[];
+ const active={missionId:'ordinary',workId:'review',title:'Ordinary PR review',memberId:null,progress:{done:0,total:0},reading:false,deadlineAt:Date.now()+60000};
+ const app=harness(async(path,options)=>{
+  if(path==='/assistant/apps/view'){const body=JSON.parse(options.body);return reply(body.handler==='page'?page:{...item,reviews:state.review?[active]:[]});}
+  if(options?.method==='POST'){posts.push(path);return reply({error:'Unexpected write'},400);}
+  if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:state.cursor,head:1,members:[],apps:[{id:'app-github',name:'GitHub',page:true,item:true,roomTab:'PR #'}],turns:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]}});
+  if(path==='/assistant/works')return reply({feedId:'feed:a',works:[]});
+  if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:0,schedules:[]});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:state.cursor,snapshot:null});
+  if(path.startsWith('/events')){const events=state.events;state.events=[];return reply({feedId:'feed:a',cursor:state.cursor,events});}
+  return reply({error:'Unavailable'},503);
+ },{'massion.workbench.feed':'feed:a'});await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();assert.doesNotMatch(app.node('app-view').textContent,/Ordinary PR review/);
+ state.review=true;state.cursor=2;state.events=[{cursor:2,aggregateId:'ordinary',revision:8,type:'admit-effect'}];await app.tick();await settle();assert.match(app.node('app-view').textContent,/Ordinary PR review/);assert.equal(posts.length,0);
+});
+
+test('a missing page read cannot drop the current feed fence from a PR item read',async()=>{
+ const {app}=fixture(true,[],[],[],undefined,(b,headers)=>b.handler==='page'?page:headers['X-Massion-Feed']==='feed:a'?item:{title:'Unfenced replacement database',groups:[]});await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();
+ await runInContext("appPage=null;appSelect('84')",app.context);await settle();assert.doesNotMatch(app.node('app-view').textContent,/Unfenced replacement database/);assert.match(app.node('app-view').textContent,/answer the owner/);
 });

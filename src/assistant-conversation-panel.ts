@@ -328,7 +328,8 @@ async function sendChat(){
  }catch{chatShow(copy('conversation.text.01'));await readChat();}finally{chatSending=false;chatControls();}
 }
 
-function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='string'&&(event.aggregateId.startsWith('assistant-conversation:')||shellWorks.some(w=>w.missionId===event.aggregateId)||chatView&&chatView.turns.some(turn=>turn.work&&turn.work.missionId===event.aggregateId))))void readChat();}
+function chatTracksMission(id){return shellWorks.some(w=>w.missionId===id)||!!chatView?.turns.some(turn=>turn.work&&turn.work.missionId===id);}
+function chatEvents(events){if(events.some(event=>typeof event.aggregateId==='string'&&(event.aggregateId.startsWith('assistant-conversation:')||chatTracksMission(event.aggregateId))))void readChat();}
 chatRestoreDraft();
 $('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));
 document.addEventListener('keydown',event=>{if(['Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)||(event.metaKey||event.ctrlKey)&&/^[1-9]$/.test(event.key))$('chat-form').setAttribute('data-keyboard-focus','true');},true);
