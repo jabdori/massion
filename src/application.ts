@@ -36,7 +36,7 @@ export class Application {
     if(snapshot.revision!==envelope.expectedRevision) {
       return {status:'conflict',revision:snapshot.revision,reason:'revision'};
     }
-    const {value,events}=apply(snapshot.value,envelope.command,actor,endsWork(envelope.command.type)?{observedAt:this.clock(),workEndVersion:2}:requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock()}:undefined);
+    const {value,events}=apply(snapshot.value,envelope.command,actor,envelope.command.type==='evaluate-growth'&&envelope.command.ownerDecision?{observedAt:this.clock()}:endsWork(envelope.command.type)?{observedAt:this.clock(),workEndVersion:2}:requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock()}:undefined);
     const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
     const result=await this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
     if(result.status==='conflict'&&result.reason==='idempotency'){

@@ -1,0 +1,7 @@
+# Evaluated rounding-rule owner decisions (R-D)
+
+The existing host rounding evaluation produces an owner decision on the exact Growth baseline and candidate. The card and its read-only case inspector use the stored calculation plan: input orders, observed outputs, scores and memory hashes. They never invent example cases or accept a producer's own scores. Owner answers use `/assistant/decisions` and the existing application CAS/idempotency path through the drain-aware owner store. Later and ask again change only decision visibility; act reuses Growth adoption and cannot bypass measured improvement or replace a newer baseline. Nothing auto-adopts.
+
+The decision is part of the Mission journal, so no separate transaction or recovery saga is needed. Earlier evaluation commands without the decision marker keep their original replay shape. A read pins feed, Mission revision and Growth identity; the client binds the card to its conversation generation and never resends an unknown answer. Only the bounded order-level rounding oracle is supported. General evaluator/policy changes remain outside this slice.
+
+Verification covers overlapping identical answers, a write resuming after drain, stale feed/revision/card identity and responses arriving after a thread change. Screen fixtures use the actual decision projection and exact stored case shape. Resolved contract exceptions are removed only after inspecting both themes.

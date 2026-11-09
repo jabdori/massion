@@ -1,3 +1,5 @@
+import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
+import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
 import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
 import type {ProtocolHeader} from '../../src/protocol.ts';
 import {createHash} from 'node:crypto';
@@ -40,7 +42,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
    !response||!Number.isInteger(response.status)||response.status<200||response.status>599||!Object.hasOwn(response,'body'))throw new Error('Invalid fixture route: '+path);
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
- return parents.length===0&&EFFECT_SCREENS.includes(screen)?effectFixture(fixture):fixture;
+ if(parents.length!==0)return fixture;const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;return MEMORY_SCREENS.includes(screen)?memoryFixture(growth):growth;
 }
 
 const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'");

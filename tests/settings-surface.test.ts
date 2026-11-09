@@ -161,7 +161,7 @@ test('Settings opens at General with its own sidebar of sections, and the conver
 test('Memory shows what you said, what was learned with its evidence, and the change history; Stop retires and Revert reverts with exact versions',async()=>{
  const {app,state}=fixture();await settle();await open(app,'memory');
  const body=app.node('settings-memory-body');
- assert.match(body.textContent,sequence(copy('page.heading.04'),'Round each line',copy('ui.panel.memory-version',{version:1}),copy('ui.panel.in-use'),'Plain tone',copy('ui.panel.memory-version',{version:1}),copy('ui.panel.not-in-use')));
+ assert.match(body.textContent,sequence(copy('page.heading.04'),copy('ui.memory-policy.line'),copy('ui.panel.memory-version',{version:1}),copy('ui.panel.in-use'),'Plain tone',copy('ui.panel.memory-version',{version:1}),copy('ui.panel.not-in-use')));
  assert.match(body.textContent,sequence(copy('page.heading.06'),'Round the total once',copy('ui.panel.memory-version',{version:2}),copy('ui.waiting'),copy('page.button.08')));
  assert.match(body.textContent,sequence(copy('page.heading.07'),'Short plain tone',copy('settings.button.08'),copy('page.button.09')));
  const evidence=byId(app,'memory-evidence-g-1')!;assert.ok(evidence);assert.match(evidence.textContent,/1 → 3.*3 orders.*Per-line tax rules change the total\./);
@@ -176,7 +176,7 @@ test('Memory shows what you said, what was learned with its evidence, and the ch
 test('Memory search filters loaded instructions and changes without writing or changing their identities',async()=>{
  const {app,state}=fixture();await settle();await open(app,'memory');
  const query=byId(app,'memory-query')!;query.value='Round';await query.fire('input');
- const body=app.node('settings-memory-body');assert.match(body.textContent,/Round each line/);assert.doesNotMatch(body.textContent,/Plain tone|Short plain tone/);
+ const body=app.node('settings-memory-body');assert.match(body.textContent,/줄마다 반올림/);assert.doesNotMatch(body.textContent,/Plain tone|Short plain tone/);
  assert.ok(byId(app,'memory-switch-rounding'));assert.equal(byId(app,'memory-switch-tone'),undefined);assert.deepEqual(state.posted,[]);
 });
 

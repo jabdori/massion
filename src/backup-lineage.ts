@@ -1,3 +1,4 @@
+import {validateMemoryMetadata} from './memory-candidates.ts';
 import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
@@ -298,7 +299,7 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
   array(item.constraints, 'Mission constraints').forEach(entry => ensure(typeof entry === 'string' && entry.isWellFormed(), 'invalid constraint'));
   const memories = array(item.memories, 'memories');
   for (const value of memories) {
-    const memory = object(value, 'memory', ['id', 'version', 'scope', 'authority', 'content', 'source', 'effective']);
+    const memory = object(value, 'memory', ['id', 'version', 'scope', 'authority', 'content', 'source', 'effective'], ['name','sourceWork']);validateMemoryMetadata(value as import('./domain.ts').Memory);
     text(memory.id, 'memory ID'); integer(memory.version, 'memory version'); ensure(memory.scope === item.scope, 'memory scope mismatch');
     oneOf(memory.authority, ['explicit', 'learned'], 'memory authority'); text(memory.content, 'memory content'); text(memory.source, 'memory source'); ensure(typeof memory.effective === 'boolean', 'invalid effective memory flag');
   }
@@ -309,7 +310,8 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
   unique(mission.works.flatMap(work => work.record ? [work.record.id] : []), 'Record ID');
   const growth = array(item.growth, 'Growth');
   for (const value of growth) {
-    const entry = object(value, 'Growth', ['id', 'proposer', 'target', 'baseline', 'candidate', 'counterevidence', 'status'], ['evaluator', 'scores', 'observation', 'previousEffective']);
+    const entry = object(value, 'Growth', ['id', 'proposer', 'target', 'baseline', 'candidate', 'counterevidence', 'status'], ['evaluator', 'scores', 'observation', 'previousEffective', 'ruleChange']);
+    if(entry.ruleChange){const d=object(entry.ruleChange,'rule decision',['at','state']);integer(d.at,'rule decision time');oneOf(d.state,['open','later'],'rule decision state');ensure(entry.status!=='proposed'&&entry.evaluator==='host-rounding-oracle/v1','rule decision requires host evaluation');}
     for (const key of ['id', 'proposer', 'baseline', 'candidate', 'counterevidence']) text(entry[key], `Growth ${key}`);
     ensure(entry.target === 'memory' && memoryKeys.has(entry.baseline as string) && memoryKeys.has(entry.candidate as string), 'Growth has unsupported target or absent memory lineage');
     oneOf(entry.status, ['proposed', 'evaluated', 'adopted', 'reverted'], 'Growth status');
@@ -390,7 +392,8 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'declare-memory-conflict': { required: ['conflictId','first','second','reason'] },
   'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'], optional:['candidateMemory'] },
-  'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding'] },
+  'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding','ownerDecision'] },
+  'answer-rule-change':{required:['growthId','baseline','candidate','decisionId','answer']},
   'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
   'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
@@ -440,7 +443,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const keys = COMMAND_KEYS[type as Command['type']];
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
-      ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
+      ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)||command.type==='answer-rule-change'?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
       if(isEffectDecisionCommand(command.type))ensure(command.type==='answer-owner-effect'?actor.id==='local-owner'&&!operation.commandId.startsWith('assistant-'):actor.id===EFFECT_HOST&&operation.commandId.startsWith(EFFECT_COMMAND_PREFIX),'effect command authority mismatch');
       checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);

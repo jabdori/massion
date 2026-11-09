@@ -1,3 +1,4 @@
+import {validateMemoryMetadata} from './memory-candidates.ts';
 import {applyEffectDecision,isEffectDecisionCommand,EFFECT_HOST} from './effect-decisions.ts';
 import {applyRoom,validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,teamTaskReady,teamCallCount} from './internal-teams.ts';
@@ -65,8 +66,9 @@ export interface Work {
   /** Host time recorded by the last command that ended or stopped the Work (member-work.md). Absent on Works ended before it existed. */
   endedAt?: number;
 }
-export interface Memory { id: string; version: number; scope: string; authority: 'explicit' | 'learned'; content: string; source: string; effective: boolean }
-export interface Growth { id: string; proposer: string; target: 'memory' | 'prompt' | 'policy' | 'organization'; baseline: string; candidate: string; counterevidence: string; evaluator?: string; scores?: { baseline: number; candidate: number; heldOut: string }; status: 'proposed' | 'evaluated' | 'adopted' | 'reverted'; observation?: { workId: string; metric: number }; previousEffective?: string[] }
+export interface Memory { name?:string; sourceWork?:import('./memory-candidates.ts').MemorySourceWork; id: string; version: number; scope: string; authority: 'explicit' | 'learned'; content: string; source: string; effective: boolean }
+export interface Growth { ruleChange?:{at:number;state:'open'|'later'}; id: string; proposer: string; target: 'memory' | 'prompt' | 'policy' | 'organization'; baseline: string; candidate: string; counterevidence: string; evaluator?: string; scores?: { baseline: number; candidate: number; heldOut: string }; status: 'proposed' | 'evaluated' | 'adopted' | 'reverted'; observation?: { workId: string; metric: number }; previousEffective?: string[] }
+export const ruleChangeId=(missionId:string,g:Pick<Growth,'id'|'baseline'|'candidate'>)=>'rule-change:'+hash([missionId,g.id,g.baseline,g.candidate]).slice(0,32);
 export interface Relation { from: string; to: string; type: 'depends-on' | 'evidenced-by' | 'contains'; fromVersion: number; toVersion: number; provenance: string; inferred: boolean }
 export interface DocumentVersion {id:string;version:number;title:string;content:string;source:string;contentSha256:string;actorId:string}
 export interface WorkSource {document:DocumentVersion;actorId:string;reason:string}
@@ -112,7 +114,8 @@ export type Command =
   | { type: 'save-memory'; memory: Memory }
   | { type: 'retire-memory'; memoryId: string; version: number; reason: string }
   | { type: 'propose-growth'; proposal: Growth; candidateMemory?:Memory }
-  | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string; binding?:{baseline:string;candidate:string;baselineHash:string;candidateHash:string} }
+  | { type: 'evaluate-growth'; growthId: string; baseline: number; candidate: number; heldOut: string; ownerDecision?:true; binding?:{baseline:string;candidate:string;baselineHash:string;candidateHash:string} }
+  | {type:'answer-rule-change';growthId:string;baseline:string;candidate:string;decisionId:string;answer:'act'|'later'|'ask'}
   | { type: 'adopt-growth'; growthId: string; baseline?:string; candidate?:string }
   | { type: 'observe-growth'; growthId: string; workId: string; metric: number }
   | { type: 'revert-growth'; growthId: string; baseline?:string; candidate?:string }
@@ -219,7 +222,7 @@ export const endsWork=(type:string)=>['verify','accept','cancel','block-work','q
 export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2}): { value: Mission; events: unknown[] } {
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
-  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||time===undefined,'Unexpected expiry clock context');
+  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||time===undefined,'Unexpected expiry clock context');
   if(time&&Object.hasOwn(time,'workEndVersion'))ensure(time.workEndVersion===2&&endsWork(command.type),'Invalid Work end version');
   const state = structuredClone(current);
   const work = 'workId' in command ? state.works.find(w => w.id === command.workId) : undefined;
@@ -347,7 +350,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     case 'cancel': { role(actor,'owner','representative'); const w=needWork(); open(w); w.execution='cancelled'; break; }
     case 'steer': { role(actor,'owner'); const w=needWork(); open(w); text(command.instruction,'instruction'); (w.instructions??=[]).push({actorId:actor.id,text:command.instruction}); if(!w.blocker)w.execution='waiting'; break; }
     case 'save-memory': {
-      role(actor,'owner','representative'); const m=command.memory; text(m.id,'memory'); text(m.source,'memory provenance'); text(m.content,'memory'); ensure(m.scope===state.scope,'Memory scope mismatch'); ensure(Number.isSafeInteger(m.version)&&m.version>0,'Invalid memory version'); ensure(m.authority==='explicit'||m.authority==='learned','Invalid memory authority'); if(m.authority==='explicit') role(actor,'owner'); ensure(m.authority!=='learned'||!m.effective,'Learned memory requires evaluated adoption'); ensure(!state.memories.some(x=>x.id===m.id&&x.version===m.version),'Memory version immutable'); ensure(m.version>Math.max(0,...state.memories.filter(x=>x.id===m.id).map(x=>x.version)),'Memory version must advance'); if(m.effective) for(const old of state.memories) if(old.id===m.id) old.effective=false; state.memories.push(structuredClone(m)); break;
+      role(actor,'owner','representative'); const m=command.memory; validateMemoryMetadata(m,state); text(m.id,'memory'); text(m.source,'memory provenance'); text(m.content,'memory'); ensure(m.scope===state.scope,'Memory scope mismatch'); ensure(Number.isSafeInteger(m.version)&&m.version>0,'Invalid memory version'); ensure(m.authority==='explicit'||m.authority==='learned','Invalid memory authority'); if(m.authority==='explicit') role(actor,'owner'); ensure(m.authority!=='learned'||!m.effective,'Learned memory requires evaluated adoption'); ensure(!state.memories.some(x=>x.id===m.id&&x.version===m.version),'Memory version immutable'); ensure(m.version>Math.max(0,...state.memories.filter(x=>x.id===m.id).map(x=>x.version)),'Memory version must advance'); if(m.effective) for(const old of state.memories) if(old.id===m.id) old.effective=false; state.memories.push(structuredClone(m)); break;
     }
     case 'retire-memory': {
       role(actor,'owner'); text(command.memoryId,'memory identity'); text(command.reason,'memory retirement reason');
@@ -359,11 +362,15 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     }
     case 'propose-growth': {
       if(command.candidateMemory){role(actor,'representative');ensure(command.candidateMemory.authority==='learned'&&!command.candidateMemory.effective&&`${command.candidateMemory.id}@${command.candidateMemory.version}`===command.proposal.candidate,'Exact inactive learned candidate required');state.memories=apply(state,{type:'save-memory',memory:command.candidateMemory},actor).value.memories;}
-      role(actor,'representative'); const g=command.proposal; text(g.id,'growth'); text(g.counterevidence,'counterevidence'); ensure(g.proposer===actor.id&&g.status==='proposed'&&!g.evaluator&&!g.scores&&!g.observation,'Invalid proposal'); ensure(g.target==='memory','Only memory adoption implemented in this slice'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&!m.effective),'Unknown candidate'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Unknown effective baseline'); ensure(!state.growth.some(x=>x.id===g.id),'Growth exists'); state.growth.push(structuredClone(g)); break;
+      role(actor,'representative'); const g=command.proposal; text(g.id,'growth'); text(g.counterevidence,'counterevidence'); ensure(g.proposer===actor.id&&g.status==='proposed'&&!g.evaluator&&!g.scores&&!g.observation&&!g.ruleChange,'Invalid proposal'); ensure(g.target==='memory','Only memory adoption implemented in this slice'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.candidate&&!m.effective),'Unknown candidate'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Unknown effective baseline'); ensure(!state.growth.some(x=>x.id===g.id),'Growth exists'); state.growth.push(structuredClone(g)); break;
     }
     case 'evaluate-growth': {
       if(command.binding){const g=growth(),b=command.binding,baseline=state.memories.find(m=>`${m.id}@${m.version}`===g.baseline),candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate);ensure(b.baseline===g.baseline&&b.candidate===g.candidate&&baseline?.scope===state.scope&&baseline.effective&&candidate?.scope===state.scope&&!candidate.effective&&b.baselineHash===memoryVersionHash(baseline)&&b.candidateHash===memoryVersionHash(candidate),'Exact current Growth memory binding required');}
-      role(actor,'evaluator'); const g=growth(); ensure(g.status==='proposed'&&g.proposer!==actor.id,'Independent evaluation required'); ensure(finite(command.baseline)&&finite(command.candidate),'Invalid evaluation metrics'); text(command.heldOut,'held-out evidence'); g.evaluator=actor.id; g.scores={baseline:command.baseline,candidate:command.candidate,heldOut:command.heldOut}; g.status='evaluated'; break;
+      role(actor,'evaluator'); const g=growth(); ensure(g.status==='proposed'&&g.proposer!==actor.id,'Independent evaluation required'); ensure(finite(command.baseline)&&finite(command.candidate),'Invalid evaluation metrics'); text(command.heldOut,'held-out evidence'); g.evaluator=actor.id; g.scores={baseline:command.baseline,candidate:command.candidate,heldOut:command.heldOut}; g.status='evaluated'; if(command.ownerDecision){ensure(command.binding&&actor.id==='host-rounding-oracle/v1'&&time&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host evaluated rule decision required');g.ruleChange={at:time.observedAt,state:'open'};} break;
+    }
+    case 'answer-rule-change': {
+      role(actor,'owner');ensure(actor.id==='local-owner'&&Object.keys(command).length===6&&Object.keys(command).every(k=>['type','growthId','baseline','candidate','decisionId','answer'].includes(k)),'Exact owner rule answer required');const g=growth();ensure(g.ruleChange&&command.baseline===g.baseline&&command.candidate===g.candidate&&command.decisionId===ruleChangeId(state.id,g),'Unknown rule decision identity');ensure(['act','later','ask'].includes(command.answer),'Invalid rule answer');ensure(g.status==='evaluated'&&(command.answer==='ask'?g.ruleChange.state==='later':g.ruleChange.state==='open'),'Only the current rule decision can be answered');
+      if(command.answer==='act')Object.assign(state,apply(state,{type:'adopt-growth',growthId:g.id,baseline:g.baseline,candidate:g.candidate},actor).value);else g.ruleChange.state=command.answer==='later'?'later':'open';break;
     }
     case 'adopt-growth': {
       role(actor,'owner'); const g=growth(); if('baseline' in command||'candidate' in command){ensure(command.baseline===g.baseline&&command.candidate===g.candidate,'Exact Growth memory versions mismatch');} ensure(g.status==='evaluated'&&g.scores&&g.scores.candidate>g.scores.baseline,'Independently measured improvement required'); ensure(state.memories.some(m=>`${m.id}@${m.version}`===g.baseline&&m.effective),'Growth baseline is no longer effective'); g.previousEffective=state.memories.filter(m=>m.effective).map(m=>`${m.id}@${m.version}`); const candidate=state.memories.find(m=>`${m.id}@${m.version}`===g.candidate)!; for(const m of state.memories) if(m.id===candidate.id) m.effective=false; candidate.effective=true; g.status='adopted'; break;

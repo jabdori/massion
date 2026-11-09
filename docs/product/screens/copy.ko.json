@@ -1,20 +1,85 @@
 {
- "ui.apps.reconcile-done": {"ko":"실행됨","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
- "ui.apps.reconcile-not-done": {"ko":"실행되지 않음","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
- "ui.apps.receipt-time": {"ko":"{content} · {time}","roles":["text"],"used_in":["B24-done:conversation","B25-done:conversation"],"provenance":"Approved app decision receipt rows"},
- "ui.apps.source-work": {"ko":"{work_title} ›","roles":["link"],"used_in":["B25:conversation"],"provenance":"Approved B25 artboard"},
- "ui.apps.write": {"ko":"쓰기","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
- "ui.apps.adds": {"ko":"추가되는 것","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
+ "ui.apps.reconcile-done": {
+  "ko": "실행됨",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "app:unknown-outcome"
+  ],
+  "provenance": "Owner-requested exact-call reconciliation review"
+ },
+ "ui.apps.reconcile-not-done": {
+  "ko": "실행되지 않음",
+  "roles": [
+   "button"
+  ],
+  "used_in": [
+   "app:unknown-outcome"
+  ],
+  "provenance": "Owner-requested exact-call reconciliation review"
+ },
+ "ui.apps.receipt-time": {
+  "ko": "{content} · {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B24-done:conversation",
+   "B25-done:conversation"
+  ],
+  "provenance": "Approved app decision receipt rows"
+ },
+ "ui.apps.source-work": {
+  "ko": "{work_title} ›",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B25:conversation"
+  ],
+  "provenance": "Approved B25 artboard"
+ },
+ "ui.apps.write": {
+  "ko": "쓰기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B24-connect:conversation"
+  ],
+  "provenance": "Approved B24-connect artboard"
+ },
+ "ui.apps.adds": {
+  "ko": "추가되는 것",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B24-connect:conversation"
+  ],
+  "provenance": "Approved B24-connect artboard"
+ },
  "ui.apps.connect-question": {
   "ko": "{app} 앱을 연결할까요?",
-  "roles": ["text"],
-  "used_in": ["B24-connect:conversation", "B24-connect-token:conversation"],
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B24-connect:conversation",
+   "B24-connect-token:conversation"
+  ],
   "provenance": "Approved B24-connect artboard"
  },
  "ui.apps.connected": {
   "ko": "{app} 앱 연결됨",
-  "roles": ["status", "text"],
-  "used_in": ["B24-connect-connected:conversation"],
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B24-connect-connected:conversation"
+  ],
   "provenance": "Approved B24-connect-connected artboard"
  },
  "composer.button.01": {
@@ -17117,6 +17182,216 @@
   ],
   "used_in": [
    "E7:first-experience"
+  ]
+ },
+ "ui.rule.question": {
+  "ko": "반올림을 합계에서 한 번으로 바꿀까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.baseline": {
+  "ko": "지금 규칙",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.candidate": {
+  "ko": "새 규칙",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.score": {
+  "ko": "사례 {count}/{total} 맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.changed": {
+  "ko": "반올림 규칙 바꿈",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.cases": {
+  "ko": "반올림 규칙 · 사례",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.case": {
+  "ko": "사례 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.expected": {
+  "ko": "기준",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.name": {
+  "ko": "반올림 규칙",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.activity-title": {
+  "ko": "반올림 규칙 바꾸기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.activity-summary": {
+  "ko": "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {baseline}, 새 규칙 {candidate}.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.counterevidence": {
+  "ko": "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.memory-candidate.saved": {
+  "ko": "{name} 남김",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.discarded": {
+  "ko": "{name} 지움",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.not_saved": {
+  "ko": "{name} 저장 안 됨",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D explicit owner memory candidate receipt"
+ },
+ "ui.memory-candidate.unknown": {
+  "ko": "저장 결과 미확인",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D uncertain memory candidate receipt"
+ },
+ "ui.memory-candidate.unavailable": {
+  "ko": "후보 변경됨",
+  "roles": [
+   "status",
+   "text"
+  ],
+  "used_in": [
+   "B7-churn:conversation"
+  ],
+  "provenance": "R-D stale memory candidate binding"
+ },
+ "ui.rule.source-work": {
+  "ko": "주문 할인 합계 계산",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.memory-policy.line": {
+  "ko": "줄마다 반올림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:settings"
+  ],
+  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
+ },
+ "ui.memory-policy.aggregate": {
+  "ko": "합계에서 한 번 반올림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:settings"
+  ],
+  "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
+ },
+ "ui.rule.item": {
+  "ko": "{quantity}개 × {price}센트",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
+  ]
+ },
+ "ui.rule.discount": {
+  "ko": "할인 {discount}%",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "R-D"
   ]
  }
 }
