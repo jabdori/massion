@@ -45,3 +45,9 @@ The split-node regression also covers CSS `visibility:hidden` separators and `di
 ## Integration with PR #117
 
 Merged the monthly-budget mainline without dropping either slice's Work fields, command/backup validation, conversation notices or drain tasks. The allow-list merge preserves the union of both slices' removals. A new test pauses/resumes a Work with a retained browser observation and validates its complete journal. All 216 related browser, budget, effect, lineage and UI tests passed, followed by the focused runtime-actor version of the new test and typecheck. Twelve browser/budget screen-theme captures add no failures: [scoped merge gate](monthly-merge-gate.json). PR #132's MCP E2E correction remains included.
+
+## E2E target binding after integration
+
+The MCP journey failed twice on `49b541a`, with a blank screenshot and evaluation origin `about:blank`, rather than a workbench application error. Agent-browser 0.41.2's unpinned mode follows discovered page targets. A local loopback reproduction created a background blank target: the unpinned session switched away, while pinning after browser launch retained the owned page ([result](e2e-tab-binding.json)). Passing the pin only at launch did not retain the page in the reproduction.
+
+The E2E setup now explicitly resets its own session pin while launching the viewport, then pins the existing browser before driving the workbench. It does not retry any owner command or relax an assertion. The existing MCP journey remains the regression gate in Linux CI; its Electron portion is not launched visibly on macOS. PR #132's context-error handling remains intact. The report also stops describing the now-merged monthly-budget feature as unmerged; that separate owner journey is still outside this E2E suite.

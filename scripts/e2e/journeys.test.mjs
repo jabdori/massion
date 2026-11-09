@@ -60,7 +60,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   return work;
  }
  try{
-  await browser('set','viewport','1280','900');assert.equal((await browser('eval','navigator.onLine')).result,true,'Browser must have a network interface; use an internal Docker network to block egress');
+  // Pin after launch: agent-browser 0.41.2 does not apply a launch-time pin to its new browser manager.
+  await browser('--no-pin-tab','set','viewport','1280','900');await browser('--pin-tab','get','url');assert.equal((await browser('eval','navigator.onLine')).result,true,'Browser must have a network interface; use an internal Docker network to block egress');
   await journey('first run without a connection and with detected subscription',async()=>{
    await start('none');await browser('open',url);await wait("!document.getElementById('first-signin').hidden");await capture('first-run-none',[/ChatGPT/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
    await start('found');await open();await wait("!!document.getElementById('first-calculation')");await capture('first-run-found',[/radio|계산|정리/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
@@ -175,7 +176,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   });
   await writeFile(join(out,'calls.json'),JSON.stringify(await calls(),null,2)+'\n');
   const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
-  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:['monthly budget (#117 unmerged)']},null,2)+'\n');
+  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:['The monthly-budget owner decision journey is not covered by this E2E suite']},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
  finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),logs);await rm(root,{recursive:true,force:true});}
 });
