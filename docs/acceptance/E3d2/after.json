@@ -1,0 +1,263 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B9",
+      "theme": "dark",
+      "passed": 32,
+      "failed": 5,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "dark",
+      "passed": 32,
+      "failed": 6,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no device restart command or pending restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "dark",
+      "passed": 32,
+      "failed": 5,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no device updater or update version state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 3,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "dark",
+      "passed": 31,
+      "failed": 1,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10-preview.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 5,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B12.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "passed": 19,
+      "failed": 16,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B15.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 3,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 10,
+      "failed": 5,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22.png"
+    },
+    {
+      "screen": "B9",
+      "theme": "light",
+      "passed": 32,
+      "failed": 5,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "light",
+      "passed": 32,
+      "failed": 6,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no device restart command or pending restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "light",
+      "passed": 32,
+      "failed": 5,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no device updater or update version state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "light",
+      "passed": 23,
+      "failed": 3,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "light",
+      "passed": 31,
+      "failed": 1,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10-preview.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "light",
+      "passed": 21,
+      "failed": 5,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B12.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "passed": 19,
+      "failed": 16,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B15.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "light",
+      "passed": 20,
+      "failed": 3,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 10,
+      "failed": 5,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22.png"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "node": "24.21.0",
+  "baseWithE3c": "d435690",
+  "integratedImplementation": "272bcb6",
+  "typecheck": {
+    "command": "npm run typecheck",
+    "exitCode": 0
+  },
+  "sourceChecks": {
+    "command": "node scripts/check.mjs",
+    "exitCode": 0,
+    "copyFindings": 0,
+    "generatedTokensCurrent": true
+  },
+  "focused": {
+    "passed": 103,
+    "failed": 0
+  },
+  "suite": {
+    "command": "TMPDIR=<physical /private/tmp directory> node --test --test-concurrency=4 tests/*.test.ts",
+    "exitCode": 1,
+    "tests": 1929,
+    "passed": 1588,
+    "failed": 1,
+    "skipped": 340,
+    "knownLocalFailure": {
+      "test": "portable inventory order is stable across English and Turkish process locales",
+      "file": "tests/portable-backup.test.ts:137",
+      "error": "Text artifact boundary: directory realpath mismatch",
+      "documentedInCommonBrief": true
+    },
+    "testedCommit": "6966341"
+  },
+  "nativeBrowser": {
+    "command": "node scripts/ui-contracts/verify-pages.mjs",
+    "exitCode": 0,
+    "checks": 6,
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "productCommands": 0,
+    "results": "native-interactions.json"
+  },
+  "notRun": [
+    "live providers or model calls",
+    "real payments or external side effects",
+    "live GitHub app integration",
+    "browser form submission",
+    "database integration tests requiring an external database"
+  ],
+  "affectedFixtureRecheck": {
+    "command": "node --test tests/ui-contract-fixtures.test.ts",
+    "passed": 13,
+    "failed": 0,
+    "reason": "Final B15 fixture adds the existing unrelated Quill Work without creating browser/form facts"
+  },
+  "agentBrowser": "0.41.2",
+  "finalSelectionAndFixtureRecheck": {
+    "passed": 34,
+    "failed": 0,
+    "scope": "Results/Schedules client and fixture integrity"
+  },
+  "finalVisualBatch": {
+    "passed": 76,
+    "failed": 0,
+    "scope": "Results/Schedules, fixture integrity, shell controls"
+  },
+  "finalCssIsolation": {
+    "scope": "App page selectors only; original Work-pane app typography/rows retained",
+    "command": "node --test tests/apps-surface.test.ts",
+    "exitCode": 0
+  },
+  "fullUI": {
+    "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+    "arguments": [],
+    "exitCode": 0,
+    "contracts": 75,
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "captures": 150,
+    "infrastructureErrors": 0,
+    "scope": [
+      "B9",
+      "B9-restart",
+      "B9-update",
+      "B10",
+      "B10-preview",
+      "B12",
+      "B15",
+      "B17",
+      "B17-empty",
+      "B22"
+    ],
+    "scopeBefore": {
+      "passed": 354,
+      "required": 576,
+      "failed": 228,
+      "warnings": 6,
+      "visual": 14,
+      "errors": 0
+    },
+    "scopeAfter": {
+      "passed": 468,
+      "required": 576,
+      "failed": 110,
+      "warnings": 6,
+      "visual": 4,
+      "errors": 0
+    },
+    "captureInputs": "capture-inputs.sha256",
+    "mode": "report-only; contract diagnostics remain; infrastructure errors always fail",
+    "codeCommit": "272bcb6",
+    "captureInputsUnchanged": true,
+    "pairsInspected": 20
+  },
+  "pairInspection": {
+    "count": 20,
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "layout": "artboard left, app right",
+    "result": "All scoped pairs inspected; retained capability/data-boundary differences are recorded in residuals.md"
+  }
+}
