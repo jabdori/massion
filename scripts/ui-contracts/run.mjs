@@ -50,6 +50,7 @@ for(const theme of ['dark','light'])for(const screen of (requested.length?reques
    }catch(error){if(!isInteractionGap(error))throw error;row.gaps.push(`Interaction ${step.action} ${step.selector||step.value}: ${error.message}`);break;}
   }
   await browser('eval','-b',Buffer.from('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))))').toString('base64'));
+  if(fixture.captureScroll)await browser('eval','-b',Buffer.from('document.querySelector('+JSON.stringify(fixture.captureScroll.selector)+').scrollTop='+fixture.captureScroll.top).toString('base64'));
   const preference=(await browser('eval','-b',Buffer.from(`matchMedia('(prefers-color-scheme: ${theme})').matches`).toString('base64'))).result;
   if(preference!==true)throw Error('Browser did not apply system color preference: '+theme);
   const snapshot=await browser('snapshot');

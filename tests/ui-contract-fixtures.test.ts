@@ -38,9 +38,10 @@ test('started Work snapshots have assigned executors and consistent task, attemp
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
   const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean}>}).works;
-  assert.deepEqual(mission.works.map(w=>w.id),summaries.map(w=>w.workId),screen);
+  assert.ok(summaries.every(s=>mission.works.some(w=>w.id===s.workId)),screen);
   for(const work of mission.works){
-   const summary=summaries.find(s=>s.workId===work.id)!;
+   const summary=summaries.find(s=>s.workId===work.id);
+   if(!summary){assert.equal(work.id,'rounding-source');assert.equal(work.execution,'queued');assert.equal(work.runtimeRun,undefined);assert.equal(work.assistantSource,undefined);assert.deepEqual(work.effects,[]);continue;}
    assert.equal(work.execution,summary.execution,screen);assert.equal(work.acceptance,summary.acceptance,screen);
    assert.ok(work.assignments.some(a=>a.role==='executor'),screen+' '+work.id+' executor');
    assert.ok(work.tasks.length,screen);assert.notEqual(work.attempts[0]!.status,'queued',screen);
@@ -195,7 +196,7 @@ test('offline fixtures use browser disconnection and failed send stays local bef
  assert.ok(offline.steps.some(step=>step.action==='offline'));
  assert.ok(failed.steps.some(step=>step.action==='offline'));
  assert.deepEqual(failed.steps.filter(step=>step.action==='offline').map(step=>step.value),['true','false']);
- const click=failed.steps.findIndex(step=>step.action==='click');assert.ok(click>0&&click<failed.steps.length-1);
+ const click=failed.steps.findIndex(step=>step.action==='click'&&step.selector==='#chat-send'),disconnected=failed.steps.findIndex(step=>step.action==='offline'&&step.value==='true'),connected=failed.steps.findIndex(step=>step.action==='offline'&&step.value==='false');assert.ok(disconnected<click&&click<connected);
  const host=await (await hostModule()).startFixtureHost('B2-offline-failed');
  try{assert.equal((await fetch(host.url+'assistant/messages',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,405);}finally{await host.close();}
 });
@@ -236,9 +237,9 @@ test('E6c effect fixtures use production decision sources',async()=>{
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
    if(['B26','B26-later'].includes(screen)||path!=='/assistant/conversation')assert.deepEqual(view.decisions??[],[],screen+' '+path+' must not imply an unimplemented owner decision');
-   else {assert.equal(view.decisions.length,1);const d=view.decisions[0],mission=(fixture.routes['/missions/intake']!.body as any).value,source=mission.works.find((w:any)=>w.id===d.effect.workId).effects.find((e:any)=>e.id===d.id);assert.deepEqual(d.effect.request,source.ownerDecision.request);assert.equal(d.effect.status,source.status);assert.equal(d.state,screen==='B16-sent'?'done':screen==='B16-later'?'later':'open');}
+   else {assert.equal(view.decisions.filter((d:any)=>d.effect).length,1);const d=view.decisions.find((d:any)=>d.effect),mission=(fixture.routes['/missions/intake']!.body as any).value,source=mission.works.find((w:any)=>w.id===d.effect.workId).effects.find((e:any)=>e.id===d.id);assert.deepEqual(d.effect.request,source.ownerDecision.request);assert.equal(d.effect.status,source.status);assert.equal(d.state,screen==='B16-sent'?'done':screen==='B16-later'?'later':'open');}
   }
-  if(screen!=='B4')assert.ok(fixture.gaps.length,screen+' must explain the remaining absent producer');
+  if(screen.startsWith('B16')){const decisions=(fixture.routes['/assistant/conversation']!.body as any).decisions;assert.ok(decisions.some((d:any)=>d.ruleChange?.cases?.orders.length===3));assert.ok(!fixture.gaps.some(g=>g.includes('rounding-rule')));}else if(screen!=='B4')assert.ok(fixture.gaps.length,screen+' must explain the remaining absent producer');
  }
 });
 
@@ -264,6 +265,9 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
  }
 });
 
+test('memory screen candidates come from answered production turns and remain owner proposals',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B6','B7-churn','B7-fail','B18','B18-room-b']){const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any,turn=view.turns.find((t:any)=>t.memoryCandidate);assert.equal(turn.status,'answered');assert.equal(turn.memoryCandidate.status,'proposed');assert.equal(turn.memoryCandidate.memberId,'member-quill');assert.ok(view.segment.messages.some((m:any)=>m.turnId===turn.id));}});
+
+test('rule capture keeps the proposal visible and briefings refer to decisions instead of phantom Work',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B2','B9','B9-restart','B9-update']){const f=await loadFixture(screen),view=f.routes['/assistant/conversation']!.body as any,summaries=f.routes['/assistant/works']!.body as any;assert.deepEqual(f.captureScroll,{selector:'#chat-scroll',top:0});assert.equal(view.decisions.find((d:any)=>d.ruleChange).ruleChange.revision,(f.routes['/missions/intake']!.body as any).revision);assert.ok(!summaries.works.some((w:any)=>w.workId==='rounding-work'));assert.ok(view.briefings.some((b:any)=>b.decisionIds.includes(view.decisions.find((d:any)=>d.ruleChange).id)));}});
 test('R-A fixtures come from timed command producers and retain named worker dependencies and skips',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown']){
