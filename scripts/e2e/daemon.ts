@@ -17,7 +17,15 @@ import type {Mission} from '../../src/domain.ts';
 
 const config=JSON.parse(await readFile((process.argv[2]??process.env.MASSION_E2E_CONFIG)!,'utf8'));
 const rpc=createHttpRpcTransport(config.database);await initializeSurrealSchema(rpc);
-const store=new SurrealStore<Mission>(rpc),artifacts=new TextArtifactStore(join(process.cwd(),'artifacts'));
+const store=new Proxy(new SurrealStore<Mission>(rpc),{get(target,key){
+ if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
+  const result=await target.commit(input);
+  // Crash after durable approval, before the host can schedule a resume.
+  if(config.crashAfterBudgetRaise&&result.status==='committed'&&input.events.some((e:any)=>e.type==='decide-monthly-budget'&&e.command.answer==='act'))process.kill(process.pid,'SIGKILL');
+  return result;
+ };
+ const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+}}),artifacts=new TextArtifactStore(join(process.cwd(),'artifacts'));
 const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
  assert.match(String(_url),/^http:\/\/127\.0\.0\.1:1\/v1\/chat\/completions$/);
  const body=JSON.parse(String(init?.body)),prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);

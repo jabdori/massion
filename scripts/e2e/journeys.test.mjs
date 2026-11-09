@@ -65,6 +65,52 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    await start('none');await browser('open',url);await wait("!document.getElementById('first-signin').hidden");await capture('first-run-none',[/ChatGPT/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
    await start('found');await open();await wait("!!document.getElementById('first-calculation')");await capture('first-run-found',[/radio|계산|정리/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
   });
+  await journey('monthly budget later, reopen and raise recover once after a pre-resume crash',async()=>{
+   const budget=await growthStore(true);currentStore=budget.store;database=(await budget.transport.query('RETURN $session.db;',{}))[0];
+   await start('configured',{crashAfterBudgetRaise:true});await open();
+   await browser('click','#rail-me');await browser('click','#me-settings');await browser('click','#settings-nav-usage');
+   await wait("!!document.getElementById('monthly-budget-change') && !document.getElementById('monthly-budget-change').disabled");
+   await browser('click','#monthly-budget-change');await browser('fill','#monthly-budget-limit','0');await browser('click','#monthly-budget-form button[type=submit]');
+   await wait("!document.getElementById('monthly-budget-form')");assert.equal((await get('/assistant/usage')).limit,0);
+   const callOffset=(await calls()).length;await open();await say('monthly-budget');
+   const work=async()=>(await current()).value.works.find(w=>w.title==='monthly-budget');
+   await until(async()=>(await work())?.execution==='budget-waiting');
+   const paused=await work(),view=await get('/assistant/usage'),decision=view.decisions.find(d=>d.state==='open');assert.ok(decision);
+   const card='[id="chat-decision-'+decision.id+'"]',system='[id="chat-system-'+decision.id+'"]';
+   const workCalls=async()=>(await calls()).slice(callOffset).filter(c=>c.kind!=='conversation');
+   await wait(`!!document.querySelector(${JSON.stringify(card)})`);await capture('budget-waiting',[/이번 달/,/예산 늘리기/,/monthly-budget/]);
+   assert.equal(paused.runtimeRun,undefined);assert.deepEqual(paused.effects,[]);assert.deepEqual(await workCalls(),[]);
+   await browser('click',card+' .chat-actions button:nth-child(2)');
+   await until(async()=>(await get('/assistant/usage')).decisions.find(d=>d.id===decision.id)?.state==='later');
+   await wait(`!!document.querySelector(${JSON.stringify(system+' button')})`);await capture('budget-later',[/다시 묻기/]);
+   assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
+   await browser('click',system+' button');
+   await until(async()=>(await get('/assistant/usage')).decisions.find(d=>d.id===decision.id)?.state==='open');
+   await wait(`!!document.querySelector(${JSON.stringify(card+' .chat-actions button')})`);await capture('budget-reopened',[/예산 늘리기/]);
+   assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
+   const crashed=child;await browser('click',card+' .chat-actions button:first-child');
+   await until(async()=>crashed.signalCode==='SIGKILL');child=undefined;
+   const raised=await budget.store.load('assistant-conversation:monthly-budget');
+   assert.equal(raised.value.decisions.find(d=>d.id===decision.id).state,'done');assert.equal(raised.value.limit,decision.budget.limit);
+   assert.deepEqual(await work(),paused);assert.deepEqual(await workCalls(),[]);
+   await start();await open();const accepted=await finished('monthly-budget');
+   assert.equal(accepted.id,paused.id);assert.equal(accepted.record.evidenceClass,'fixture');assert.equal(accepted.verdict.status,'passed');
+   const assertOnce=async()=>{
+    assert.deepEqual((await workCalls()).map(c=>c.kind).sort(),['check','produce']);
+    const operations=(await budget.store.exportJournal()).operations.filter(o=>o.aggregateId==='intake');
+    for(const type of ['activate-runtime','accept'])assert.equal(operations.flatMap(o=>o.events).filter(e=>e.type===type&&e.command.workId===paused.id).length,1,type);
+    assert.deepEqual(await work(),accepted);
+   };
+   await assertOnce();await capture('budget-completed',[/monthly-budget/,/완료/]);
+   await stop();await start();await open();await browser('reload');await assertOnce();
+   const usage=await get('/assistant/usage');assert.equal(usage.period,view.period);assert.equal(usage.knownOutputTokens,3);assert.equal(usage.inputTokens,3);assert.equal(usage.reserved,0);
+   await browser('click','#rail-me');await browser('click','#me-settings');await browser('click','#settings-nav-usage');
+   await wait("document.getElementById('settings-usage-body').textContent.includes('3 출력 토큰')");
+   await capture('budget-usage',[/3 출력 토큰/,/월 예산/]);
+   const displayed=await browser('eval',"({period:settingsUsage.period,output:settingsUsage.knownOutputTokens,input:settingsUsage.inputTokens,limit:settingsUsage.limit})");
+   assert.deepEqual(displayed.result,{period:usage.period,output:usage.knownOutputTokens,input:usage.inputTokens,limit:usage.limit});
+   await assertOnce();await stop();currentStore=f.store;database=(await f.transport.query('RETURN $session.db;',{}))[0];
+  });
   await start();await open();
   await journey('conversation, handoff and independent accepted Record',async()=>{
    await say('direct');await wait("document.getElementById('chat-log').textContent.includes('Fixture conversation reply')");await capture('conversation',[/Fixture conversation reply/]);assert.equal((await current()).value.works.length,0);
@@ -175,7 +221,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   });
   await writeFile(join(out,'calls.json'),JSON.stringify(await calls(),null,2)+'\n');
   const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
-  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:['monthly budget (#117 unmerged)']},null,2)+'\n');
+  await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:[]},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
  finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),logs);await rm(root,{recursive:true,force:true});}
 });

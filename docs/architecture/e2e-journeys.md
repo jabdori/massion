@@ -51,7 +51,9 @@ without resend after reload. Explicit quit must drain the
 supervisor. Missing Electron, Xvfb, database or browser fails rather than skips;
 never launch a visible desktop window on the owner's Mac.
 
-Monthly budget remains excluded until #117 merges. No real money, remote device,
+[Monthly budget](e2e-monthly-budget.md) now covers B26 Later/reopen/raise, a
+post-commit/pre-resume daemon crash, exactly-once recovery and B14 period usage.
+No real money, remote device,
 MCP network server, provider inference or release is exercised. The fixtures stage
 effect-ready Work because there is no general checkout/handoff producer in the
 runtime. They do not establish autonomous shopping or remote execution quality.
