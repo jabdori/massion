@@ -259,6 +259,38 @@
                     "id": "pr84:root",
                     "parentId": null,
                     "status": "active"
+                  },
+                  {
+                    "id": "pr84:executor",
+                    "parentId": "pr84:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "pr84:read",
+                    "parentId": "pr84:executor",
+                    "status": "active",
+                    "step": {
+                      "role": "읽기",
+                      "title": "읽기",
+                      "dependsOn": []
+                    }
+                  },
+                  {
+                    "id": "pr84:test",
+                    "parentId": "pr84:executor",
+                    "status": "queued",
+                    "step": {
+                      "role": "테스트",
+                      "title": "테스트 돌리기",
+                      "dependsOn": [
+                        "pr84:read"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "pr84:verifier",
+                    "parentId": "pr84:root",
+                    "status": "queued"
                   }
                 ],
                 "attempts": [
@@ -370,6 +402,38 @@
                   "id": "pr84:root",
                   "parentId": null,
                   "status": "active"
+                },
+                {
+                  "id": "pr84:executor",
+                  "parentId": "pr84:root",
+                  "status": "active"
+                },
+                {
+                  "id": "pr84:read",
+                  "parentId": "pr84:executor",
+                  "status": "active",
+                  "step": {
+                    "role": "읽기",
+                    "title": "읽기",
+                    "dependsOn": []
+                  }
+                },
+                {
+                  "id": "pr84:test",
+                  "parentId": "pr84:executor",
+                  "status": "queued",
+                  "step": {
+                    "role": "테스트",
+                    "title": "테스트 돌리기",
+                    "dependsOn": [
+                      "pr84:read"
+                    ]
+                  }
+                },
+                {
+                  "id": "pr84:verifier",
+                  "parentId": "pr84:root",
+                  "status": "queued"
                 }
               ],
               "attempts": [

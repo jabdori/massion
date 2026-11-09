@@ -2,7 +2,7 @@
 
 Fixture-class evidence only. No real account login, credential-file read or model invocation was used for verification. Desktop security settings are unchanged.
 
-- Node 24.21.0: related tests passed 143, failed 0, skipped 7. The seven skipped cases require an actual SurrealDB test instance.
+- Node 24.21.0: related tests passed 250, failed 0, skipped 10 after integrating main at `395193e`. The ten skipped cases require an actual SurrealDB test instance.
 - `npm run typecheck`: passed.
 - Scoped copy lint: 29 files, no blocking findings; the new first-experience source is included in the keyed-copy gate.
 - Impeccable detector on the changed UI: no findings.
@@ -13,7 +13,7 @@ Fixture-class evidence only. No real account login, credential-file read or mode
 
 ```sh
 npm run typecheck
-node --test tests/first-experience.test.ts tests/members.test.ts tests/conversation-cards.test.ts tests/surface-shell.test.ts tests/ui-copy.test.ts tests/ui-copy-lint.test.ts tests/ui-contract-fixtures.test.ts tests/ui-contract-assets.test.ts tests/host-drain.test.ts
+node --test tests/first-experience.test.ts tests/members.test.ts tests/conversation-cards.test.ts tests/surface-shell.test.ts tests/ui-copy.test.ts tests/ui-copy-lint.test.ts tests/ui-contract-fixtures.test.ts tests/ui-contract-assets.test.ts tests/host-drain.test.ts tests/member-rooms.test.ts tests/member-work.test.ts tests/work-room-visual.test.ts tests/internal-teams-surface.test.ts tests/client-workbench.test.ts
 UI_CONTRACTS_BLOCKING=1 UI_CONTRACTS_OUTPUT=docs/acceptance/e7 node scripts/ui-contracts/run.mjs B1 B1-signin B1-first B1-first-calc B1-first-later B21-done
 ```
 
