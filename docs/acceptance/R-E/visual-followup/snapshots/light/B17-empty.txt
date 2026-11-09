@@ -1,0 +1,43 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "예약" [ref=e6]
+      - StaticText "예약"
+      - button "검색" [expanded=false, ref=e9]
+      - button "새 작업" [ref=e10]
+        - StaticText "새 작업"
+  - main "예약" [ref=e2]
+    - generic
+      - generic
+        - heading "작업 예약하기" [level=2, ref=e11]
+        - button "아침 브리핑 어제 맡긴 일을 아침마다 정리" [ref=e12]
+          - strong
+            - StaticText "아침 브리핑"
+          - StaticText "어제 맡긴 일을 아침마다 정리"
+        - button "주간 지출 정리 지난주 지출을 항목별로 묶기" [ref=e13]
+          - strong
+            - StaticText "주간 지출 정리"
+          - StaticText "지난주 지출을 항목별로 묶기"
+        - button "가격 보기 원하는 값 아래로 내려가면 알림" [ref=e14]
+          - strong
+            - StaticText "가격 보기"
+          - StaticText "원하는 값 아래로 내려가면 알림"
+        - button "월말 구독 점검 이번 달 구독 결제 목록" [ref=e15]
+          - strong
+            - StaticText "월말 구독 점검"
+          - StaticText "이번 달 구독 결제 목록"
+        - button "회의 전 자료 모으기 회의 전날 저녁에 자료 모으기" [ref=e16]
+          - strong
+            - StaticText "회의 전 자료 모으기"
+          - StaticText "회의 전날 저녁에 자료 모으기"
+        - button "주말 장보기 목록 금요일마다 장보기 목록 만들기" [ref=e17]
+          - strong
+            - StaticText "주말 장보기 목록"
+          - StaticText "금요일마다 장보기 목록 만들기"
