@@ -77,7 +77,7 @@ Members exist, but every Work is the Representative's. The Representative cannot
 ## Not in this increment (follow-up)
 
 - Representative handoff notification lines and Work cards inside the member 1:1 thread (the remaining B18 scope).
-- A team per Work (team lead expanding the member's procedure, role chips, the participant line with workers) — Q13.
+- Internal teams now expand pinned member procedures into worker steps; see [Internal teams](internal-teams.md) (Q13). Room messages and mutual challenge remain Q14.
 - Model group created at admission with a host description; a group picker on the member page (B19) and Settings > Members.
 - Memory candidates from the 1:1 conversation (B18 `Memory candidate: … Keep / Remove`).
 - The Representative's repeat trigger that calls `propose-member` with `handoff`.

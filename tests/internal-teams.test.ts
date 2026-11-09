@@ -1,7 +1,10 @@
 import test from 'node:test';
+import {Application} from '../src/application.ts';
+import {InMemoryStore} from '../src/storage.ts';
 import assert from 'node:assert/strict';
 import {memberProcedures,parseTeamPlan,validateTeamProcedure} from '../src/internal-teams.ts';
-import {apply,createMission,hash} from '../src/domain.ts';
+import {apply,createMission,hash,workProducers} from '../src/domain.ts';
+import {familyCheck} from '../src/model-family.ts';
 import {applySkills} from '../src/skills.ts';
 import type {SkillsState} from '../src/skills.ts';
 
@@ -33,5 +36,23 @@ test('worker effects respect dependencies and skips and cannot publish the team 
   m=apply(m,{type:'assign',workId:'w',assignment:{id:'a'+i,actorId:'worker'+i,role:'executor',taskId:'w:step:'+i,model:{provider:'fixture',model:'m',configVersion:'v1',reason:'test',evidenceClass:'fixture'},extensionVersion:'v1'}},rep).value;
  }
  assert.throws(()=>apply(m,{type:'admit-effect',workId:'w',effect:{id:'e',taskId:'w:step:1',status:'pending',target:'text',authority:'g'},reserve:1},{id:'worker1',roles:['executor']}),/dependencies/);
+ assert.throws(()=>apply(m,{type:'assign',workId:'w',assignment:{...m.works[0]!.assignments[0]!,id:'escape',taskId:'w:executor'}},rep),/worker/);
  assert.throws(()=>apply(m,{type:'publish-artifact',workId:'w',artifact:{id:'a',version:1,sha256:'a'.repeat(64),path:'p',kind:'text'}},{id:'worker0',roles:['executor']}),/assigned/);
+ m.works[0]!.tasks.find(t=>t.id==='w:step:0')!.step!.skipReason='Already supplied';
+ assert.throws(()=>apply(m,{type:'admit-effect',workId:'w',effect:{id:'skip',taskId:'w:step:0',status:'pending',target:'text',authority:'g'},reserve:1},{id:'worker0',roles:['executor']}),/skipped/);
+ assert.throws(()=>apply(m,{type:'settle-task',workId:'w',taskId:'w:step:0',result:'Done'},{id:'worker0',roles:['executor']}),/Skipped step/);
+});
+
+
+test('overlapping identical team delegates replay the stored result and create one step',async()=>{
+ const {m}=work(),store=new InMemoryStore<typeof m>();await store.commit({id:'m',commandId:'seed',expectedRevision:0,fingerprint:hash(m),value:m,events:[],outbox:[]});
+ const app=new Application(store,[rep]);await app.dispatch({missionId:'m',commandId:'parent',expectedRevision:1,actorId:rep.id,command:{type:'delegate',workId:'w',taskId:'w:executor',parentId:'w:root'}});
+ const envelope={missionId:'m',commandId:'step',expectedRevision:2,actorId:rep.id,command:{type:'delegate' as const,workId:'w',taskId:'w:step:0',parentId:'w:executor',step:{title:'Read sources',role:'Reading',dependsOn:[]}}};
+ const results=await Promise.all([app.dispatch(envelope),app.dispatch(envelope)]);assert.deepEqual(results.map(r=>r.status).sort(),['committed','replayed']);assert.equal((await store.load('m'))!.value.works[0]!.tasks.filter(t=>t.step).length,1);
+});
+
+
+test('the check family includes a worker even when the lead is from another family',()=>{
+ const {w}=work();w.assignments=['openai','anthropic'].map((provider,i)=>({id:'a'+i,actorId:'actor'+i,role:'executor',taskId:i?'w:step:0':'w:executor',model:{provider,model:'model',configVersion:'v1',reason:'fixture',evidenceClass:'fixture'},extensionVersion:'v1'}));
+ const check=familyCheck(workProducers(w),{provider:'anthropic',model:'checker'});assert.equal(check.producers.length,2);assert.equal(check.relation,'same-family');
 });

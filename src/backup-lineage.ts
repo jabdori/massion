@@ -14,7 +14,7 @@ import {MEMBERS_ID,isMembersState,replayMembers} from './members.ts';
 import {isSchedulesState,replaySchedules} from './schedules.ts';
 import type {SchedulesState} from './schedules.ts';
 import {isPermissionsState,replayPermissions} from './permissions.ts';
-import {SKILLS_ID,isSkillsState,replaySkills} from './skills.ts';
+import {isSkillsState,replaySkills} from './skills.ts';
 import {isAppsState,replayApps} from './apps.ts';
 import type {AppsState} from './apps.ts';
 import type {SkillsState} from './skills.ts';
@@ -396,10 +396,10 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
  */
 export function validateMissionJournalLineage(operations: readonly Operation<Mission>[]): void {
   const previous = new Map<string, Operation<Mission>>();
-  const commands = new Set<string>();
+  const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
   for (const operation of operations) {
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
-    if (isSkillsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isSkillsState(operation.value)) { skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isPermissionsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayPermissions(operation as unknown as Operation<PermissionsState>, previous.get(operation.aggregateId) as unknown as Operation<PermissionsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSchedulesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySchedules(operation as unknown as Operation<SchedulesState>, previous.get(operation.aggregateId) as unknown as Operation<SchedulesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isMembersState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayMembers(operation as unknown as Operation<MembersState>, previous.get(operation.aggregateId) as unknown as Operation<MembersState> | undefined); previous.set(operation.aggregateId, operation); continue; }
@@ -429,7 +429,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
       ensure(operation.fingerprint === hash({ actorId: actor.id, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
-      checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>);
+      checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');
       equal(operation.outbox, command.type === 'admit-effect' ? [{ type: 'effect-admitted', workId: command.workId, effectId: command.effect.id }] : [], 'command/outbox transition');
@@ -439,7 +439,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
 }
 
 /** Synthetic lineage roles cannot tell the assistant actor apart, so its narrow permission and host IDs are checked here. */
-function checkAssistantSteps(operation: Operation<Mission>, actorId: string, command: Command, mission: Mission, previous: Map<string, Operation<AssistantSegment>>): void {
+function checkAssistantSteps(operation: Operation<Mission>, actorId: string, command: Command, mission: Mission, previous: Map<string, Operation<AssistantSegment>>,skillsHistory:Map<number,SkillsState>): void {
   if (actorId === ASSISTANT_ACTOR_ID) ensure(command.type === 'admit-work' && Object.hasOwn(command, 'assistantSource') || command.type === 'activate-runtime', 'assistant actor may only admit its pinned Work and start its run');
   // Pin the assistant actor's runs and the deterministic assistant run ID; an owner run merely named assistant-* (possible before HTTP refused it) still replays.
   const runSource = command.type === 'activate-runtime' ? mission.works.find(work => work.id === command.workId)?.assistantSource : undefined;
@@ -448,7 +448,7 @@ function checkAssistantSteps(operation: Operation<Mission>, actorId: string, com
   }
   if (command.type !== 'admit-work' || !Object.hasOwn(command, 'assistantSource')) return;
   const source = command.assistantSource as AssistantSource;
-  if(command.team)equal(command.team,memberProcedures(previous.get(SKILLS_ID)?.value as unknown as SkillsState??null,source.memberId!),'Team must pin the member procedures at admission');
+  if(command.team){const revision=command.team.skillsRevision;ensure(revision===0||skillsHistory.has(revision),'Team procedure snapshot must precede admission');equal(command.team,memberProcedures(skillsHistory.get(revision)??null,source.memberId!,revision),'Team must pin the originally read member procedures');}
   ensure(actorId === ASSISTANT_ACTOR_ID, 'assistantSource admission must be by assistant-representative');
   ensure(operation.commandId === 'assistant-work:' + source.turnId, 'assistantSource admission must use command ID assistant-work:<turnId>');
   const segment = previous.get(source.segmentId)?.value, turn = segment?.turns.find(entry => entry.id === source.turnId);

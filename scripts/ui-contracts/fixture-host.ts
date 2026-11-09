@@ -44,8 +44,8 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
 const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'");
 const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"style-src 'self' 'unsafe-inline'","connect-src 'self'","img-src 'self' data:","font-src 'self'","frame-src 'none'","frame-ancestors 'none'","object-src 'none'","base-uri 'none'","form-action 'none'"].join('; ');
 
-export async function startFixtureHost(screen:string):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
- const fixture=await loadFixture(screen);
+export async function startFixtureHost(screen:string|ScreenFixture):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
+ const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
  let origin='';
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');

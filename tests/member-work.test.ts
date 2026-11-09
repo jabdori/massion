@@ -586,3 +586,44 @@ test('Q13 invalid plans and unknown worker outcomes never synthesize or check',a
   const calls=f.calls.length;await f.product.run('intake',w.id,'second-run',(await f.store.load('intake'))!.revision);assert.equal(f.calls.length,calls);
  }
 });
+
+test('Q13 procedure replacement during Work commit retains the originally read version and replays',async t=>{
+ const f=await setup(t),member=await f.admit(),skills=new SkillsService(f.store),body={description:'Analyze inputs',steps:['Read old inputs'],verify:'Check result'};
+ await skills.act({commandId:'procedure-before',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body});
+ const commit=f.store.commit.bind(f.store);let replaced=false;
+ f.store.commit=async input=>{if(!replaced&&input.events.some((e:any)=>e.type==='admit-work'&&e.command?.team)){replaced=true;await skills.act({commandId:'procedure-after',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body:{...body,steps:['Read new inputs']}});}return commit(input);};
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted');assert.equal(w.team!.procedures[0]!.version,1);assert.deepEqual(w.team!.procedures[0]!.body.steps,['Read old inputs']);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('Q13 a newly ready dependent starts while an unrelated worker is still running',async t=>{
+ const f=await setup(t),member=await f.admit();
+ await new SkillsService(f.store).act({commandId:'dag-procedure',action:'write',memberId:member.id,kind:'procedure',name:'Analyze',body:{description:'Analyze sources',steps:['First','Independent','After first'],verify:'Check result'}});
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({title,role:'Analysis',dependsOn:i===2?[0]:[]}))}));
+ let release=()=>{},entered=()=>{},independent=false,sawOverlap=false;
+ const independentStarted=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ const timer=setTimeout(release,1000);t.after(()=>{clearTimeout(timer);release();});
+ f.setWorker(async prompt=>{if(prompt.step.title==='First')await independentStarted;else if(prompt.step.title==='Independent'){independent=true;entered();await gate;independent=false;}else{sawOverlap=independent;release();}return 'Answer bounded';});
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ assert.equal(sawOverlap,true,'a ready dependency cannot wait for unrelated work');assert.equal((await f.intake()).works.at(-1)!.acceptance,'accepted');
+});
+
+test('Q13 loading a procedure records its use through the drain-aware store',async t=>{
+ const f=await setup(t),member=await f.admit(),skills=new SkillsService(f.store,{clock:()=>1});
+ await skills.act({commandId:'usage-procedure',action:'write',memberId:member.id,kind:'procedure',name:'Analysis',body:{description:'Read sources',steps:['Read evidence'],verify:'Check evidence'}});
+ f.script.push(v2('On it.','Read evidence','Quill'));await f.say(f.assistant,'Read evidence');await f.assistant.idle();
+ assert.ok(f.store.inspect().some(op=>op.events.some((e:any)=>e.type==='use-skill')),'usage must survive restart');
+ let blocked=0;const ownerStore=intercepted(f.store,{commit:async()=>{blocked++;throw new HostDrainError();}}),chat=new AssistantService(f.store,f.product,f.m,{members:async()=>(await f.members.read()).members,ownerStore});
+ const before=(await f.intake()).works.length;f.script.push(v2('On it.','Other evidence','Quill'));await f.say(chat,'Other evidence');await chat.idle();
+ assert.equal(blocked,1);assert.equal((await f.intake()).works.length,before,'drain must not fall back to raw store');
+});
+
+test('Q13 accepted text reads retain the exact procedure pin of the Record',async t=>{
+ const {readRecordArtifact}=await import('../src/record-artifact.ts'),f=await setup(t);await f.admit();
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze evidence');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!,input={recordId:w.record!.id,artifactVersion:w.artifact!.version,artifactSha256:w.artifact!.sha256};
+ assert.ok(await readRecordArtifact(f.store,f.artifacts,'intake',w.id,input));
+ const changed=intercepted(f.store,{readState:async(id?:string)=>{const state=await f.store.readState(id);if(state.snapshot?.value.works)state.snapshot.value.works.find((work:Mission['works'][number])=>work.id===w.id)!.team!.skillsRevision++;return state;}});
+ await assert.rejects(readRecordArtifact(changed,f.artifacts,'intake',w.id,input),/exact accepted Record/);
+});
