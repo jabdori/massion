@@ -131,5 +131,34 @@
     "finalScopedGateExit": 0,
     "baselineAllowances": 958,
     "candidateAllowances": 938
+  },
+  "invariantRecovery": {
+    "baseCommit": "103ee18",
+    "implementationCommit": "4f75900",
+    "integratedMain": "1180dc6",
+    "integrationCommit": "3e49167",
+    "relatedFiles": 19,
+    "tests": 417,
+    "passed": 381,
+    "failed": 0,
+    "skipped": 36,
+    "commitBoundaries": 28,
+    "faultMatrixCases": 112,
+    "faultModes": [
+      "throw",
+      "crash"
+    ],
+    "faultSides": [
+      "before",
+      "after"
+    ],
+    "typecheck": "passed",
+    "repositoryCheck": "passed",
+    "screens": 6,
+    "requiredOccurrencesPassed": 176,
+    "allowancesRemoved": 20,
+    "allowancesAdded": 0,
+    "scopedBlockingGateExit": 0,
+    "notRun": "Full repository suite, actual DB, live providers; CI/environment-owned"
   }
 }
