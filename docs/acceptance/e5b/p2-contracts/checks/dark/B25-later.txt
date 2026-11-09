@@ -29,7 +29,7 @@ contract B25-later (B25 주노가 만든 앱 · 나중에) vs /Users/code/orca/w
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":30,"strings":8,"sentences":0,"longest":9} proto {"chars":19,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":153,"strings":17,"sentences":5,"longest":35} proto {"chars":157,"strings":20,"sentences":2,"longest":35} source visibleTextBudget
+  budget conversation app {"chars":149,"strings":17,"sentences":4,"longest":35} proto {"chars":157,"strings":20,"sentences":2,"longest":35} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  warn  budget conversation sentences 5 > 2: "PR #84 검토해 줘."
+  warn  budget conversation sentences 4 > 2: "PR #84 검토해 줘."
 PASS: 0 failures, 1 warnings, 27 required elements

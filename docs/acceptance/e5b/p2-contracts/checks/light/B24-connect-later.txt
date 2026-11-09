@@ -24,9 +24,9 @@ contract B24-connect-later (B24-connect 앱 연결 · 나중에) vs /Users/code/
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":7,"sentences":0,"longest":8} proto {"chars":19,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":67,"strings":4,"sentences":2,"longest":25} proto {"chars":23,"strings":3,"sentences":0,"longest":13} source visibleTextBudget
+  budget conversation app {"chars":63,"strings":4,"sentences":1,"longest":25} proto {"chars":23,"strings":3,"sentences":0,"longest":13} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  warn  budget conversation sentences 2 > 0: "massion 저장소에 열린 PR 정리해 줘."
+  warn  budget conversation sentences 1 > 0: "massion 저장소에 열린 PR 정리해 줘."
   warn  budget conversation longest string 25 > 24 chars
-  warn  budget conversation chars 67 > 50
+  warn  budget conversation chars 63 > 50
 PASS: 0 failures, 3 warnings, 22 required elements

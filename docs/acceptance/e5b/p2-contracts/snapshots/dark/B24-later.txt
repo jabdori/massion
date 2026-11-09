@@ -50,7 +50,7 @@
           - paragraph
             - StaticText "massion 저장소에 열린 PR 정리해 줘."
           - paragraph
-            - StaticText "나중에: GitHub 앱을 설치할까요?"
+            - StaticText "나중에: GitHub 설치됨"
             - button "다시 묻기" [ref=e24]
           - generic
             - paragraph

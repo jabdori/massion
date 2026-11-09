@@ -71,7 +71,7 @@
               - StaticText "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
             - button "복사" [ref=e28]
           - paragraph
-            - StaticText "나중에: PR 목록 가져오기를 설치할까요?"
+            - StaticText "나중에: PR 목록 가져오기 설치됨"
             - button "다시 묻기" [ref=e29]
           - generic
             - StaticText "주노"

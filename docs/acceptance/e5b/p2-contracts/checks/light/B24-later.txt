@@ -25,7 +25,6 @@ contract B24-later (B24 앱 설치 · 나중에) vs /Users/code/orca/workspaces/
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":7,"sentences":0,"longest":8} proto {"chars":19,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":98,"strings":5,"sentences":3,"longest":31} proto {"chars":89,"strings":6,"sentences":2,"longest":31} source visibleTextBudget
+  budget conversation app {"chars":92,"strings":5,"sentences":2,"longest":31} proto {"chars":89,"strings":6,"sentences":2,"longest":31} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  warn  budget conversation sentences 3 > 2: "massion 저장소에 열린 PR 정리해 줘."
-PASS: 0 failures, 1 warnings, 23 required elements
+PASS: 0 failures, 0 warnings, 23 required elements

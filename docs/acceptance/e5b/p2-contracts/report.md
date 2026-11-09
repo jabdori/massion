@@ -8,7 +8,7 @@ Element passes count required matches. Failures also include forbidden strings a
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | B24 | dark | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B24.png) |
 | B24-done | dark | 24 / 24 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B24-done.png) |
-| B24-later | dark | 23 / 23 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/dark/B24-later.png) |
+| B24-later | dark | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B24-later.png) |
 | B25 | dark | 28 / 28 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/dark/B25.png) |
 | B25-done | dark | 27 / 27 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/dark/B25-done.png) |
 | B25-later | dark | 27 / 27 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/dark/B25-later.png) |
@@ -19,7 +19,7 @@ Element passes count required matches. Failures also include forbidden strings a
 | B24-connect-mail | dark | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B24-connect-mail.png) |
 | B24 | light | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B24.png) |
 | B24-done | light | 24 / 24 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B24-done.png) |
-| B24-later | light | 23 / 23 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/light/B24-later.png) |
+| B24-later | light | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B24-later.png) |
 | B25 | light | 28 / 28 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/light/B25.png) |
 | B25-done | light | 27 / 27 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/light/B25-done.png) |
 | B25-later | light | 27 / 27 | 0 | 1 | 0 | 0 | 0 | [PNG](pairs/light/B25-later.png) |

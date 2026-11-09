@@ -68,7 +68,9 @@ card/form instead of being replaced by the first-task settings link. Regression
 tests cover the empty first conversation and the placeholder picker button.
 Both themes pass B24-connect-mail 23/23; all 22 B24/B25 runs pass 542/542 required
 checks with zero contract/visual/gap/infrastructure failures ([report](p2-contracts/report.md)).
-The exact 154 resolved #118 allowances and conditional removal patch are in
-[allow-list-follow-up/](allow-list-follow-up/README.md); apply them when #114 lands.
+The actual allow-list now removes the 154 resolved #118 allowances; the removal
+lands with this PR. [Details and scoped gate evidence](allow-list-follow-up/README.md).
 
 Main `3ffdf51` was integrated without rebasing. Post-integration related checks passed 193 tests with one opt-in skip; the final mail/scoped app check passed 133/133 and typecheck passed. Linux Node 24.19.0 passed 23 app/document tests, 15 desktop tests, desktop typecheck and the complete actual app-panel script/style/resize smoke ([logs](p2-checks/)).
+
+After integrating the blocking gate at `ac99f1d`, the unchanged gate engine passes the fixed E5b screen/copy scope with zero new, stale or infrastructure diagnostics. Only the 154 resolved E5b exceptions were removed; no additions were justified or made.

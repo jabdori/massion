@@ -1,7 +1,7 @@
 {
   "pr": 118,
   "sourceHead": "85b7b2a064735b4ffd810b2327bb333ecf9690d9",
-  "condition": "Apply only after PR #114 lands and against current gate evidence.",
+  "condition": "Applied to the actual allow-list after integrating #118; removal lands atomically with #114.",
   "removedCount": 154,
   "remainingCount": 824,
   "entries": [

@@ -1,0 +1,33 @@
+{
+  "scope": {
+    "screens": [
+      "B24",
+      "B24-done",
+      "B24-later",
+      "B25",
+      "B25-done",
+      "B25-later",
+      "B24-connect",
+      "B24-connect-token",
+      "B24-connect-connected",
+      "B24-connect-later",
+      "B24-connect-mail"
+    ],
+    "files": [
+      "src/app-connect-panel.ts",
+      "src/app-frame.ts",
+      "src/apps-panel.ts",
+      "src/assistant-conversation-panel.ts",
+      "src/first-experience.ts",
+      "src/surface-shell.ts",
+      "src/workbench.ts"
+    ]
+  },
+  "removed": [],
+  "result": {
+    "code": 0,
+    "added": [],
+    "resolved": [],
+    "errors": []
+  }
+}

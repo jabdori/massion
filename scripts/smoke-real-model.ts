@@ -18,28 +18,29 @@ import {createProtocolClient,createHttpTransport} from '../src/client-protocol.t
 import type {Mission,Work} from '../src/domain.ts';
 
 const EXECUTOR='gpt-6.1-terra',CHECKER='zai/glm-5.3',CAP=8,OUTPUT_CAP=2048;
-interface Call {number:number;role:'representative'|'executor'|'checker';model:string;modelIdentity:'requested';startedAt:string;durationMs:number|null;status:'completed'|'failed'|'unknown';inputTokens:number|null;outputTokens:number|null;reason:string;exitCode:number|null;diagnostic:string|null}
+interface Call {number:number;role:'representative'|'executor'|'checker'|'discriminator';model:string;modelIdentity:'requested';startedAt:string;durationMs:number|null;status:'completed'|'failed'|'unknown';inputTokens:number|null;outputTokens:number|null;reason:string;exitCode:number|null;diagnostic:string|null}
 export interface SmokeReport {startedAt:string;finishedAt:string|null;durationMs:number|null;status:'running'|'passed'|'failed';stage:string;callCap:number;capReached:boolean;calls:Call[];verdicts:{status:string;relation:string|null}[];directAnswer:boolean;readback:{recordId:string;sha256:string;byteLength:number}|null;drain:string|null}
-export const newReport=():SmokeReport=>({startedAt:new Date().toISOString(),finishedAt:null,durationMs:null,status:'running',stage:'startup',callCap:CAP,capReached:false,calls:[],verdicts:[],directAnswer:false,readback:null,drain:null});
+export const newReport=(callCap:8|120=CAP):SmokeReport=>({startedAt:new Date().toISOString(),finishedAt:null,durationMs:null,status:'running',stage:'startup',callCap,capReached:false,calls:[],verdicts:[],directAnswer:false,readback:null,drain:null});
 
 export async function writeReport(root:string,report:SmokeReport){
  const unknown=report.calls.filter(c=>c.status==='unknown').map(c=>c.number);
  const rows=report.calls.map(c=>`| ${c.number} | ${c.role} | ${c.model} | ${c.inputTokens??'unknown'} | ${c.outputTokens??'unknown'} | ${c.durationMs??'unknown'} | ${c.status} (${c.reason}; ${c.diagnostic??'no diagnostic'}) |`).join('\n');
- const markdown=`# Real-model smoke\n\nStatus: ${report.status}; stage: ${report.stage}.\nStarted: ${report.startedAt}; duration: ${report.durationMs??'unknown'} ms.\nCalls: ${report.calls.length}/${CAP}; cap reached: ${report.capReached}.\nModel identities: requested, not independently attested. CLI transport/stream retries are disabled; the cap counts single-shot CLI invocations. Upstream service-internal attempts are not observable.\n\n| Call | Role | Model | Input tokens | Output tokens | Duration ms | Outcome |\n| --- | --- | --- | --- | --- | --- | --- |\n${rows}\n\nDirect answer: ${report.directAnswer}.\nVerdicts: ${report.verdicts.map(v=>v.status+' / '+v.relation).join(', ')||'none'}.\nReadback: ${report.readback?report.readback.sha256+' ('+report.readback.byteLength+' bytes)':'none'}.\nUnknown outcomes: ${unknown.join(', ')||'none'}.\nHost drain: ${report.drain??'unknown'}.\n`;
+ const markdown=`# Real-model smoke\n\nStatus: ${report.status}; stage: ${report.stage}.\nStarted: ${report.startedAt}; duration: ${report.durationMs??'unknown'} ms.\nCalls: ${report.calls.length}/${report.callCap}; cap reached: ${report.capReached}.\nModel identities: requested, not independently attested. CLI transport/stream retries are disabled; the cap counts single-shot CLI invocations. Upstream service-internal attempts are not observable.\n\n| Call | Role | Model | Input tokens | Output tokens | Duration ms | Outcome |\n| --- | --- | --- | --- | --- | --- | --- |\n${rows}\n\nDirect answer: ${report.directAnswer}.\nVerdicts: ${report.verdicts.map(v=>v.status+' / '+v.relation).join(', ')||'none'}.\nReadback: ${report.readback?report.readback.sha256+' ('+report.readback.byteLength+' bytes)':'none'}.\nUnknown outcomes: ${unknown.join(', ')||'none'}.\nHost drain: ${report.drain??'unknown'}.\n`;
  await writeFile(join(root,'report.json'),JSON.stringify({...report,unknownOutcomes:unknown},null,2)+'\n',{mode:0o600});
  await writeFile(join(root,'report.md'),markdown,{mode:0o600});
 }
 
 /** Reserve before awaiting: concurrent dispatches cannot pass the cap together. */
 export function createSmokeRunner(report:SmokeReport,checkpoint:()=>Promise<void>,runner:CliRunner=spawnCliRunner,clock=Date.now,routerUrl:string):CliRunner {
+ assert.ok([8,120].includes(report.callCap),'Only smoke or evaluation call caps are authorized');const cap=report.callCap;
  const router=new URL(routerUrl);assert.ok(router.protocol==='http:'&&router.hostname==='127.0.0.1'&&router.port&&router.pathname==='/v1'&&!router.username&&!router.password&&!router.search&&!router.hash,'Explicit loopback router /v1 URL required');
  let fenced=false;
  return async invocation=>{
-  if(report.calls.length>=CAP){report.capReached=true;fenced=true;throw new Error('Smoke call cap reached');}
+  if(report.calls.length>=cap){report.capReached=true;fenced=true;throw new Error('Smoke call cap reached');}
   if(fenced)throw new Error('Smoke dispatch fenced');
   const model=invocation.args[invocation.args.indexOf('-m')+1];
   if(invocation.command!=='codex'||![EXECUTOR,CHECKER].includes(model!)){fenced=true;throw new Error('Smoke model refused');}
-  const prompt=JSON.parse(invocation.stdin),role=model===CHECKER?'checker':Object.hasOwn(prompt,'currentMessage')?'representative':'executor';
+  const prompt=JSON.parse(invocation.stdin),role=prompt.discriminator===true?'discriminator':model===CHECKER?'checker':Object.hasOwn(prompt,'currentMessage')?'representative':'executor';
   const started=clock(),call:Call={number:report.calls.length+1,role,model:model!,modelIdentity:'requested',startedAt:new Date(started).toISOString(),durationMs:null,status:'unknown',inputTokens:null,outputTokens:null,reason:'intent-checkpoint',exitCode:null,diagnostic:null};
   report.calls.push(call);
   try{

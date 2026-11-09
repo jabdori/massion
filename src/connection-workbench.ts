@@ -44,7 +44,7 @@ export type ProviderType=typeof MODEL_PROVIDER_TYPES[number]['id'];
 export const isCliProvider=(id:string)=>id==='claude-code-cli'||id==='codex-cli';
 export interface ConnectionInput {id:string;label:string;providerType:ProviderType;baseUrl:string;mode:'https'|'local-http-mock';secretRef?:string}
 export interface HostConnectionBindings {revision:string;bindingHash:string;connections:{input:ConnectionInput;models:readonly string[]}[]}
-interface ConnectionOptions {transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
+interface ConnectionOptions {discriminatorTimeoutMs?:number;transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
 export interface DiscoveredModel {id:string;label:string;outputTokenLimit:number|null}
 interface ConnectionState {input:ConnectionInput;configHash:string;models:DiscoveredModel[];discovery:'not-requested'|'models-discovered'|'discovery-failed';generation:number}
 function ensure(v:unknown,m:string):asserts v {if(!v)throw new DomainError(m);}
@@ -89,10 +89,12 @@ function validGroups(value:unknown):asserts value is ModelGroup[] {
  ensure(new Set(value.map((g:any)=>g.id)).size===value.length&&new Set(value.map((g:any)=>g.name)).size===value.length,'Model group IDs and names must be unique');
 }
 export class ConnectionWorkbench implements WorkRuntime {
+ #runtimeWrites:Promise<unknown>=Promise.resolve();
+ readonly #shadowStop=new AbortController();readonly #shadowJobs=new Set<Promise<unknown>>();
  readonly #store:Store<Mission>;readonly #artifacts:TextArtifactStore;readonly #options:ConnectionOptions;#enrolling=false;
  readonly #connections=new Map<string,ConnectionState>();readonly #profiles=new Map<string,{connectionId:string;profile:ModelConnectionProfile}>();#grants:ExecutionAuthorization[]=[];#generation=0;#draining=false;readonly #active=new Map<string,SelectableTextRuntime>();
  #routes:DefaultRoute[]=[];#groups:ModelGroup[]=[];#revoked:string[]=[];#representative:RepresentativeSettings|null=null;readonly #turns=new Set<symbol>();readonly #scope?:string;#revision=0;#updatedAt:string|null=null;#saving=false;#pending=false;#unknown=false;
- constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
+ constructor(store:Store<Mission>,artifacts:TextArtifactStore,options:ConnectionOptions){this.#store=store;this.#artifacts=artifacts;ensure(options.discoveryTimeoutMs===undefined||positive(options.discoveryTimeoutMs)&&options.discoveryTimeoutMs<=15000,'Invalid discovery timeout');ensure(options.discriminatorTimeoutMs===undefined||positive(options.discriminatorTimeoutMs)&&options.discriminatorTimeoutMs<=60000,'Invalid discriminator timeout');this.#options={...options,...(options.hostBindings?{hostBindings:structuredClone(options.hostBindings)}:{})};
   // Only a manifest gives stable identities; an unmanaged host stays session-only.
   if(this.#options.settings&&this.#options.hostBindings)this.#scope='manifest:'+this.#options.hostBindings.bindingHash;this.#enroll();}
  /** Synchronous enrollment and restore never write storage. */
@@ -103,21 +105,23 @@ export class ConnectionWorkbench implements WorkRuntime {
  private catalog(){// One catalog per transport mode avoids protocol aliasing between fixture and live.
   const profiles=[...this.#profiles.values()].map(v=>v.profile);const modes=new Set([...this.#profiles.values()].map(v=>this.#connections.get(v.connectionId)!.input.mode));ensure(modes.size<=1,'Fixture and live profiles cannot share a session');return new ConnectionCatalog(profiles,this.factories([...modes][0]??'https'));
  }
- private router(store=this.#store){return new SelectableTextRuntime(store,this.catalog(),this.#grants.filter(g=>g.mode==='mock-http'||this.#options.allowLiveExecution===true),this.#artifacts,(producers,cap)=>this.#differentFamilyAvailable(producers,cap),async(missionId,input)=>{
+ private serializeRuntimeWrite<T>(action:()=>Promise<T>){const next=this.#runtimeWrites.then(action);this.#runtimeWrites=next.catch(()=>{});return next;}
+ private router(store=this.#store){return new SelectableTextRuntime(store,this.catalog(),this.#grants.filter(g=>g.mode==='mock-http'||this.#options.allowLiveExecution===true),this.#artifacts,(producers,cap)=>this.#differentFamilyAvailable(producers,cap),async(missionId,input,write,signal)=>{
   const group=this.#groups.find(g=>g.role==='discriminator');if(!group)return;
   const work=(await store.load(missionId))?.value.works.find(w=>w.id===input.workId);if(!work)return;
   const remaining=4-(work.room?.messages.length??1);if(work.budget.reserved+workDiscriminatorPolicy(work).outputTokenReserve+remaining*(work.runtimeRun?.outputTokenCap??0)>work.budget.limit)return;
-  const moderator=new DiscriminatorService(store,async id=>{const resolved=await this.resolveDiscriminator(id);if(resolved&&work.assignments.some(a=>a.model.provider===resolved.adapter.pin.provider&&a.model.model===resolved.adapter.pin.model)){resolved.release();return null;}return resolved;});
-  return moderator.ask(missionId,group.id,input);
- });}
+  const shadowStore=new Proxy(store,{get(target,key){if(key==='commit')return (command:Parameters<typeof store.commit>[0])=>write(()=>target.commit(command));const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  const moderator=new DiscriminatorService(shadowStore,async id=>{const resolved=await this.resolveDiscriminator(id);if(resolved&&work.assignments.some(a=>a.model.provider===resolved.adapter.pin.provider&&a.model.model===resolved.adapter.pin.model)){resolved.release();return null;}return resolved;},Date.now,{timeoutMs:this.#options.discriminatorTimeoutMs,signal:AbortSignal.any([signal,this.#shadowStop.signal])});
+  const job=moderator.ask(missionId,group.id,input);this.#shadowJobs.add(job);try{return await job;}finally{this.#shadowJobs.delete(job);}
+ },action=>this.serializeRuntimeWrite(action));}
  /** ADR 0003 §7: any group, the derived default included, holding an available different-family checker within the cap. */
  #differentFamilyAvailable(producers:readonly {provider:string;model:string}[],outputTokenCap:number){return [DEFAULT_GROUP,...this.#groups.filter(g=>g.role!=='discriminator').map(g=>g.id)].some(id=>{const c=this.#choose(id,{outputTokenCap,producers});return c.status==='chosen'&&c.relation==='different-family';});}
  configuration(){const defaultRoutes=this.#routeViews();return {...this.router().configuration(),defaultRoutes,modelGroups:structuredClone(this.#groups),representative:structuredClone(this.#representative),selectionRequired:!defaultRoutes.some(r=>r.status==='active')};}
  availability(mission:Mission){return this.router().availability(mission);}
  preflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,choice?:ExecutionChoice){if(this.#pending||this.#unknown){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return {...result,ready:false,diagnostics:[...result.diagnostics,SETTINGS_BLOCKED]};}if(this.#active.size&& !this.#active.has(`${snapshot.value.id}\0${workId}`)){const result=workAdmissionPreflight(snapshot,workId,expectedRevision,choice?.outputTokenCap);return result.ready?hostBusyPreflight(result):result;}return this.router().preflight(snapshot,workId,expectedRevision,choice);}
  hasActiveAdmission(){return this.#active.size>0;}
- beginDrain(){this.#draining=true;for(const runtime of this.#active.values())runtime.beginDrain();}
- async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));}
+ beginDrain(){this.#draining=true;this.#shadowStop.abort();for(const runtime of this.#active.values())runtime.beginDrain();}
+ async drain(){this.beginDrain();await Promise.all([...this.#active.values()].map(runtime=>runtime.drain()));await Promise.allSettled([...this.#shadowJobs]);}
  /** Another host on the same database may have narrowed the settings; the stored revision is read before every admission. Preflight stays advisory. */
  async #storedSettingsCheck():Promise<ConnectionDiagnostic|undefined>{const settings=this.settingsStore();if(!settings||this.#pending||this.#unknown)return;const seen=this.#revision;let row;try{row=await settings.load(this.#scope!);}catch{return SETTINGS_BLOCKED;}
   if(this.#pending||this.#unknown||this.#revision!==seen)return SETTINGS_BLOCKED;if((row?.revision??0)===seen)return;if(this.#active.size===0)try{this.#adopt(row);}catch{this.#unknown=true;}return SETTINGS_CHANGED;}
