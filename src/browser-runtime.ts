@@ -28,11 +28,11 @@ export function maskBrowserField(f:{label:string;type:string;autocomplete:string
  return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||![f.label,f.name??'',f.autocomplete].some(v=>benign.test(v.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').trim()));
 }
 export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[number,number]>{
- const sourceOffsets:number[]=[];let visible='',offset=0;for(const character of value){if(!/[\p{Cf}\p{Default_Ignorable_Code_Point}]/u.test(character)){visible+=character;for(let i=0;i<character.length;i++)sourceOffsets.push(offset+i);}offset+=character.length;}
- if(visible!==value)return browserPrivateRanges(visible,secrets).map(([start,end])=>[sourceOffsets[start]!,sourceOffsets[end-1]!+1]);
+ const normalized=value.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'');
+ if(normalized!==value){const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=segment.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'');visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets).map(([start,end])=>[starts[start]!,ends[end-1]!]);}
  const ranges:Array<[number,number]>=[];
  if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
-  for(const secret of secrets){const needle=secret.replace(/[\s\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'');if(!needle)continue;let start=0;while((start=compact.indexOf(needle,start))!==-1){ranges.push([positions[start]!,positions[start+needle.length-1]!+1]);start+=needle.length;}}
+  for(const secret of secrets){const needle=secret.normalize('NFKC').replace(/[\s\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'');if(!needle)continue;let start=0;while((start=compact.indexOf(needle,start))!==-1){ranges.push([positions[start]!,positions[start+needle.length-1]!+1]);start+=needle.length;}}
  }
  for(const pattern of [/\b(?:\d[ -]?){13,19}\b/g,/\b(?:Bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi])for(const match of value.matchAll(pattern))ranges.push([match.index,match.index+match[0].length]);
  const merged:Array<[number,number]>=[];for(const range of ranges.sort((a,b)=>a[0]-b[0]||b[1]-a[1])){const last=merged.at(-1);if(last&&range[0]<last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range);}return merged;
