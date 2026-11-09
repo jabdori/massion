@@ -18,7 +18,11 @@ earlier-step dependencies and optionally a skip reason. The host validates the
 whole plan before delegating. The tree is root → producing/lead task → worker steps;
 the checking task is a separate root child. Skips settle with `Skipped · reason`.
 The producing model is the member's authorized model; each call has fresh context.
-Workers get exact Work/input/Record pointers and only their required task data.
+Workers get exact Work/input/Record pointers plus the resolved pinned task data
+from the existing executor input: Mission constraints, memory, source-document
+contents and owner clarifications. Provider adapters treat references as identifiers,
+so pointers alone cannot supply worker context. Steps share the bounded Work input
+bundle, keep source text untrusted, and never reload or rebind newer versions.
 The lead assembles worker results into the artifact. The existing independent checker
 checks its bytes and the family relation includes every producer assignment.
 

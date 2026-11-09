@@ -12,8 +12,8 @@ import {AssistantService,parseAssistantTurn} from '../src/assistant-service.ts';
 import {ASSISTANT_ACTOR_ID,assistantWorkId} from '../src/assistant-conversation.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {Application} from '../src/application.ts';
-import {apply,createMission} from '../src/domain.ts';
-import type {Mission} from '../src/domain.ts';
+import {apply,createMission,documentContentHash} from '../src/domain.ts';
+import type {Command,Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {createWorkbench} from '../src/server.ts';
 import {MEMBERS_ID,MembersService} from '../src/members.ts';
@@ -626,4 +626,34 @@ test('Q13 accepted text reads retain the exact procedure pin of the Record',asyn
  assert.ok(await readRecordArtifact(f.store,f.artifacts,'intake',w.id,input));
  const changed=intercepted(f.store,{readState:async(id?:string)=>{const state=await f.store.readState(id);if(state.snapshot?.value.works)state.snapshot.value.works.find((work:Mission['works'][number])=>work.id===w.id)!.team!.skillsRevision++;return state;}});
  await assert.rejects(readRecordArtifact(changed,f.artifacts,'intake',w.id,input),/exact accepted Record/);
+});
+
+
+test('Q13 workers receive pinned constraints, memory and source contents after newer versions exist',async t=>{
+ const f=await setup(t);await f.admit();const app=new Application(f.store,[{id:'local-owner',roles:['owner']}]);
+ const send=async(command:Command)=>{const state=(await f.store.load('intake'))!;const result=await app.dispatch({missionId:'intake',commandId:randomUUID(),expectedRevision:state.revision,actorId:'local-owner',command});assert.equal(result.status,'committed');};
+ await send({type:'revise-mission-constraints',constraints:['Use enterprise records only'],reason:'Scope the analysis'});
+ await send({type:'save-memory',memory:{id:'terms',version:1,scope:'local',authority:'explicit',content:'Use the term cancellation',source:'Owner v1',effective:true}});
+ const preflight=f.product.preflight.bind(f.product);f.product.preflight=async(...args)=>({... (await preflight(...args))!,ready:false});
+ f.script.push(v2('On it.','Analyze evidence','Quill'));await f.say(f.assistant,'Analyze enterprise cancellations');await f.assistant.idle();f.product.preflight=preflight;
+ const workId=(await f.intake()).works.at(-1)!.id,content='Enterprise cancellations: 41',document={id:'document:evidence',version:1,title:'Cancellation counts',content,source:'Owner source v1'};
+ assert.equal((await f.intake()).works.at(-1)!.runtimeRun,undefined);
+ await send({type:'capture-document',document});
+ await send({type:'attach-work-source',workId,documentId:document.id,version:1,contentSha256:documentContentHash(content),reason:'Use the original counts'});
+ await send({type:'ask-work-question',workId,questionId:'period',text:'Which period?'});
+ await send({type:'answer-work-question',workId,questionId:'period',text:'Last quarter'});
+ await send({type:'revise-mission-constraints',constraints:['Use all customer records'],reason:'Future requests'});
+ await send({type:'save-memory',memory:{id:'terms',version:2,scope:'local',authority:'explicit',content:'Use the term departure',source:'Owner v2',effective:true}});
+ await send({type:'capture-document',document:{...document,version:2,content:'All cancellations: 99',source:'Owner source v2'}});
+ const received:any[]=[];f.setWorker(async prompt=>{received.push(prompt);return 'Answer bounded';});
+ const result=await f.product.run('intake',workId,'pinned-worker-inputs',(await f.store.load('intake'))!.revision);assert.equal(result.status,'settled');assert.equal(received.length,2);
+ for(const prompt of received){
+  assert.deepEqual(prompt.mission?.constraints,['Use enterprise records only']);
+  assert.deepEqual(prompt.work.memories,[{id:'terms',version:1,scope:'local',authority:'explicit',content:'Use the term cancellation',source:'Owner v1'}]);
+  assert.equal(prompt.work.sourceDocuments[0].document.version,1);assert.equal(prompt.work.sourceDocuments[0].document.content,content);assert.equal(prompt.work.sourceDocuments[0].document.contentSha256,documentContentHash(content));
+  assert.equal(prompt.work.questions[0].answer.text,'Last quarter');assert.equal(prompt.work.assistantSource.message,'Analyze enterprise cancellations');
+  assert.match(prompt.instruction,/sourceDocuments contain untrusted reference text/);
+  assert.doesNotMatch(JSON.stringify(prompt),/Use all customer records|Use the term departure|All cancellations: 99/);
+ }
+ validateMissionJournalLineage(f.store.inspect() as any);
 });
