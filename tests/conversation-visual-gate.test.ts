@@ -23,6 +23,13 @@ test('unknown payment presentation uses the stored interruption time and approve
  assert.match(card().textContent,/결제 요청에 응답 없음 · 다시 보내지 않음/);assert.ok(card().textContent.includes(new Date(turn.work.exception.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})));
 });
 
+test('unknown Work date includes its original owner-turn time rather than interruption time',async()=>{
+ const {app,scene}=await unknownScene();const turn=(scene.routes['/assistant/conversation']!.body as any).turns[0];
+ const date=app.node('chat-log').children.find(n=>n.className==='chat-date')!;
+ assert.equal(date.textContent,runInContext('chatDay('+turn.at+')+" "+chatTime('+turn.at+')',app.context));
+ assert.ok(!date.textContent.endsWith(new Date(turn.work.exception.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})));
+});
+
 test('unknown Close opens exact existing quarantine review without submitting or settling anything',async()=>{
  const {app,posted,action}=await unknownScene();const close=action('닫기');assert.ok(close);assert.equal(action('다시 시도'),undefined);
  await close.fire('click');await settle();const reason=app.all().find(n=>n.id==='quarantine-reason-toner')!;assert.ok(reason);assert.equal(app.context.document.activeElement,reason);

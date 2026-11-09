@@ -165,3 +165,13 @@ Every occurrence is classified in [remaining.json](remaining.json). The unknown 
 
 - **R052 — unsupported product capability**: `FAIL  missing conversation button   "다시 묻기"`
   Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action.
+
+## B5 approval row (dark; artboard-only)
+
+- **V-B5-approval-dark — unsupported product capability**: `ARTBOARD missing conversation text example "레이저 토너 검정 · 34,000원 결제 승인함 14:12"`
+  No host path produces an identity-bound owner payment-approval decision/event for this Work. GET /assistant/conversation combines member, app and skill decisions only; POST /assistant/decisions dispatches to those same services. A domain effect authority string and an interruption receipt are not an owner approval decision, payment amount or approved product receipt. The generated B5 contract marks this row as an optional {content} data example (order 5), so it contributes zero required-check failures; it remains a visible artboard gap in both themes.
+
+## B5 approval row (light; artboard-only)
+
+- **V-B5-approval-light — unsupported product capability**: `ARTBOARD missing conversation text example "레이저 토너 검정 · 34,000원 결제 승인함 14:12"`
+  No host path produces an identity-bound owner payment-approval decision/event for this Work. GET /assistant/conversation combines member, app and skill decisions only; POST /assistant/decisions dispatches to those same services. A domain effect authority string and an interruption receipt are not an owner approval decision, payment amount or approved product receipt. The generated B5 contract marks this row as an optional {content} data example (order 5), so it contributes zero required-check failures; it remains a visible artboard gap in both themes.

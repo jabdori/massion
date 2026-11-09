@@ -192,12 +192,12 @@ function renderChat(){
  const attached=new Set((view.segment?.messages||[]).map(m=>m.turnId||'assistant-turn:'+m.id));
  const extraWorks=view.turns.filter(t=>t.proposal&&!attached.has(t.id)&&Number.isSafeInteger(t.at)).flatMap(t=>chatSlot(t).map(node=>({at:t.at,node:()=>node})));
  const extras=chatSegment?[]:[...extraWorks,...chatDecisions().map(d=>({at:d.at,node:()=>chatDecision(d)})),...chatBriefings().map(b=>({at:b.at,node:()=>chatBriefing(b,turns)})),...chatRunExceptions().map(e=>({at:e.at,node:()=>chatRunException(e)}))].sort((a,b)=>a.at-b.at);
- const dated=(at,node)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=view.turns.length&&view.turns.every(t=>!t.proposal)?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
+ const dated=(at,node,withTime=false)=>{if(Number.isSafeInteger(at)&&chatDay(at)!==day){day=chatDay(at);const label=withTime||view.turns.length&&view.turns.every(t=>!t.proposal)?day+' '+chatTime(at):day;items.push(chatNode('date:'+day,label,'chat-date'));}items.push(node);};
  for(const message of view.segment?view.segment.messages:[]){
   const turn=message.role==='owner'?turns.get('assistant-turn:'+message.id):turns.get(message.turnId);
   if(message.role==='owner'&&turn&&Number.isSafeInteger(turn.at))while(extras.length&&extras[0].at<turn.at){const extra=extras.shift();dated(extra.at,extra.node());}
   if(chatThread&&message.role!=='owner'&&turn?.proposal)items.push(...chatSlot(turn));
-  dated(message.role==='owner'&&turn?turn.at:null,chatMessage(message,turn));if(!turn)continue;
+  dated(message.role==='owner'&&turn?turn.at:null,chatMessage(message,turn),!!turn?.work?.unknown);if(!turn)continue;
   // The state line always follows its message, empty when there is nothing to say, so a later reply only appends.
   if(message.role==='owner'){items.push(chatTurnState(turn));const steer=chatSteerLine(turn);if(steer)items.push(steer);}
   else if(!chatThread&&turn.proposal)items.push(...chatSlot(turn));

@@ -71,8 +71,28 @@ an eventless check wait advancing from one to three minutes and a global-only
 wait observing completion without an event; neither path dispatches commands.
 
 [Before this visual gate: 54 diagnostics / 1,060 required](pre-visual-gate.json).
-The new measurement is 52 diagnostics / 1,058 required: two B5 Close diagnostics
+The first visual-gate measurement is 52 diagnostics / 1,058 required: two B5 Close diagnostics
 are resolved and the owner-withdrawn B11 editor control changes the denominator.
+
+## Visual gate round 2
+
+The same 52 required-check diagnostics remain. Two additional **artboard-only**
+B5 approval-row gaps (one per theme) are explicitly listed in `remaining.json`
+and the ledger; they do not change checker totals because the generated B5
+contract makes the approval row an optional content example (order 5). The host
+has no producing payment-approval decision/event bound to this Work: the read
+and command router support members/apps/skills decisions. An effect authority
+string or unknown interruption is not proof of owner approval, an item or amount.
+The accepted order-history residual remains unchanged.
+
+The B5 separator now shows the original stored request time, **11월 5일 (목)
+14:08**, independently of its 14:12 interruption. The GitHub rail uses the exact
+artboard branch paths at 18px, retaining navigation and other apps' fallback.
+B2/B5/B11/B18 all use the exact same artboard shield path, 14×14px rendered size,
+1.75px stroke and no fill in both themes; the B2 observation required verification,
+not a different icon. These measurements are in `visual-gate.json`.
+The full 150-state CI command and all eight pairs were re-captured for this round.
+[Before round 2](pre-visual-gate-round2.json).
 
 ## CI infrastructure regression
 
@@ -114,7 +134,7 @@ its viewport. No timeout or infrastructure-error rule changed.
 - Node 24.21.0, existing dependencies, and the brief's physical macOS `TMPDIR`.
 - `npm run typecheck`: passed.
 - `node scripts/check.mjs`: passed; copy lint zero findings; generated tokens current.
-- `npm test`: **1,550 passed, 340 skipped, one known local failure**:
+- `npm test`: **1,551 passed, 340 skipped, one known local failure**:
   `portable inventory order is stable across English and Turkish process locales`
   (`Text artifact boundary: directory realpath mismatch`). No inventory code changed.
 - Existing overlapping-command, drain-aware ownerStore, feed/deadline refresh,
@@ -213,22 +233,23 @@ as distinct occurrences. Existing generic Growth, memory and quarantine tools
 are not presented as identity-bound rule/payment/candidate flows they do not
 produce. File-add remains disabled because message attachment transport is absent.
 
-| State | Count | Allowed boundary | Reason |
-| --- | ---: | --- | --- |
-| B2 | 2 | unsupported product capability | A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view. |
-| B2 | 2 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
-| B3-run | 2 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
-| B4 | 2 | unsupported product capability | The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title. |
-| B4 | 2 | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
-| B4 | 12 | later B7 pane | The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout. |
-| B5 | 2 | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
-| B5 | 2 | unsupported product capability | No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated. |
-| B6 | 4 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
-| B6 | 4 | unsupported product capability | The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text. |
-| B16-later | 2 | unsupported product capability | The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated. |
-| B16-sent | 2 | unsupported product capability | Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record. |
-| B16-sent | 2 | unsupported product capability | The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated. |
-| B18 | 4 | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
-| B18 | 4 | unsupported product capability | The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text. |
-| B21-done-hana | 2 | unsupported product capability | MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled. |
-| B26-later | 2 | unsupported product capability | Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action. |
+| State | Count | Measurement | Allowed boundary | Reason |
+| --- | ---: | --- | --- | --- |
+| B2 | 2 | required check | unsupported product capability | A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view. |
+| B2 | 2 | required check | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
+| B3-run | 2 | required check | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
+| B4 | 2 | required check | unsupported product capability | The host decision router supports member/apps/skills decisions, not an identity-bound in-progress payment approval attached to this Work. Generic waiting is shown truthfully; no payment gate binding is inferred from a title. |
+| B4 | 2 | required check | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
+| B4 | 12 | required check | later B7 pane | The existing Work pane is the legacy execution/evidence view. Payment amount slots and its compact layout/copy belong to B7; no conversation/header/sidebar redesign can supply that pane layout. |
+| B5 | 2 | required check | unsupported product capability | No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt. |
+| B5 | 2 | required check | unsupported product capability | No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated. |
+| B6 | 4 | required check | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
+| B6 | 4 | required check | unsupported product capability | The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text. |
+| B16-later | 2 | required check | unsupported product capability | The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated. |
+| B16-sent | 2 | required check | unsupported product capability | Approval alone is not a sent external-agent request. The host has no owned laptop/Claude Code delegation dispatch/read-back in this slice, so it cannot truthfully emit the requested sent-at/awaiting-reply activity record. |
+| B16-sent | 2 | required check | unsupported product capability | The approved scene has a new Representative acknowledgement after the defer/delegation decision. The current decision operation updates decision state only and produces no subsequent conversation message. Existing replies retain their true earlier order; a new reply is not fabricated. |
+| B18 | 4 | required check | unsupported product capability | The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented. |
+| B18 | 4 | required check | unsupported product capability | The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text. |
+| B21-done-hana | 2 | required check | unsupported product capability | MembersCommand has no admission undo/remove operation. The completed admission now exposes and opens the exact stored member ID, but no unsupported undo action is enabled. |
+| B26-later | 2 | required check | unsupported product capability | Budget-waiting/deferred-budget decisions and a matching reopen command are not produced by the host. Reopening a member or rounding decision would not implement this budget action. |
+| B5 | 2 | artboard-only | unsupported product capability | No host path produces an identity-bound owner payment-approval decision/event for this Work. GET /assistant/conversation combines member, app and skill decisions only; POST /assistant/decisions dispatches to those same services. A domain effect authority string and an interruption receipt are not an owner approval decision, payment amount or approved product receipt. The generated B5 contract marks this row as an optional {content} data example (order 5), so it contributes zero required-check failures; it remains a visible artboard gap in both themes. |

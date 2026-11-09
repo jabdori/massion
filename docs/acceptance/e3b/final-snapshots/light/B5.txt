@@ -18,7 +18,7 @@
       - generic
         - log
           - paragraph
-            - StaticText "11월 5일 (목)"
+            - StaticText "11월 5일 (목) 14:08"
           - paragraph
             - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
           - generic

@@ -670,5 +670,41 @@
       "src/schedules.ts",
       "src/members.ts"
     ]
+  },
+  {
+    "id": "V-B5-approval-dark",
+    "screen": "B5",
+    "theme": "dark",
+    "diagnostic": "ARTBOARD missing conversation text example \"레이저 토너 검정 · 34,000원 결제 승인함 14:12\"",
+    "scope": "unsupported product capability",
+    "measurement": "artboard-only",
+    "required": false,
+    "contractOrder": 5,
+    "reason": "No host path produces an identity-bound owner payment-approval decision/event for this Work. GET /assistant/conversation combines member, app and skill decisions only; POST /assistant/decisions dispatches to those same services. A domain effect authority string and an interruption receipt are not an owner approval decision, payment amount or approved product receipt. The generated B5 contract marks this row as an optional {content} data example (order 5), so it contributes zero required-check failures; it remains a visible artboard gap in both themes.",
+    "evidence": [
+      "docs/product/screens/contracts/B5.json:143",
+      "src/server.ts:137",
+      "src/server.ts:146",
+      "src/domain.ts:313",
+      "src/assistant-service.ts:36"
+    ]
+  },
+  {
+    "id": "V-B5-approval-light",
+    "screen": "B5",
+    "theme": "light",
+    "diagnostic": "ARTBOARD missing conversation text example \"레이저 토너 검정 · 34,000원 결제 승인함 14:12\"",
+    "scope": "unsupported product capability",
+    "measurement": "artboard-only",
+    "required": false,
+    "contractOrder": 5,
+    "reason": "No host path produces an identity-bound owner payment-approval decision/event for this Work. GET /assistant/conversation combines member, app and skill decisions only; POST /assistant/decisions dispatches to those same services. A domain effect authority string and an interruption receipt are not an owner approval decision, payment amount or approved product receipt. The generated B5 contract marks this row as an optional {content} data example (order 5), so it contributes zero required-check failures; it remains a visible artboard gap in both themes.",
+    "evidence": [
+      "docs/product/screens/contracts/B5.json:143",
+      "src/server.ts:137",
+      "src/server.ts:146",
+      "src/domain.ts:313",
+      "src/assistant-service.ts:36"
+    ]
   }
 ]

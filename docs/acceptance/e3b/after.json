@@ -591,6 +591,7 @@
     "unsupported": 40,
     "axFallbackFailures": 76,
     "visual": 0,
-    "infrastructure": 0
+    "infrastructure": 0,
+    "artboardOnlyResiduals": 2
   }
 }

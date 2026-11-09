@@ -23,6 +23,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "emptyLog": {
         "children": 0,
         "display": "flex",
@@ -60,12 +69,14 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 4일 (수)"
         },
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -74,7 +85,16 @@
         "icons": 2,
         "text": "기본 권한"
       },
-      "pointerRing": "none"
+      "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null
     }
   },
   {
@@ -104,7 +124,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목) 14:08"
         }
       ],
       "draftCopy": false,
@@ -114,6 +135,22 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": {
+        "height": 18,
+        "hidden": "true",
+        "icon": true,
+        "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E\")",
+        "text": "",
+        "width": 18
+      },
       "unknown": {
         "buttons": [
           "확인",
@@ -179,7 +216,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 4일 (수) 21:30"
         }
       ],
       "draftCopy": false,
@@ -189,6 +227,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "popup": {
         "border": "1px",
         "icon": true,
@@ -252,7 +299,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -262,6 +310,22 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": {
+        "height": 18,
+        "hidden": "true",
+        "icon": true,
+        "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E\")",
+        "text": "",
+        "width": 18
+      },
       "keyboard": {
         "active": "chat-input",
         "color": "rgb(131, 137, 147)",
@@ -297,7 +361,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -307,6 +372,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "modal": {
         "shortcutsBlocked": true,
         "directCallerBlocked": true,
@@ -339,6 +413,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "emptyLog": {
         "children": 0,
         "display": "flex",
@@ -376,12 +459,14 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 4일 (수)"
         },
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -390,7 +475,16 @@
         "icons": 2,
         "text": "기본 권한"
       },
-      "pointerRing": "none"
+      "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null
     }
   },
   {
@@ -420,7 +514,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목) 14:08"
         }
       ],
       "draftCopy": false,
@@ -430,6 +525,22 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": {
+        "height": 18,
+        "hidden": "true",
+        "icon": true,
+        "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E\")",
+        "text": "",
+        "width": 18
+      },
       "unknown": {
         "buttons": [
           "확인",
@@ -495,7 +606,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 4일 (수) 21:30"
         }
       ],
       "draftCopy": false,
@@ -505,6 +617,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "popup": {
         "border": "1px",
         "icon": true,
@@ -568,7 +689,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -578,6 +700,22 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": {
+        "height": 18,
+        "hidden": "true",
+        "icon": true,
+        "mask": "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E\")",
+        "text": "",
+        "width": 18
+      },
       "keyboard": {
         "active": "chat-input",
         "color": "rgb(93, 93, 93)",
@@ -613,7 +751,8 @@
         {
           "after": "none",
           "align": "center",
-          "before": "none"
+          "before": "none",
+          "text": "11월 5일 (목)"
         }
       ],
       "draftCopy": false,
@@ -623,6 +762,15 @@
         "text": "기본 권한"
       },
       "pointerRing": "none",
+      "shield": {
+        "fill": "none",
+        "height": 14,
+        "path": "M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z",
+        "strokeWidth": "1.75px",
+        "viewBox": "0 0 24 24",
+        "width": 14
+      },
+      "github": null,
       "modal": {
         "shortcutsBlocked": true,
         "directCallerBlocked": true,

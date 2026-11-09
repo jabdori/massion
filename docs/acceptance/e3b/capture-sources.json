@@ -179,5 +179,7 @@
       "theme": "light"
     }
   ],
-  "visualAssertions": ".runtime/conversation-visual-gate/measurements.json"
+  "visualAssertions": ".runtime/conversation-visual-gate/measurements.json",
+  "round": "visual-gate-2",
+  "baselineCommit": "ae5d611"
 }
