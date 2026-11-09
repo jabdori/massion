@@ -1,72 +1,17 @@
 {
   "screen": "B1-first",
   "extends": "B1",
-  "description": "First-work selection with mail unavailable.",
-  "gaps": [
-    "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted."
-  ],
-  "routes": {
-    "/assistant/conversation": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "head": 1,
-        "members": [],
-        "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": []
-        },
-        "turns": [],
-        "decisions": [
-          {
-            "id": "mail-connect",
-            "at": 1793855520000,
-            "title": "Gmail",
-            "question": "Gmail을 연결할까요?",
-            "rows": [],
-            "action": "연결",
-            "state": "open"
-          }
-        ],
-        "briefings": []
-      }
+  "description": "Owner first Work picker; real controls only, no commands.",
+  "gaps": [],
+  "steps": [
+    {
+      "selector": "#sidebar-toggle",
+      "action": "click"
     },
-    "/assistant/conversation?segment=1": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "head": 1,
-        "members": [],
-        "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": []
-        },
-        "turns": [],
-        "decisions": [
-          {
-            "id": "mail-connect",
-            "at": 1793855520000,
-            "title": "Gmail",
-            "question": "Gmail을 연결할까요?",
-            "rows": [],
-            "action": "연결",
-            "state": "open"
-          }
-        ],
-        "briefings": []
-      }
+    {
+      "selector": "#first-calculation",
+      "action": "click",
+      "readySelector": "#first-assign"
     }
-  }
+  ]
 }

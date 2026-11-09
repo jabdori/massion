@@ -16621,5 +16621,77 @@
    "B22-room:conversation",
    "B22-room-steps:conversation"
   ]
+ },
+ "ui.first.greeting": {
+  "ko": "안녕하세요, {member}예요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.question": {
+  "ko": "무엇부터 맡길까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.mail-question": {
+  "ko": "Gmail을 연결할까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.mail-later": {
+  "ko": "나중에: Gmail 앱",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.calculation": {
+  "ko": "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘. 정확히 한 줄로만 답해.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.member-greeting": {
+  "ko": "안녕하세요, {member}이에요.\n{topic}을 맡을게요.\n무엇부터 맡길까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.login-pending": {
+  "ko": "로그인을 마친 뒤 확인해주세요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
+ },
+ "ui.first.login-check": {
+  "ko": "로그인 확인",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "E7:first-experience"
+  ]
  }
 }

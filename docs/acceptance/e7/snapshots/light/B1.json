@@ -1,0 +1,31 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e3]\n    - button \"결과물\" [ref=e4]\n    - button \"예약\" [ref=e5]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e6]\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 보기\" [expanded=false, ref=e7]\n      - heading \"하나\" [level=1, ref=e8]\n        - button \"하나\" [ref=e10]\n    - region \"대화\" [ref=e9]\n      - generic\n        - log\n          - generic\n            - paragraph\n              - StaticText \"안녕하세요, 하나예요.\"\n            - button \"복사\" [ref=e15]\n          - generic\n            - paragraph\n              - StaticText \"무엇부터 맡길까요?\"\n            - link \"문단 세 줄 요약\" [ref=e16]\n              - StaticText \"문단 세 줄 요약\"\n            - link \"할인 후 합계 계산\" [ref=e17]\n              - StaticText \"할인 후 합계 계산\"\n            - link \"매일 아침 어제 일 알려 주기\" [ref=e18]\n              - StaticText \"매일 아침 어제 일 알려 주기\"\n            - link \"기타\" [ref=e19]\n              - StaticText \"기타\"\n      - generic\n        - form\n          - textbox \"답변을 입력하거나 다른 이야기를 하세요\" [ref=e11]\n          - button \"파일 추가\" [disabled, ref=e12]\n          - button \"기본 권한\" [ref=e13]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e14]"
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "안녕하세요, 하나예요.",
+      "무엇부터 맡길까요?",
+      "A",
+      "문단 세 줄 요약",
+      "B",
+      "할인 후 합계 계산",
+      "C",
+      "매일 아침 어제 일 알려 주기",
+      "D",
+      "기타"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ]
+  }
+}

@@ -40,7 +40,9 @@ test('only worker steps become role chips after the member and before Check; com
  assert.deepEqual(list.children.map(n=>n.textContent),['해지 내역 수집','고객 분류','설문 발송건너뜀 · 기존 설문','원인 요약선행 단계 · 고객 분류','확인0/1','기록']);
  assert.ok(list.children.every(n=>n.children.every(child=>child.children.length===0)),'compact rows have no nested identity or result blocks');
  assert.equal(list.children[2]!.textContent.split('기존 설문').length,2,'the skip reason appears once');
- assert.match(results()!.textContent,/퀼.*조사.*해지 41건/);
+ assert.deepEqual(results()!.children[0]!.children[0]!.children.map(n=>n.textContent),['조사','퀼']);
+ assert.match(results()!.textContent,/조사.*퀼.*해지 41건/);
+ assert.equal(list.children.flatMap(n=>n.children).filter(n=>n.tagName==='TIME').length,0,'Work start time is not a recorded worker-step time');
  assert.equal(results()!.children.length,1,'only non-skipped worker output is shown');
  const compact=list.parentElement!.parentElement!;
  assert.ok(compact.parentElement!.children.indexOf(compact)<compact.parentElement!.children.indexOf(results()!),'results follow the procedure');

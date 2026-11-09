@@ -5,7 +5,7 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {startFixtureHost,loadFixture} from '../../scripts/ui-contracts/fixture-host.ts';
 import {workbenchReady,visibleTextBudgetExpression,visibleBudgets,parseCheck} from '../../scripts/ui-contracts/report.ts';
 import {validateTeamProcedure} from '../../src/internal-teams.ts';
-const run=promisify(execFile),session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-q13'])).stdout.trim(),out=process.cwd()+'/docs/acceptance/q13-ui',rows=[];
+const run=promisify(execFile),session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-q13'])).stdout.trim(),out=process.cwd()+'/'+(process.env.UI_CONTRACTS_OUTPUT||'docs/acceptance/q13-ui'),rows=[];
 await mkdir('.runtime/q13',{recursive:true});await mkdir(out,{recursive:true});
 await writeFile('.runtime/q13/browser-config.json','{}\n');
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));
@@ -26,7 +26,7 @@ for(const [screen,theme] of [['B7-teams','dark'],['B7-teams','light'],['B8-teams
   await evaluate(`globalThis.q13Commands=0;const q13Fetch=globalThis.fetch;globalThis.fetch=(path,options)=>{if(path==='/protocol/request'&&JSON.parse(options.body).kind==='command')q13Commands++;return q13Fetch(path,options)}`);
   const state=await evaluate(`(()=>{const card=document.querySelector('.work-room:not([hidden])'),wide=document.getElementById('app').classList.contains('wide'),list=card.querySelector(wide?'.room-flow':'.room-steps'),result=card.querySelector('.room-worker-results');return {wide,people:[...card.querySelector('.room-people').children].map(n=>n.textContent),text:list.textContent,results:result?.textContent,rows:list.querySelectorAll('li').length,flat:[...card.querySelectorAll('.room-steps li')].every(n=>[...n.children].every(c=>c.children.length===0)),resultAfterProcedure:!!(card.querySelector('.room-procedure').compareDocumentPosition(result)&Node.DOCUMENT_POSITION_FOLLOWING),duration:card.querySelector('.room-status time').textContent,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
   assert.deepEqual(state.people,['퀼퀼','조사','분류','설문','요약','확인']);assert.equal(state.flat,true);assert.equal(state.resultAfterProcedure,true);
-  assert.equal(state.duration,'4분');assert.match(state.results,/퀼.*조사.*지난 90일 해지 41건/);
+  assert.equal(state.duration,'4분');assert.match(state.results,/조사.*퀼.*지난 90일 해지 41건/);
   if(state.wide)assert.match(state.text,/해지 내역 수집.*퀼.*조사.*지난 90일 해지 41건/);else assert.doesNotMatch(state.text,/퀼|지난 90일 해지 41건/);
   assert.match(state.text,/건너뜀 · 기존 설문 활용/);assert.doesNotMatch(state.text,/Skipped/);assert.match(state.text,/선행 단계 · 고객 분류/);assert.equal(state.overflow,false);
   await browser('screenshot',out+'/'+stem+'.png');const snapshot=await browser('snapshot');await writeFile(out+'/'+stem+'.snapshot.txt',snapshot.snapshot+'\n');
