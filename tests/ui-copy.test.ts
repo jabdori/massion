@@ -20,3 +20,10 @@ test('conversation fidelity copy retains approved artboard provenance',()=>{
  assert.equal(copy('ui.scroll-bottom'),'맨 아래로');
  assert.equal(copy('ui.interrupted',{time:'21:12'}),'응답이 끊겼어요 · 21:12');
 });
+test('member greetings select Korean particles for vowel-final and consonant-final names and topics in host and client copy',()=>{
+ const client=runInNewContext(uiCopyClient+'; copy');
+ for(const format of [copy,client]){
+  assert.equal(format('ui.first.member-greeting',{member:'미아',topic:'자료 조사'}),'안녕하세요, 미아예요.\n자료 조사를 맡을게요.\n무엇부터 맡길까요?');
+  assert.equal(format('ui.first.member-greeting',{member:'셈',topic:'합계 확인'}),'안녕하세요, 셈이에요.\n합계 확인을 맡을게요.\n무엇부터 맡길까요?');
+ }
+});

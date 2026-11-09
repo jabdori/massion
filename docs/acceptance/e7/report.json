@@ -1,0 +1,149 @@
+{
+  "blocking": true,
+  "rows": [
+    {
+      "screen": "B1",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 0,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1.png"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "passed": 4,
+      "failed": 0,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1-signin.png"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 0,
+      "warnings": 0,
+      "required": 14,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1-first.png"
+    },
+    {
+      "screen": "B1-first-calc",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 0,
+      "warnings": 0,
+      "required": 12,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1-first-calc.png"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 0,
+      "warnings": 0,
+      "required": 13,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1-first-later.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21-done.png"
+    },
+    {
+      "screen": "B1",
+      "theme": "light",
+      "passed": 11,
+      "failed": 0,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1.png"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "passed": 4,
+      "failed": 0,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1-signin.png"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "light",
+      "passed": 14,
+      "failed": 0,
+      "warnings": 0,
+      "required": 14,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1-first.png"
+    },
+    {
+      "screen": "B1-first-calc",
+      "theme": "light",
+      "passed": 12,
+      "failed": 0,
+      "warnings": 0,
+      "required": 12,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1-first-calc.png"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "light",
+      "passed": 13,
+      "failed": 0,
+      "warnings": 0,
+      "required": 13,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1-first-later.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "light",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21-done.png"
+    }
+  ]
+}
