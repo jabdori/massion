@@ -107,3 +107,15 @@ test('an established configured connection opens conversation even when subscrip
  const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
  assert.equal(app.node('first-signin').hidden,true);assert.equal(app.node('app').hidden,false);assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
+test('a conflicting login stays pending while an unavailable login reports disconnection, without another command',async()=>{
+ for(const [status,expected] of [[409,'로그인을 마친 뒤 확인해주세요.'],[503,'연결 끊김']] as const){
+  const f=await loadFixture('B1-signin');let starts=0;
+  const app=harness(async(path)=>{if(path==='/connection-login'){starts++;return reply({error:'Login already started or unresolved'},status);}const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
+  await app.node('first-chatgpt').fire('click');await settle();assert.equal(app.node('first-login-status').textContent,expected);assert.equal(app.node('first-login-check').hidden,false);assert.equal(starts,1);
+ }
+});
+test('an installed Gmail rail app suppresses its first-work connection proposal',async()=>{
+ const f=await loadFixture('B1');(f.routes['/assistant/conversation']!.body as any).apps=[{id:'app-gmail',name:'Gmail',page:true,item:false,roomTab:null}];
+ const app=harness(async path=>{const route=f.routes[path]??(path.startsWith('/events?')?f.routes['/events']:undefined);return reply(route?.body??{},route?.status??503);});await settle();
+ await find(app,'first-calculation')!.fire('click');assert.ok(find(app,'first-assign'));assert.ok(!app.node('chat-log').textContent.includes('Gmail을 연결할까요?'));assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});

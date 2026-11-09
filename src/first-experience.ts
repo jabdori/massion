@@ -20,7 +20,7 @@ function firstItems(){
  if(!firstEmpty())return items;
  const mail=chatDecisions().find(d=>d.id==='mail-connect');
  if(firstPicker||mail){
-  if(!chatView.apps?.some(a=>a.id==='gmail')){
+  if(!chatView.apps?.some(a=>a.id==='app-gmail')){
    const later=storage.get(firstMailKey())==='later'||mail?.state==='later';
    if(later)items.push(chatKeyed('first-mail-later','p','chat-system','later',()=>[element('span',copy('ui.first.mail-later')),firstLink('first-mail-ask',copy('conversation.button.06'),()=>{storage.remove(firstMailKey());renderChat();})]));
    else items.push(chatKeyed('first-mail-open','section','chat-decision first-mail','open',()=>[element('p',copy('ui.first.mail-question')),firstLink('first-mail-connect',copy('conversation.button.12'),()=>{shellShow('settings');settingsOpen('apps');}),firstLink('first-mail-later',copy('conversation.button.04'),()=>{storage.set(firstMailKey(),'later');renderChat();})]));
@@ -36,7 +36,7 @@ function firstItems(){
 }
 async function firstLogin(providerType){if(firstLoginBusy)return;firstLoginBusy=true;$('first-claude').disabled=true;$('first-chatgpt').disabled=true;
  const epoch=connectionEpoch,key=providerType;let commandId=firstLoginCommands.get(key);if(!commandId){commandId='login:'+crypto.randomUUID();firstLoginCommands.set(key,commandId);}
- try{const {response}=await request('/connection-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({providerType,commandId})});if(epoch!==connectionEpoch)return;$('first-login-status').textContent=response.ok?copy('ui.first.login-pending'):copy('ui.unavailable');}
+ try{const {response}=await request('/connection-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({providerType,commandId})});if(epoch!==connectionEpoch)return;$('first-login-status').textContent=response.ok||response.status===409?copy('ui.first.login-pending'):copy('ui.unavailable');}
  catch{if(epoch===connectionEpoch)$('first-login-status').textContent=copy('conversation.text.01');}
  finally{firstLoginBusy=false;$('first-claude').disabled=false;$('first-chatgpt').disabled=false;$('first-login-status').hidden=false;$('first-login-check').hidden=false;}
 }
