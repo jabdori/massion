@@ -1,0 +1,584 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+    "occurrence": 2,
+    "category": "unsupported business-role order cascade",
+    "reason": "The B7-churn snapshot has only root/executor/verifier tasks and no named worker steps or role metadata. Removing the uncounted duplicate root restores the procedure heading/count order. The new role-order occurrence is a strict-order cascade over the still absent business-role sequence; it is not justification for inventing a research role from the Work title.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/work-room-panel.ts:60",
+      "scripts/ui-contracts/fixtures/B7-churn.json"
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "kind": "visual",
+    "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "unsupported browser surface",
+    "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
+    "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
+    "sources": [
+      "scripts/ui-contracts/fixtures/B15.json:1",
+      "src/surface-shell.ts:128",
+      "docs/acceptance/E3d2/full150.json:581",
+      "docs/acceptance/e3c/full150.json:589"
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "kind": "visual",
+    "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
+    "occurrence": 1,
+    "category": "unsupported browser surface",
+    "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
+    "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
+    "sources": [
+      "scripts/ui-contracts/fixtures/B15.json:1",
+      "src/surface-shell.ts:128",
+      "docs/acceptance/E3d2/full150.json:581",
+      "docs/acceptance/e3c/full150.json:589"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported active procedure-edit scenario",
+    "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
+    "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+    "sources": [
+      "src/assistant-service.ts:253",
+      "src/domain.ts:316",
+      "src/domain.ts:344",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 1,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 2,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 3,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 4,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽는 중\"",
+    "occurrence": 1,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "kind": "visual",
+    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "existing prototype geometry drift",
+    "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
+    "sources": [
+      "src/assistant-conversation-panel.ts:7",
+      "docs/product/screens/contracts/B22-room.json",
+      "docs/acceptance/E3d2/full150.json:819"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported active procedure-edit scenario",
+    "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
+    "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+    "sources": [
+      "src/assistant-service.ts:253",
+      "src/domain.ts:316",
+      "src/domain.ts:344",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 2,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "kind": "visual",
+    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "existing prototype geometry drift",
+    "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
+    "sources": [
+      "src/assistant-conversation-panel.ts:7",
+      "docs/product/screens/contracts/B22-room-steps.json",
+      "docs/acceptance/E3d2/full150.json:819"
+    ]
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
+    "occurrence": 2,
+    "category": "unsupported business-role order cascade",
+    "reason": "The B7-churn snapshot has only root/executor/verifier tasks and no named worker steps or role metadata. Removing the uncounted duplicate root restores the procedure heading/count order. The new role-order occurrence is a strict-order cascade over the still absent business-role sequence; it is not justification for inventing a research role from the Work title.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/work-room-panel.ts:60",
+      "scripts/ui-contracts/fixtures/B7-churn.json"
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "kind": "visual",
+    "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "unsupported browser surface",
+    "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
+    "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
+    "sources": [
+      "scripts/ui-contracts/fixtures/B15.json:1",
+      "src/surface-shell.ts:128",
+      "docs/acceptance/E3d2/full150.json:581",
+      "docs/acceptance/e3c/full150.json:589"
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "kind": "visual",
+    "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
+    "occurrence": 1,
+    "category": "unsupported browser surface",
+    "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
+    "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
+    "sources": [
+      "scripts/ui-contracts/fixtures/B15.json:1",
+      "src/surface-shell.ts:128",
+      "docs/acceptance/E3d2/full150.json:581",
+      "docs/acceptance/e3c/full150.json:589"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported active procedure-edit scenario",
+    "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
+    "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+    "sources": [
+      "src/assistant-service.ts:253",
+      "src/domain.ts:316",
+      "src/domain.ts:344",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 1,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 2,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 3,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽음\"",
+    "occurrence": 4,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane status \"읽는 중\"",
+    "occurrence": 1,
+    "category": "unsupported file-read telemetry",
+    "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+    "sources": [
+      "src/apps.ts:18",
+      "src/domain.ts:31",
+      "src/apps-panel.ts:42",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "kind": "visual",
+    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "existing prototype geometry drift",
+    "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
+    "sources": [
+      "src/assistant-conversation-panel.ts:7",
+      "docs/product/screens/contracts/B22-room.json",
+      "docs/acceptance/E3d2/full150.json:819"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported active procedure-edit scenario",
+    "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
+    "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+    "sources": [
+      "src/assistant-service.ts:253",
+      "src/domain.ts:316",
+      "src/domain.ts:344",
+      "scripts/ui-contracts/fixtures/B22-room.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+    "occurrence": 2,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "unsupported step telemetry and order cascade",
+    "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+    "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+    "sources": [
+      "src/domain.ts:31",
+      "src/internal-teams.ts",
+      "src/work-room-panel.ts:62",
+      "src/work-room-panel.ts:66",
+      "docs/product/screens/contracts/B22-room-steps.json"
+    ]
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "kind": "visual",
+    "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
+    "occurrence": 1,
+    "category": "existing prototype geometry drift",
+    "reason": "The shared conversation uses 24px inline padding; these two artboards use 20px. Both exact 4px/8px composer differences already occur in pre-Q14 E3c/E3d2 captures. This is retained visual drift, not a missing telemetry producer or a fixed contract. No screen-name CSS exception or global padding regression is introduced.",
+    "ledger": "docs/acceptance/room-residuals/README.md#composer-geometry",
+    "sources": [
+      "src/assistant-conversation-panel.ts:7",
+      "docs/product/screens/contracts/B22-room-steps.json",
+      "docs/acceptance/E3d2/full150.json:819"
+    ]
+  }
+]
