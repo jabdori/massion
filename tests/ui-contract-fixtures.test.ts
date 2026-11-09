@@ -205,10 +205,11 @@ test('conversation fixtures keep the supported histories and navigation of their
  }
 });
 
-test('B22 evidence setup opens the new Work room inspection before its nested legacy evidence',async()=>{
+test('B22 steps setup opens the Work room without expanding legacy evidence',async()=>{
  const {loadFixture}=await hostModule(),fixture=await loadFixture('B22-room-steps');
- const outer=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-room-check-pr84'),inner=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-evidence-summary-pr84');
- assert.ok(outer>=0&&inner>outer,'the setup must reveal the outer Work room summary first');
+ assert.equal(fixture.steps.length,2);
+ assert.ok(fixture.steps.every(s=>!('selector' in s)||!s.selector.includes('evidence')&&!s.selector.includes('work-room-check')));
+ const work=(fixture.routes['/missions/intake']!.body as any).value.works[0];assert.deepEqual(work.tasks.filter((t:any)=>t.step).map((t:any)=>t.step.title),['읽기','테스트 돌리기']);
 });
 
 test('E6c effect fixtures use production decisions; budget fallbacks still never fabricate a decision',async()=>{

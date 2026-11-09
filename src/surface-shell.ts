@@ -132,6 +132,7 @@ function renderPane(){
  chatCheckoutRender(shown);$('work-pane').hidden=!paneTabs.length||paneHidden;shellWorkspace();if(paneTabs.length)$('page-status').hidden=true;paneFilter();paneParticipants();if(!paneTabs.length&&paneWideOn)paneWide(false);
  $('pane-tabs').replaceChildren(...paneTabs.map((t,index)=>{const wrap=element('div',undefined,'pane-tab'),tab=element('button',t.title),close=element('button','×');tab.type='button';close.type='button';tab.id='pane-tab-'+t.key;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',t.checkout?'pane-effect':'pane-body');tab.setAttribute('aria-selected',String(t.key===paneActive));tab.tabIndex=t.key===paneActive?0:-1;close.setAttribute('aria-label',copy('ui.close-title',{title:t.title}));
   tab.addEventListener('click',()=>void paneSelect(t.key));tab.addEventListener('keydown',event=>{const step=event.key==='ArrowRight'?1:event.key==='ArrowLeft'?-1:0;if(!step)return;event.preventDefault();void paneSelect(paneTabs[(index+step+paneTabs.length)%paneTabs.length].key);});close.addEventListener('click',()=>paneCloseTab(t.key));wrap.append(tab,close);return wrap;}));
+ if(chatView)renderChat();
 }
 for(const [name,[,,rail]] of Object.entries(shellPages))if(rail)$(rail).addEventListener('click',()=>{if(name==='chat')chatOpenThread('');else shellShow(name);});
 $('side-representative').addEventListener('click',()=>chatOpenThread(''));

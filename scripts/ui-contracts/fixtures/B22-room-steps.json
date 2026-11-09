@@ -1,6 +1,6 @@
 {
   "screen": "B22-room-steps",
-  "description": "Juno pull request work with evidence expanded. Fixed API data; freeze browser Date to now.",
+  "description": "Juno pull request steps in the B7 Work room pane. Fixed API data; freeze browser Date to now.",
   "now": 1793855520000,
   "readySelector": "#side-member-member-juno",
   "steps": [
@@ -13,21 +13,9 @@
       "selector": "[id=\"chat-card-assistant-turn:m:pr84\"] .chat-card-open",
       "action": "click",
       "readySelector": "#work-heading-pr84"
-    },
-    {
-      "selector": "#work-room-check-pr84",
-      "action": "click",
-      "readySelector": "#work-evidence-summary-pr84"
-    },
-    {
-      "selector": "#work-evidence-summary-pr84",
-      "action": "click",
-      "readySelector": "#work-attempts-summary-pr84"
     }
   ],
-  "gaps": [
-    "The contract step strip has no production counterpart; the actual Work evidence is expanded."
-  ],
+  "gaps": [],
   "reuse": [
     "tests/apps-surface.test.ts",
     "tests/surface-shell.test.ts",
@@ -266,6 +254,38 @@
                     "id": "pr84:root",
                     "parentId": null,
                     "status": "active"
+                  },
+                  {
+                    "id": "pr84:executor",
+                    "parentId": "pr84:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "pr84:read",
+                    "parentId": "pr84:executor",
+                    "status": "active",
+                    "step": {
+                      "role": "읽기",
+                      "title": "읽기",
+                      "dependsOn": []
+                    }
+                  },
+                  {
+                    "id": "pr84:test",
+                    "parentId": "pr84:executor",
+                    "status": "queued",
+                    "step": {
+                      "role": "테스트",
+                      "title": "테스트 돌리기",
+                      "dependsOn": [
+                        "pr84:read"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "pr84:verifier",
+                    "parentId": "pr84:root",
+                    "status": "queued"
                   }
                 ],
                 "attempts": [
@@ -377,6 +397,38 @@
                   "id": "pr84:root",
                   "parentId": null,
                   "status": "active"
+                },
+                {
+                  "id": "pr84:executor",
+                  "parentId": "pr84:root",
+                  "status": "active"
+                },
+                {
+                  "id": "pr84:read",
+                  "parentId": "pr84:executor",
+                  "status": "active",
+                  "step": {
+                    "role": "읽기",
+                    "title": "읽기",
+                    "dependsOn": []
+                  }
+                },
+                {
+                  "id": "pr84:test",
+                  "parentId": "pr84:executor",
+                  "status": "queued",
+                  "step": {
+                    "role": "테스트",
+                    "title": "테스트 돌리기",
+                    "dependsOn": [
+                      "pr84:read"
+                    ]
+                  }
+                },
+                {
+                  "id": "pr84:verifier",
+                  "parentId": "pr84:root",
+                  "status": "queued"
                 }
               ],
               "attempts": [
