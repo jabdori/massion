@@ -1,8 +1,10 @@
 {
   "screen": "B23-github-expired",
   "extends": "B23-github",
-  "description": "Known GitHub token expiry.",
+  "description": "Requested GitHub token-expired artboard; the unsupported host credential state remains an explicit gap.",
   "gaps": [
-    "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+    "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer."
   ]
 }

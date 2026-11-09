@@ -1,0 +1,39 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e6]
+      - button "설정" [ref=e9]
+      - LabelText
+        - searchbox "설정 검색" [ref=e21]
+      - button "일반" [ref=e10]
+        - StaticText "일반"
+      - button "기억" [ref=e11]
+        - StaticText "기억"
+      - button "구성원" [ref=e12]
+        - StaticText "구성원"
+      - button "기기" [ref=e13]
+        - StaticText "기기"
+      - button "연결" [ref=e14]
+        - StaticText "연결"
+      - button "사용량" [ref=e15]
+        - StaticText "사용량"
+      - button "앱" [ref=e16]
+        - StaticText "앱"
+      - button "개선" [ref=e17]
+        - StaticText "개선"
+      - button "권한" [ref=e18]
+        - StaticText "권한"
+      - button "고급" [ref=e19]
+  - main "설정" [ref=e2]
+    - region "기기" [ref=e20]
+      - heading "기기" [level=2, ref=e22]
+      - strong
+        - StaticText "이 Mac"
+      - StaticText "준비됨"

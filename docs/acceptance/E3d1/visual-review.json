@@ -1,0 +1,49 @@
+{
+  "pairsInspected": {
+    "dark": [
+      "B13",
+      "B13-devices",
+      "B13-general",
+      "B13-general-restart",
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update",
+      "B14-usage",
+      "B19",
+      "B19-juno",
+      "B20",
+      "B20-coding",
+      "B23",
+      "B23-github",
+      "B23-github-expired"
+    ],
+    "light": [
+      "B13",
+      "B13-devices",
+      "B13-general",
+      "B13-general-restart",
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update",
+      "B14-usage",
+      "B19",
+      "B19-juno",
+      "B20",
+      "B20-coding",
+      "B23",
+      "B23-github",
+      "B23-github-expired"
+    ]
+  },
+  "method": "Artboard left / captured application right; all pairs inspected in four-screen contact sheets, plus full-size General and source-artboard inspection. Accessible labels/order are checked separately by the unchanged contract runner.",
+  "observations": [
+    "Settings full-height region and centered 640px column match the approved geometry.",
+    "General readonly and disabled unknown controls reflect absent host preferences; restart is not fabricated.",
+    "Configured-only connection states stay unverified and default-route controls are disabled.",
+    "Member archive, app/member bindings, retained memory and member schedules remain absent host capabilities, with corresponding visible gaps.",
+    "Model edit controls use decoded SVG masks, actual profile IDs and recorded busy identities.",
+    "No pixel-similarity score is claimed."
+  ]
+}

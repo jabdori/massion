@@ -44,7 +44,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -53,13 +53,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -332,8 +340,34 @@
           }
         ],
         "runtime": {
-          "connections": [],
-          "defaultRoutes": []
+          "connections": [
+            {
+              "id": "profile:claude-code-cli:claude-sonnet-5-5",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "claude-sonnet-5-5",
+              "label": "Claude Code",
+              "providerKind": "claude-code-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:codex-cli:gpt-6.1-terra",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "gpt-6.1-terra",
+              "label": "Codex",
+              "providerKind": "codex-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:zai:glm-5.3",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "glm-5.3",
+              "label": "Z.ai",
+              "providerKind": "zai",
+              "diagnostics": []
+            }
+          ],
+          "defaultRoutes": [],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
@@ -352,14 +386,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "codex-cli",
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -374,14 +412,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "zai",
                 "model": "glm-5.3",
                 "label": "Z.ai",
                 "family": "zhipu",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:zai:glm-5.3",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -396,14 +438,18 @@
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "claude-code-cli",
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           }
@@ -1070,7 +1116,7 @@
             ]
           },
           {
-            "id": "member-juno-0",
+            "id": "member-juno-owner-0",
             "memberId": "member-juno",
             "kind": "skill",
             "name": "코드 읽기",
@@ -1078,54 +1124,85 @@
             "author": "owner",
             "at": 1793769120000,
             "state": "active",
-            "steps": [
-              "테스트 먼저",
-              "읽기",
-              "확인",
-              "기록"
-            ]
+            "steps": []
           },
           {
-            "id": "member-juno-1",
+            "id": "member-juno-owner-1",
             "memberId": "member-juno",
             "kind": "skill",
-            "name": "PR 설명",
+            "name": "테스트 돌리기",
             "version": 1,
-            "author": "member",
+            "author": "owner",
             "at": 1793769120000,
             "state": "active",
+            "steps": []
+          },
+          {
+            "id": "member-juno-improved-0",
+            "memberId": "member-juno",
+            "kind": "skill",
+            "name": "PR 설명 쓰기",
+            "version": 2,
+            "author": "member",
+            "at": 1793851920000,
+            "state": "active",
             "steps": [
-              "테스트 먼저",
               "읽기",
               "확인",
               "기록"
             ]
           },
           {
-            "id": "member-juno-2",
+            "id": "member-juno-improved-1",
             "memberId": "member-juno",
             "kind": "procedure",
-            "name": "PR 검토",
+            "name": "PR 리뷰 절차에 테스트 먼저 돌리기",
             "version": 2,
             "author": "member",
-            "at": 1793769120000,
+            "at": 1793851920000,
             "state": "active",
             "steps": [
-              "테스트 먼저",
               "읽기",
               "확인",
               "기록"
             ]
+          },
+          {
+            "id": "member-juno-archived",
+            "memberId": "member-juno",
+            "kind": "skill",
+            "name": "이전 PR 설명",
+            "version": 1,
+            "author": "member",
+            "at": 1791177120000,
+            "state": "archived",
+            "steps": []
           }
         ],
         "improvements": [
           {
-            "id": "improvement-review",
+            "id": "improvement-member-juno-improved-0",
             "at": 1793851920000,
             "type": "adopted",
-            "skillId": "member-juno-2",
+            "skillId": "member-juno-improved-0",
             "memberId": "member-juno",
-            "name": "PR 검토",
+            "name": "PR 설명 쓰기",
+            "kind": "skill",
+            "from": 1,
+            "to": 2,
+            "source": "바뀐 파일마다 테스트 여부 적기",
+            "result": "2 → 4 / 4",
+            "checkedBy": "다른 제공사",
+            "revertible": true,
+            "reverted": null
+          },
+          {
+            "id": "improvement-member-juno-improved-1",
+            "at": 1793851920000,
+            "type": "adopted",
+            "skillId": "member-juno-improved-1",
+            "memberId": "member-juno",
+            "name": "PR 리뷰 절차에 테스트 먼저 돌리기",
             "kind": "procedure",
             "from": 1,
             "to": 2,
@@ -1133,6 +1210,22 @@
             "result": "2 → 4 / 4",
             "checkedBy": "다른 제공사",
             "revertible": true,
+            "reverted": null
+          },
+          {
+            "id": "archived-member-juno-archived",
+            "at": 1793853720000,
+            "type": "archived",
+            "skillId": "member-juno-archived",
+            "memberId": "member-juno",
+            "name": "이전 PR 설명",
+            "kind": "skill",
+            "from": 1,
+            "to": 1,
+            "source": null,
+            "result": null,
+            "checkedBy": null,
+            "revertible": false,
             "reverted": null
           }
         ],

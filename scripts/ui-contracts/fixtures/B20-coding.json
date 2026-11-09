@@ -1,6 +1,6 @@
 {
   "screen": "B20-coding",
-  "description": "Coding model group; editor unavailable. Fixed API data; freeze Date to now.",
+  "description": "Existing host model-group editor with exact profile pins; read-only captures.",
   "now": 1793855520000,
   "readySelector": "#chat-decision-rounding",
   "steps": [
@@ -18,11 +18,14 @@
       "selector": "#settings-nav-connections",
       "action": "click",
       "readySelector": "#settings-groups .set-row"
+    },
+    {
+      "selector": "#settings-group-coding",
+      "action": "click",
+      "readySelector": "#settings-group-name"
     }
   ],
-  "gaps": [
-    "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
-  ],
+  "gaps": [],
   "reuse": [
     "tests/settings-surface.test.ts",
     "tests/results-schedules-surface.test.ts",
@@ -41,7 +44,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -50,13 +53,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -329,8 +340,26 @@
           }
         ],
         "runtime": {
-          "connections": [],
-          "defaultRoutes": []
+          "connections": [
+            {
+              "id": "profile:codex-cli:gpt-6.1-terra",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "gpt-6.1-terra",
+              "label": "Codex",
+              "providerKind": "codex-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:claude-code-cli:claude-sonnet-5-5",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "claude-sonnet-5-5",
+              "label": "Claude Code",
+              "providerKind": "claude-code-cli",
+              "diagnostics": []
+            }
+          ],
+          "defaultRoutes": [],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
@@ -349,14 +378,18 @@
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "claude-code-cli",
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           }

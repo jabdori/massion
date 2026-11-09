@@ -1,0 +1,93 @@
+{
+  "runtime": "v24.21.0",
+  "commands": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    "source": {
+      "command": "node scripts/check.mjs",
+      "status": "passed",
+      "copyFindings": 0
+    },
+    "focused": {
+      "command": "node --test tests/settings-surface.test.ts tests/apps-surface.test.ts tests/skills-surface.test.ts tests/workbench.test.ts tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts",
+      "status": "passed",
+      "tests": 210
+    },
+    "aggregate": {
+      "command": "npm test",
+      "status": "failed-known-local-only-final-candidate",
+      "tests": 1903,
+      "passed": 1562,
+      "failed": 1,
+      "skipped": 340,
+      "failure": "portable inventory order is stable across English and Turkish process locales",
+      "reason": "Text artifact boundary: directory realpath mismatch on the macOS case-insensitive filesystem. Pre-existing, explicitly listed in CODEX-BRIEF.md; this slice changes no backup/artifact code.",
+      "timingNote": "The prior concurrent aggregate attempt had a lifetime timeout. The isolated file and the final whole-suite run after browser completion both passed that case. Prior failure evidence is retained in aggregate-timing-attempt.txt."
+    },
+    "contracts": {
+      "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+      "status": "passed-report-only",
+      "expectedRuns": 150,
+      "runs": 150,
+      "errors": 0,
+      "scopedRuns": 32,
+      "scopedFailures": 142,
+      "scopedVisualFailures": 0
+    },
+    "browser": {
+      "status": "passed",
+      "evidence": "browser-interactions.json"
+    },
+    "designDetector": {
+      "status": "passed",
+      "findings": []
+    },
+    "runtimeRecheck": {
+      "command": "node --test tests/runtime-lifetime.test.ts",
+      "status": "passed",
+      "tests": 14,
+      "passed": 12,
+      "skipped": 2
+    },
+    "aggregateTimingAttempt": {
+      "command": "npm test",
+      "status": "failed-known-local-and-timing",
+      "tests": 1903,
+      "passed": 1561,
+      "failed": 2,
+      "skipped": 340,
+      "failure": "portable inventory order is stable across English and Turkish process locales",
+      "reason": "Text artifact boundary: directory realpath mismatch on the macOS case-insensitive filesystem. Pre-existing, explicitly listed in CODEX-BRIEF.md; this slice changes no backup/artifact code.",
+      "additionalFailure": "deadline during final acceptance acknowledgment preserves committed Record: Lifetime fixture deadline (10s wait for a gate in a test with a 500ms run deadline). No runtime source changed.",
+      "evidence": "aggregate-timing-attempt.txt"
+    }
+  },
+  "unrun": [
+    "Real providers, credentials, device pairing and app installation",
+    "Optional actual SurrealDB integration stages (340 aggregate skips)"
+  ],
+  "sourceSha256": {
+    "docs/product/screens/copy.ko.json": "20340bd967f4d66fed47534d380f3533837835465138249ac34e7d4ed6e503ab",
+    "docs/product/screens/visual.json": "b62bfb194e381a6e8a4ba23ac2f63842e87031c15bfe8f4d73a31f778d5da1da",
+    "scripts/ui-contracts/fixtures/B13-devices.json": "365b0a09b15fd55005b155a59e455486759e003d57477f0d11f1bc5642084510",
+    "scripts/ui-contracts/fixtures/B13.json": "2400c39dd2f78ceeb6b5c790296acb5296e404cb0df3d5f168d793055b109dfa",
+    "scripts/ui-contracts/fixtures/B14-usage.json": "3524348839dd7cb7686555698263f46a440fb5b1016e0839932ea1d5ee30110f",
+    "scripts/ui-contracts/fixtures/B14.json": "b711671f6d7870d4e54f9e62faa4d94de8de13885e05fd12705e00c6eb988166",
+    "scripts/ui-contracts/fixtures/B19-juno.json": "da4e8dbfa9a30cb203669d352e1f80517c31fa94e050b1ed375225daa9cbc95e",
+    "scripts/ui-contracts/fixtures/B19.json": "88a30f622ad138ac7b00f0a031774a7968ea2f1fc32d21037d8317f2b01217e3",
+    "scripts/ui-contracts/fixtures/B20-coding.json": "071f19f48f1b18441a10a2a169f08c013a031d225eebff542f583dc33f41ce7e",
+    "scripts/ui-contracts/fixtures/B20.json": "46b9bbbb58f24045828b56815d80cda415ae5cb4307fd3e5fef868e854b7b375",
+    "scripts/ui-contracts/fixtures/B23-github-expired.json": "a37f80e864ac4db8a07b544dcd5959f23d8e836690da3dd3b4049b439e3b4f9d",
+    "scripts/ui-contracts/fixtures/B23-github.json": "7a122f7109ac162753ae4e1ea777d3e63d2fc691861c26ca5cf8676878e3a038",
+    "scripts/ui-contracts/fixtures/B23.json": "0d75ebb5fae0561db7dbc9db8ba2df3039bc2be54d775f6981da0f4e732d633b",
+    "src/apps-panel.ts": "f2d68b509457f9f6e75c28995e03dfa95ac6d487a72769bf471ff71cb2fb00c4",
+    "src/settings-panel.ts": "7aa86a7743f7c97a6647714dbdb60bd106d82bfeb4209e0b0031e7b57ee4f68d",
+    "src/ui-tokens.ts": "5d306a8ba0f91934796170691d6ce62f4fd02b1f6a6b9cc7896d311eccdc6e8d",
+    "src/workbench.ts": "68c25a2bd36119615ec57c1bd5d2f70aca9bb41f6271e5dd04296c7e913eeeba",
+    "tests/apps-surface.test.ts": "f28d0b006a5d97d3036c4895d43472a816f62b9c82a23f8284b8ca487616789e",
+    "tests/settings-surface.test.ts": "faa5bd55bd16c66b931bf62fbecfb2dccd8828e4bee00257fa8ef8d82e8888ac",
+    "tests/ui-contract-fixtures.test.ts": "3eb9ac28e9db899cc84c6b9ef4199bac7a2f17c7f930e963bc7c39b027c1ba0d"
+  }
+}

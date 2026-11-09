@@ -1,0 +1,34 @@
+contract B23 (B23 설정 · 앱) vs /Users/code/orca/workspaces/massion/e3d1-settings/.runtime/ui-contracts/snapshots/light/B23.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      text     "설정" -> button "설정"
+  ok    sidebar      textbox  "설정 검색" -> searchbox "설정 검색"
+  ok    sidebar      text     "일반" -> statictext "일반"
+  ok    sidebar      link     "기억" -> button "기억"
+  ok    sidebar      link     "구성원" -> button "구성원"
+  ok    sidebar      link     "기기" -> button "기기"
+  ok    sidebar      link     "연결" -> button "연결"
+  ok    sidebar      link     "사용량" -> button "사용량"
+  ok    sidebar      link     "앱" -> button "앱"
+  ok    sidebar      link     "개선" -> button "개선"
+  ok    sidebar      link     "권한" -> button "권한"
+  ok    settings     heading  "앱" -> heading "앱"
+  ok    settings     textbox  "앱 검색" -> searchbox "앱 검색"
+  ok    settings     heading  "설치됨1" -> heading "설치됨1"
+  ok    settings     heading  "직접 만든 앱1" -> heading "직접 만든 앱1"
+  ok    settings     link     "{work_title} ›" -> button "PR #84 검토 ›"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
+  budget settings     app {"chars":66,"strings":13,"sentences":0,"longest":14} proto {"chars":135,"strings":35,"sentences":0,"longest":11} source visibleTextBudget
+  FAIL  missing settings     link     "{work_title} 1.4.0 · 주노, 퀼 켜짐"
+  FAIL  missing settings     heading  "추천"
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+  FAIL  role   settings     link     "설치" (text exists without the required role)
+FAIL: 8 failures, 0 warnings, 29 required elements

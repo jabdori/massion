@@ -44,7 +44,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -53,13 +53,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -332,8 +340,34 @@
           }
         ],
         "runtime": {
-          "connections": [],
-          "defaultRoutes": []
+          "connections": [
+            {
+              "id": "profile:claude-code-cli:claude-sonnet-5-5",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "claude-sonnet-5-5",
+              "label": "Claude Code",
+              "providerKind": "claude-code-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:codex-cli:gpt-6.1-terra",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "gpt-6.1-terra",
+              "label": "Codex",
+              "providerKind": "codex-cli",
+              "diagnostics": []
+            },
+            {
+              "id": "profile:zai:glm-5.3",
+              "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "model": "glm-5.3",
+              "label": "Z.ai",
+              "providerKind": "zai",
+              "diagnostics": []
+            }
+          ],
+          "defaultRoutes": [],
+          "authorizations": []
         },
         "configHash": "fixture",
         "grants": [],
@@ -352,14 +386,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "codex-cli",
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -374,14 +412,18 @@
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "zai",
                 "model": "glm-5.3",
                 "label": "Z.ai",
                 "family": "zhipu",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:zai:glm-5.3",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           },
@@ -396,14 +438,18 @@
                 "model": "gpt-6.1-terra",
                 "label": "Codex",
                 "family": "openai",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:codex-cli:gpt-6.1-terra",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "provider": "claude-code-cli",
                 "model": "claude-sonnet-5-5",
                 "label": "Claude Code",
                 "family": "anthropic",
-                "status": "available"
+                "status": "available",
+                "profileId": "profile:claude-code-cli:claude-sonnet-5-5",
+                "configHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               }
             ]
           }
@@ -1022,54 +1068,6 @@
         "revision": 4,
         "skills": [
           {
-            "id": "member-quill-0",
-            "memberId": "member-quill",
-            "kind": "skill",
-            "name": "출처 확인",
-            "version": 1,
-            "author": "owner",
-            "at": 1793769120000,
-            "state": "active",
-            "steps": [
-              "조사",
-              "분류",
-              "요약",
-              "확인"
-            ]
-          },
-          {
-            "id": "member-quill-1",
-            "memberId": "member-quill",
-            "kind": "skill",
-            "name": "표 정리",
-            "version": 1,
-            "author": "member",
-            "at": 1793769120000,
-            "state": "active",
-            "steps": [
-              "조사",
-              "분류",
-              "요약",
-              "확인"
-            ]
-          },
-          {
-            "id": "member-quill-2",
-            "memberId": "member-quill",
-            "kind": "procedure",
-            "name": "자료 조사",
-            "version": 2,
-            "author": "member",
-            "at": 1793769120000,
-            "state": "active",
-            "steps": [
-              "조사",
-              "분류",
-              "요약",
-              "확인"
-            ]
-          },
-          {
             "id": "member-juno-0",
             "memberId": "member-juno",
             "kind": "skill",
@@ -1116,16 +1114,87 @@
               "확인",
               "기록"
             ]
+          },
+          {
+            "id": "member-quill-owner-0",
+            "memberId": "member-quill",
+            "kind": "skill",
+            "name": "출처 찾아 읽기",
+            "version": 1,
+            "author": "owner",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": []
+          },
+          {
+            "id": "member-quill-owner-1",
+            "memberId": "member-quill",
+            "kind": "skill",
+            "name": "근거 붙여 요약",
+            "version": 1,
+            "author": "owner",
+            "at": 1793769120000,
+            "state": "active",
+            "steps": []
+          },
+          {
+            "id": "member-quill-improved-0",
+            "memberId": "member-quill",
+            "kind": "skill",
+            "name": "출처 확인",
+            "version": 2,
+            "author": "member",
+            "at": 1793851920000,
+            "state": "active",
+            "steps": [
+              "읽기",
+              "확인",
+              "기록"
+            ]
+          },
+          {
+            "id": "member-quill-improved-1",
+            "memberId": "member-quill",
+            "kind": "procedure",
+            "name": "자료 조사 절차",
+            "version": 2,
+            "author": "member",
+            "at": 1793851920000,
+            "state": "active",
+            "steps": [
+              "출처 고르기",
+              "모으기",
+              "요약",
+              "표 만들기",
+              "확인",
+              "기록"
+            ]
           }
         ],
         "improvements": [
           {
-            "id": "improvement-review",
+            "id": "improvement-member-quill-improved-0",
             "at": 1793851920000,
             "type": "adopted",
-            "skillId": "member-juno-2",
-            "memberId": "member-juno",
-            "name": "PR 검토",
+            "skillId": "member-quill-improved-0",
+            "memberId": "member-quill",
+            "name": "출처 확인",
+            "kind": "skill",
+            "from": 1,
+            "to": 2,
+            "source": "바뀐 파일마다 테스트 여부 적기",
+            "result": "2 → 4 / 4",
+            "checkedBy": "다른 제공사",
+            "revertible": true,
+            "reverted": null
+          },
+          {
+            "id": "improvement-member-quill-improved-1",
+            "at": 1793851920000,
+            "type": "adopted",
+            "skillId": "member-quill-improved-1",
+            "memberId": "member-quill",
+            "name": "자료 조사 절차",
             "kind": "procedure",
             "from": 1,
             "to": 2,

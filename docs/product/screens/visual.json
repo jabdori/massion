@@ -153,6 +153,25 @@
   "conversation": {
    "column_max_width": 680,
    "note": "conversation column and composer share one centered column; with a pane open the column fills main minus 24px gutters"
+  },
+  "settings": {
+   "column_width": 640,
+   "padding_top": 44,
+   "padding_x": 24,
+   "padding_bottom": 48,
+   "row_height": 56,
+   "heading_size": 22,
+   "heading_line_height": 30,
+   "section_gap": 28,
+   "heading_gap": 20,
+   "label_width": 64,
+   "control_width": 200,
+   "search_height": 30,
+   "member_avatar": 44,
+   "member_initial": 18,
+   "field_max_width": 360,
+   "source": "B13-general, B14, B19-juno and B20 approved artboards",
+   "search_radius": 8
   }
  },
  "typography": {

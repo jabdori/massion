@@ -70,11 +70,12 @@ ${schedulesPage}
 ${appsPage}
 <div id="page-settings" class="page-body" hidden><div class="settings-stack">
 ${settingsSection('general')}${settingsSection('memory')}${settingsSection('members')}${settingsSection('devices')}
-${settingsSection('connections',`<div id="settings-groups"></div><details id="settings-setup" class="set-setup"><summary>${copy("legacy.connection-setup")}</summary>
+${settingsSection('connections',`<div id="settings-groups"></div>`)}${settingsSection('usage')}${settingsSection('apps')}${settingsSection('improvements')}${settingsSection('permissions')}
+<section id="settings-advanced" class="set-section" aria-labelledby="settings-advanced-title" hidden><h2 id="settings-advanced-title">${copy("legacy.advanced")}</h2>
+<details id="settings-setup" class="set-setup"><summary>${copy("legacy.connection-setup")}</summary>
 <section class="panel" aria-labelledby="connection-heading"><h2 id="connection-heading">${copy("legacy.connect-a-model-provider")}</h2><p class="hint">${copy("legacy.choose-an-api-provider-discover-its-models")}</p>
 <form id="connection-form"><fieldset id="connection-fields"><label for="connection-kind">${copy("legacy.provider-api")}</label><select id="connection-kind"></select><label for="connection-label">${copy("legacy.connection-name")}</label><input id="connection-label" maxlength="512" required><label for="connection-base">${copy("legacy.api-base-url")}</label><input id="connection-base" type="url" required><label for="connection-reference">${copy("legacy.host-credential-reference-optional")}</label><input id="connection-reference" maxlength="128" autocomplete="off" placeholder="${copy("legacy.opaque-reference-never-an-api-key")}"><label for="connection-mode">${copy("legacy.transport")}</label><select id="connection-mode"><option value="https">${copy("legacy.https-api")}</option></select><button type="submit">${copy("legacy.save-connection")}</button></fieldset></form><p id="connection-status" class="hint" role="status">${copy("legacy.checking-connection-setup")}</p><div id="connection-list"></div></section>
-</details>`)}${settingsSection('apps')}${settingsSection('improvements')}${settingsSection('permissions')}
-<section id="settings-advanced" class="set-section" aria-labelledby="settings-advanced-title" hidden><h2 id="settings-advanced-title">${copy("legacy.advanced")}</h2>
+</details>
 <span id="health" role="status"><span class="dot"></span>${copy("legacy.connecting")}</span>
 <div id="provider-notice" class="notice" role="status">${copy("legacy.checking-provider-availability-no-execution-has-been")}</div>
 <section class="panel" aria-labelledby="create-heading"><div class="section-top"><h2 id="create-heading">${copy("legacy.create-mission")}</h2><span class="tag">${copy("legacy.01-purpose")}</span></div>

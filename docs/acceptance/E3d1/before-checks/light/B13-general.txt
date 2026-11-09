@@ -1,0 +1,26 @@
+contract B13-general (B13 일반 · 일반) vs /Users/code/orca/workspaces/massion/e3d1-settings/.runtime/e3d1-before/snapshots/light/B13-general.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "내 계정"
+  ok    sidebar      link     "일반" -> button "일반"
+  ok    sidebar      link     "기억" -> button "기억"
+  ok    sidebar      link     "구성원" -> button "구성원"
+  ok    sidebar      link     "기기" -> button "기기"
+  ok    sidebar      link     "연결" -> button "연결"
+  ok    sidebar      link     "앱" -> button "앱"
+  ok    sidebar      link     "개선" -> button "개선"
+  ok    sidebar      link     "권한" -> button "권한"
+  ok    settings     heading  "일반" -> heading "일반"
+  ok    settings     text     "이름" -> statictext "이름"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":20,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
+  budget settings     app {"chars":16,"strings":6,"sentences":0,"longest":6} proto {"chars":32,"strings":13,"sentences":0,"longest":9} source visibleTextBudget
+  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
+  FAIL  role   sidebar      link     "설정" (text exists without the required role)
+  FAIL  missing sidebar      link     "사용량"
+  FAIL  role   settings     textbox  "이름" (text exists without the required role)
+  FAIL  role   settings     combobox "아침 브리핑" (text exists without the required role)
+  FAIL  missing settings     combobox "알림"
+  FAIL  missing settings     text     "—"
+FAIL: 7 failures, 0 warnings, 21 required elements
