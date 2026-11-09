@@ -48,6 +48,10 @@ the owning slice resolves it; no wildcard waiver is added for future diagnostics
   `feat/monthly-budget` (open when checked).
 - Pending-slice occurrences: 2.
 - Reason: The open monthly-budget slice owns these budget-screen failures.
+- E8 branch resolution: PR #117 now removes the two pending-slice occurrences
+  and 18 earlier E8 capability occurrences (20 total) after all six E8 rows pass.
+  See [scoped verification](../e8/blocking-scope.json). This records the branch
+  correction; the historical baseline above remains unchanged until landing.
 
 ## Landing and removal
 

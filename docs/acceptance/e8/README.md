@@ -42,6 +42,12 @@ Main `ab5c145` was integrated. Fifteen related files passed **329 tests**, with 
 
 **This is not a whole-PR approval.** Separate newer findings on discriminator accounting, input changes before the pause, owner-expired accounting and restored-journal authorization remain open; see the explicit list in [round2-recovery.md](round2-recovery.md). The last issue is a reported restore-security blocker. Do not merge while those findings remain unresolved.
 
+## Blocking gate follow-up
+
+Blocking-gate main `ac99f1d` (#118) was merged after the `a95c079` recovery push. A fresh E8 capture again passes **176/176 required occurrences** across exactly six screen/theme rows. The [scoped gate evidence](blocking-scope.json) uses the official `readCapture`, `copyDiagnostics` and `evaluateGate` functions: **zero new diagnostics, zero stale exceptions and zero infrastructure errors**, exit 0 after removing **20 E8 exceptions**, with no additions and no changes to foreign exceptions or baseline provenance. The focused gate/fixture/copy harness passed **40/40** and typecheck passed.
+
+The full CLI was invoked with blocking enabled and correctly rejected the six-row capture as incomplete: it requires all 150 rows. That global pass is not claimed. E8's scoped validation enforces exact coverage/counts and the same bidirectional diagnostic comparison; the full candidate capture remains CI-owned. Rebaseline PR #125 was still open when this evidence was recorded. No gate/checker thresholds or shared coverage rules were weakened, and no addition/justification flag was used.
+
 ## Artboard / application pairs
 
 The artboard is on the left, the application on the right. Known B26 amounts fill the artboard's slots with locale-formatted numbers without unit text; unknown values and provider quota percentages stay as `—`. Increase and Change use their recorded owner commands.

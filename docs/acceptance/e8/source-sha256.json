@@ -13,5 +13,8 @@
   "src/client-protocol.ts": "2c5ac460bd6bbfe02f3b2e6961b262ccdca089dc7a06152568a34295b824536a",
   "src/work-inbox-panel.ts": "5d666cf6d51b000fa78318c55b1c6623045a9dc1773cf1f4fa6fb37e5e78c2c8",
   "src/member-rooms.ts": "a7e0fd7d41e86c15ec8bb2954f0ab12275823c19b6304cc3c89b12a1c7abbbe0",
-  "src/internal-teams.ts": "ee3112ce1688306913ae5d6a94d2cf3b7bc54ecb835199dc0f91a16c0d0ac583"
+  "src/internal-teams.ts": "ee3112ce1688306913ae5d6a94d2cf3b7bc54ecb835199dc0f91a16c0d0ac583",
+  "scripts/ui-contracts/gate.ts": "72120e71eb9e2b96c0cca57aff16ea8b96481b47ffbbaad6760ffc586c05ce51",
+  "scripts/ui-contracts/run.mjs": "08368029142ed948797b4eb6536f7f6c4845c298ffdca8c073d81fcf4717fdee",
+  "scripts/ui-contracts/allow-list.json": "bbe48526c78133ae69cb478799b7f271b790f10ca9309318962d216e9a615cc6"
 }

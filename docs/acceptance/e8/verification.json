@@ -104,5 +104,28 @@
       4514966445,
       4514966451
     ]
+  },
+  "blockingGateFollowUp": {
+    "main": "ac99f1d",
+    "scope": [
+      "B26",
+      "B26-later",
+      "B14-usage"
+    ],
+    "rows": 6,
+    "requiredPassed": 176,
+    "allowancesRemoved": 20,
+    "allowancesAdded": 0,
+    "newDiagnostics": 0,
+    "staleAllowances": 0,
+    "infrastructureErrors": 0,
+    "scopedGateExit": 0,
+    "harnessTestsPassed": 40,
+    "typecheck": "passed",
+    "fullCliExit": 1,
+    "fullCliReason": "Full CLI requires all 150 rows; scoped validation uses the same official gate functions",
+    "fullCapture": "CI-owned",
+    "rebaselinePR": 125,
+    "rebaselineStateAtCheck": "OPEN"
   }
 }
