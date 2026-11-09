@@ -23,6 +23,7 @@ import {prerequisitePanel,prerequisiteClient} from './work-prerequisite-panel.ts
 import {runSequencePanel,runSequenceClient} from './run-sequence-panel.ts';
 import {MAX_REQUEST_BODY_BYTES} from './request-limits.ts';
 import {chatPanel,chatClient,chatStyle} from './assistant-conversation-panel.ts';
+import {appConnectPanel,appConnectClient,appConnectStyle} from './app-connect-panel.ts';
 import {memberDialog,memberClient,memberStyle} from './members-panel.ts';
 import {resultsPage,resultsPane,resultsClient,resultsStyle} from './results-panel.ts';
 import {schedulesPage,schedulesClient,schedulesStyle} from './schedules-panel.ts';
@@ -46,6 +47,7 @@ ${uiTokensStyle}
 .impact-panel{border-top:1px solid var(--line);margin-top:20px;padding-top:14px;overflow-wrap:anywhere}.impact-results{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}.impact-results:focus-visible{outline:var(--focus-width) solid var(--focus-ring);outline-offset:var(--focus-offset)}.impact-results ul{padding-left:20px}.impact-results li{margin-bottom:12px}
 .expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
 ${chatStyle}
+${appConnectStyle}
 ${memberStyle}
 ${resultsStyle}
 ${schedulesStyle}
@@ -92,6 +94,7 @@ ${settingsSection('connections',`<div id="settings-groups"></div><details id="se
 </section>
 </div></div><!-- /page-settings -->
 </main>
+${appConnectPanel}
 <section id="work-pane" class="pane" aria-label="${copy("legacy.work-2")}" hidden>
 ${shellPaneBar}
 <div id="pane-body" class="pane-body" role="tabpanel">
@@ -1701,6 +1704,7 @@ async function connect() {
   if (!selectedId && initialReference.present) report(copy("legacy.invalid-mission-link-enter-a-valid-mission"), 'error');
 }
 ${chatClient}
+${appConnectClient}
 ${memberClient}
 ${resultsClient}
 ${schedulesClient}

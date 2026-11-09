@@ -1,9 +1,9 @@
 {
   "screen": "B24-connect-connected",
-  "extends": "B24-done",
+  "extends": "B24-connect",
   "description": "GitHub connector: connected.",
   "gaps": [
-    "Independent connected fixture; no real connection is made and the production result chip is unavailable."
+    "The read-only contract host loads the connected result directly. The E5b acceptance harness proves the token-submit transition using a fixture command response, not a real account."
   ],
   "routes": {
     "/assistant/conversation": {
@@ -97,7 +97,13 @@
             "action": "연결",
             "state": "done",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": true
+            }
           }
         ],
         "briefings": []
@@ -194,11 +200,24 @@
             "action": "연결",
             "state": "done",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": true
+            }
           }
         ],
         "briefings": []
       }
     }
-  }
+  },
+  "reuse": [
+    "tests/app-connect-surface.test.ts",
+    "tests/conversation-cards.test.ts",
+    "tests/apps-surface.test.ts"
+  ],
+  "readySelector": "#chat-system-install",
+  "steps": []
 }

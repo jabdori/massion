@@ -51,6 +51,12 @@
               "role": "owner",
               "turnId": null,
               "text": "massion 저장소에 열린 PR 정리해 줘."
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "알겠어요. PR 링크를 붙여 주면 그 페이지만 읽을게요."
             }
           ]
         },
@@ -99,122 +105,6 @@
           }
         ],
         "briefings": []
-      }
-    },
-    "/assistant/works": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "works": []
-      }
-    },
-    "/events": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "events": []
-      }
-    },
-    "/read-state": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": null
-      }
-    },
-    "/health": {
-      "status": 200,
-      "body": {
-        "status": "ready"
-      }
-    },
-    "/providers": {
-      "status": 200,
-      "body": {
-        "providers": [],
-        "selection": {
-          "status": "unavailable",
-          "code": "provider_unavailable",
-          "reason": "Read-only fixture"
-        }
-      }
-    },
-    "/connections": {
-      "status": 200,
-      "body": {
-        "host": null,
-        "providerTypes": [],
-        "connections": [],
-        "runtime": {
-          "connections": [],
-          "defaultRoutes": []
-        },
-        "configHash": "fixture",
-        "grants": [],
-        "representative": {
-          "intakeMissionId": "intake"
-        },
-        "modelGroups": [],
-        "fixtureModeEnabled": false,
-        "liveExecutionEnabled": false
-      }
-    },
-    "/assistant/schedules": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "revision": 1,
-        "schedules": []
-      }
-    },
-    "/read-state?mission=intake": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": {
-          "revision": 3,
-          "value": {
-            "id": "intake",
-            "purpose": "맡긴 일",
-            "scope": "local",
-            "constraints": [],
-            "criteria": {
-              "version": 1,
-              "description": "요청한 결과와 근거 확인",
-              "oracle": "bounded-text-review/v1"
-            },
-            "version": 1,
-            "works": [],
-            "memories": [],
-            "growth": [],
-            "relations": []
-          }
-        }
-      }
-    },
-    "/missions/intake": {
-      "status": 200,
-      "body": {
-        "revision": 3,
-        "value": {
-          "id": "intake",
-          "purpose": "맡긴 일",
-          "scope": "local",
-          "constraints": [],
-          "criteria": {
-            "version": 1,
-            "description": "요청한 결과와 근거 확인",
-            "oracle": "bounded-text-review/v1"
-          },
-          "version": 1,
-          "works": [],
-          "memories": [],
-          "growth": [],
-          "relations": []
-        }
       }
     },
     "/assistant/conversation?segment=1": {
@@ -256,6 +146,12 @@
               "role": "owner",
               "turnId": null,
               "text": "massion 저장소에 열린 PR 정리해 줘."
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "알겠어요. PR 링크를 붙여 주면 그 페이지만 읽을게요."
             }
           ]
         },
@@ -305,22 +201,7 @@
         ],
         "briefings": []
       }
-    },
-    "/assistant/apps": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "revision": 3,
-        "apps": [],
-        "catalog": [
-          {
-            "id": "github",
-            "name": "GitHub",
-            "description": "PR과 검사 결과",
-            "installed": false
-          }
-        ]
-      }
     }
-  }
+  },
+  "extends": "B24"
 }

@@ -1,11 +1,20 @@
 {
   "screen": "B24-connect-mail",
-  "extends": "B1",
+  "extends": "B24-connect",
   "description": "Missing-mail connector decision.",
-  "gaps": [
-    "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture."
+  "gaps": [],
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#chat-decision-mail-connect .chat-actions button:first-child",
+      "readySelector": "#app-connect-token"
+    },
+    {
+      "action": "click",
+      "selector": "#app-connect-cancel",
+      "readySelector": "#chat-decision-mail-connect"
+    }
   ],
-  "steps": [],
   "routes": {
     "/assistant/conversation": {
       "status": 200,
@@ -13,7 +22,26 @@
         "feedId": "fixture:B2",
         "cursor": 1,
         "head": 1,
-        "members": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
         "apps": [],
         "segment": {
           "number": 1,
@@ -32,7 +60,13 @@
             "question": "Gmail을 연결할까요?",
             "rows": [],
             "action": "연결",
-            "state": "open"
+            "state": "open",
+            "connection": {
+              "appId": "app-gmail",
+              "slot": "gmail-token",
+              "label": "Gmail token",
+              "connected": false
+            }
           }
         ],
         "briefings": []
@@ -44,7 +78,26 @@
         "feedId": "fixture:B2",
         "cursor": 1,
         "head": 1,
-        "members": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "drop",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "round",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
         "apps": [],
         "segment": {
           "number": 1,
@@ -63,11 +116,23 @@
             "question": "Gmail을 연결할까요?",
             "rows": [],
             "action": "연결",
-            "state": "open"
+            "state": "open",
+            "connection": {
+              "appId": "app-gmail",
+              "slot": "gmail-token",
+              "label": "Gmail token",
+              "connected": false
+            }
           }
         ],
         "briefings": []
       }
     }
-  }
+  },
+  "reuse": [
+    "tests/app-connect-surface.test.ts",
+    "tests/conversation-cards.test.ts",
+    "tests/apps-surface.test.ts"
+  ],
+  "readySelector": "#chat-decision-mail-connect"
 }

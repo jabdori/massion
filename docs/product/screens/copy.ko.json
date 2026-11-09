@@ -1,4 +1,19 @@
 {
+ "ui.apps.source-work": {"ko":"{work_title} ›","roles":["link"],"used_in":["B25:conversation"],"provenance":"Approved B25 artboard"},
+ "ui.apps.write": {"ko":"쓰기","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
+ "ui.apps.adds": {"ko":"추가되는 것","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
+ "ui.apps.connect-question": {
+  "ko": "{app} 앱을 연결할까요?",
+  "roles": ["text"],
+  "used_in": ["B24-connect:conversation", "B24-connect-token:conversation"],
+  "provenance": "Approved B24-connect artboard"
+ },
+ "ui.apps.connected": {
+  "ko": "{app} 앱 연결됨",
+  "roles": ["status", "text"],
+  "used_in": ["B24-connect-connected:conversation"],
+  "provenance": "Approved B24-connect-connected artboard"
+ },
  "composer.button.01": {
   "ko": "기본 권한",
   "roles": [

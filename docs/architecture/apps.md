@@ -95,3 +95,7 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 - Conversation cards contributed by apps; the `7 more ›` link in B24-done; per-app member lists (`주노, 퀼`).
 - A Linux network sandbox on Node 24 (see the ponytail note).
 - A link from a self-made app's source Work (B23, B25 `PR #84 review ›`) to its Work room; the title is shown as text.
+
+## MCP and connection follow-up (E5b)
+
+[MCP apps and connection cards](mcp-apps.md) extends this aggregate with owner-admitted MCP descriptors, pinned tool lists, durable single-send calls, scoped secret entry and opaque-origin app frames. Legacy script packages retain their existing hashes and worker path. Native transport and secret adapters remain unavailable by default pending E5a integration; fixture evidence is not a live-account claim.

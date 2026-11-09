@@ -1,3 +1,4 @@
+import {appFrameClient} from './app-frame.ts';
 import {copy} from './ui-copy.ts';
 /** Apps on the surface (docs/architecture/apps.md, prototype B22, B22-room, B23, B23-github, B24): rail icons, the app page, the Work room app tab and Settings > Apps. Apps send views as data; every string is drawn through textContent. */
 export const appsStyle=String.raw`.app-mark{background:var(--bg-3);color:var(--fg)}.rail .app-mark{width:22px;height:22px;border-radius:6px;font-size:12px}.set-row .app-mark,.set-head .app-mark{background:var(--bg-3);color:var(--fg)}
@@ -14,7 +15,8 @@ export const appsStyle=String.raw`.app-mark{background:var(--bg-3);color:var(--f
 export const appsPage=String.raw`<div id="page-app" class="page-body" hidden><div id="app-view" class="app-view" aria-live="polite"></div></div>`;
 export const appsSide=String.raw`<nav id="side-app" aria-label="${copy('ui.apps')}" hidden></nav>`;
 export const appsPane=String.raw`<div id="pane-app" class="pane-app app-view" role="tabpanel" aria-label="${copy('ui.apps')}" hidden></div>`;
-export const appsClient=String.raw`
+export const appsClient=String.raw`${appFrameClient}
+
 // Each async read has its own generation: a response is drawn only if no newer request of its kind started since (A, B, A again drops the first A).
 let appQuery='',appGroups=new Set();
 let appsList=[],appShown='',appItem='',appPage=null,appSeq=0,appItemSeq=0,appTabSeq=0,settingsApps=null,settingsApp='';
@@ -35,6 +37,7 @@ const appDeltaText=d=>'+'+d.adds+(d.deletes?' −'+d.deletes:'');
 function appsViewNodes(v,github=false){
  const label=github?appLabel:value=>value;
  if(!v||!chatText(v.title)||!Array.isArray(v.groups))return [element('p',copy('ui.panel.unavailable'),'app-meta')];
+ if(v.frame&&typeof v.frame.html==='string'&&v.frame.html.length<=65536)return [element('h2',v.title),appFrame(v.title,v.frame.html)];
  const number=github&&/^(.*) #(\d+)$/.exec(v.title),heading=element('h2',number?number[1]+' ':v.title);if(number)heading.append(element('span','#'+number[2],'app-number'));const out=[heading];
  if(chatText(v.meta)){
   const parts=v.meta.split(' · ');

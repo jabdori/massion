@@ -173,3 +173,10 @@ test('a late Settings > Apps read never replaces a newer one',async()=>{
  pending[1]!();await settle();pending[0]!();await settle();
  assert.match(app.node('settings-apps-body').textContent,/1\.4\.0/);assert.doesNotMatch(app.node('settings-apps-body').textContent,/old/);
 });
+
+test('a self-made install card opens its exact source Work without installing',async()=>{
+ const source={missionId:'intake',workId:'w-done',title:'PR #84 review'},card={id:'app-decision:source',at:T0,title:'PR list fetcher',question:'Install?',rows:[['Source',source.title]],source,action:'Install',state:'open'};
+ const {app,posted}=fixture(false,[card]);await settle();
+ const node=app.all().find(n=>n.id==='chat-decision-app-decision:source')!,link=button(node,'PR #84 review ›')[0];assert.ok(link);
+ await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/missions/intake'));assert.equal(posted.length,0);
+});

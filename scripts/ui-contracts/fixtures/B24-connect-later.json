@@ -1,9 +1,9 @@
 {
   "screen": "B24-connect-later",
-  "extends": "B24",
+  "extends": "B24-connect",
   "description": "GitHub connector: later.",
   "gaps": [
-    "Independent deferred connector fixture; no connector action is submitted."
+    "The read-only contract host loads the deferred result directly. The E5b acceptance harness proves Later and Ask again through the decision endpoint."
   ],
   "routes": {
     "/assistant/conversation": {
@@ -89,7 +89,13 @@
             "action": "연결",
             "state": "later",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": false
+            }
           }
         ],
         "briefings": []
@@ -178,12 +184,24 @@
             "action": "연결",
             "state": "later",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": false
+            }
           }
         ],
         "briefings": []
       }
     }
   },
-  "readySelector": "#chat-system-install"
+  "readySelector": "#chat-system-install",
+  "reuse": [
+    "tests/app-connect-surface.test.ts",
+    "tests/conversation-cards.test.ts",
+    "tests/apps-surface.test.ts"
+  ],
+  "steps": []
 }
