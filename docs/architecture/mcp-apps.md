@@ -24,3 +24,11 @@ New conversation commands explicitly opt into recording the host-observed messag
 ## E5a integration after #111 merged
 
 The second main merge (`1d0d1e3`) keeps the app network AbortSignal and E5a's read-only page-handler policy. MCP request bounds now call the shared `callTool` with the pinned read-only classification instead of a parallel timeout implementation. Connection entry uses `SecretSlots.set({owner: appId, slot}, token)`, including the shared 1024-byte value bound; normal startup supplies `KeychainSecretSlots`. Tests use the real in-memory slot adapter and verify owner/slot isolation and no client/journal echo. Concrete stdio/local-HTTP negotiation and trusted launcher target enrollment remain outside this host-service slice; no raw spawning or secret environment fallback was introduced.
+
+## Explicit owner reconciliation
+
+An unknown call continues to block later writes for the same app. `POST /assistant/apps` accepts the existing owner-command envelope with `action: 'reconcile'`, exact `appId`/`callId`, `outcome: 'done'|'not-done'` and nonempty evidence. The pure `reconcile-app-tool` transition requires an owner and an exact unknown call, records actor, host time, outcome and evidence, and marks only that call succeeded/failed. It neither invokes an adapter nor creates a new dispatch. Original identity, version hash, input hash and journal history remain; replaying the original call reads the reconciled record without sending it again. Overlapping identical commands use the existing post-load lookup/CAS/replay pattern.
+
+Pending calls cannot be reconciled by this path. No timer, app update, removal, restart or expiry clears an unknown result automatically. This increment uses explicit owner evidence, not automatic interpretation of a remote reply. Reconciliation is an owner observation, not an independent Work acceptance or a fabricated tool result.
+
+Read/rail projections include only unresolved call IDs, names and statuses, never arguments. A blocked tool-only app has a rail entry and uses the existing unknown/no-resend wording. Its host-owned evidence form offers the two explicit outcomes. Missing evidence, duplicate clicks, an unknown command response and feed changes remain fenced. Resolving a call removes the warning only after a fresh host read; a later distinct write is admitted normally.

@@ -27,6 +27,7 @@ export interface AppDecision {id:string;at:number;appId:string;version:number;ba
 export interface AppsState {toolCalls?:McpCall[];kind:'apps';id:string;apps:App[];decisions:AppDecision[];rejected:{at:number;memberId:string;name:string;version:string;hash:string;reason:string}[]}
 type Offer={decisionId:string;origin:'catalog'|'self-made';memberId?:string;source?:App['source'];pkg:AppPackage;check?:AppCheck};
 export type AppsCommand =
+ | {type:'reconcile-app-tool';appId:string;callId:string;outcome:'done'|'not-done';evidence:string}
  | {type:'begin-app-connect'|'complete-app-connect';decisionId:string;connectionId:string}
  | {type:'claim-app-tool';call:McpCall}
  | {type:'settle-app-tool';callId:string;status:'succeeded'|'failed'|'unknown';result?:unknown}
@@ -141,6 +142,11 @@ export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor
    const c=state.toolCalls?.find(c=>c.id===command.callId);ensure(c&&c.status==='pending','Original pending tool claim required','conflict');
    if(command.result!==undefined){boundedJson(command.result);c.result=structuredClone(command.result);}c.status=command.status;break;
   }
+  case 'reconcile-app-tool': {
+   role('owner');ensure(exact(command,['type','appId','callId','outcome','evidence'])&&id(command.appId)&&id(command.callId)&&['done','not-done'].includes(command.outcome)&&line(command.evidence,2000),'Exact reconciliation outcome and evidence required');
+   const call=state.toolCalls?.find(c=>c.id===command.callId&&c.appId===command.appId);ensure(call&&call.status==='unknown'&&!call.reconciliation,'Only the exact unknown call can be reconciled','conflict');
+   call.reconciliation={actorId:actor.id,at,outcome:command.outcome,evidence:command.evidence};call.status=command.outcome==='done'?'succeeded':'failed';break;
+  }
   case 'rollback-app': {
    role('owner');ensure(exact(command,['type','appId','version','decisionId']),'Exact rollback fields required');const a=installed(command.appId);
    ensure(Number.isSafeInteger(command.version)&&a.versions[command.version-1]?.approvedAt!==undefined&&command.version!==a.current,'Only another version the owner approved is rolled back to','conflict');ask(a,command.version,command.decisionId);break;
@@ -169,6 +175,7 @@ export function replayApps(operation:Operation<AppsState>,prior:Operation<AppsSt
  ensure(hash(derived.value)===hash(operation.value)&&hash(derived.events)===hash(operation.events)&&operation.outbox.length===0,'apps command/state transition');
 }
 
+const unresolvedCalls=(state:AppsState,appId:string)=>(state.toolCalls??[]).filter(c=>c.appId===appId&&(c.status==='pending'||c.status==='unknown')).map(c=>({id:c.id,name:c.name,status:c.status as 'pending'|'unknown'}));
 const joined=(v:string[])=>v.length?v.join(' · '):'None';
 const adds=(m:AppManifest)=>joined([...(m.contributes.page?[m.contributes.page.title+' page']:[]),...(m.contributes.roomTab?[m.contributes.roomTab.prefix.replace(/\s*#$/,'')+' tab']:[])]);
 export class AppsService {
@@ -179,13 +186,13 @@ export class AppsService {
  async read(){
   const s=await this.#state(),v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState;
   const apps=v.apps.filter(a=>a.current!==null).map(a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest;
-   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),
+   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};});
   const catalog=CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)}));
   return {revision:s?.revision??0,apps,catalog};
  }
  /** Enabled apps for the rail and Work room tabs. */
- async rail(){const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null};});}
+ async rail(){const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null,...(m.kind==='mcp'?{unresolved:unresolvedCalls(v!,a.id)}:{})};});}
  /** Decision cards: catalog apps in the Representative's conversation (null), self-made apps in their member's (conversation-cards.md shape plus `detail` and `remove`). */
  async decisions(memberId:string|null){
   const v=(await this.#state())?.value;if(!v)return [];const members=((await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined)?.members??[];
@@ -224,7 +231,7 @@ export class AppsService {
  async callTool(input:{commandId:string;appId:string;name:string;arguments:Record<string,unknown>}){
   ensure(exact(input,['commandId','appId','name','arguments'])&&id(input.commandId)&&input.commandId.startsWith(HOST_PREFIX)&&id(input.appId)&&typeof input.name==='string'&&!!input.arguments&&typeof input.arguments==='object'&&!Array.isArray(input.arguments),'Exact host tool request required');boundedJson(input.arguments);input=structuredClone(input);
   const inputHash=hash(input.arguments),prior=(await this.#state())?.value.toolCalls?.find(c=>c.id===input.commandId);
-  if(prior){ensure(prior.appId===input.appId&&prior.name===input.name&&prior.inputHash===inputHash,'Tool command identity reused','conflict');return {status:prior.status==='pending'?'unknown':prior.status,...(prior.result!==undefined?{result:prior.result}:{})};}
+  if(prior){ensure(prior.appId===input.appId&&prior.name===input.name&&prior.inputHash===inputHash,'Tool command identity reused','conflict');return {status:prior.status==='pending'?'unknown':prior.status,...(prior.result!==undefined?{result:prior.result}:{}),...(prior.reconciliation?{reconciliation:structuredClone(prior.reconciliation)}:{})};}
   const current=async()=>{const a=(await this.#state())?.value.apps.find(a=>a.id===input.appId);ensure(a&&a.current!==null,'App is not installed','conflict');ensure(a.enabled,'App is off','conflict');const v=a.versions[a.current-1]!;ensure(packageHash(v.package)===v.hash,'Package changed after its check','conflict');return v;};
   const v=await current(),m=v.package.manifest,tool=requireTool(m,input.name),adapter=this.#mcp;ensure(adapter,'MCP adapter unavailable','conflict');await this.#admit();
   const live=await mcpRequest(adapter,input.appId,m.mcp!,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:input.appId,server:structuredClone(m.mcp!),signal}),this.#stop.signal,true);
@@ -277,9 +284,10 @@ export class AppsService {
  }
  /** Owner actions from Settings > Apps and the conversation. */
  async act(input:unknown):Promise<CommitResult<AppsState>>{
-  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={install:['catalogId'],disable:['appId'],enable:['appId'],remove:['appId'],rollback:['appId','version']};
+  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={install:['catalogId'],disable:['appId'],enable:['appId'],remove:['appId'],rollback:['appId','version'],reconcile:['appId','callId','outcome','evidence']};
   ensure(typeof action==='string'&&Object.hasOwn(fields,action)&&exact(input,['commandId','action',...fields[action]!])&&id(input.commandId),'Exact app action fields required');const commandId=this.#caller(input.commandId);
   if(action==='install'){const pkg=CATALOG.find(c=>c.manifest.id===input.catalogId);ensure(pkg,'Unknown catalog app');return this.#dispatch(commandId,OWNER,{type:'offer-app',decisionId:appDecisionId(commandId),origin:'catalog',pkg:structuredClone(pkg)});}
+  if(action==='reconcile')return this.#dispatch(commandId,OWNER,{type:'reconcile-app-tool',appId:input.appId as string,callId:input.callId as string,outcome:input.outcome as 'done'|'not-done',evidence:input.evidence as string});
   if(action==='rollback')return this.#dispatch(commandId,OWNER,{type:'rollback-app',appId:input.appId as string,version:input.version as number,decisionId:appDecisionId(commandId)});
   return this.#dispatch(commandId,OWNER,{type:(action+'-app') as 'disable-app'|'enable-app'|'remove-app',appId:input.appId as string});
  }

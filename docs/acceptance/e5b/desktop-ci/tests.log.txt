@@ -1,0 +1,53 @@
+
+> massion-desktop@0.1.0-dev.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+> massion-desktop@0.1.0-dev.0 test
+> node --test tests/*.test.ts
+
+✔ a v1-speaking impostor cannot receive owner commands or the launch secret (128.343411ms)
+✔ owner payload is not sent if the authenticated socket closes before dispatch (28.853585ms)
+✔ a fresh proof relayed from another port does not authenticate the impostor (48.362828ms)
+✔ authenticated daemon gates commands and SSE while preserving owner negotiation and writes (145.715866ms)
+✔ notification waits for an in-flight member switch before focusing its decision (156.563237ms)
+✔ a newer notification click supersedes a delayed read from an older target (19.520286ms)
+✔ desktop build preserves iframe client strings and appends a separate focus bridge (1276.609038ms)
+✔ detached daemon survives launcher exit, excludes a second owner and drains on explicit quit (2987.244517ms)
+▶ packaged daemon resources are usable by external Node at their resolved paths
+  ✔ standalone daemon runner is outside ASAR and readable by Node (371.798801ms)
+  ✔ core imports and the app handler runner survives the package filter (1110.177128ms)
+✔ packaged daemon resources are usable by external Node at their resolved paths (1686.228235ms)
+✔ untrusted URLs, subframes and renderer capabilities stay outside the host boundary (12.401575ms)
+✔ desktop uses existing version negotiation: ready (115.767281ms)
+✔ desktop uses existing version negotiation: update-needed (36.182229ms)
+✔ desktop uses existing version negotiation: restart-needed (14.280885ms)
+✔ proxy forwards one command, refuses redirects and never exposes non-protocol routes (49.391615ms)
+✔ only owner exceptions notify; progress, duplicate revisions and stale feeds stay quiet (2.807632ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4085.407433
+
+> massion-desktop@0.1.0-dev.0 build
+> node build.mjs
+
+(node:224) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> massion-desktop@0.1.0-dev.0 smoke
+> node tests/smoke.mjs
+
+[297:1109/145953.532941:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[297:1109/145954.530554:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[297:1109/145954.531243:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+{"electronSmoke":"passed","title":"Massion","accessibilityNodes":942,"security":"sandbox, isolation, CSP, navigation, permissions","theme":"dark/light","windowLifecycle":"close and reopen","notification":"existing Work pane and keyboard focus","artifacts":"/app/desktop/smoke-artifacts"}

@@ -17,4 +17,4 @@ for(const name of ['client-protocol','protocol','daemon-auth']){
 for(const name of ['launcher.cjs','daemon-runner.mjs'])await copyFile(join(directory,name),join(out,name));
 await writeFile(join(out,'preload.cjs'),(await readFile(join(directory,'preload.cjs'),'utf8')).replace('__DESKTOP_CHANNELS__',JSON.stringify(channels)));
 const bridge=await readFile(join(directory,'host-client.js'),'utf8');
-await writeFile(join(out,'index.html'),workbenchPage.replace('</body>',`<script>\n${bridge}\n</script>\n</body>`));
+await writeFile(join(out,'index.html'),workbenchPage.replace(/<\/body>\s*<\/html>\s*$/,()=>`<script>\n${bridge}\n</script>\n</body>\n</html>`));

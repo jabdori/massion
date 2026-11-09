@@ -34,7 +34,7 @@ try{
  await contents.executeJavaScript("location.href='https://example.org'");await delay(100);assert.equal(contents.getURL(),'massion://app/');
  const target=JSON.parse(process.env.MASSION_SMOKE_TARGET);
  contents.send('desktop:focus',target);
- for(let n=0;n<100;n++){if(await contents.executeJavaScript(`paneActive===${JSON.stringify(target.missionId+'/'+target.workId)}&&!document.getElementById('work-pane').hidden`))break;await delay(100);}
+ for(let n=0;n<100;n++){if(await contents.executeJavaScript(`paneActive===${JSON.stringify(target.missionId+'/'+target.workId)}&&!document.getElementById('work-pane').hidden&&document.activeElement.id===${JSON.stringify('work-heading-'+target.workId)}`))break;await delay(100);}
  assert.equal(await contents.executeJavaScript('paneActive'),target.missionId+'/'+target.workId,'Notification target opens its Work');
  assert.equal(await contents.executeJavaScript('document.activeElement.id'),'work-heading-'+target.workId,'Work receives keyboard focus');
  await writeFile(join(artifacts,'focused-work.png'),(await contents.capturePage()).toPNG());

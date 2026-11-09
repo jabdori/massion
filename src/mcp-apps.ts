@@ -15,7 +15,7 @@ export interface McpAdapter {
  view?(request:{requestId:string;appId:string;server:McpServer;signal:AbortSignal}):Promise<unknown>;
  close(request:{requestId:string;appId:string;server:McpServer;reason:'complete'|'cancel'}):Promise<void>;
 }
-export interface McpCall {id:string;appId:string;versionHash:string;name:string;inputHash:string;timeoutMs:number;status:'pending'|'succeeded'|'failed'|'unknown';result?:unknown}
+export interface McpCall {id:string;appId:string;versionHash:string;name:string;inputHash:string;timeoutMs:number;status:'pending'|'succeeded'|'failed'|'unknown';result?:unknown;reconciliation?:{actorId:string;at:number;outcome:'done'|'not-done';evidence:string}}
 export const MCP_TIMEOUT_MS=TOOL_TIMEOUT_MS;
 const exact=(v:unknown,keys:string[],optional:string[]=[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&keys.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>keys.includes(k)||optional.includes(k));
 const validName=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_.-]{1,64}$/.test(v);

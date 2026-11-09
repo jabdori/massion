@@ -1,4 +1,6 @@
 {
+ "ui.apps.reconcile-done": {"ko":"실행됨","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
+ "ui.apps.reconcile-not-done": {"ko":"실행되지 않음","roles":["button"],"used_in":["app:unknown-outcome"],"provenance":"Owner-requested exact-call reconciliation review"},
  "ui.apps.receipt-time": {"ko":"{content} · {time}","roles":["text"],"used_in":["B24-done:conversation","B25-done:conversation"],"provenance":"Approved app decision receipt rows"},
  "ui.apps.source-work": {"ko":"{work_title} ›","roles":["link"],"used_in":["B25:conversation"],"provenance":"Approved B25 artboard"},
  "ui.apps.write": {"ko":"쓰기","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},

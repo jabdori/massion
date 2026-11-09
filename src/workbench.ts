@@ -1704,8 +1704,8 @@ async function connect() {
   await startFeed();
   if (!selectedId && initialReference.present) report(copy("legacy.invalid-mission-link-enter-a-valid-mission"), 'error');
 }
-${chatClient}
 ${appConnectClient}
+${chatClient}
 ${memberClient}
 ${resultsClient}
 ${schedulesClient}

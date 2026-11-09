@@ -143,3 +143,36 @@ test('connection cards localize permission labels and approved updates reuse the
  const update=(await service.decisions(null)).find(d=>d.state==='open')!;assert.equal(update.connection,undefined);
  assert.equal((await service.decide({commandId:'update',decisionId:update.id,answer:'act'})).status,'committed');assert.equal((await service.read()).apps[0]!.version,'1.1.0');
 });
+
+test('only an evidenced owner reconciliation releases the exact unknown call without resending it',async()=>{
+ for(const outcome of ['done','not-done'] as const){
+  let sent=0,listed=0,now=100;const adapter={list:async()=>{listed++;return tools;},call:async()=>{sent++;return sent===1?new Promise(()=>{}):{content:[]};},close:async()=>{}};
+  const {store,service,decisionId}=await setup({mcp:adapter,toolTimeoutMs:10,clock:()=>now});await install(service,decisionId);
+  assert.equal((await call(service,'comment','assistant-app-uncertain')).status,'unknown');
+  await assert.rejects(call(service,'comment','assistant-app-next'),/Unresolved/);assert.equal(sent,1);
+  const request={commandId:'reconcile',action:'reconcile',appId:'app-mcp-github',callId:'assistant-app-uncertain',outcome,evidence:'Service receipt #42 observed by owner'};
+  await assert.rejects(service.act({...request,evidence:' '}),/evidence/i);
+  await assert.rejects(service.act({...request,appId:'app-other'}),/call/i);
+  const state=(await store.load(APPS_ID))!.value;
+  assert.throws(()=>applyApps(state,{type:'reconcile-app-tool',appId:request.appId,callId:request.callId,outcome,evidence:request.evidence} as any,host,{observedAt:200}),/role/);
+  const pending=structuredClone(state);pending.toolCalls[0].status='pending';assert.throws(()=>applyApps(pending,{type:'reconcile-app-tool',appId:request.appId,callId:request.callId,outcome,evidence:request.evidence},{id:'local-owner',roles:['owner']},{observedAt:200}),/unknown call/);
+  const before={sent,listed};now=200;
+  const result=await Promise.all([service.act(request),service.act(request)]);assert.deepEqual(result.map(r=>r.status).sort(),['committed','replayed']);assert.deepEqual({sent,listed},before);
+  const resolved=(await store.load(APPS_ID))!.value.toolCalls.find((c:any)=>c.id===request.callId);
+  assert.equal(resolved.status,outcome==='done'?'succeeded':'failed');assert.deepEqual(resolved.reconciliation,{actorId:'local-owner',at:200,outcome,evidence:request.evidence});
+  assert.equal((await call(new AppsService(store,{mcp:adapter}),'comment',request.callId)).status,resolved.status);assert.deepEqual({sent,listed},before,'replay never invokes again');
+  assert.equal((await call(service,'comment','assistant-app-next')).status,'succeeded');assert.equal(sent,2);
+  validateMissionJournalLineage(store.inspect() as any);
+ }
+});
+
+test('unknown app calls are projected without arguments and reconcile over the existing owner route',async t=>{
+ const {store,service,decisionId}=await setup({mcp:{list:async()=>tools,call:async()=>new Promise(()=>{}),close:async()=>{}},toolTimeoutMs:10});await install(service,decisionId);
+ await call(service,'comment','assistant-app-unknown-ui');
+ const rail:any=await service.rail();assert.deepEqual(rail[0].unresolved,[{id:'assistant-app-unknown-ui',name:'comment',status:'unknown'}]);
+ const server=createWorkbench(store,process.cwd(),{scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
+ const base='http://127.0.0.1:'+(server.address() as any).port,body={commandId:'reconcile-http',action:'reconcile',appId:'app-mcp-github',callId:'assistant-app-unknown-ui',outcome:'not-done',evidence:'Server receipt confirms no effect'};
+ const post=(feed?:string)=>fetch(base+'/assistant/apps',{method:'POST',headers:{'content-type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(body)});
+ assert.equal((await post('old-feed')).status,409);assert.equal((await service.rail() as any)[0].unresolved.length,1);
+ assert.equal((await post()).status,200);assert.deepEqual((await service.rail() as any)[0].unresolved,[]);
+});

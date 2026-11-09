@@ -41,3 +41,7 @@ The recorded test run used the physical scratchpad TMPDIR prescribed by CODEX-BR
 After #111 merged, the focused MCP/apps/shared-timeout/slots/runtime/server/daemon-auth checks passed **55 tests, one real-DB skip, zero failures** ([output](e5a-integration-tests.txt)); typecheck passed again. The secret sentinel test now exercises E5a's real `InMemorySecretSlots` API. MCP's duplicate timer implementation was removed. The personal keychain was not mutated and no concrete native MCP transport was invoked. This merge changed no rendered client, fixture or CSS bytes, so the committed visual captures remain the renderer tested in this round.
 
 The final post-#111 conversation/source-lineage, member Work and internal-team rerun passed **124 tests, 2 real-DB skips, zero failures** ([output](post111-conversation-tests.txt)).
+
+## Independent-review and CI follow-up
+
+The owner-reconciliation fix and its actual host/browser evidence are documented in [reconciliation.md](reconciliation.md). The unknown-write block remains until an evidenced owner command settles that exact call; no reconciliation resends it. This round also corrects the desktop bundle insertion and the offline draft initialization order exposed by CI.
