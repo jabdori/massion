@@ -19,7 +19,7 @@ export interface AppManifest {kind?:'script'|'mcp';mcp?:McpServer;connection?:{s
 export interface AppPackage {manifest:AppManifest;source:string}
 /** The host's network adapter: it attaches the secret stored for this app's slot itself, keyed by (appId, slot), so one app never names another's secret; the app never receives the value. */
 export type AppNetwork=(request:{appId:string;url:string;method:string;secret:string|null;signal:AbortSignal})=>Promise<{status:number;body:string}>;
-export interface AppView {frame?:{html:string};title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string}[]}[];fields?:[string,string][]}
+export interface AppView {frame?:{html:string};github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[];title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string;github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[]}[]}[];fields?:[string,string][]}
 export interface AppCheck {tests:{passed:number;total:number};declaredOnly:boolean;evidence:string}
 export interface AppVersion {hash:string;package:AppPackage;at:number;approvedAt?:number;check?:AppCheck}
 export interface App {id:string;name:string;origin:'catalog'|'self-made';memberId?:string;source?:{missionId:string;workId:string;title:string};versions:AppVersion[];current:number|null;enabled:boolean;installedAt?:number;removedAt?:number}
@@ -204,8 +204,8 @@ export class AppsService {
  /** Settings > Apps: installed apps with permissions, contributions and approved versions; the catalog with what is installed. */
  async read(){
   await this.#recoverPending();const s=await this.#state(),v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState;
-  const apps=v.apps.filter(a=>a.current!==null).map(a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest;
-   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),
+  const apps=v.apps.filter(a=>a.current!==null).map(a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest,bundled=a.origin==='catalog'&&CATALOG.find(c=>c.manifest.id===m.id);
+   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),...bundled&&bundled.manifest.version.localeCompare(m.version,'en',{numeric:true})>0?{update:{catalogId:bundled.manifest.id,version:bundled.manifest.version}}:{},
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};});
   const catalog=CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)}));
   return {revision:s?.revision??0,apps,catalog};
@@ -242,6 +242,7 @@ export class AppsService {
   const item=cur.package.manifest.handlers.includes('item');
   if(input.handler==='item')ensure(ref(input.ref),'Invalid ref');else ensure(input.ref===undefined,'A page takes no ref');
   const view=(await runHandler({appId:a.id,pkg:cur.package,handler:input.handler,input:input.handler==='item'?{ref:input.ref}:{},network:this.#network})).view;
+  if(a.id==='app-github'&&view.github)ensure(input.handler==='item'&&String(view.github.number)===input.ref&&view.github.repository==='jabdori/massion','GitHub item identity changed during read','conflict');
   // Page rows are what the owner selects as item refs, so a page is held to the same ref contract as the item request.
   if(input.handler==='page'&&item)ensure(view.groups.every(g=>g.rows.every(r=>ref(r.id))),'Page row ids must be item refs');
   return view;

@@ -1,0 +1,109 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room-steps.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 15,
+      "failed": 0,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "light",
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room-steps.png"
+    }
+  ]
+}
