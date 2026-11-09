@@ -16,6 +16,7 @@ The current interface is in Korean; this guide explains it in English.
 5. [Your records and files](records.md)
 6. [Back up and restore](backup-restore.md)
 7. [Troubleshooting](troubleshooting.md)
+8. [Release checklist](release.md)
 
 For the distinction between conversation, delegated Work and accepted Records,
 see the [concepts overview](../product/concepts.md). For what remains planned,
