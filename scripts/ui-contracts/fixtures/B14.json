@@ -334,6 +334,24 @@
             "credentialConfigured": true,
             "models": [],
             "configHash": "fixture"
+          },
+          {
+            "id": "anthropic",
+            "label": "Anthropic API",
+            "providerType": "anthropic",
+            "connectionStatus": "credential-required",
+            "credentialConfigured": false,
+            "models": [],
+            "configHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "id": "openai",
+            "label": "OpenAI API",
+            "providerType": "openai",
+            "connectionStatus": "credential-required",
+            "credentialConfigured": false,
+            "models": [],
+            "configHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           }
         ],
         "runtime": {

@@ -26,14 +26,14 @@ contract B14-update (B14 설정 · 연결 · 개선) vs /Users/code/orca/workspa
   ok    settings     link     "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 {count}" -> button "코딩 주노 코드를 고치고 테스트를 돌려 봐요 gpt-6.1-terra OpenAI claude-sonnet-5-5 Anthropic 제공사 2곳"
   ok    settings     heading  "구독 로그인" -> heading "구독 로그인"
   ok    settings     heading  "API 키" -> heading "API 키"
+  ok    settings     text     "없음" -> statictext "없음"
+  ok    settings     text     "없음" -> statictext "없음"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":262,"strings":34,"sentences":2,"longest":21} proto {"chars":321,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
+  budget settings     app {"chars":289,"strings":38,"sentences":2,"longest":21} proto {"chars":321,"strings":47,"sentences":2,"longest":21} source visibleTextBudget
   FAIL  missing settings     button   "다시 확인"
   FAIL  missing settings     button   "다시 확인"
   FAIL  missing settings     button   "키 변경"
-  FAIL  missing settings     text     "없음"
   FAIL  missing settings     button   "키 추가"
-  FAIL  missing settings     text     "없음"
   FAIL  missing settings     button   "키 추가"
-FAIL: 7 failures, 0 warnings, 34 required elements
+FAIL: 5 failures, 0 warnings, 34 required elements

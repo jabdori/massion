@@ -1,0 +1,49 @@
+{
+  "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+  "screenArguments": [],
+  "exitCode": 0,
+  "contracts": 75,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "captured": 150,
+  "infrastructureErrors": 0,
+  "blocking": false,
+  "sourceFiles": 407,
+  "sourceInputSha256": "4cfc3d4d95c4ac375c264c546e1c2091b4a03b9cd10baa30b84db833beeeb39f",
+  "captureInputsUnchanged": true,
+  "b22Before": [
+    {
+      "theme": "dark",
+      "infrastructureErrors": 1
+    },
+    {
+      "theme": "light",
+      "infrastructureErrors": 1
+    }
+  ],
+  "b22After": [
+    {
+      "theme": "dark",
+      "passed": 34,
+      "required": 49,
+      "failed": 18,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "infrastructureErrors": 0
+    },
+    {
+      "theme": "light",
+      "passed": 34,
+      "required": 49,
+      "failed": 18,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "infrastructureErrors": 0
+    }
+  ],
+  "revision": "Final low-priority revision-submission isolation fix; all150 repeated before push, no visual changes."
+}

@@ -1,14 +1,14 @@
-Final full aggregate run after browser completion.
-ℹ tests 1903
-ℹ pass 1562
+Final integrated full aggregate run after supported fixture repair.
+ℹ tests 1930
+ℹ pass 1589
 ℹ fail 1
 ℹ skipped 340
-ℹ duration_ms 57281.172708
+ℹ duration_ms 54381.619709
 
 ✖ failing tests:
 
 test at tests/portable-backup.test.ts:137:1
-✖ portable inventory order is stable across English and Turkish process locales (190.810209ms)
+✖ portable inventory order is stable across English and Turkish process locales (70.855584ms)
   Error: Text artifact boundary: directory realpath mismatch
       at fail (file:///Users/code/orca/workspaces/massion/e3d1-settings/src/text-artifacts.ts:32:47)
       at directory (file:///Users/code/orca/workspaces/massion/e3d1-settings/src/text-artifacts.ts:69:38)

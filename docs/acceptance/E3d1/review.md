@@ -31,3 +31,9 @@ Browser interaction evidence separately verifies local search, the readonly
 General controls, keyboard model reorder dispatch and no replay after the
 read-only fixture host rejects a write. That fixture evidence is not a real
 provider call, durable group save, app installation or credential result.
+
+## Main integration
+
+After the first push, main advanced to `d435690` (PR 108). Only the copy table conflicted: preserve all current-main entries and add the seven Settings keys. Regenerate tokens from the combined visual source. No Work-pane implementation was rewritten; its current-main changes are inherited. The integrated candidate passes typecheck, 211 affected tests and the source/copy checks. The full 1,930-test run has 1,589 passes, 340 optional skips and only the documented macOS case-path failure. Rerun all 150 screen/theme cases before the integration push.
+
+The final residual audit found two unconfigured API rows were fixture gaps, not missing host capabilities. `ConnectionWorkbench.connect` permits an omitted secret reference and `list` returns `credential-required`; the existing Settings test already covers OpenAI without a credential. Add both approved Anthropic/OpenAI metadata rows to B14 and its inherited variants. No credential, provider call, endpoint or UI implementation was added. Rerun the integrated 150 captures after this fixture repair.

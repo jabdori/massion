@@ -9,7 +9,7 @@ const dynamic='\uFFFC';
 const attributes=new Set(['title','placeholder','alt','aria-label','aria-description']);
 const properties=new Set(['textContent','innerText','title','placeholder','alt','ariaLabel','ariaDescription']);
 const keyedFiles=new Set([
- 'surface-shell.ts','assistant-conversation-panel.ts','settings-panel.ts','apps-panel.ts','members-panel.ts','results-panel.ts','schedules-panel.ts','workbench.ts',
+ 'work-room-panel.ts','surface-shell.ts','assistant-conversation-panel.ts','settings-panel.ts','apps-panel.ts','members-panel.ts','results-panel.ts','schedules-panel.ts','workbench.ts',
  'conversation-work-panel.ts','expired-run-panel.ts','knowledge-neighborhood-panel.ts','memory-conflict-panel.ts','memory-content-search-panel.ts','memory-expiry-panel.ts','memory-find-panel.ts','memory-usage-panel.ts',
  'mission-catalog-panel.ts','mission-constraints-panel.ts','reflection-trail-panel.ts','rejected-text-panel.ts','run-sequence-panel.ts','work-clarification-panel.ts','work-correction-panel.ts','work-inbox-panel.ts','work-prerequisite-panel.ts',
  'accepted-result-source-draft.ts','owner-file-document-draft.ts'

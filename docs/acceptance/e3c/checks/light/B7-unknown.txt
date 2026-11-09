@@ -1,0 +1,56 @@
+contract B7-unknown (B7 업무 방 · 프린터 토너 주문 결과 모름) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/ui-contracts/snapshots/light/B7-unknown.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      status   "읽지 않음" -> status "읽지 않음"
+  ok    sidebar      button   "우선순위" -> button "우선순위"
+  ok    sidebar      status   "읽지 않음" -> statictext "읽지 않음"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "닫기" -> button "닫기"
+  ok    pane         tab      "{work_title}" -> tab "프린터 토너 주문"
+  ok    pane         link     "넓히기" -> button "넓히기"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         text     "결과 모름" -> statictext "결과 모름"
+  ok    pane         heading  "{work_title}" -> heading "프린터 토너 주문"
+  ok    pane         text     "{member}" -> statictext "하나"
+  ok    pane         chip     "확인" -> statictext "확인"
+  ok    pane         text     "절차" -> statictext "절차"
+  ok    pane         text     "{progress}" -> statictext "0/3"
+  ok    pane         text     "{time}" -> statictext "14:08"
+  ok    pane         chip     "{member}" -> statictext "작성"
+  ok    pane         text     "결과 모름" -> statictext "결과 모름"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":76,"strings":19,"sentences":0,"longest":9} proto {"chars":221,"strings":14,"sentences":5,"longest":47} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":335,"strings":33,"sentences":6,"longest":36} proto {"chars":188,"strings":16,"sentences":2,"longest":30} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":85,"strings":17,"sentences":0,"longest":13} proto {"chars":269,"strings":31,"sentences":0,"longest":26} source visibleTextBudget
+  warn  budget conversation sentences 6 > 2: "경쟁사 가격도 확인해 줘."
+  warn  budget conversation chars 335 > 264
+  FAIL  missing sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}."
+  FAIL  missing sidebar      link     "{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요."
+  FAIL  missing sidebar      link     "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요."
+  FAIL  missing sidebar      link     "{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요."
+  FAIL  missing sidebar      link     "{work_title} 파일 {count}를 다 읽었어요. {time} 완료."
+  FAIL  missing conversation button   "주문 내역 확인"
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
+  FAIL  missing pane         button   "확인 안 함 결제 응답 없음"
+FAIL: 10 failures, 2 warnings, 46 required elements

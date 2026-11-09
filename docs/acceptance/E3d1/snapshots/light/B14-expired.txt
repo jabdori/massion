@@ -78,3 +78,9 @@
         - strong
           - StaticText "Z.ai GLM Coding Plan"
         - StaticText "시험 연결"
+        - strong
+          - StaticText "Anthropic API"
+        - StaticText "없음"
+        - strong
+          - StaticText "OpenAI API"
+        - StaticText "없음"

@@ -17,32 +17,24 @@ All rows below map to absent host capabilities described in [capabilities.md](ca
 | B14 | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | dark | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14 | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14 | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | dark | FAIL  missing settings     button   "다시 연결" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-expired | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-expired | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     text     "다시 시작 필요" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     button   "다시 시작" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     text     "다시 시작 필요" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     button   "다시 시작" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-restart | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-restart | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | dark | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | dark | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-update | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-update | dark | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | dark | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-usage | dark | FAIL  order  settings     text     "—" (occurrence already consumed or found earlier) | [Usage/currency budget](capabilities.md) |
 | B14-usage | dark | FAIL  missing settings     button   "변경" | [Usage/currency budget](capabilities.md) |
@@ -88,32 +80,24 @@ All rows below map to absent host capabilities described in [capabilities.md](ca
 | B14 | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | light | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14 | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14 | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14 | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | light | FAIL  missing settings     button   "다시 연결" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-expired | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-expired | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-expired | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     text     "다시 시작 필요" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     button   "다시 시작" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     text     "다시 시작 필요" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     button   "다시 시작" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-restart | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-restart | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-restart | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | light | FAIL  missing settings     button   "다시 확인" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | light | FAIL  missing settings     button   "키 변경" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-update | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
-| B14-update | light | FAIL  missing settings     text     "없음" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-update | light | FAIL  missing settings     button   "키 추가" | [Connection credentials/lifecycle commands](capabilities.md) |
 | B14-usage | light | FAIL  order  settings     text     "—" (occurrence already consumed or found earlier) | [Usage/currency budget](capabilities.md) |
 | B14-usage | light | FAIL  missing settings     button   "변경" | [Usage/currency budget](capabilities.md) |

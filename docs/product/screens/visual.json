@@ -88,7 +88,8 @@
  "evidence": {
   "light": "apps/codex-desktop/evidence/bundles/tokens.css: light-dark gray-0/50/75/100/200/400/500/600/700/950; yellow-50/400/700/900; red-600; blue-500/600; purple-500/600; pink-600/700. Avatar roles preserve identity and readable contrast with existing avatar ink (--bg-0).",
   "dark": "Original owner-approved massion-tokens.css palette, unchanged.",
-  "motion": "apps/claude-desktop/frontend.md §4: .12s/.3s; cubic-bezier(.32,.72,0,1)."
+  "motion": "apps/claude-desktop/frontend.md §4: .12s/.3s; cubic-bezier(.32,.72,0,1).",
+  "work_room": "Approved B7/B8 rendered artboards: B8 field grid 96px/1fr/auto, 18px row line, flow time 44px/dot 5px; B7 status/step SVG 13px and Stop square radius 2px. B8 card header 38px; B7 procedure header 34px and rows 32px, from their approved rendered DOM."
  },
  "shell": {
   "rail": {
@@ -572,6 +573,17 @@
    "lh": "20px",
    "width": 424,
    "height": 136
+  },
+  "work.room": {
+   "label_width": 96,
+   "row_line_height": 18,
+   "time_width": 44,
+   "dot_size": 5,
+   "step_mark_size": 13,
+   "stop_radius": 2,
+   "header_height": 38,
+   "procedure_header_height": 34,
+   "step_height": 32
   }
  },
  "rhythm": {

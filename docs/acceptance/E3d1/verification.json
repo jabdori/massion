@@ -13,18 +13,18 @@
     "focused": {
       "command": "node --test tests/settings-surface.test.ts tests/apps-surface.test.ts tests/skills-surface.test.ts tests/workbench.test.ts tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts",
       "status": "passed",
-      "tests": 210
+      "tests": 211
     },
     "aggregate": {
       "command": "npm test",
-      "status": "failed-known-local-only-final-candidate",
-      "tests": 1903,
-      "passed": 1562,
+      "status": "failed-known-local-only-after-main-integration",
+      "tests": 1930,
+      "passed": 1589,
       "failed": 1,
       "skipped": 340,
       "failure": "portable inventory order is stable across English and Turkish process locales",
       "reason": "Text artifact boundary: directory realpath mismatch on the macOS case-insensitive filesystem. Pre-existing, explicitly listed in CODEX-BRIEF.md; this slice changes no backup/artifact code.",
-      "timingNote": "The prior concurrent aggregate attempt had a lifetime timeout. The isolated file and the final whole-suite run after browser completion both passed that case. Prior failure evidence is retained in aggregate-timing-attempt.txt."
+      "timingNote": "A pre-integration concurrent aggregate attempt had a lifetime timeout. Its isolated file, the later 1,903-test run and the integrated 1,930-test run all pass that case. Prior failure evidence is retained in aggregate-timing-attempt.txt."
     },
     "contracts": {
       "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
@@ -33,7 +33,7 @@
       "runs": 150,
       "errors": 0,
       "scopedRuns": 32,
-      "scopedFailures": 142,
+      "scopedFailures": 126,
       "scopedVisualFailures": 0
     },
     "browser": {
@@ -69,25 +69,50 @@
     "Optional actual SurrealDB integration stages (340 aggregate skips)"
   ],
   "sourceSha256": {
-    "docs/product/screens/copy.ko.json": "20340bd967f4d66fed47534d380f3533837835465138249ac34e7d4ed6e503ab",
-    "docs/product/screens/visual.json": "b62bfb194e381a6e8a4ba23ac2f63842e87031c15bfe8f4d73a31f778d5da1da",
+    "docs/product/screens/copy.ko.json": "06c4bba5b66626d4f311408d900277db0b76b234cd5243600a17fef0fa401795",
+    "docs/product/screens/visual.json": "897d66e86b343299fe6b5b82bf249b23658fbaaa5201b337b9a8cacf826a0060",
+    "scripts/generate-ui-tokens.mjs": "3925d26055bd7d9f7506c97e15c991a243fcae3d7ff446478ab191de906a91d4",
+    "scripts/ui-contracts/copy-lint.mjs": "652c0ec0d0a0ae878b4b9d62419379e287644f8811b749aa653debfca4ea5b50",
     "scripts/ui-contracts/fixtures/B13-devices.json": "365b0a09b15fd55005b155a59e455486759e003d57477f0d11f1bc5642084510",
     "scripts/ui-contracts/fixtures/B13.json": "2400c39dd2f78ceeb6b5c790296acb5296e404cb0df3d5f168d793055b109dfa",
     "scripts/ui-contracts/fixtures/B14-usage.json": "3524348839dd7cb7686555698263f46a440fb5b1016e0839932ea1d5ee30110f",
-    "scripts/ui-contracts/fixtures/B14.json": "b711671f6d7870d4e54f9e62faa4d94de8de13885e05fd12705e00c6eb988166",
+    "scripts/ui-contracts/fixtures/B14.json": "421804da3e600b7482ebae8f9e9925c72bdbf735e250e8b13ad52a761e265230",
     "scripts/ui-contracts/fixtures/B19-juno.json": "da4e8dbfa9a30cb203669d352e1f80517c31fa94e050b1ed375225daa9cbc95e",
     "scripts/ui-contracts/fixtures/B19.json": "88a30f622ad138ac7b00f0a031774a7968ea2f1fc32d21037d8317f2b01217e3",
     "scripts/ui-contracts/fixtures/B20-coding.json": "071f19f48f1b18441a10a2a169f08c013a031d225eebff542f583dc33f41ce7e",
     "scripts/ui-contracts/fixtures/B20.json": "46b9bbbb58f24045828b56815d80cda415ae5cb4307fd3e5fef868e854b7b375",
+    "scripts/ui-contracts/fixtures/B22-room-steps.json": "961cc43a174dda6fb7ba5323486859fab9db34e6279c3d5615045872da401a1d",
     "scripts/ui-contracts/fixtures/B23-github-expired.json": "a37f80e864ac4db8a07b544dcd5959f23d8e836690da3dd3b4049b439e3b4f9d",
     "scripts/ui-contracts/fixtures/B23-github.json": "7a122f7109ac162753ae4e1ea777d3e63d2fc691861c26ca5cf8676878e3a038",
     "scripts/ui-contracts/fixtures/B23.json": "0d75ebb5fae0561db7dbc9db8ba2df3039bc2be54d775f6981da0f4e732d633b",
+    "scripts/ui-contracts/fixtures/B7-churn.json": "c48171d0151c5ae4aa72452046d6a2b7da7c031af8671a2510001bbf64f76847",
+    "scripts/ui-contracts/fixtures/B7-done.json": "0afedc34dc611ec24bb98bbb69419fcab6d88ed581cff656f7c491462302a4d7",
+    "scripts/ui-contracts/fixtures/B7-fail.json": "51c7ee38e4697553fc3b59a3de863ad668589f24d4e11381bc4204414d4bc958",
+    "scripts/ui-contracts/fixtures/B7-unknown.json": "1ae0570b307b68177189ce5da5de4c0f0105f097d603b6c3ca24404f357a47ba",
+    "scripts/ui-contracts/fixtures/B7.json": "013b42ab1c5d89d0203b2fa9060284e2b143bb63473e5d06e5fa85e7c7e90a88",
+    "scripts/ui-contracts/fixtures/B8-done.json": "a2077531141a556f38568627d35d82a3467d11bdcb8b5f75284ccd681c7f5311",
+    "scripts/ui-contracts/fixtures/B8-fail.json": "f420f2d817f5c358d6e11999286d66d6707c665583d77bf18fb985c0b5be1f5b",
+    "scripts/ui-contracts/fixtures/B8-unknown.json": "beca0df67bf1b29199d0ac331a0cd54b2f2c519c4171fcedecbc1fa5ed27930e",
+    "scripts/ui-contracts/fixtures/B8.json": "6c4a337e041291178a4eab0e154d0c17598fb7d8c8412b6baf7b3005798fe5bf",
+    "scripts/ui-contracts/verify-work-pane.mjs": "df711fa03a473a824472224d41aba7952fe93f9ed865a287e5c3be86d5a18bba",
     "src/apps-panel.ts": "f2d68b509457f9f6e75c28995e03dfa95ac6d487a72769bf471ff71cb2fb00c4",
+    "src/assistant-conversation-panel.ts": "7d2c7fc2250a09cba818321ac48f42d3c11cf31b2254c411ed7c442c8f7cacee",
     "src/settings-panel.ts": "7aa86a7743f7c97a6647714dbdb60bd106d82bfeb4209e0b0031e7b57ee4f68d",
-    "src/ui-tokens.ts": "5d306a8ba0f91934796170691d6ce62f4fd02b1f6a6b9cc7896d311eccdc6e8d",
-    "src/workbench.ts": "68c25a2bd36119615ec57c1bd5d2f70aca9bb41f6271e5dd04296c7e913eeeba",
+    "src/surface-shell.ts": "2eead2c12a3b8d95c6d286e6e910054ad16470e9c4ac86c430828df295e00521",
+    "src/ui-tokens.ts": "0ea7bc923b2defbd8d091011726969c7e191d1a33c0140c069894bd854bbb340",
+    "src/work-inbox-panel.ts": "69a9e32eef5a0a7be73bd7df8b3f18c89dfc527c45726459fcc880e7c6a09add",
+    "src/work-room-panel.ts": "5afa1213439acb4f7f2b201e92e7feeb6ffdc01aecad0140ddca27d4bdbe82e9",
+    "src/workbench.ts": "cb2680219fb2b0722ed04b3d748c8ca3829d8685bfde49f2d4440a7184d53ff4",
     "tests/apps-surface.test.ts": "f28d0b006a5d97d3036c4895d43472a816f62b9c82a23f8284b8ca487616789e",
+    "tests/assistant-conversation.test.ts": "6bd8c0de1914429e6fd84fedd5fe34f374cdd1e81d043eac326a4179bff4ec9f",
+    "tests/conversation-cards.test.ts": "1c94564eda6685d721b8b83195a3b5c7e97456c771a27fbc98057ec602bcd197",
+    "tests/conversation-visual-gate.test.ts": "8579812e031dd2ef8dffbdc41368ccaced9b8be20c116c8fc9ad765f57f66fd5",
+    "tests/document-usage-panel.test.ts": "5f47eead394d5e0372d29a9b413c3fce7d6c9a895a920edb5130851a105f407c",
     "tests/settings-surface.test.ts": "faa5bd55bd16c66b931bf62fbecfb2dccd8828e4bee00257fa8ef8d82e8888ac",
-    "tests/ui-contract-fixtures.test.ts": "3eb9ac28e9db899cc84c6b9ef4199bac7a2f17c7f930e963bc7c39b027c1ba0d"
-  }
+    "tests/surface-shell.test.ts": "7eabb1cd97e1138d7995959bc931cf0f04b38063303def3b5733d213b7ae0d71",
+    "tests/ui-contract-fixtures.test.ts": "cf964974603e70f5dda089d8048afa47d64c25aa6127860e2ed5c3c927b393a9",
+    "tests/ui-tokens.test.ts": "36fc85c8816dad81a7ceb6937074b4ae96f0c64d8b3af483222c93f068e4f216",
+    "tests/work-room-visual.test.ts": "5fa4fe8a2c1105c75976264378ae5495a653c48bee4d4ac111d8d93d6ebee01f"
+  },
+  "integrationMainCommit": "d435690ca0f25ed80eaef0c6429ab47e5744fcb1"
 }

@@ -204,3 +204,9 @@ test('conversation fixtures keep the supported histories and navigation of their
   assert.ok(body.apps.some((app:any)=>app.id==='github'&&app.page),screen+' installed rail app is real fixture data');
  }
 });
+
+test('B22 evidence setup opens the new Work room inspection before its nested legacy evidence',async()=>{
+ const {loadFixture}=await hostModule(),fixture=await loadFixture('B22-room-steps');
+ const outer=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-room-check-pr84'),inner=fixture.steps.findIndex(s=>'selector' in s&&s.selector==='#work-evidence-summary-pr84');
+ assert.ok(outer>=0&&inner>outer,'the setup must reveal the outer Work room summary first');
+});

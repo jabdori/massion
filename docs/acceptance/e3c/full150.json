@@ -1,0 +1,2155 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B1",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 0,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [],
+      "gaps": [
+        "The production conversation has no first-launch suggestion buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B1.png"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 2,
+      "warnings": 0,
+      "required": 14,
+      "visualFailures": [],
+      "gaps": [
+        "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B1-first.png"
+    },
+    {
+      "screen": "B1-first-calc",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 0,
+      "warnings": 0,
+      "required": 12,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B1-first-calc.png"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 2,
+      "warnings": 1,
+      "required": 13,
+      "visualFailures": [],
+      "gaps": [
+        "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B1-first-later.png"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "passed": 0,
+      "failed": 4,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [
+        "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B1-signin.png"
+    },
+    {
+      "screen": "B2",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 2,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "The check-rule case-detail view is not implemented; no policy approval is simulated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B2-offline-failed.png"
+    },
+    {
+      "screen": "B3",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 5,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
+      "screen": "B5",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 2,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B5.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "dark",
+      "passed": 28,
+      "failed": 0,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [
+        "The production exception renderer has no known token-expiry variant or identity-bound retry control; the existing failed-work state is the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6-token.png"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-churn.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-unknown.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 10,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-unknown.png"
+    },
+    {
+      "screen": "B9",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 12,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or update state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "dark",
+      "passed": 16,
+      "failed": 10,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 10,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10-preview.png"
+    },
+    {
+      "screen": "B11",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B11.png"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 0,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [],
+      "gaps": [
+        "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B11-quill.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 13,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B12.png"
+    },
+    {
+      "screen": "B13",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 8,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 7,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 9,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 18,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "dark",
+      "passed": 14,
+      "failed": 20,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-usage.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 17,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B15.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 1,
+      "warnings": 2,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-later.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "passed": 19,
+      "failed": 2,
+      "warnings": 2,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-sent.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 12,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 7,
+      "failed": 8,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B18",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 40,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18-room-b.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "dark",
+      "passed": 24,
+      "failed": 19,
+      "warnings": 0,
+      "required": 43,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "dark",
+      "passed": 25,
+      "failed": 12,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 17,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B20-coding.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [
+        "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done-hana.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "dark",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21-name.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 10,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "dark",
+      "passed": 27,
+      "failed": 13,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 18,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract step strip has no production counterpart; the actual Work evidence is expanded."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B22-room-steps.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 12,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 3,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23-github-expired.png"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 5,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B24.png"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 5,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "The production connector action has no host-owned token form; no action is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B24-connect.png"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 6,
+      "warnings": 3,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Independent connected fixture; no real connection is made and the production result chip is unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B24-connect-connected.png"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 3,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Independent deferred connector fixture; no connector action is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B24-connect-later.png"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "passed": 15,
+      "failed": 8,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B24-connect-mail.png"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 10,
+      "warnings": 0,
+      "required": 28,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production connector has no host-owned masked token pane. No secret is supplied or product action submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B24-connect-token.png"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 6,
+      "warnings": 0,
+      "required": 24,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B24-done.png"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 6,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B24-later.png"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 7,
+      "warnings": 1,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B25.png"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 5,
+      "warnings": 1,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B25-done.png"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 5,
+      "warnings": 1,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B25-later.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The production host has no budget-waiting decision state or budget-increase card; existing Work is shown without fabricating a budget event."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26-later.png"
+    },
+    {
+      "screen": "B1",
+      "theme": "light",
+      "passed": 11,
+      "failed": 0,
+      "warnings": 0,
+      "required": 11,
+      "visualFailures": [],
+      "gaps": [
+        "The production conversation has no first-launch suggestion buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B1.png"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "light",
+      "passed": 12,
+      "failed": 2,
+      "warnings": 0,
+      "required": 14,
+      "visualFailures": [],
+      "gaps": [
+        "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B1-first.png"
+    },
+    {
+      "screen": "B1-first-calc",
+      "theme": "light",
+      "passed": 12,
+      "failed": 0,
+      "warnings": 0,
+      "required": 12,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B1-first-calc.png"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "light",
+      "passed": 11,
+      "failed": 2,
+      "warnings": 1,
+      "required": 13,
+      "visualFailures": [],
+      "gaps": [
+        "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B1-first-later.png"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "passed": 0,
+      "failed": 4,
+      "warnings": 0,
+      "required": 4,
+      "visualFailures": [
+        "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no first-launch sign-in page or provider login buttons."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B1-signin.png"
+    },
+    {
+      "screen": "B2",
+      "theme": "light",
+      "passed": 29,
+      "failed": 2,
+      "warnings": 0,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "The check-rule case-detail view is not implemented; no policy approval is simulated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B2.png"
+    },
+    {
+      "screen": "B2-offline",
+      "theme": "light",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 2,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline.png"
+    },
+    {
+      "screen": "B2-offline-failed",
+      "theme": "light",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B2-offline-failed.png"
+    },
+    {
+      "screen": "B3",
+      "theme": "light",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "light",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 30,
+      "failed": 5,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
+    },
+    {
+      "screen": "B5",
+      "theme": "light",
+      "passed": 15,
+      "failed": 2,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B5.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "light",
+      "passed": 28,
+      "failed": 0,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [
+        "The production exception renderer has no known token-expiry variant or identity-bound retry control; the existing failed-work state is the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6-token.png"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-churn.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-unknown.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 26,
+      "failed": 10,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-unknown.png"
+    },
+    {
+      "screen": "B9",
+      "theme": "light",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "light",
+      "passed": 26,
+      "failed": 12,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "light",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or update state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "light",
+      "passed": 16,
+      "failed": 10,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "light",
+      "passed": 22,
+      "failed": 10,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10-preview.png"
+    },
+    {
+      "screen": "B11",
+      "theme": "light",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B11.png"
+    },
+    {
+      "screen": "B11-quill",
+      "theme": "light",
+      "passed": 17,
+      "failed": 0,
+      "warnings": 0,
+      "required": 17,
+      "visualFailures": [],
+      "gaps": [
+        "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B11-quill.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "light",
+      "passed": 13,
+      "failed": 13,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B12.png"
+    },
+    {
+      "screen": "B13",
+      "theme": "light",
+      "passed": 14,
+      "failed": 8,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "light",
+      "passed": 14,
+      "failed": 6,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "passed": 14,
+      "failed": 7,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "passed": 14,
+      "failed": 9,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "light",
+      "passed": 18,
+      "failed": 18,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "light",
+      "passed": 18,
+      "failed": 16,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "light",
+      "passed": 14,
+      "failed": 20,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production settings navigation has no Usage section, usage/reset data, budget field or refresh action; connection settings are the nearest reachable state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-usage.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "passed": 18,
+      "failed": 17,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B15.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 2,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "passed": 20,
+      "failed": 1,
+      "warnings": 2,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-later.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "passed": 19,
+      "failed": 2,
+      "warnings": 2,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The external-device detail link and remote execution progress are not exposed by the production conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-sent.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "light",
+      "passed": 12,
+      "failed": 12,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 7,
+      "failed": 8,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B18",
+      "theme": "light",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 29,
+      "failed": 40,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract memory-candidate save/discard controls and named message bylines are not exposed in the member conversation."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18-room-b.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "light",
+      "passed": 24,
+      "failed": 19,
+      "warnings": 0,
+      "required": 43,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "light",
+      "passed": 25,
+      "failed": 12,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "light",
+      "passed": 13,
+      "failed": 17,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "light",
+      "passed": 13,
+      "failed": 16,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The model-group editor, name/description inputs, model removal and reorder controls do not exist in the production settings page; the selected group is shown read-only."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B20-coding.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "light",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "light",
+      "passed": 20,
+      "failed": 0,
+      "warnings": 1,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [
+        "No member is admitted by this fixture; production lacks the approved post-admission navigation/result chip."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "light",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done-hana.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "light",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21-name.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "passed": 11,
+      "failed": 10,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22.png"
+    },
+    {
+      "screen": "B22-room",
+      "theme": "light",
+      "passed": 27,
+      "failed": 13,
+      "warnings": 0,
+      "required": 40,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "passed": 34,
+      "failed": 18,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [
+        "The contract step strip has no production counterpart; the actual Work evidence is expanded."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B22-room-steps.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "light",
+      "passed": 17,
+      "failed": 12,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "light",
+      "passed": 30,
+      "failed": 2,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "light",
+      "passed": 30,
+      "failed": 3,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production app detail has no token-expiry field or reconnect control; no token value is invented."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23-github-expired.png"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "passed": 18,
+      "failed": 5,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B24.png"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "passed": 18,
+      "failed": 5,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "The production connector action has no host-owned token form; no action is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B24-connect.png"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "passed": 17,
+      "failed": 6,
+      "warnings": 3,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Independent connected fixture; no real connection is made and the production result chip is unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B24-connect-connected.png"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 3,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Independent deferred connector fixture; no connector action is submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B24-connect-later.png"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "passed": 15,
+      "failed": 8,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B24-connect-mail.png"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "passed": 18,
+      "failed": 10,
+      "warnings": 0,
+      "required": 28,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production connector has no host-owned masked token pane. No secret is supplied or product action submitted."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B24-connect-token.png"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "passed": 18,
+      "failed": 6,
+      "warnings": 0,
+      "required": 24,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B24-done.png"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "passed": 17,
+      "failed": 6,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B24-later.png"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "passed": 21,
+      "failed": 7,
+      "warnings": 1,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B25.png"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "passed": 22,
+      "failed": 5,
+      "warnings": 1,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B25-done.png"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "passed": 22,
+      "failed": 5,
+      "warnings": 1,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B25-later.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "passed": 27,
+      "failed": 0,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The production host has no budget-waiting decision state or budget-increase card; existing Work is shown without fabricating a budget event."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26-later.png"
+    }
+  ]
+}

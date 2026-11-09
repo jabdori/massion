@@ -138,7 +138,7 @@
       "screen": "B4",
       "theme": "dark",
       "passed": 30,
-      "failed": 8,
+      "failed": 5,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
@@ -189,15 +189,15 @@
     {
       "screen": "B7",
       "theme": "dark",
-      "passed": 31,
-      "failed": 12,
-      "warnings": 1,
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
       "required": 40,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B7.png"
@@ -205,15 +205,16 @@
     {
       "screen": "B7-churn",
       "theme": "dark",
-      "passed": 31,
-      "failed": 44,
-      "warnings": 1,
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
       "required": 74,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/dark/B7-churn.png"
@@ -221,13 +222,15 @@
     {
       "screen": "B7-done",
       "theme": "dark",
-      "passed": 26,
-      "failed": 22,
-      "warnings": 0,
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
       "required": 47,
       "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B7-done.png"
@@ -235,15 +238,16 @@
     {
       "screen": "B7-fail",
       "theme": "dark",
-      "passed": 30,
-      "failed": 49,
-      "warnings": 1,
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
       "required": 78,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/dark/B7-fail.png"
@@ -251,15 +255,15 @@
     {
       "screen": "B7-unknown",
       "theme": "dark",
-      "passed": 26,
-      "failed": 23,
-      "warnings": 0,
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
       "required": 46,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B7-unknown.png"
@@ -267,16 +271,15 @@
     {
       "screen": "B8",
       "theme": "dark",
-      "passed": 18,
-      "failed": 16,
-      "warnings": 1,
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
       "required": 31,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B8.png"
@@ -284,16 +287,15 @@
     {
       "screen": "B8-done",
       "theme": "dark",
-      "passed": 18,
-      "failed": 19,
-      "warnings": 0,
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B8-done.png"
@@ -301,16 +303,16 @@
     {
       "screen": "B8-fail",
       "theme": "dark",
-      "passed": 19,
-      "failed": 20,
+      "passed": 26,
+      "failed": 10,
       "warnings": 3,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/dark/B8-fail.png"
@@ -318,16 +320,15 @@
     {
       "screen": "B8-unknown",
       "theme": "dark",
-      "passed": 19,
-      "failed": 20,
-      "warnings": 0,
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/dark/B8-unknown.png"
@@ -495,8 +496,8 @@
     {
       "screen": "B14",
       "theme": "dark",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -509,8 +510,8 @@
     {
       "screen": "B14-expired",
       "theme": "dark",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -524,8 +525,8 @@
     {
       "screen": "B14-restart",
       "theme": "dark",
-      "passed": 27,
-      "failed": 9,
+      "passed": 29,
+      "failed": 7,
       "warnings": 0,
       "required": 36,
       "visualFailures": [],
@@ -539,8 +540,8 @@
     {
       "screen": "B14-update",
       "theme": "dark",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -669,8 +670,8 @@
     {
       "screen": "B18-room-b",
       "theme": "dark",
-      "passed": 31,
-      "failed": 38,
+      "passed": 29,
+      "failed": 40,
       "warnings": 2,
       "required": 69,
       "visualFailures": [
@@ -814,8 +815,8 @@
     {
       "screen": "B22-room-steps",
       "theme": "dark",
-      "passed": 28,
-      "failed": 24,
+      "passed": 34,
+      "failed": 18,
       "warnings": 0,
       "required": 49,
       "visualFailures": [
@@ -1182,7 +1183,7 @@
       "screen": "B4",
       "theme": "light",
       "passed": 30,
-      "failed": 8,
+      "failed": 5,
       "warnings": 0,
       "required": 35,
       "visualFailures": [],
@@ -1233,15 +1234,15 @@
     {
       "screen": "B7",
       "theme": "light",
-      "passed": 31,
-      "failed": 12,
-      "warnings": 1,
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
       "required": 40,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B7.png"
@@ -1249,15 +1250,16 @@
     {
       "screen": "B7-churn",
       "theme": "light",
-      "passed": 31,
-      "failed": 44,
-      "warnings": 1,
+      "passed": 41,
+      "failed": 33,
+      "warnings": 2,
       "required": 74,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/light/B7-churn.png"
@@ -1265,13 +1267,15 @@
     {
       "screen": "B7-done",
       "theme": "light",
-      "passed": 26,
-      "failed": 22,
-      "warnings": 0,
+      "passed": 35,
+      "failed": 12,
+      "warnings": 2,
       "required": 47,
       "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B7-done.png"
@@ -1279,15 +1283,16 @@
     {
       "screen": "B7-fail",
       "theme": "light",
-      "passed": 30,
-      "failed": 49,
-      "warnings": 1,
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
       "required": 78,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/light/B7-fail.png"
@@ -1295,15 +1300,15 @@
     {
       "screen": "B7-unknown",
       "theme": "light",
-      "passed": 26,
-      "failed": 23,
-      "warnings": 0,
+      "passed": 36,
+      "failed": 10,
+      "warnings": 2,
       "required": 46,
-      "visualFailures": [
-        "region pane: [840,0,600,900] != [840,44,600,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B7-unknown.png"
@@ -1311,16 +1316,15 @@
     {
       "screen": "B8",
       "theme": "light",
-      "passed": 18,
-      "failed": 16,
-      "warnings": 1,
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
       "required": 31,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B8.png"
@@ -1328,16 +1332,15 @@
     {
       "screen": "B8-done",
       "theme": "light",
-      "passed": 18,
-      "failed": 19,
-      "warnings": 0,
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B8-done.png"
@@ -1345,16 +1348,16 @@
     {
       "screen": "B8-fail",
       "theme": "light",
-      "passed": 19,
-      "failed": 20,
+      "passed": 26,
+      "failed": 10,
       "warnings": 3,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
       ],
       "errors": [],
       "pair": "pairs/light/B8-fail.png"
@@ -1362,16 +1365,15 @@
     {
       "screen": "B8-unknown",
       "theme": "light",
-      "passed": 19,
-      "failed": 20,
-      "warnings": 0,
+      "passed": 23,
+      "failed": 13,
+      "warnings": 2,
       "required": 36,
-      "visualFailures": [
-        "region composer: [76,808,332,78] != [76,808,432,78] (2px tolerance)",
-        "region main: [52,44,380,856] != [52,44,480,856] (2px tolerance)"
-      ],
+      "visualFailures": [],
       "gaps": [
-        "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
       ],
       "errors": [],
       "pair": "pairs/light/B8-unknown.png"
@@ -1539,8 +1541,8 @@
     {
       "screen": "B14",
       "theme": "light",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -1553,8 +1555,8 @@
     {
       "screen": "B14-expired",
       "theme": "light",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -1568,8 +1570,8 @@
     {
       "screen": "B14-restart",
       "theme": "light",
-      "passed": 27,
-      "failed": 9,
+      "passed": 29,
+      "failed": 7,
       "warnings": 0,
       "required": 36,
       "visualFailures": [],
@@ -1583,8 +1585,8 @@
     {
       "screen": "B14-update",
       "theme": "light",
-      "passed": 27,
-      "failed": 7,
+      "passed": 29,
+      "failed": 5,
       "warnings": 0,
       "required": 34,
       "visualFailures": [],
@@ -1713,8 +1715,8 @@
     {
       "screen": "B18-room-b",
       "theme": "light",
-      "passed": 31,
-      "failed": 38,
+      "passed": 29,
+      "failed": 40,
       "warnings": 2,
       "required": 69,
       "visualFailures": [
@@ -1858,8 +1860,8 @@
     {
       "screen": "B22-room-steps",
       "theme": "light",
-      "passed": 28,
-      "failed": 24,
+      "passed": 34,
+      "failed": 18,
       "warnings": 0,
       "required": 49,
       "visualFailures": [

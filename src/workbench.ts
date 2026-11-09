@@ -1,3 +1,4 @@
+import {workRoomStyle,workRoomClient} from './work-room-panel.ts';
 import {uiTokensStyle} from './ui-tokens.ts';
 import {copy,uiCopyClient} from './ui-copy.ts';
 import {protocolClientScript} from './client-protocol.ts';
@@ -50,7 +51,8 @@ ${resultsStyle}
 ${schedulesStyle}
 ${settingsStyle}
 ${appsStyle}
-${shellStyle}</style>
+${shellStyle}
+${workRoomStyle}</style>
 </head>
 <body>
 <div id="app" class="app">
@@ -650,7 +652,7 @@ function renderWork(work) {
     form.addEventListener('submit', event => { event.preventDefault(); if (!current()) return; const instruction = input.value.trim(); drafts.set(key,input.value); if (instruction) sendCommand({type:'steer',workId:work.id,instruction}, document.activeElement === input || document.activeElement === steer); });
     buttons.append(steer,cancel); form.append(label,input,buttons,element('p',copy("legacy.steering-records-an-owner-instruction-existing-execution"),'hint')); area.append(form); card.append(area);
   }
-  return card;
+  return paneTabs.some(t=>t.key===paneActive&&t.missionId===snapshot.value.id&&t.workId===work.id)?renderWorkRoom(work,card):card;
 }
 function renderMission() {
   if (!snapshot) return;
@@ -946,9 +948,9 @@ function renderDocumentUses(body,choice){
  if(body.limit!==20 || body.totalUses!==expected.length || !Array.isArray(body.uses) || JSON.stringify(comparableData(body.uses))!==JSON.stringify(comparableData(expected.slice(0,20))))throw Error(copy("legacy.use-results-do-not-match-exact-work"));
  const area=$('document-usage-results');area.append(element('p',copy("legacy.work-uses-v-showing-limit-20",{totalUses:body.totalUses,id:choice.document.id,version:choice.document.version,length:body.uses.length}),'hint'),element('p',copy("legacy.original-source-sha-256",{contentSha256:choice.document.contentSha256}),'hint'));
  for(const use of body.uses){area.append(element('h4',use.workId+' · '+use.title),element('p',copy("legacy.execution-acceptance-criteria-v",{execution:use.execution,acceptance:use.acceptance,criteriaVersion:use.criteriaVersion})),element('pre',copy("legacy.owner-selection-reason",{actorId:use.decision.actorId,reason:use.decision.reason})));
-  const inspect=element('button',copy("legacy.inspect-work",{workId:use.workId}));inspect.id='document-usage-work-'+use.workId;inspect.type='button';inspect.addEventListener('click',()=>{if(!currentDocumentRead(choice))return;paneExplicit(snapshot.value.id,use.workId,use.title);const summary=document.getElementById('work-evidence-summary-'+use.workId);if(summary?.parentElement)summary.parentElement.open=true;document.getElementById('work-heading-'+use.workId)?.focus();});area.append(inspect);
+  const inspect=element('button',copy("legacy.inspect-work",{workId:use.workId}));inspect.id='document-usage-work-'+use.workId;inspect.type='button';inspect.addEventListener('click',()=>{if(!currentDocumentRead(choice))return;paneExplicit(snapshot.value.id,use.workId,use.title);openWorkEvidence(use.workId);document.getElementById('work-heading-'+use.workId)?.focus();});area.append(inspect);
   if(use.record){area.append(element('p',copy("legacy.record-evidence-criteria-v",{id:use.record.id,evidenceClass:use.record.evidenceClass,criteriaVersion:use.record.criteriaVersion})),element('p',copy("legacy.record-checksum",{checksum:use.record.checksum}),'hint'),element('p',copy("legacy.artifact-v-sha-256",{id:use.record.artifact.id,version:use.record.artifact.version,kind:use.record.artifact.kind,sha256:use.record.artifact.sha256}),'hint'));
-   const record=element('button',copy("legacy.inspect-exact-record",{id:use.record.id}));record.id='document-usage-record-'+use.workId;record.type='button';record.addEventListener('click',()=>{if(!currentDocumentRead(choice))return;paneExplicit(snapshot.value.id,use.workId,use.title);const evidence=document.getElementById('work-evidence-summary-'+use.workId);if(evidence?.parentElement)evidence.parentElement.open=true;const summary=document.getElementById('work-record-text-summary-'+use.workId);if(summary?.parentElement)summary.parentElement.open=true;const read=document.getElementById('work-record-text-read-'+use.workId);if(read && !read.disabled)read.focus();else document.getElementById('work-heading-'+use.workId)?.focus();});area.append(record);
+   const record=element('button',copy("legacy.inspect-exact-record",{id:use.record.id}));record.id='document-usage-record-'+use.workId;record.type='button';record.addEventListener('click',()=>{if(!currentDocumentRead(choice))return;paneExplicit(snapshot.value.id,use.workId,use.title);openWorkEvidence(use.workId);const summary=document.getElementById('work-record-text-summary-'+use.workId);if(summary?.parentElement)summary.parentElement.open=true;const read=document.getElementById('work-record-text-read-'+use.workId);if(read && !read.disabled)read.focus();else document.getElementById('work-heading-'+use.workId)?.focus();});area.append(record);
   }else area.append(element('p',copy("legacy.no-accepted-record-for-this-work")));
  }
  $('document-read-status').textContent=copy("legacy.exact-original-and-stored-use-bindings-checked",{value:(body.totalUses>20?copy("legacy.more-uses-exist-this-view-shows-only"):'')});
@@ -1706,6 +1708,7 @@ ${schedulesClient}
 ${settingsClient}
 ${appsClient}
 ${shellClient}
+${workRoomClient}
 ${missionCatalogClient}
 ${workInboxClient}
 ${runSequenceClient}

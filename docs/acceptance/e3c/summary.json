@@ -1,0 +1,18 @@
+{
+  "passed": 572,
+  "required": 848,
+  "failed": 276,
+  "visualFailures": 0,
+  "infrastructureErrors": 0,
+  "strictOrderCascades": 172,
+  "boundaryCounts": {
+    "payment": 16,
+    "business-procedure": 80,
+    "steering-continuation": 4,
+    "memory-candidate": 8,
+    "work-room-messages": 56,
+    "rule-change-case": 6,
+    "business-activity": 24,
+    "check-time-and-predicates": 82
+  }
+}
