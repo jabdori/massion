@@ -55,7 +55,7 @@
         "decisions": [
           {
             "id": "mail-connect",
-            "at": 1793855520000,
+            "at": 1793842260000,
             "title": "Gmail",
             "question": "Gmail을 연결할까요?",
             "rows": [],
@@ -111,7 +111,7 @@
         "decisions": [
           {
             "id": "mail-connect",
-            "at": 1793855520000,
+            "at": 1793842260000,
             "title": "Gmail",
             "question": "Gmail을 연결할까요?",
             "rows": [],
@@ -134,5 +134,6 @@
     "tests/conversation-cards.test.ts",
     "tests/apps-surface.test.ts"
   ],
-  "readySelector": "#chat-decision-mail-connect"
+  "readySelector": "#chat-decision-mail-connect",
+  "now": 1793855520000
 }

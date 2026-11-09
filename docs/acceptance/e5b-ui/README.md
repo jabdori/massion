@@ -1,5 +1,7 @@
 # E5b connection client evidence
 
+Historical initial-head evidence. The current main-integration and visual-gate results, committed screenshots, and explicit data-driven residuals are in [../e5b/README.md](../e5b/README.md). The eight ordering failures recorded below are fixed in that later round.
+
 The connection decision reuses the existing decision renderer, question, rows, identity and state. Its Connect action opens a separate host-owned password panel; it does not change the Work pane. Submission uses the existing client port and logical `POST /assistant/apps/connect` with `{commandId, decisionId, token}` and the conversation feed. Only decision identity and outcome enter client state. Password input clears synchronously on submission, close, thread/segment change and feed invalidation. Pending requests are aborted on invalidation; abort is not evidence that a submitted command did not commit.
 
 Committed and replayed replies trigger a fresh read. Unknown outcomes remain fenced against resubmission. A proven conflict requires a deliberate new entry. Panel identity, thread, feed, connection epoch and secret-slot metadata fence late responses. Ordinary B24/B25 decisions retain their existing actions and fixtures.

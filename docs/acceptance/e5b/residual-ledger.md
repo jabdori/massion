@@ -1,0 +1,26 @@
+# E5b visual gate residual ledger
+
+Scope: the owner's blocking visual review of B24-done (both themes), B24-later, B25-done and B25-later. Reference PNGs and contracts are unchanged. Screenshots and pairs in this directory are actual headless captures of the production renderer with fixture API data. They are not evidence of a live account, model call, or completed app-driven Work.
+
+## Fixed: chronology and notice structure
+
+The original B24-done reply appeared before its date and installation notice. `AssistantMessage` had no recorded time, the service projection omitted one, and `renderChat` inserted notices only around owner turn start times. The same defect placed the final Copy button before the notice in B24-later and B25-done/later.
+
+New host-created messages opt into `recordMessageTime: true`; the reducer takes the timestamp only from its existing recorded host observation. The read projection exposes it, and the renderer interleaves notices between the owner message and later reply. Decision completion/defer time is used for the notice. App completion receipts and member reply bylines display the recorded time. Old commands without the flag replay to exactly their old state; old messages do not get guessed timestamps. The test in `tests/assistant-conversation.test.ts` checks new timestamps and both new/legacy journal lineage; `tests/conversation-cards.test.ts` checks date → owner → notice → reply ordering.
+
+The B24/B25 fixture messages now use explicit scenario times matching the reference chronology. That exercises the supported read shape. It does not create a real post-install reply producer.
+
+## Retained data-driven gaps
+
+| ID | Screen / missing structure | Code evidence | Why it is not fabricated in this change | Required follow-up |
+| --- | --- | --- | --- | --- |
+| E5b-D1 | B24-done: `작업 ›` row between installation notice and answer | [`AppsService.decide`](../../../src/apps.ts#L286), only commits `decide-app`. `callTool` retains claims in the apps aggregate. [`AssistantService.read`](../../../src/assistant-service.ts#L268), projects Work only from an admitted turn's pinned Mission. [`chatSlot`](../../../src/assistant-conversation-panel.ts#L181) / [`chatFold`](../../../src/assistant-conversation-panel.ts#L85), requires `turn.work`. | Installation does not admit or finish a PR-listing Work. A completion row would claim execution that did not happen. | Wire the owner-requested app action through admitted Work and persist its outcome; reuse the existing collapsed Work row. |
+| E5b-D2 | B24-done: PR result table with #84, #83 and #82 | `src/app-catalog.ts` exposes PR groups through the `page` handler; [`AppsService.view`](../../../src/apps.ts#L206), obtains that view only on explicit view execution. `src/server.ts` registers it as `POST /assistant/apps/view`. [`AssistantMessage`](../../../src/assistant-conversation.ts#L11), carries text and provenance, not an app-result reference or PR row receipt. `chatMessage` renders that message text. | The standalone app page's sample rows are not the result of the conversation's requested Work. A conversation read must not secretly execute an app or substitute its fixture for retained result evidence. | Persist an exact app-result reference/row projection with the Work outcome, then render that result beside the reply. |
+| E5b-D3 | B24-done: `7개 모두 보기` after the PR table | The page handler in `src/app-catalog.ts` requests a bounded `per_page=30` response. Neither `AppView` nor the conversation message records a total/cursor or full-list target bound to a conversation result. | A hard-coded seven and a generic page link would imply an authoritative total and result relationship that the host has not produced. | Expose the verified total and full-result target with the same retained result; use the existing app-page navigation. |
+| E5b-D4 | Automatic follow-up replies after installing or deferring (B24/B25) | `AppsService.decide` and `connect` update the app decision and optional secret slot; they do not call `AssistantService.send` or append a representative message. `AssistantService` produces replies only for admitted conversation turns. | The summary/acknowledgement examples in these screenshot fixtures are illustrative input. New timestamps fix their presentation, not their missing producer. | Add a separately admitted post-decision continuation, preserving single-send effects and no replay. |
+
+## Other visible differences, outside this blocking round
+
+B25's earlier source Work still uses the shared completed-Work folding behavior (`chatKind` returns `done` and `chatSlot` uses `chatFold`). The prototype keeps a full completed card and omits the original owner exchange. This change preserves the established Work/conversation behavior rather than rewriting the Work surface or hiding source messages for an app screenshot. The screenshot pairs make this visible.
+
+The standard read-only screen host cannot perform Connect/Later mutations. The separate `docs/acceptance/e5b-ui/verify.mjs` acceptance overlay walks those actions with fixture command responses; its evidence is copied under `actions/`. Native transport/keychain integration and actual account results are not verified.

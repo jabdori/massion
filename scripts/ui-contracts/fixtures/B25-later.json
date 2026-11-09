@@ -64,25 +64,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "알겠어요. 지금처럼 손으로 모을게요."
+              "text": "알겠어요. 지금처럼 손으로 모을게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -92,7 +96,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793850000000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -117,8 +121,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -131,7 +135,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851440000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -176,7 +180,8 @@
             "action": "설치",
             "state": "later",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": []
@@ -289,25 +294,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "알겠어요. 지금처럼 손으로 모을게요."
+              "text": "알겠어요. 지금처럼 손으로 모을게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -317,7 +326,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793850000000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -342,8 +351,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -356,7 +365,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851440000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -401,7 +410,8 @@
             "action": "설치",
             "state": "later",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": []
@@ -453,25 +463,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "알겠어요. 지금처럼 손으로 모을게요."
+              "text": "알겠어요. 지금처럼 손으로 모을게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -481,7 +495,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793850000000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -506,8 +520,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -520,7 +534,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851440000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -565,7 +579,8 @@
             "action": "설치",
             "state": "later",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": [],
@@ -626,25 +641,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "알겠어요. 지금처럼 손으로 모을게요."
+              "text": "알겠어요. 지금처럼 손으로 모을게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -654,7 +673,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793850000000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -679,8 +698,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -693,7 +712,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851440000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -738,7 +757,8 @@
             "action": "설치",
             "state": "later",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": [],

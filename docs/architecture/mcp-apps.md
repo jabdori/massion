@@ -15,3 +15,7 @@ This increment extends the existing apps aggregate, owner decisions, content has
 Tests first: install approval and overlapping identity replay; tool permission, version/list change, timeout and restart/no-resend; token sentinel in HTTP and all persisted state, unknown and drain; isolated iframe attributes and closed bridge. Existing app tests cover script behavior and journal lineage. UI checks exercise B24/B25 and connection states in both themes, with side-by-side reference pairs. Connection copy is projected from the Korean copy table; self-made install cards link to their exact source Work using the existing read path. Locally run changed tests and typecheck; CI owns the full suite/contracts under the owner's verification budget.
 
 Protocol reference: https://modelcontextprotocol.io/specification/2026-07-28/server/tools (annotations remain untrusted; the host owns permission).
+
+## Visual-gate chronology follow-up
+
+New conversation commands explicitly opt into recording the host-observed message time. The flag is part of the journaled command, so old command replay retains its original timestamp-free state and source hash. Owner and reply projections can now order app notices between messages without inferring time from a turn start. App receipt rows use the recorded answer time. The remaining app-driven Work, PR-table and total-count producers are documented with code evidence in [the visual residual ledger](../acceptance/e5b/residual-ledger.md).

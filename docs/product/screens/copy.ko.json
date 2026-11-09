@@ -1,4 +1,5 @@
 {
+ "ui.apps.receipt-time": {"ko":"{content} · {time}","roles":["text"],"used_in":["B24-done:conversation","B25-done:conversation"],"provenance":"Approved app decision receipt rows"},
  "ui.apps.source-work": {"ko":"{work_title} ›","roles":["link"],"used_in":["B25:conversation"],"provenance":"Approved B25 artboard"},
  "ui.apps.write": {"ko":"쓰기","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
  "ui.apps.adds": {"ko":"추가되는 것","roles":["text"],"used_in":["B24-connect:conversation"],"provenance":"Approved B24-connect artboard"},
@@ -16492,5 +16493,27 @@
    "B14:settings"
   ],
   "provenance": "B14 approved artboard: CLI route how"
+ },
+ "ui.room.skipped": {
+  "ko": "건너뜀 · {reason}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7:pane",
+   "B8:pane"
+  ],
+  "provenance": "Q13 named worker steps and dependencies."
+ },
+ "ui.room.dependencies": {
+  "ko": "선행 단계 · {steps}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7:pane",
+   "B8:pane"
+  ],
+  "provenance": "Q13 named worker steps and dependencies."
  }
 }

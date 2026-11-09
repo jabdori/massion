@@ -261,3 +261,8 @@ for(const status of [200,500])test('mention popup closes after '+(status===200?'
  let release=()=>{};state.sendHold=new Promise<void>(resolve=>{release=resolve;});const pending=app.submit('chat-form');await settle();assert.equal(app.node('chat-mentions').hidden,true,'popup closes while the send is still pending');release();await pending;await settle();assert.equal(input.value,status===200?'':'@');assert.equal(app.node('chat-mentions').hidden,true);assert.equal(input.attributes.has('aria-activedescendant'),false);assert.doesNotMatch(workbenchPage,/id="chat-draft-copy"/);
  if(status!==200){const count=posts(app).length;await app.submit('chat-form');await settle();assert.equal(posts(app).length,count,'unknown delivery never resends');assert.equal(app.node('chat-mentions').hidden,true);}
 });
+
+test('recorded reply time places install notices between the owner message and reply',async()=>{
+ const app=harness(async(path)=>path.startsWith('/assistant/conversation')?reply({feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[{id:'owner',role:'owner',turnId:null,text:'List PRs',at:T0},{id:'reply',role:'representative',turnId:null,text:'Listed PRs',at:T0+2000}]},turns:[],decisions:[{id:'installed',at:T0+1000,title:'GitHub',question:'Install?',rows:[],action:'Install',state:'done',line:'Installed',remove:'app-github'}]}):reply({error:'unavailable'},503));
+ await settle();const nodes=shown(app);assert.equal(nodes[0]!.className,'chat-date');assert.deepEqual(nodes.filter(n=>n.className!=='chat-date').map(n=>n.textContent),['List PRs','Installed제거','Listed PRs']);
+});

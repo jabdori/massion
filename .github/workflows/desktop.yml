@@ -1,0 +1,39 @@
+name: Desktop shell
+on:
+  pull_request:
+    paths: ['desktop/**', 'src/**', 'docs/product/screens/copy.ko.json', '.github/workflows/desktop.yml', 'package*.json', 'tsconfig.json']
+  push:
+    branches: [main]
+    paths: ['desktop/**', 'src/**', 'docs/product/screens/copy.ko.json', '.github/workflows/desktop.yml', 'package*.json', 'tsconfig.json']
+permissions:
+  contents: read
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund && npm run install:electron --prefix desktop
+      - run: npm run typecheck --prefix desktop && npm test --prefix desktop && npm run build --prefix desktop
+      - name: Enable Electron's sandbox helper
+        run: sudo chown root:root desktop/node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
+      - run: xvfb-run -a npm run smoke --prefix desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-headless-evidence
+          path: desktop/smoke-artifacts
+  mac-dev-package:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run package:mac --prefix desktop

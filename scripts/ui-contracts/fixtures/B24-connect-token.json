@@ -15,5 +15,6 @@
       "selector": "#chat-decision-install .chat-actions button:first-child",
       "readySelector": "#app-connect-token"
     }
-  ]
+  ],
+  "now": 1793855520000
 }

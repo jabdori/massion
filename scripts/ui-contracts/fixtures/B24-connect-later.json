@@ -44,7 +44,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -52,7 +53,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -95,7 +96,8 @@
               "slot": "github-token",
               "label": "GitHub token",
               "connected": false
-            }
+            },
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
@@ -139,7 +141,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -147,7 +150,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -190,7 +193,8 @@
               "slot": "github-token",
               "label": "GitHub token",
               "connected": false
-            }
+            },
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
@@ -203,5 +207,6 @@
     "tests/conversation-cards.test.ts",
     "tests/apps-surface.test.ts"
   ],
-  "steps": []
+  "steps": [],
+  "now": 1793855520000
 }

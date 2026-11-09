@@ -58,13 +58,15 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요."
+              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요.",
+              "at": 1793842261000
             }
           ]
         },
@@ -72,7 +74,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 설치할까요?",
             "rows": [
@@ -109,7 +111,8 @@
             "action": "설치",
             "state": "done",
             "line": "GitHub 설치됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
@@ -161,13 +164,15 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             },
             {
               "id": "r:install-result",
               "role": "representative",
               "turnId": null,
-              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요."
+              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요.",
+              "at": 1793842261000
             }
           ]
         },
@@ -175,7 +180,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 설치할까요?",
             "rows": [
@@ -212,7 +217,8 @@
             "action": "설치",
             "state": "done",
             "line": "GitHub 설치됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []

@@ -1,3 +1,6 @@
+import {memberProcedures,teamCallCount} from './internal-teams.ts';
+import {SKILLS_ID,SkillsService} from './skills.ts';
+import type {SkillsState} from './skills.ts';
 /** The Representative turn path: one owner message, at most one model call, at most one Work admission and one run request. Never a resend. */
 import {createHash,randomUUID} from 'node:crypto';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,CONTEXT_MESSAGES,DIAGNOSTIC_BYTES,MEMBER_NAME_CHARS,MESSAGE_BYTES,PENDING_GRACE_MS,TITLE_BYTES,assistantRunId,assistantTurnId,assistantWorkId,closeCommandId,hasRoom,headSegment,ownerMessageId,segmentId} from './assistant-conversation.ts';
@@ -32,14 +35,14 @@ const diagnostic=(code:string,message:string):AssistantDiagnostic=>({code,messag
 const bounded=(list:readonly {code:string;message:string}[]):AssistantDiagnostic[]=>list.slice(0,2).map(d=>diagnostic(/^[a-z][a-z0-9_]{0,63}$/.test(d.code)?d.code:'diagnostic',d.message));
 const outcome=(work:AssistantOutcome['work']['status'],workDiagnostics:AssistantDiagnostic[],run:AssistantOutcome['run']['status']='off',runDiagnostics:AssistantDiagnostic[]=[]):Outcome=>({work:{status:work,diagnostics:workDiagnostics},run:{status:run,diagnostics:runDiagnostics}});
 /** The root task only contains the steps, so it is not counted (conversation-cards.md). */
-const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+const steps=(work:Mission['works'][number])=>{const list=work.tasks.filter(t=>work.team?!!t.step:t.parentId!==null);return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
 export function workException(work:Mission['works'][number]):{at:number|null;runId:string|null;fact:'payment-response-unknown'|null}{
  const unknown=work.effects.filter(effect=>effect.status==='unknown');
  return {at:work.runtimeInterruption?.observedAt??null,runId:work.runtimeRun?.id??null,fact:unknown.length===1&&unknown[0]!.target==='결제 요청'&&unknown[0]!.receipt==='응답 없음 · 다시 보내지 않음'?'payment-response-unknown':null};
 }
 /** Count only assigned child tasks; a retried assignment never counts the same task twice. */
 function progress(work:Mission['works'][number]){
- const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>t.parentId!==null&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
+ const stage=(role:'executor'|'verifier')=>{const list=work.tasks.filter(t=>(work.team&&role==='executor'?!!t.step:t.parentId!==null)&&work.assignments.some(a=>a.taskId===t.id&&a.role===role));return {done:list.filter(t=>t.status==='settled').length,total:list.length};};
  return {make:stage('executor'),check:stage('verifier')};
 }
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
@@ -136,7 +139,7 @@ export class AssistantService {
     call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,works:(head.works??[]).map(({id,missionId})=>({id,missionId}))};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
-   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',messageId,text,turn};
+   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
    // Only a fresh committed pending turn permits the call.
@@ -159,7 +162,7 @@ export class AssistantService {
   // The model only proposes. Only an explicit owner confirmation may write or interrupt Work.
   const target=status==='answered'&&parsed!.steer?call.works.find(w=>w.id===parsed!.steer):undefined;
   const steer=target?await this.#prepareSteer(target.missionId,target.id):undefined;
-  const settle:AssistantCommand=status==='answered'?{type:'settle-assistant-turn',turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
+  const settle:AssistantCommand=status==='answered'?{type:'settle-assistant-turn',recordMessageTime:true,turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
   let fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,settle);
   // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
   if(!fresh&&status!=='unknown'&&(await this.#load(n))?.value.turns.find(t=>t.id===turnId)?.status==='pending'){status='unknown';parsed=null;fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status,usage,receipt});}
@@ -247,7 +250,8 @@ export class AssistantService {
   if(!message||turn?.status!=='answered'||turn.proposal?.title!==title||turn.proposal.member!==proposal.member)return outcome('not_created',[diagnostic('assistant_source_unavailable','The settled turn no longer matches the stored conversation.')]);
   const assistantSource:AssistantSource={segmentId:segment.id,turnId,messageId,messageHash:hash(message),message:structuredClone(message),representative:{provider:route.provider,model:route.model},...(member?{memberId:member.id}:{})};
   const workId=assistantWorkId(turnId),gate=this.#product.executionGate(intake.value),commandId='assistant-work:'+turnId;
-  const command={type:'admit-work' as const,workId,title,budget:2*resolved.choice.outputTokenCap,assistantSource,...(gate?{executionGate:gate}:{})};
+  let team;try{if(member){const skills=await this.#store.load(SKILLS_ID);team=memberProcedures(skills?.value as unknown as SkillsState??null,member.id,skills?.revision??0);const loader=new SkillsService(this.#ownerStore,{clock:this.#clock});for(const procedure of team.procedures)if(procedure.id!=='host-default-v1'){const used=await loader.use(procedure.id);if(used.status!=='committed'&&used.status!=='replayed')throw new DomainError('Procedure changed during load');}}}catch(error){return outcome('not_created',[diagnostic('procedure_unavailable',error instanceof Error?error.message:'Procedure unavailable')]);}
+  const command={type:'admit-work' as const,workId,title,budget:teamCallCount(team)*resolved.choice.outputTokenCap,...(team?{team}:{}),assistantSource,...(gate?{executionGate:gate}:{})};
   let admitted:CommitResult<Mission>;
   try{admitted=await this.#admission.dispatch({missionId:intakeMissionId,commandId,expectedRevision:intake.revision,actorId:ASSISTANT_ACTOR_ID,command});}
   catch(error){
@@ -286,7 +290,7 @@ export class AssistantService {
      // Card facts (conversation-cards.md): the durable run start, settled steps under the root task (the check is one), and an unknown effect outcome not yet answered by quarantine; a plain cancel is not that answer (ADR 0002 §8).
      startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),exception:workException(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null}}:{})};
   });
-  return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
+  return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text,...(m.at!==undefined?{at:m.at}:{})}))}:null,turns};
  }
  /** Results (results-and-schedules.md): accepted Records of conversation Work in the intake Mission, newest first, with the exact identity the preview reads. No writes and no calls. */
  // ponytail: `at` is the run start because Records keep no acceptance time; at most 200 rows, page when owners keep more.

@@ -42,7 +42,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -50,7 +51,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -137,7 +138,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -145,7 +147,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -667,5 +669,6 @@
       "selector": "#app-connect-cancel",
       "readySelector": "#chat-decision-install"
     }
-  ]
+  ],
+  "now": 1793855520000
 }
