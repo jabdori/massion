@@ -1,3 +1,7 @@
+import type {CliLauncher} from './cli-launcher.ts';
+import type {CliProtocol} from './cli-agent-providers.ts';
+import {KeychainSecretSlots,checkSlot} from './secret-slots.ts';
+import type {SecretSlots,SecretSlot} from './secret-slots.ts';
 import {validateRestoredSelection} from './restored-artifact-reader.ts';
 import type {RestoredArtifactSelection} from './restored-artifact-reader.ts';
 /** Explicit owner-selected host bindings. No credential search or startup sends; only non-secret manifest-scoped settings persist. */
@@ -16,7 +20,7 @@ import type {TextArtifactStore} from './text-artifacts.ts';
 
 interface HostConnection {
  id:string;label:string;providerType:ConnectionInput['providerType'];baseUrl:string;models:string[];
- credential?:{ref:string;environment:string};
+ credential?:{ref:string;environment:string;slot?:never}|{ref:string;slot:string;environment?:never};
 }
 export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[]}
 export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean;restoredArtifacts?:RestoredArtifactSelection}
@@ -48,8 +52,10 @@ export function parseHostManifest(value:unknown):HostManifest {
   if(!cli)for(const model of models){const suffix=provider.id==='anthropic'?'/messages':provider.id==='gemini'?'/models/'+model+':generateContent':'/chat/completions';const endpoint=entry.baseUrl+suffix.slice(1);requireHost(endpoint.length<=512,'inference endpoint exceeds profile limit');try{validateModelEndpoint(endpoint,value.mode,suffix);}catch{throw new DomainError('Host configuration: invalid inference endpoint');}}
   modelCount+=models.size;requireHost(modelCount<=64,'at most 64 models allowed');requireHost(!ids.has(entry.id),'duplicate connection');ids.add(entry.id);
   if(value.mode==='https'&&!cli){
-   fields(entry.credential,['ref','environment']);identity(entry.credential.ref);
-   requireHost(typeof entry.credential.environment==='string'&&/^[A-Z_][A-Z0-9_]{0,127}$/.test(entry.credential.environment),'explicit environment name required');
+   const keychain=!!entry.credential&&typeof entry.credential==='object'&&Object.hasOwn(entry.credential,'slot');
+   fields(entry.credential,['ref',keychain?'slot':'environment']);identity(entry.credential.ref);
+   if(keychain)checkSlot({owner:entry.id,slot:entry.credential.slot as string});
+   else requireHost(typeof entry.credential.environment==='string'&&/^[A-Z_][A-Z0-9_]{0,127}$/.test(entry.credential.environment),'explicit environment name required');
    requireHost(!references.has(entry.credential.ref),'duplicate credential reference');references.add(entry.credential.ref);
   }else requireHost(entry.credential===undefined,'fixture transport cannot carry credential bindings');
  }
@@ -78,32 +84,33 @@ export async function loadHostStartup(args:readonly string[]):Promise<HostStartu
 }
 
 /** Compile immutable identity/destination bindings; construction never calls the supplied accessor. */
-export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false) {
+export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false,secrets:SecretSlots=new KeychainSecretSlots()) {
  const snapshot=parseHostManifest(manifest),bindingHash=hash(snapshot);
  const entries:HostConnectionBindings['connections']=[];
- const permitted=new Map<string,string>();
+ const permitted=new Map<string,string|SecretSlot>();
  const key=(ref:string,profileId:string,endpoint:string)=>JSON.stringify([ref,profileId,endpoint]);
  for(const entry of snapshot.connections){
   const id='host:'+entry.id+':'+bindingHash.slice(0,16);
   const input:ConnectionInput={id,label:entry.label,providerType:entry.providerType,baseUrl:entry.baseUrl,mode:snapshot.mode,...(entry.credential?{secretRef:entry.credential.ref}:{})};
   entries.push({input,models:[...entry.models]});
   if(!entry.credential)continue;
-  permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),entry.credential.environment);
-  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),entry.credential.environment);if(input.providerType==='compatible'&&input.baseUrl.endsWith('/v1/'))permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),entry.credential.environment);}
+  const source=entry.credential.slot!==undefined?{owner:entry.id,slot:entry.credential.slot}:entry.credential.environment;
+  permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),source);
+  for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),source);if(input.providerType==='compatible'&&input.baseUrl.endsWith('/v1/'))permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),source);}
  }
  const resolveCredential:CredentialResolver=async request=>{
   request.signal.throwIfAborted();const source=permitted.get(key(request.secretRef,request.profileId,request.endpoint));
   if(!source||request.endpoint.endsWith('/systemone')&&!isDiscriminatorProfile(request.profileId))throw new Error('Host credential binding unavailable');
-  let secret:unknown;try{secret=readEnvironment(source);}catch{throw new Error('Host credential unavailable');}
+  let secret:unknown;try{secret=typeof source==='string'?readEnvironment(source):await secrets.read(source,request.signal);}catch{throw new Error('Host credential unavailable');}
   request.signal.throwIfAborted();if(typeof secret!=='string'||!secret||secret.length>8192||/[^\x21-\x7e]/.test(secret))throw new Error('Host credential unavailable');return secret;
  };
  return {bindings:{revision:snapshot.revision,bindingHash,connections:entries},resolveCredential};
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
-export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore}) {
+export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
  if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
- let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true);
- manager=new ConnectionWorkbench(store,artifacts,{transport:options.transport,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
+ let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets);
+ manager=new ConnectionWorkbench(store,artifacts,{transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }

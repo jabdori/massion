@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {stat} from 'node:fs/promises';
+import {stat,mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {cliProfileFactory,parseClaudeResult,parseCodexEvents} from '../src/cli-agent-providers.ts';
 import type {CliInvocation,CliResult,CliRunner} from '../src/cli-agent-providers.ts';
 import type {ModelConnectionProfile} from '../src/provider-profiles.ts';
@@ -161,4 +164,50 @@ test('default runner: argv-only stdin/stdout, SIGKILL on timeout and output over
   const controller = new AbortController(), pending = spawnCliRunner({...base, signal: controller.signal, command: process.execPath, args: ['-e', 'setTimeout(()=>{},60000)']});
   setTimeout(() => controller.abort(), 100);
   assert.equal((await pending).aborted, true);
+});
+
+test('overlapping identical provider invocations share one launch and the original outcome',async()=>{
+ let sends=0;const adapter=cliProfileFactory('codex-cli/v1',{mode:'local-http-mock',runner:async()=>{sends++;await new Promise(r=>setTimeout(r,20));return ok(codex());}}).create(profile('codex-cli','codex-cli/v1','m'));
+ const input=request(),[a,b]=await Promise.all([adapter.invoke(input),adapter.invoke(input)]);assert.equal(sends,1);assert.deepEqual(a,b);
+ assert.deepEqual(await adapter.invoke(input),a);assert.equal(sends,1);
+ const changed=await adapter.invoke({...input,instruction:'Different request'});assert.equal(changed.status,'failed');assert.equal(sends,1);
+});
+
+test('process timeout offers bounded cleanup before forced termination',async()=>{
+ const {spawnCliRunner}=await import('../src/cli-agent-providers.ts');
+ const result=await spawnCliRunner({command:process.execPath,args:['-e','process.on("SIGTERM",()=>{process.stdout.write("cleaned");process.exit(0)});setInterval(()=>{},1000)'],stdin:'',cwd:process.cwd(),env:{},timeoutMs:300,maxOutputBytes:1024,signal:signal()});
+ assert.equal(result.timedOut,true);assert.equal(result.stdout,'cleaned');
+});
+
+
+test('group escalation kills a SIGTERM-ignoring descendant after the direct child closes', {skip:process.platform==='win32'},async t=>{
+ const {spawnCliRunner}=await import('../src/cli-agent-providers.ts'),root=await mkdtemp(join(tmpdir(),'massion-descendant-')),ready=join(root,'ready');
+ const controller=new AbortController();let descendant:number|undefined;
+ const grandchild='process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},1000)';
+ const script='const {spawn}=require("node:child_process");const child=spawn(process.execPath,["-e",'+JSON.stringify(grandchild)+',process.argv[1]],{stdio:"ignore"});process.stdout.write(String(child.pid));setInterval(()=>{},1000)';
+ const pending=spawnCliRunner({command:process.execPath,args:['-e',script,ready],stdin:'',cwd:process.cwd(),env:{},timeoutMs:5000,maxOutputBytes:1024,signal:controller.signal});
+ t.after(async()=>{controller.abort();const result=await pending;const pid=descendant??Number(result.stdout);if(Number.isSafeInteger(pid)&&pid>0){try{process.kill(pid,'SIGKILL');}catch{}}await rm(root,{recursive:true,force:true});});
+ const deadline=Date.now()+4000;
+ while(descendant===undefined){try{descendant=Number(await readFile(ready,'utf8'));}catch{assert.ok(Date.now()<deadline,'descendant installed its SIGTERM handler');await new Promise(r=>setTimeout(r,10));}}
+ assert.ok(Number.isSafeInteger(descendant)&&descendant>0);controller.abort();
+ const result=await pending;assert.equal(result.aborted,true);assert.equal(Number(result.stdout),descendant);
+ const running=()=>{try{return !execFileSync('/bin/ps',['-o','stat=','-p',String(descendant)],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().startsWith('Z');}catch{return false;}};
+ const stoppedBy=Date.now()+1500;while(running()&&Date.now()<stoppedBy)await new Promise(r=>setTimeout(r,20));
+ assert.equal(running(),false,'process-group SIGKILL survives the direct child close');
+});
+
+test('launcher refusals before dispatch remain known failures through the CLI provider',async()=>{
+ const {CliLauncher}=await import('../src/cli-launcher.ts'),{InMemorySecretSlots}=await import('../src/secret-slots.ts');
+ for(const stage of ['prepare','secret','recheck']){
+  const secrets=new InMemorySecretSlots(),slot={owner:'fixture',slot:'token'},sentinel='private-'+crypto.randomUUID();await secrets.set(slot,sentinel);let starts=0;
+  if(stage==='secret')secrets.read=async()=>{throw Error(sentinel);};
+  const adapter=cliProfileFactory('codex-cli/v1',{mode:'https',runner:async call=>{
+   const launcher=new CliLauncher({command:process.execPath,args:call.args,environment:[],secrets:{TOOL_TOKEN:slot},readOnly:true,signature:{teamId:'FIXTURE123',identifier:'test.fixture'}},secrets,{
+    prepare:async()=>{if(stage==='prepare')throw Error(sentinel);return ()=>{if(stage==='recheck')throw Error(sentinel);};},runner:async()=>{starts++;return ok(codex());}
+   });
+   return launcher.launch(call.invocationId!,{...call,command:process.execPath});
+  }}).create(profile('codex-cli','codex-cli/v1','m'));
+  const input=request(),outcome=await adapter.invoke(input);assert.equal(starts,0);assert.equal(outcome.status,'failed',stage);assert.equal(outcome.reason,'cli_unavailable_not_started');assert.equal(outcome.output,null);assert.ok(!JSON.stringify(outcome).includes(sentinel));
+  assert.deepEqual(await adapter.invoke(input),outcome);assert.equal(starts,0);
+ }
 });

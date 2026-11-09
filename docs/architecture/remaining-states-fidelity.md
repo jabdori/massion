@@ -48,7 +48,7 @@ than the overclaiming baseline; see `docs/acceptance/E3e/` for every occurrence.
 
 ## Main integration and blocking visual feedback
 
-Merge origin/main 094eca4 without rewriting branch history. Preserve the now-merged
+Merge origin/main 094eca4, then 1d0d1e3 after PR 111 lands, without rewriting branch history. Preserve the now-merged
 Q13 worker display and E3e failure details/legacy progress; team dependencies inherit
 normal text color, while actual failed/unknown rows retain their error color.
 Keep both sets of additive copy keys. Add team/legacy counter assertions to the

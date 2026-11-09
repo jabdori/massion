@@ -1,7 +1,7 @@
 # E3e evidence
 
 > **Historical evidence:** The forty captures and Q13-open statements below describe
-> `b8f1f20`. Main 094eca4 (including Q13) is now integrated. See
+> `b8f1f20`. Main 1d0d1e3 (including Q13 and the secret launcher) is now integrated. See
 > [the current blocking visual-gate ledger](residuals.md#main-integration-and-blocking-visual-gate-2026-11-09)
 > and [main-integration/](main-integration/) for this round; old counts are not
 > current-merge acceptance claims.
