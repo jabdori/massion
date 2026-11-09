@@ -15,7 +15,8 @@ settings sections, conversation rendering and the Work pane outside this slice.
 Standalone page geometry must not change conversation or other settings layout.
 
 Add only local search/filter/navigation/copy controls supported by existing data.
-Results open the exact producing conversation using the same-feed Work binding;
+Results carry the original member identity in their existing read projection and
+open the exact producing conversation without depending on the bounded global Work list;
 previews keep Record/version/hash identity. Schedules retain cumulative budgets,
 unknown outcomes and overlapping-command guards. Memory retains immutable
 versions, independent Growth evidence and the exact retirement/revert commands.

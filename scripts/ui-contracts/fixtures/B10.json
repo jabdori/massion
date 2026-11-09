@@ -1803,7 +1803,8 @@
             "title": "이탈 원인 조사",
             "at": 1793851920000,
             "segment": 1,
-            "turnId": "assistant-turn:m:churn"
+            "turnId": "assistant-turn:m:churn",
+            "memberId": "member-quill"
           },
           {
             "missionId": "intake",
@@ -1815,7 +1816,8 @@
             "title": "요일별 할인 합계",
             "at": 1793851920000,
             "segment": 1,
-            "turnId": "assistant-turn:m:weekly"
+            "turnId": "assistant-turn:m:weekly",
+            "memberId": "member-quill"
           }
         ]
       }

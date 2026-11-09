@@ -10,7 +10,7 @@ const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*
 
 // docs/architecture/results-and-schedules.md, Surface: Results (B10, B10-preview) and Schedules (B17, B17-empty), and schedule exceptions in the conversation.
 const T0=Date.UTC(2026,10,5,23,0),sha='a'.repeat(64);
-const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',title:'River summary',at:T0,segment:1,turnId:'turn:1'};
+const result={missionId:'intake',workId:'work:a',recordId:'record:a',version:1,sha256:sha,kind:'text',memberId:null,title:'River summary',at:T0,segment:1,turnId:'turn:1'};
 const turn={id:'turn:1',messageId:'m:1',status:'answered',displayStatus:'answered',at:T0-60000,proposal:{title:'River summary'},outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:3,workId:'work:a',title:'River summary',execution:'settled',acceptance:'accepted',started:true}};
 const schedule={id:'schedule-a',title:'Morning briefing',request:'Sum up yesterday\'s work: what finished, what was handed back, what has an unknown result.',assignee:'하나',destination:copy('ui.panel.member-conversation',{member:'하나'}),active:true,nextAt:T0+86400000,minute:480,offset:540,budget:{runs:30,used:1},runs:[{id:'run-1',at:T0,state:'done',fact:'1 Work item',turnIds:['turn:1']}]};
 function fixture(initial:{results?:any[];schedules?:any[];exceptions?:any[];artifact?:number;runDeadlineAt?:number;head?:number}={}){
@@ -52,9 +52,9 @@ test('background page resets keep conversation search visible and malformed resu
  await app.node('rail-results').fire('click');await settle();assert.equal(app.node('results-rows').children.length,1);
 });
 
-test('a result opens its same-feed producing member and a past run opens its recorded segment',async()=>{
- const {app,state}=fixture({schedules:[{...schedule,runs:[{...schedule.runs[0],segment:1}]}]});await settle();
- runInContext("shellWorksFeed='feed:a';shellWorks=[{missionId:'intake',workId:'work:a',memberId:'member-a'}];chatView.members=[{id:'member-a',name:'퀼'}]",app.context);
+test('a result opens its authoritative producing member even without the global Work list and a past run opens its recorded segment',async()=>{
+ const {app,state}=fixture({results:[{...result,memberId:'member-a'}],schedules:[{...schedule,runs:[{...schedule.runs[0],segment:1}]}]});await settle();
+ runInContext("shellWorksFeed='another-feed';shellWorks=[];chatView.members=[{id:'member-a',name:'퀼'}]",app.context);
  await app.node('rail-results').fire('click');await settle();await byId(app,'result-row-intake/work:a')!.fire('click');await settle();
  assert.ok(app.calls.some(c=>c.path.includes('/assistant/conversation?member=member-a')));
  await app.node('rail-schedules').fire('click');await settle();await button(app.node('schedule-runs'),copy('ui.panel.view-conversation'))!.fire('click');await settle();

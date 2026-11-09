@@ -165,6 +165,7 @@ test('HTTP: schedules and results routes take exact fields; the conversation rea
  assert.equal((await post('/assistant/schedules',{commandId:'c-3',action:'pause',scheduleId:id})).status,200);assert.equal((await fetch(url('/assistant/schedules')).then(r=>r.json()) as any).schedules[0].active,false);
  const results=await fetch(url('/assistant/results')).then(r=>r.json()) as any,row=results.results[0];
  assert.deepEqual([results.results.length,row.title,row.kind,row.missionId,row.segment,row.turnId],[1,'Discount totals','text','intake',1,view.turns.find((x:any)=>x.work).id]);
+ assert.equal(row.memberId,null,'the accepted result carries its original conversation owner');
  const read=await fetch(url(`/missions/${row.missionId}/record-artifact?work=${encodeURIComponent(row.workId)}&record=${encodeURIComponent(row.recordId)}&version=${row.version}&sha256=${row.sha256}`)).then(r=>r.json()) as any;
  assert.match(read.content,/Answer bounded fixture text/,'the preview reads the exact accepted text');
  assert.equal((await fetch(url('/assistant/results?x=1'))).status,400);

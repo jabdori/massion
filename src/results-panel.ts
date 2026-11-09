@@ -19,10 +19,10 @@ export const resultsPane=String.raw`<div id="pane-result" class="pane-result" ro
 export const resultsClient=String.raw`
 let resultRows=[],resultGrid=false,resultQuery='',resultFilter='all',resultSeq=0,resultText='',resultLoadSeq=0;
 const resultKinds={all:copy('page.button.14'),documents:copy('sidebar.button.06'),files:copy('sidebar.button.14'),images:copy('sidebar.button.11')};
-const resultMember=r=>shellWorksFeed===chatView?.feedId?shellWorks.find(w=>w.missionId===r.missionId&&w.workId===r.workId)?.memberId||'':'';
+const resultMember=r=>r.memberId||'';
 const resultMatches=r=>(!resultQuery||r.title.toLocaleLowerCase().includes(resultQuery.toLocaleLowerCase()))&&(resultFilter==='all'||resultFilter==='documents'&&['text','text/plain','text/markdown'].includes(r.kind)||resultFilter==='images'&&r.kind?.startsWith('image/')||resultFilter==='files'&&!['text','text/plain','text/markdown'].includes(r.kind)&&!r.kind?.startsWith('image/'));
 const resultKey=r=>r.missionId+'/'+r.workId,resultWhen=at=>Number.isSafeInteger(at)?chatDay(at)+' '+chatTime(at):'';
-const resultValid=r=>r&&typeof r.kind==='string'&&chatText(r.missionId)&&chatText(r.workId)&&chatText(r.recordId)&&Number.isSafeInteger(r.version)&&/^[a-f0-9]{64}$/.test(r.sha256)&&chatText(r.title)&&Number.isSafeInteger(r.segment)&&r.segment>=1;
+const resultValid=r=>r&&(r.memberId===null||chatText(r.memberId))&&typeof r.kind==='string'&&chatText(r.missionId)&&chatText(r.workId)&&chatText(r.recordId)&&Number.isSafeInteger(r.version)&&/^[a-f0-9]{64}$/.test(r.sha256)&&chatText(r.title)&&Number.isSafeInteger(r.segment)&&r.segment>=1;
 // A CSS-drawn page: the client builds no markup from strings.
 function resultIcon(){const box=element('span',undefined,'result-kind');box.setAttribute('aria-hidden','true');return box;}
 /** Accepted Records live in the intake Mission, which is never a conversation aggregate, so its events reread the page while it shows. */
@@ -39,13 +39,13 @@ function renderResults(){
  side.replaceChildren(title,...filters,...(recent.length?[element('p',copy('sidebar.text.02'),'side-label'),...recent]:[]));
  $('results-empty').hidden=!!rows.length;$('results-table').hidden=!rows.length||resultGrid;$('results-tiles').hidden=!rows.length||!resultGrid;
  $('results-grid').setAttribute('aria-pressed',String(resultGrid));$('results-list').setAttribute('aria-pressed',String(!resultGrid));
- $('results-rows').replaceChildren(...rows.map(r=>{const row=element('tr',undefined,'result-row'),name=element('button',undefined,'result-name'),who=element('td'),avatar=element('span','${representativeName.slice(0,1)}','avatar'),cell=element('td');name.type='button';name.append(resultIcon(),element('span',r.title));cell.append(name);const member=chatMembers().find(m=>m.id===resultMember(r)),avatarName=member?.name||'${representativeName}';avatar.textContent=[...avatarName][0];shellLook(avatar,member);avatar.setAttribute('role','status');avatar.setAttribute('aria-label',avatarName);who.append(avatar);
+ $('results-rows').replaceChildren(...rows.map(r=>{const row=element('tr',undefined,'result-row'),name=element('button',undefined,'result-name'),who=element('td'),avatar=element('span','${representativeName.slice(0,1)}','avatar'),cell=element('td');name.type='button';name.append(resultIcon(),element('span',r.title));cell.append(name);const member=chatMembers().find(m=>m.id===resultMember(r)),avatarName=member?.name||(resultMember(r)?copy('ui.panel.unknown'):'${representativeName}');avatar.textContent=[...avatarName][0];shellLook(avatar,member);avatar.setAttribute('role','status');avatar.setAttribute('aria-label',avatarName);who.append(avatar);
   row.id='result-row-'+resultKey(r);row.append(cell,element('td',r.title),who,element('td',resultWhen(r.at)));row.addEventListener('click',()=>void resultOpen(r));return row;}));
  $('results-tiles').replaceChildren(...rows.map(r=>{const tile=element('button',undefined,'result-tile');tile.type='button';tile.id='result-tile-'+resultKey(r);tile.append(resultIcon(),element('span',r.title),element('span',resultWhen(r.at)));tile.addEventListener('click',()=>void resultOpen(r));return tile;}));
 }
 /** A result opens the conversation that made it, at its segment, with a preview tab beside it (B10-preview); a refused thread switch opens nothing. The segment is pinned: the read itself returns to the head view when that segment is the head, so a cached head never decides it. */
 async function resultOpen(r){
- const member=resultMember(r),name=chatMembers().find(m=>m.id===member)?.name||'';if(!chatOpenThread(member,name))return;chatSegment=r.segment;void readChat();
+ const member=resultMember(r),name=member?chatMembers().find(m=>m.id===member)?.name||copy('ui.panel.unknown'):'';if(!chatOpenThread(member,name))return;chatSegment=r.segment;void readChat();
  const key='result:'+resultKey(r);if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,missionId:r.missionId,workId:'',title:r.title,result:r});paneActive=key;paneAway(false);renderPane();await resultLoad(r);
 }
 /** Reads the exact accepted bytes once per open; a stale or failed read shows Unavailable and nothing else is substituted. */
