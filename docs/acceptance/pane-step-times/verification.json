@@ -1,0 +1,40 @@
+{
+  "baseCommit": "3ffdf51",
+  "tests": {
+    "total": 129,
+    "passed": 121,
+    "skipped": 8,
+    "failed": 0,
+    "typecheck": "passed"
+  },
+  "contracts": {
+    "rows": 8,
+    "passed": 296,
+    "required": 422,
+    "failed": 126,
+    "visual": 0,
+    "infrastructure": 0,
+    "beforeAfterIdentical": true
+  },
+  "original22": {
+    "resolved": 0,
+    "ledgerReasons": 22,
+    "stepTimes": 20,
+    "legacyRoleOrder": 2
+  },
+  "q13": {
+    "dark": {
+      "passed": 50,
+      "required": 74,
+      "failed": 24
+    },
+    "light": {
+      "passed": 50,
+      "required": 74,
+      "failed": 24
+    },
+    "interactions": 3,
+    "productWrites": 0
+  },
+  "designDetector": []
+}
