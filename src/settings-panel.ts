@@ -207,7 +207,7 @@ function settingsImprovementsView(){
  const past=(k.improvements||[]).filter(c=>c.type==='adopted').map(c=>settingsRow(c.name,[copy('ui.panel.applied-date',{date:settingsWhen(c.at)}),c.reverted&&copy('ui.panel.reverted-date',{date:settingsWhen(c.reverted.at)===settingsWhen(c.at)?copy('ui.panel.same-day'):settingsWhen(c.reverted.at)}),c.from?copy('ui.panel.version-change',{from:c.from,to:c.to}):copy('ui.panel.version',{version:c.to})].filter(Boolean).join(' · ')));
  return [settingsCard('',[...waiting,...unchecked,...past])[1]];
 }
-for(const name of settingsNames)$('settings-nav-'+name).addEventListener('click',()=>settingsOpen(name));
+for(const name of settingsNames)$('settings-nav-'+name).addEventListener('click',()=>void settingsOpen(name));
 $('settings-home').addEventListener('click',()=>settingsOpen('general'));
 $('settings-search').addEventListener('input',()=>{const query=$('settings-search').value.trim().toLowerCase();for(const name of settingsNames){const label=settingsLabels[name];$('settings-nav-'+name).hidden=(name==='advanced'&&!query)||!!query&&!(settingsShown==='memory'&&name==='memory')&&!label.toLowerCase().includes(query);}if(settingsShown==='memory')renderSettings();});
 `;

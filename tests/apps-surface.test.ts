@@ -173,7 +173,7 @@ test('every app read draws only its newest request: an item selected A, B, A aga
  assert.equal(app.node('pane-app').children.find(n=>n.tagName==='H2')?.textContent,'item 84 #2');assert.doesNotMatch(app.node('pane-app').textContent,/#1/);
 });
 
-test('a late Settings > Apps read never replaces a newer one',async()=>{
+test('a late Settings > Apps read never replaces a newer one',{timeout:5000},async()=>{
  const pending:(()=>void)[]=[];let reads=0;
  const app=harness(async(path,options)=>{
   if(path==='/assistant/apps'&&!options?.method){const n=++reads;return new Promise(done=>pending.push(()=>done(reply({feedId:'feed:a',revision:n,apps:[{...github,version:n===1?'old':'1.4.0'}],catalog:[]}))));}
