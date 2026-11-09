@@ -6,17 +6,25 @@ artifact `13685920783` (`ui-contracts`). The complete unchanged main capture has
 150 rows: 874 contract failures, 18 visual failures, 146 gaps and zero infrastructure
 errors. Current copy lint has zero findings.
 
-The committed allow-list contains 794 occurrences: 662 contract failures, four
-visual failures and 128 gaps. Contract/visual reasons match existing E3b, E3c,
+The committed allow-list contains 970 occurrences: 814 contract failures, ten
+visual failures and 146 gaps. The original 794 entries match existing E3b, E3c,
 E3d1, E3d2 and E3e residual records by screen, theme and normalized diagnostic.
 Gap reasons match exact historical report occurrences and link the corresponding
 published capability/residual ledger. Historical explanations remain provenance;
 they do not reassert old claims that Q13 is still open or that named tasks do not
 exist. Current diagnostics, not historical occurrence counts, determine membership.
 
+The lead subsequently authorized 176 `pending-slice` entries through the
+[ownership ledger](pending-slices.md): 150 for E5b PR #114 (`B24*`, `B25*`), 24
+for E7 PR #119 (`B1-signin`, `B1-first*`) and two for E8 PR #117 (`B26` exactly).
+The explicit addition flag is justified by this lead decision. Each owning slice
+must remove entries resolved when it lands; the stale-entry rule remains unchanged.
+
 **The baseline is deliberately red:** [unclassified.json](unclassified.json) lists
-244 occurrences with no matching ledger reason (212 contract, 14 visual, 18 gaps).
-They have no waiver. The PR body lists each occurrence for owner/lead triage.
+68 occurrences (60 contract, eight visual) across `B22-room`, `B22-room-steps`,
+`B7-churn`, `B8-done`, `B8-fail` and `B15`. They have no waiver. The PR body lists
+each occurrence for owner/lead triage. Another agent owns their ledger/fixes; after
+those changes land, synchronize with main and refresh the complete baseline.
 E3f does not invent a reason, change UI/fixtures or weaken a contract to pass CI.
 
 Initial generation used the explicit addition path with reason entries matched
@@ -48,7 +56,7 @@ Review the list diff before committing. There is no baseline auto-update in CI.
 
 Local validation on Node 24.21.0: 135 focused harness/copy tests and TypeScript
 static checking pass. The real downloaded main capture returns exit 1 with
-244 new/unallowed occurrences, zero stale exceptions and zero infrastructure
+68 new/unallowed occurrences, zero stale exceptions and zero infrastructure
 errors. Full tests and a fresh all-screen capture belong to CI under the owner's
 verification budget. No UI, contract, artboard, fixture or threshold was changed.
 

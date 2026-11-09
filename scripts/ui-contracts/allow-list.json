@@ -7943,6 +7943,1766 @@
       "category": "capability",
       "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"맡기기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"맡기기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing page heading \"Massion\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing page button \"Claude로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing page button \"ChatGPT로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing page link \"다른 방법으로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "visual",
+      "diagnostic": "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The production workbench has no first-launch sign-in page or provider login buttons.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The production connector action has no host-owned token form; no action is submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Independent connected fixture; no real connection is made and the production result chip is unavailable.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Independent deferred connector fixture; no connector action is submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane link \"작업 공간 닫기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role pane textbox \"{work_title} 토큰\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane button \"연결\" (found in conversation)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane link \"취소\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "visual",
+      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "visual",
+      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The production connector has no host-owned masked token pane. No secret is supplied or product action submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"복사\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"복사\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} ›\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"설치\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"나중에\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"제거\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"다시 묻기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"맡기기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The production first-work picker and unavailable Gmail connector are not implemented; no authorization is attempted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"맡기기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-first-later",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The production first-work picker is not implemented; the mail decision is an independently loaded deferred fixture.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing page heading \"Massion\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing page button \"Claude로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing page button \"ChatGPT로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing page link \"다른 방법으로 계속하기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "visual",
+      "diagnostic": "region main: [52,44,1388,856] != [0,0,1440,900] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B1-signin",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The production workbench has no first-launch sign-in page or provider login buttons.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E7 PR #119 (feat/first-experience) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e7"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The production connector action has no host-owned token form; no action is submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-connected",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Independent connected fixture; no real connection is made and the production result chip is unavailable.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-later",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Independent deferred connector fixture; no connector action is submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing composer textbox \"하나에게 메시지 보내기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-mail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Production has no Gmail connector or authorization path; the decision is an independently loaded fixture.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane link \"작업 공간 닫기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role pane textbox \"{work_title} 토큰\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane button \"연결\" (found in conversation)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane link \"취소\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "visual",
+      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "visual",
+      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-connect-token",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The production connector has no host-owned masked token pane. No secret is supplied or product action submitted.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"복사\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 2,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B24-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"복사\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} ›\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"설치\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"나중에\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"제거\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"작업 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"실행 중\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar status \"확인 대기\"",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B25-later",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"다시 묻기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e5b"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
+      "occurrence": 1,
+      "category": "pending-slice",
+      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
+      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
     }
   ]
 }

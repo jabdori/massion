@@ -10,6 +10,9 @@ Store exceptions in `scripts/ui-contracts/allow-list.json`, each with category,
 reason and a repository residual-ledger link. Historical candidates are evidence
 to match against current diagnostics, not a baseline to copy wholesale. Current
 diagnostics without an existing reason remain unallowed and are listed in the PR.
+The lead also authorized `pending-slice` for specific existing occurrences owned
+by open E5b, E7 and E8 slices. Their exact screen scope, PR references and removal
+obligation are recorded in [the ownership ledger](../acceptance/E3f/pending-slices.md).
 
 The gate checks complete screen/theme coverage, checker counts and infrastructure
 errors, then compares occurrences in both directions. New diagnostics and stale
