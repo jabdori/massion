@@ -303,7 +303,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
      await this.send(missionId,{type:'delegate',workId,taskId:workId+':'+slot,parentId:workId+':root'},'runtime-representative');
      await this.send(missionId,{type:'assign',workId,assignment:{...assignments[1]!,id:runId+':'+slot+':assignment',actorId:identity!,taskId:workId+':'+slot,extensionVersion:'massion.builtin.member-room@1'}},'runtime-representative');
     }
-    await this.send(missionId,{type:'open-room',workId,content,producerAssignmentId:runId+':executor:assignment',challengerAssignmentId:runId+':challenge:assignment'},'runtime-representative');
+    await this.send(missionId,{type:'open-room',workId,content,...binary?{artifactBase64:(await this.binaryArtifacts.readBytes(artifact)).toString('base64')}:{},producerAssignmentId:runId+':executor:assignment',challengerAssignmentId:runId+':challenge:assignment'},'runtime-representative');
     const moderate=async(moment:2|3|4)=>{
      const key=JSON.stringify([missionId,workId]);if(!this.options.moderateRoom||this.draining||this.shadows.has(key))return;
      const {snapshot,work}=await this.current(missionId,workId),input=roomModerationInput(work,snapshot.revision,moment),shadow=new AbortController();

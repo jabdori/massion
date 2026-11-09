@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -31,17 +31,18 @@ async function setup(t:test.TestContext,providerType='openrouter'){
  const root=await mkdtemp(join(tmpdir(),'massion-member-work-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let roomTurn:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
+ let produced='Answer bounded fixture text',reviewQuote='Answer bounded';
  let moderationHook:((signal:AbortSignal)=>Promise<void>)|undefined;
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
   const body=JSON.parse(String(init!.body));if(body.questions){if(moderationHook)await moderationHook(init!.signal as AbortSignal);const q=body.questions.moderation,keys=Object.keys(q.criteria),answer=q.type==='noul'?{type:'noul',noul:1}:{type:'choice',choice:keys[0],probabilities:Object.fromEntries(keys.map((k,i)=>[k,i?0:1])),confidence:1};return new Response(JSON.stringify({model:body.model,answers:{moderation:answer},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
   if(Object.hasOwn(prompt,'currentMessage')){prompts.push({model:body.model,prompt});return completion(body.model,script.shift()??v1('Hello.'));}
   calls.push(body.model);
   if(prompt.teamPlanning)return completion(body.model,JSON.stringify(plan?plan(prompt.teamPlanning.steps):{steps:prompt.teamPlanning.steps.map((title:string,i:number)=>({role:i===0?'Research':'Writing',title,dependsOn:i?[i-1]:[],...(title==='Optional comparison'?{skipReason:'No comparison requested'}:{})}))}));
-  if(prompt.roomTurn)return completion(body.model,roomTurn?await roomTurn(prompt,init!.signal as AbortSignal):JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:prompt.roomTurn==='challenge'?'The result needs concrete evidence':'The evidence is incomplete',quote:prompt.roomTurn==='challenge'?'Answer bounded':''}));
-  if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'Answer bounded',reason:'Controlled fixture'}]}));
+  if(prompt.roomTurn)return completion(body.model,roomTurn?await roomTurn(prompt,init!.signal as AbortSignal):JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:prompt.roomTurn==='challenge'?'The result needs concrete evidence':'The evidence is incomplete',quote:prompt.roomTurn==='challenge'?reviewQuote:''}));
+  if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:reviewQuote,reason:'Controlled fixture'}]}));
   if(prompt.step&&worker)return completion(body.model,await worker(prompt,init!.signal as AbortSignal));
   if(onExecute)await onExecute(init!.signal as AbortSignal);
-  return completion(body.model,'Answer bounded fixture text');
+  return completion(body.model,produced);
  };
  const settings=new InMemoryHostSettings();
  const m=createHostConnections(store,artifacts,{manifest:providerType==='openrouter'?manifest:parseHostManifest({...manifest,connections:manifest.connections.map(c=>({...c,providerType}))}),allowLiveExecution:false},{transport,readEnvironment:()=>'fixture-only-not-a-secret',settings});
@@ -63,7 +64,7 @@ async function setup(t:test.TestContext,providerType='openrouter'){
   return (await members.read()).members.find(x=>x.name===name)!;
  };
  const chatFor=(member:{id:string;name:string;modelGroup:string},ownerStore?:Store<any>)=>new AssistantService(store,product,m,{clock,member:{id:member.id,name:member.name,modelGroup:member.modelGroup},...(ownerStore?{ownerStore}:{})});
- return {setModerationHook:(hook:typeof moderationHook)=>{moderationHook=hook;},setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
+ return {setOutput:(output:string,quote:string)=>{produced=output;reviewQuote=quote;},setModerationHook:(hook:typeof moderationHook)=>{moderationHook=hook;},setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
 }
 
 async function runningWork(f:Awaited<ReturnType<typeof setup>>,t:test.TestContext){
@@ -707,3 +708,12 @@ for(const mode of ['answer','drain','next-room'])test('slow shadow moderation '+
  const until=Date.now()+1500;while(!(await f.intake()).works.find(w=>w.id===before.id)!.moderation![0]!.result&&Date.now()<until)await new Promise(r=>setTimeout(r,5));
  const after=(await f.intake()).works.find(w=>w.id===before.id)!;assert.equal(after.moderation![0]!.result!.decision,mode==='drain'?'unconfirmed':'shadow');assert.equal(after.moderation![0]!.result!.applied,false);assert.deepEqual(after.record,record);assert.equal(after.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect() as any);
  });
+
+
+for(const kind of ['application/pdf','image/png'])test(`multi-step member Work checks actual ${kind} bytes through the room and independent verifier`,async t=>{
+ const f=await setup(t);await f.admit();
+ const output=kind==='application/pdf'?{format:'massion-result/v1',kind,text:'Answer bounded fixture text'}:{format:'massion-result/v1',kind,width:1,height:1,pixels:[255,0,0]};
+ f.setOutput(JSON.stringify(output),kind==='application/pdf'?'Answer bounded':'#ff0000');f.script.push(v2('On it.','Create '+kind,'Quill'));await f.say(f.assistant,'Create '+kind);await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker}));assert.equal(w.artifact!.kind,kind);assert.equal(w.room!.artifact.sha256,w.artifact!.sha256);assert.equal(w.record!.room!.artifact.sha256,w.artifact!.sha256);
+ const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.equal(w.verdict!.status,'passed');
+});

@@ -2,10 +2,11 @@ import {createHash} from 'node:crypto';
 import {DomainError,hash} from './domain.ts';
 import type {Actor,Work} from './domain.ts';
 import type {ModerationInput} from './discriminator.ts';
+import {BINARY_MAX_BYTES,binaryArtifactText} from './binary-artifacts.ts';
 export interface RoomMessage {ordinal:number;authorId:string;assignmentId:string;effectId:string|null;kind:'proposal'|'challenge'|'answer'|'concede';replyTo:number|null;text:string;quote:string;inferred:true;status:'admitted'|'returned'}
 // shortcut: one artifact and one challenge round; widen after multi-member routing and revision leases are pinned.
-export interface MemberRoom {version:1;artifact:{version:number;sha256:string;content:string};producerAssignmentId:string;challengerAssignmentId:string;sameModel:boolean;messages:RoomMessage[];issue:{opener:string;status:'open'|'escalated'}|null}
-export type RoomCommand={type:'open-room';workId:string;content:string;producerAssignmentId:string;challengerAssignmentId:string}|{type:'record-room-turn';workId:string;effectId:string};
+export interface MemberRoom {version:1;artifact:{version:number;sha256:string;content:string;base64?:string};producerAssignmentId:string;challengerAssignmentId:string;sameModel:boolean;messages:RoomMessage[];issue:{opener:string;status:'open'|'escalated'}|null}
+export type RoomCommand={type:'open-room';workId:string;content:string;artifactBase64?:string;producerAssignmentId:string;challengerAssignmentId:string}|{type:'record-room-turn';workId:string;effectId:string};
 function requireRoom(ok:unknown,message:string):asserts ok {if(!ok)throw new DomainError('Room: '+message);}
 const exact=(v:any,keys:string[])=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const text=(v:unknown,max=4000):v is string=>typeof v==='string'&&v.trim().length>0&&v.length<=max&&v.isWellFormed();
@@ -13,12 +14,18 @@ export const normalizeQuote=(s:string)=>s.normalize('NFC').replace(/\s+/gu,' ').
 export const containsQuote=(content:string,quote:string)=>normalizeQuote(quote).length>0&&normalizeQuote(content).includes(normalizeQuote(quote));
 function roomStart(w:Work,c:Extract<RoomCommand,{type:'open-room'}>):MemberRoom {
  requireRoom(w.team&&w.team.procedures.flatMap(p=>p.body.steps).length>1&&w.artifact?.version===1,'multi-step team artifact required');
- requireRoom(typeof c.content==='string'&&Buffer.byteLength(c.content)<=32768&&c.content.isWellFormed()&&createHash('sha256').update(c.content).digest('hex')===w.artifact.sha256,'artifact content mismatch');
+ requireRoom(typeof c.content==='string'&&Buffer.byteLength(c.content)<=32768&&c.content.isWellFormed(),'artifact content mismatch');
+ const binary=['application/pdf','image/png'].includes(w.artifact.kind);let matches=false;
+ if(binary){
+  // 재생 시에도 실제 바이트의 해시와 그 바이트에서 추출한 본문을 함께 검증합니다.
+  try{if(typeof c.artifactBase64==='string'&&c.artifactBase64.length<=Math.ceil(BINARY_MAX_BYTES/3)*4){const bytes=Buffer.from(c.artifactBase64,'base64');matches=bytes.toString('base64')===c.artifactBase64&&createHash('sha256').update(bytes).digest('hex')===w.artifact.sha256&&binaryArtifactText(w.artifact.kind,bytes)===c.content;}}catch{}
+ }else matches=!Object.hasOwn(c,'artifactBase64')&&createHash('sha256').update(c.content).digest('hex')===w.artifact.sha256;
+ requireRoom(matches,'artifact content mismatch');
  const producer=w.assignments.find(a=>a.id===c.producerAssignmentId),challenger=w.assignments.find(a=>a.id===c.challengerAssignmentId);
  requireRoom(producer?.role==='executor'&&producer.taskId===w.id+':executor'&&challenger?.role==='executor'&&challenger.taskId===w.id+':challenge'&&producer.actorId!==challenger.actorId,'separate producing and challenger assignments required');
  requireRoom(!w.assignments.some(a=>a.actorId===challenger.actorId&&a.id!==challenger.id)&&w.tasks.some(t=>t.id===challenger.taskId&&t.parentId===w.id+':root'),'challenger must be outside producing subtree');
  requireRoom(!w.assignments.some(a=>a.role==='verifier'&&[producer.actorId,challenger.actorId].includes(a.actorId)),'checking identity cannot participate');
- return {version:1,artifact:{version:1,sha256:w.artifact.sha256,content:c.content},producerAssignmentId:producer.id,challengerAssignmentId:challenger.id,sameModel:producer.model.provider===challenger.model.provider&&producer.model.model===challenger.model.model,messages:[{ordinal:1,authorId:producer.actorId,assignmentId:producer.id,effectId:null,kind:'proposal',replyTo:null,text:c.content,quote:'',inferred:true,status:'admitted'}],issue:null};
+ return {version:1,artifact:{version:1,sha256:w.artifact.sha256,content:c.content,...binary?{base64:c.artifactBase64!}:{}},producerAssignmentId:producer.id,challengerAssignmentId:challenger.id,sameModel:producer.model.provider===challenger.model.provider&&producer.model.model===challenger.model.model,messages:[{ordinal:1,authorId:producer.actorId,assignmentId:producer.id,effectId:null,kind:'proposal',replyTo:null,text:c.content,quote:'',inferred:true,status:'admitted'}],issue:null};
 }
 function appendTurn(w:Work,room:MemberRoom,effectId:string){
  requireRoom(room.messages.length<3,'bounded round already ended');
@@ -35,15 +42,15 @@ function appendTurn(w:Work,room:MemberRoom,effectId:string){
 }
 export function validateRoom(w:Work){
  if(w.room===undefined){requireRoom(!w.runtimeRun?.roomVersion||!w.verdict,'checking requires a room');return;}const r=w.room;requireRoom(!w.verdict||r.messages.length>=2&&r.issue?.status!=='open','unfinished challenge cannot be checked');
- requireRoom(exact(r,['version','artifact','producerAssignmentId','challengerAssignmentId','sameModel','messages','issue'])&&r.version===1&&exact(r.artifact,['version','sha256','content'])&&Array.isArray(r.messages)&&r.messages.length>=1&&r.messages.length<=3,'invalid retained room');
- const rebuilt=roomStart(w,{type:'open-room',workId:w.id,content:r.artifact.content,producerAssignmentId:r.producerAssignmentId,challengerAssignmentId:r.challengerAssignmentId});
+ requireRoom(exact(r,['version','artifact','producerAssignmentId','challengerAssignmentId','sameModel','messages','issue'])&&r.version===1&&exact(r.artifact,['version','sha256','content',...Object.hasOwn(r.artifact??{},'base64')?['base64']:[]])&&Array.isArray(r.messages)&&r.messages.length>=1&&r.messages.length<=3,'invalid retained room');
+ const rebuilt=roomStart(w,{type:'open-room',workId:w.id,content:r.artifact.content,...Object.hasOwn(r.artifact,'base64')?{artifactBase64:r.artifact.base64!}:{},producerAssignmentId:r.producerAssignmentId,challengerAssignmentId:r.challengerAssignmentId});
  for(const m of r.messages.slice(1)){requireRoom(typeof m.effectId==='string','turn receipt required');appendTurn(w,rebuilt,m.effectId);}
  requireRoom(hash(rebuilt)===hash(r),'transcript provenance mismatch');
 }
 export function applyRoom(w:Work,c:RoomCommand,actor:Actor){
  requireRoom(actor.id==='runtime-representative'&&actor.roles.includes('representative'),'host authority required');
  requireRoom(w.execution==='active'&&w.acceptance==='pending'&&!w.runtimeRecovery&&!w.runtimeInterruption&&!w.blocker&&!w.effects.some(e=>e.status==='pending'||e.status==='unknown'),'active settled effects required');
- if(c.type==='open-room'){requireRoom(exact(c,['type','workId','content','producerAssignmentId','challengerAssignmentId'])&&!w.room,'fresh room required');w.room=roomStart(w,c);}
+ if(c.type==='open-room'){requireRoom(exact(c,['type','workId','content','producerAssignmentId','challengerAssignmentId',...Object.hasOwn(c,'artifactBase64')?['artifactBase64']:[]])&&!w.room,'fresh room required');w.room=roomStart(w,c);}
  else {requireRoom(exact(c,['type','workId','effectId'])&&w.room,'room required');validateRoom(w);appendTurn(w,w.room,c.effectId);}
  validateRoom(w);
 }

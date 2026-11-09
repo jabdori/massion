@@ -104,3 +104,20 @@ test('an explicitly malformed template kind cannot fall back to the legacy brief
  await assert.rejects(service.act({commandId:'null-kind',action:'create',kind:null,minute:540,offset:0,budget:{runs:3}}),DomainError);
  assert.equal(await store.load(SCHEDULES_ID),null);
 });
+
+test('a late confirmed producer reply retains its original source without resending',async()=>{
+ const store=new InMemoryStore<any>();let now=T,calls=0;
+ const service=new SchedulesService(store,async()=>({turns:[]}),()=>now,store,async()=>{calls++;now+=61000;return {turnIds:['turn:confirmed'],segment:7};});
+ await service.act({commandId:'late-create',action:'create',kind:'weekly-expenses',minute:540,offset:0,budget:{runs:2}});
+ const id=(await service.read()).schedules[0]!.id;
+ await service.act({commandId:'late-run',action:'run',scheduleId:id});
+ const run=(await service.read()).schedules[0]!.runs[0]!;assert.equal(run.state,'done');assert.deepEqual(run.turnIds,['turn:confirmed']);assert.equal(run.segment,7);
+ await service.act({commandId:'late-run',action:'run',scheduleId:id});assert.equal(calls,1);
+});
+
+test('late producer completion never reopens an owner-closed schedule run',async()=>{
+ const store=new InMemoryStore<any>();let now=T;
+ const service=new SchedulesService(store,async()=>({turns:[]}),()=>now,store,async input=>{now+=61000;await service.act({commandId:'owner-close',action:'close',scheduleId:input.scheduleId,runId:input.runId});return {turnIds:['turn:late'],segment:3};});
+ await service.act({commandId:'closed-create',action:'create',kind:'weekly-expenses',minute:540,offset:0,budget:{runs:2}});const id=(await service.read()).schedules[0]!.id;
+ await service.act({commandId:'closed-run',action:'run',scheduleId:id});assert.equal((await service.read()).schedules[0]!.runs[0]!.state,'closed');
+});

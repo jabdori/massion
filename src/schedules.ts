@@ -115,7 +115,8 @@ export function applySchedules(current:SchedulesState|null,command:SchedulesComm
   case 'finish-run': {
    ensure(exact(command,['type','scheduleId','runId','turnIds','segment'])&&int(command.segment,0,Number.MAX_SAFE_INTEGER)&&Array.isArray(command.turnIds)&&command.turnIds.length<=BRIEFING_TURNS&&command.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Exact finish fields required');
    const s=schedule();ensure(s.kind==='briefing'||command.segment>0&&command.turnIds.length>0&&new Set(command.turnIds).size===command.turnIds.length,'A completed schedule requires an exact Work source');
-   const r=run(s);ensure(r.state==='started'&&at<r.deadlineAt,'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds],segment:command.segment});break;
+   // 원래 요청의 확정 응답은 기한 뒤에도 보존하며, 소유자가 닫은 실행은 다시 열지 않습니다.
+   const r=run(s);ensure(r.state==='started'&&(s.kind!=='briefing'||at<r.deadlineAt),'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds],segment:command.segment});break;
   }
   case 'fail-run': {ensure(exact(command,['type','scheduleId','runId','reason'])&&typeof command.reason==='string'&&command.reason.length>0&&command.reason.length<=64,'Exact fail fields required');const r=run(schedule());ensure(r.state==='started','Only a started run fails','conflict');Object.assign(r,{state:'failed',endedAt:at,reason:command.reason});break;}
   case 'skip-run': {

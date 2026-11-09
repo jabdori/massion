@@ -352,7 +352,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'answer-owner-effect':{required:['workId','effectId','answer']},
   'dispatch-owner-effect':{required:['workId','effectId','feedId']},
   'record-owner-effect':{required:['workId','effectId','receipt']},
-  'open-room':{required:['workId','content','producerAssignmentId','challengerAssignmentId']},
+  'open-room':{required:['workId','content','producerAssignmentId','challengerAssignmentId'],optional:['artifactBase64']},
   'record-room-turn':{required:['workId','effectId']},
   'reserve-moderation':{required:['workId','entry'],optional:['hostVersion']},
   'record-moderation':{required:['workId','questionId','result'],optional:['hostVersion']},
