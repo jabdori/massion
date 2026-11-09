@@ -165,7 +165,7 @@
     },
     {
      "role": "heading",
-     "text": "설치됨1",
+     "text": "설치됨 1",
      "required": true,
      "order": 2
     },
@@ -178,7 +178,7 @@
     },
     {
      "role": "heading",
-     "text": "직접 만든 앱1",
+     "text": "직접 만든 앱 1",
      "required": true,
      "order": 4
     },

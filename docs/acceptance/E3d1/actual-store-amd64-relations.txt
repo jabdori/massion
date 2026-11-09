@@ -1,0 +1,22 @@
+Disposable SurrealDB ready: {"pid_in_this_exec_namespace": 22, "url": "http://127.0.0.1:18080", "runtime": "/tmp/disposable-m_aa8ha5", "binary": "/opt/massion-surreal/surreal", "version": "3.3.0", "server_args": ["/opt/massion-surreal/surreal", "start", "surrealkv:///tmp/disposable-m_aa8ha5/data", "--bind", "127.0.0.1:18080", "--unauthenticated", "--no-banner", "--log", "info", "--temporary-directory", "/tmp/disposable-m_aa8ha5/tmp", "--default-namespace", "massion_storage_tests", "--default-database", "massion_storage_tests", "--deny-net", "--deny-scripting"]}
+✔ in-memory fixture relation GUI records exact original versions/provenance through normal API, reads impact and retains old Record (422.856011ms)
+✔ actual SurrealDB relation GUI records exact original versions/provenance through normal API, reads impact and retains old Record (819.001395ms)
+✔ in-memory fixture relation stale draft sends no POST until explicit review; normal CAS race preserves original references without retry (142.047164ms)
+✔ actual SurrealDB relation stale draft sends no POST until explicit review; normal CAS race preserves original references without retry (669.693777ms)
+✔ relation GUI input guards/cancel do not send command or disturb Work draft (75.545533ms)
+✔ relation drafts are Mission-private across switches and late old snapshot (136.434657ms)
+✔ pending relation acknowledgement bars duplicate/cancel/review/switch, retains later edits and moved focus (134.342711ms)
+✔ in-memory fixture relation unknown commit remains locked until existing durable receipt readback; no POST replay (112.653345ms)
+✔ actual SurrealDB relation unknown commit remains locked until existing durable receipt readback; no POST replay (527.96007ms)
+✔ actual SurrealDB fresh browser restores relation unknown identity and checks receipt without save replay (600.093749ms)
+✔ definite relation rollback retains exact private draft and focus before deliberate new save (111.378853ms)
+✔ in-memory fixture replacement feed clears relation confirmation and keeps original private source/CAS until explicit review (173.724051ms)
+✔ actual SurrealDB replacement feed clears relation confirmation and keeps original private source/CAS until explicit review (695.618783ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6077.318345

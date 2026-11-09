@@ -16308,6 +16308,176 @@
   ],
   "provenance": "Approved B7-fail:conversation, B8-fail:pane artboard wording for Work pane visual-gate correction."
  },
+ "ui.pages.am": {
+  "ko": "오전 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17:page artboard"
+ },
+ "ui.pages.pm": {
+  "ko": "오후 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17:page artboard"
+ },
+ "ui.pages.tomorrow": {
+  "ko": "내일 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ],
+  "provenance": "Approved B17:sidebar artboard"
+ },
+ "ui.pages.daily": {
+  "ko": "매일",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:sidebar"
+  ],
+  "provenance": "Approved B17:sidebar artboard"
+ },
+ "ui.pages.today": {
+  "ko": "오늘 {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B22:sidebar"
+  ],
+  "provenance": "Approved B22 artboard"
+ },
+ "ui.pages.briefing-run": {
+  "ko": "어제 맡긴 일 {count}개",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B17:page"
+  ],
+  "provenance": "Approved B17 artboard"
+ },
+ "ui.pages.files": {
+  "ko": "파일 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B22:page"
+  ],
+  "provenance": "Approved B22 artboard file heading"
+ },
+ "ui.settings.unknown-value": {
+  "ko": "—",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B13-general:settings"
+  ],
+  "provenance": "B13-general approved artboard"
+ },
+ "ui.settings.description": {
+  "ko": "설명",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.models": {
+  "ko": "모델 {count}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.remove-model": {
+  "ko": "{model} 빼기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.provider-count": {
+  "ko": "제공사 {count}곳",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings"
+  ],
+  "provenance": "B14 approved artboard"
+ },
+ "ui.settings.no-spare": {
+  "ko": "추가할 모델 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B20:settings"
+  ],
+  "provenance": "B20 approved artboard"
+ },
+ "ui.settings.member-usage": {
+  "ko": "{member} 사용률 —",
+  "roles": [
+   "status"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ],
+  "provenance": "B14-usage approved artboard"
+ },
+ "ui.settings.installed-count": {
+  "ko": "설치됨 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ],
+  "provenance": "B23 approved artboard: installed heading and count"
+ },
+ "ui.settings.self-made-count": {
+  "ko": "직접 만든 앱 {count}",
+  "roles": [
+   "heading"
+  ],
+  "used_in": [
+   "B23:settings"
+  ],
+  "provenance": "B23 approved artboard: self-made heading and count"
+ },
+ "ui.settings.subscription": {
+  "ko": "구독",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14:settings"
+  ],
+  "provenance": "B14 approved artboard: CLI route how"
+ },
  "ui.room.skipped": {
   "ko": "건너뜀 · {reason}",
   "roles": [

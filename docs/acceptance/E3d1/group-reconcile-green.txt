@@ -1,0 +1,10 @@
+✔ a lost group save stays readonly until a later fresh catalog read; reconciliation never resends (77.193583ms)
+✔ failed or malformed catalog reads cannot unlock an uncertain group save (8.860792ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 297.473458

@@ -1,0 +1,78 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e6]
+      - button "설정" [ref=e9]
+      - LabelText
+        - searchbox "설정 검색" [ref=e20]
+      - button "일반" [ref=e10]
+        - StaticText "일반"
+      - button "기억" [ref=e11]
+        - StaticText "기억"
+      - button "구성원" [ref=e12]
+        - StaticText "구성원"
+      - button "기기" [ref=e13]
+        - StaticText "기기"
+      - button "연결" [ref=e14]
+        - StaticText "연결"
+      - button "사용량" [ref=e15]
+        - StaticText "사용량"
+      - button "앱" [ref=e16]
+        - StaticText "앱"
+      - button "개선" [ref=e17]
+        - StaticText "개선"
+      - button "권한" [ref=e18]
+        - StaticText "권한"
+  - main "설정" [ref=e2]
+    - region "구성원" [ref=e19]
+      - generic
+        - button "‹ 구성원" [ref=e21]
+        - heading "퀼" [level=2, ref=e22]
+        - button "메시지 보내기" [ref=e23]
+        - heading "스킬" [level=3, ref=e24]
+        - strong
+          - StaticText "출처 찾아 읽기"
+        - StaticText "나"
+        - strong
+          - StaticText "근거 붙여 요약"
+        - StaticText "나"
+        - strong
+          - StaticText "출처 확인"
+        - StaticText "v2 · 11월 5일 (목)"
+        - heading "절차" [level=3, ref=e25]
+        - StaticText "출처 고르기"
+        - StaticText "›"
+        - StaticText "모으기"
+        - StaticText "›"
+        - StaticText "요약"
+        - StaticText "›"
+        - StaticText "표 만들기"
+        - StaticText "›"
+        - StaticText "확인"
+        - StaticText "›"
+        - StaticText "기록"
+        - StaticText "자료 조사 절차"
+        - heading "모델 그룹" [level=3, ref=e26]
+        - strong
+          - StaticText "조사"
+        - StaticText "출처를 찾아 읽고 근거와 함께 요약해요"
+        - StaticText "모델 2개"
+        - button "설정 ›" [ref=e27]
+        - heading "최근 개선" [level=3, ref=e28]
+        - strong
+          - StaticText "출처 확인 v1 → v2"
+        - StaticText "11월 5일 (목) · 바뀐 파일마다 테스트 여부 적기"
+        - button "자세히" [expanded=false, ref=e29]
+        - button "되돌리기" [ref=e30]
+        - strong
+          - StaticText "자료 조사 절차 v1 → v2"
+        - StaticText "11월 5일 (목) · PR #84 검토"
+        - button "자세히" [expanded=false, ref=e31]
+        - button "되돌리기" [ref=e32]

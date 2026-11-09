@@ -154,6 +154,94 @@
   "conversation": {
    "column_max_width": 680,
    "note": "conversation column and composer share one centered column; with a pane open the column fills main minus 24px gutters"
+  },
+  "pages": {
+   "results_width": 1104,
+   "detail_width": 744,
+   "app_width": 880,
+   "gutter": 32,
+   "title_size": 20,
+   "title_line_height": 28,
+   "search_width": 220,
+   "search_height": 32,
+   "pill_radius": 999,
+   "top_height": 64,
+   "switch_knob": 16,
+   "switch_inset": 2,
+   "empty_width": 600,
+   "empty_icon": 44,
+   "profile_width": 280,
+   "control_height": 30,
+   "document_mark": 26,
+   "tile_minimum": 200,
+   "example_minimum": 260,
+   "schedule_label": 116,
+   "field_label": 96,
+   "space_18": 18,
+   "space_20": 20,
+   "space_24": 24,
+   "radius_5": 5,
+   "radius_7": 7,
+   "icon_9": 9,
+   "switch_width": 34,
+   "border_width": 1,
+   "small_gap": 2,
+   "stroke_width": 1.5,
+   "source_column": 180,
+   "member_column": 72,
+   "time_column": 104,
+   "controls_height": 54,
+   "table_header_height": 34,
+   "memory_width": 640,
+   "memory_top": 44,
+   "memory_gutter": 24,
+   "profile_line_height": 17,
+   "diff_bar_width": 80,
+   "diff_bar_height": 6,
+   "diff_add_width": 48,
+   "diff_delete_width": 36,
+   "file_row_height": 34,
+   "sidebar_item_line_height": 17
+  },
+  "settings": {
+   "column_width": 640,
+   "padding_top": 44,
+   "padding_x": 24,
+   "padding_bottom": 48,
+   "row_height": 56,
+   "heading_size": 22,
+   "heading_line_height": 30,
+   "section_gap": 28,
+   "heading_gap": 20,
+   "label_width": 64,
+   "control_width": 200,
+   "search_height": 30,
+   "member_avatar": 44,
+   "member_initial": 18,
+   "field_max_width": 360,
+   "source": "B13-general, B14, B19-juno and B20 approved artboards",
+   "search_radius": 8,
+   "row_padding_y": 12,
+   "general_row_padding_y": 14,
+   "member_padding_top": 32,
+   "member_back_gap": 14,
+   "member_avatar_radius": 11,
+   "member_row_padding_y": 11,
+   "action_height": 28,
+   "procedure_chip_height": 22,
+   "group_back_gap": 6,
+   "model_index_width": 14,
+   "model_row_padding_y": 10,
+   "group_member_avatar": 24,
+   "group_member_radius": 7,
+   "group_member_initial": 11,
+   "default_heading_top": 13,
+   "default_model_indent": 28,
+   "heading_tracking": -0.22,
+   "row_avatar": 32,
+   "member_header_height": 50,
+   "feedback_source": "A1-A8: approved proto/render/B13.dc.html (rows 12px); B13-general.dc.html (rows 14px); B19/B19-juno.dc.html (header 50px = title 30px + subtitle 20px; top 32px, back gap 14px, radius 11px, rows 11px, chips 22px); B20/B20-coding.dc.html (back gap 6px, index 14px, models 10px, member avatar 24px/7px/11px); B14.dc.html (heading 13px, model indent 28px); actions 28px",
+   "member_list_text_height": 40
   }
  },
  "typography": {
@@ -565,6 +653,23 @@
    "header_height": 38,
    "procedure_header_height": 34,
    "step_height": 32
+  },
+  "pages-popup": {
+   "bd": "1px solid var(--line)",
+   "radius": "10px",
+   "pad": "16px",
+   "shadow": "0 8px 24px var(--shadow-color)"
+  },
+  "pages-row": {
+   "fw": "500"
+  },
+  "pages-regular": {
+   "fw": "400"
+  },
+  "pages-memory-title": {
+   "fs": "22px",
+   "lh": "30px",
+   "fw": "600"
   }
  },
  "rhythm": {
@@ -593,5 +698,10 @@
   "slow": ".3s",
   "ease": "cubic-bezier(.32,.72,0,1)",
   "reduced_motion": "0s"
+ },
+ "pages_provenance": {
+  "geometry": "Approved B10/B12/B17/B22 dc artboard inline measurements: page max widths 1104/744/880, gutters 32, title 20/28, search 220x32, top 64, profile 280. B10 source/member/time columns are 180/72/104; controls row 54 and table header 34.",
+  "retained_dimensions": "Existing results/schedules component dimensions moved to generated tokens; shared settings/sidebar/switch styles, Work-app tab styles and existing mobile breakpoints are preserved.",
+  "review_corrections": "PR110 A1-A16: B9 14px profile and 17px subtitle line; B12 640px content and 44px top/24px gutters, 22/30 title; B22 34px file rows with 48/36 count columns and 80x6 bars; regular body weights from approved artboards."
  }
 }

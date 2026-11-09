@@ -1,0 +1,31 @@
+{
+  "runtime": "v24.21.0",
+  "results": [
+    {
+      "screen": "B13-general",
+      "mainTop": 0,
+      "name": "하나",
+      "readOnly": true,
+      "selects": [
+        {
+          "disabled": true,
+          "text": "—"
+        },
+        {
+          "disabled": true,
+          "text": "—"
+        }
+      ],
+      "localSearch": true
+    },
+    {
+      "screen": "B20",
+      "keyboardReorder": true,
+      "fixtureRejectedWrites": true,
+      "unknownLocked": true,
+      "commands": 1,
+      "noReplay": true
+    }
+  ],
+  "svgMaskDecoded": true
+}
