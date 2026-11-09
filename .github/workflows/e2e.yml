@@ -10,9 +10,6 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/massion-e2e-browser
-      MASSION_E2E_BROWSER: ${{ runner.temp }}/massion-e2e-browser/chromium-1248/chrome-linux64/chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +18,8 @@ jobs:
       - name: Install locked development tools
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install headless browser
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/massion-e2e-browser
         run: |
           npm install --global agent-browser@0.41.2
           npx --yes playwright@1.64.0 install --with-deps --no-shell chromium
@@ -42,6 +41,7 @@ jobs:
       - name: Drive real daemon and durable journeys with local model fixtures
         env:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
+          MASSION_E2E_BROWSER: ${{ runner.temp }}/massion-e2e-browser/chromium-1248/chrome-linux64/chrome
         run: |
           "$MASSION_E2E_BROWSER" --version
           xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
