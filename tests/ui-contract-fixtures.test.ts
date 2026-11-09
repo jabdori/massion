@@ -227,9 +227,9 @@ test('B22 steps setup opens the Work room without expanding legacy evidence',asy
  const work=(fixture.routes['/missions/intake']!.body as any).value.works[0];assert.deepEqual(work.tasks.filter((t:any)=>t.step).map((t:any)=>t.step.title),['읽기','테스트 돌리기']);
 });
 
-test('E6c effect fixtures use production decisions; budget fallbacks still never fabricate a decision',async()=>{
+test('E6c effect fixtures use production decision sources',async()=>{
  const {loadFixture}=await hostModule();
- for(const screen of ['B4','B16','B16-sent','B16-later','B26','B26-later']){
+ for(const screen of ['B4','B16','B16-sent','B16-later']){
   const fixture=await loadFixture(screen);
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
@@ -260,4 +260,9 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
    assert.doesNotMatch(JSON.stringify(view.segment?.messages??[]),/TOTAL: [34] cents|3센트 상품|반올림/);
   }
  }
+});
+
+
+test('E8 monthly decision fixtures carry the production budget read and explicit owner deferral',async()=>{
+ const {loadFixture}=await hostModule();for(const screen of ['B26','B26-later']){const fixture=await loadFixture(screen),conversation=fixture.routes['/assistant/conversation']!.body as any,usage=fixture.routes['/assistant/usage']!.body as any;assert.equal(conversation.decisions.length,1);const d=conversation.decisions[0];assert.ok(d.id.startsWith('monthly-budget:'));assert.equal(d.state,screen==='B26'?'open':'later');assert.equal(d.budget.revision,usage.revision);assert.equal(usage.unit,'output-tokens');assert.equal(usage.cost,null);assert.deepEqual(fixture.gaps,[]);assert.doesNotMatch(JSON.stringify(conversation),/TOTAL: [34] cents/);}
 });

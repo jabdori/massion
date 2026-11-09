@@ -692,6 +692,13 @@ for(const mode of ['shadow','same-model','tight-budget'])test('Q14 discriminator
  assert.ok(w.moderation!.every(e=>e.model.model==='jev-fixture'&&e.result?.applied===false));assert.equal(w.room!.issue!.status,'escalated');validateMissionJournalLineage(f.store.inspect() as any);
  });
 
+test('monthly admission reserves the challenge and answer caps added by member rooms',async t=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const f=await setup(t);await f.admit();const budget=new MonthlyBudgetService(f.store),before=await budget.read();
+ await budget.configure({commandId:'room-monthly-budget',expectedRevision:before.revision,limit:before.knownOutputTokens+21,timezone:before.timezone});const calls=f.calls.length;
+ f.script.push(v2('On it.','Bounded room report','Quill'));await f.say(f.assistant,'Make a checked room report');await f.assistant.idle();const work=(await f.intake()).works.at(-1)!;
+ assert.equal(work.budget.limit,28);assert.equal(work.execution,'budget-waiting');assert.equal(work.runtimeRun,undefined);assert.equal(f.calls.length,calls);assert.equal(work.effects.length,0);
+});
+
 for(const mode of ['answer','drain','next-room'])test('slow shadow moderation '+mode+' after acceptance never delays a room turn',async t=>{
  const f=await setup(t,'compatible');await f.admit();let entered=()=>{},release=()=>{};
  const started=new Promise<void>(r=>{entered=r;}),held=new Promise<void>(r=>{release=r;});
