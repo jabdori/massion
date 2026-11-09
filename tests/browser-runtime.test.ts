@@ -101,3 +101,17 @@ test('security labels, names and autocomplete never commit a numeric security co
   const s=await setup(async()=>({...raw,blocks:['Reflected value: 456'],fields:[{...field,type:'number',value:'456'}]}));await s.service.capture(request);const read=await s.service.read('intake','work'),operation=s.store.inspect().at(-1)!;assert.equal(read.session!.page.fields[0]!.masked,true);assert.equal(read.session!.page.fields[0]!.value,'••••');assert.equal(read.session!.page.blocks[0],'Reflected value: ••••');assert.doesNotMatch(JSON.stringify(operation),/"value":"456"|Reflected value: 456/);
  }
 });
+
+test('host drain waits for interrupted browser cleanup and reports its deadline honestly',async t=>{
+ const {createWorkbench}=await import('../src/server.ts');
+ for(const timeout of [false,true]){
+  const s=await setup();let entered!:()=>void,cleanupEntered!:()=>void,release!:()=>void,cleaned=false;
+  const reading=new Promise<void>(r=>entered=r),cleaning=new Promise<void>(r=>cleanupEntered=r),cleanup=new Promise<void>(r=>release=r);
+  const server=createWorkbench(s.store,'.',{scheduleIntervalMs:0,drainTimeoutMs:timeout?20:2000,browserAdapter:{async read({signal}){entered();try{await new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));return raw;}finally{cleanupEntered();await cleanup;cleaned=true;}}}});
+  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{release();server.close();});const capture=server.browserSessions.capture(request).catch(error=>error);await reading;
+  const closed=new Promise<void>(r=>server.once('close',r));let finished=false;const drain=server.drain().then(result=>{finished=true;return result;});await cleaning;await closed;await new Promise<void>(r=>setImmediate(r));
+  if(timeout){const result=await drain;assert.equal(result.status,'unsettled');assert.equal(result.timedOut,true);assert.equal(cleaned,false);release();}
+  else{assert.equal(finished,false,'drain must wait for adapter finally');release();assert.deepEqual(await drain,{status:'drained',timedOut:false});assert.equal(cleaned,true);}
+  await capture;await server.browserSessions.drain();
+ }
+});

@@ -7,5 +7,8 @@
   ],
   "scriptExecuted": false,
   "identicalMaskedPixels": true,
-  "pngSha256": "f111ec7b37473c96c3c7ec558b549d324cb807e5f4b595df49eb35ea52aa87c4"
+  "splitNodeReflection": true,
+  "hiddenSeparatorReflection": true,
+  "spacedReflection": true,
+  "pngSha256": "6f5680973ab3b7b93821702b1c79261c2d83d193ef3f0bdaebf29ac030c592d6"
 }

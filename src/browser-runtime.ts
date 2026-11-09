@@ -26,7 +26,15 @@ export function maskBrowserField(f:{label:string;type:string;autocomplete:string
  const benign=/^(이름|성명|주소|배송지|도서|책|제목|수량|날짜|시간|방|인원|name|full.?name|given-name|family-name|street-address|address-line[123]|address|title|quantity|qty|count|guests|room|date|time|isbn)$/i;
  return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||![f.label,f.name??'',f.autocomplete].some(v=>benign.test(v.trim()));
 }
-export function browserText(value:string,secrets:string[]=[]){return secrets.reduce((s,secret)=>s.split(secret).join('••••'),value).replace(/\b(?:\d[ -]?){13,19}\b/g,'••••').replace(/\b(?:Bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'••••');}
+export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[number,number]>{
+ const ranges:Array<[number,number]>=[];
+ if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
+  for(const secret of secrets){const needle=secret.replace(/\s/g,'');if(!needle)continue;let start=0;while((start=compact.indexOf(needle,start))!==-1){ranges.push([positions[start]!,positions[start+needle.length-1]!+1]);start+=needle.length;}}
+ }
+ for(const pattern of [/\b(?:\d[ -]?){13,19}\b/g,/\b(?:Bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi])for(const match of value.matchAll(pattern))ranges.push([match.index,match.index+match[0].length]);
+ const merged:Array<[number,number]>=[];for(const range of ranges.sort((a,b)=>a[0]-b[0]||b[1]-a[1])){const last=merged.at(-1);if(last&&range[0]<last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range);}return merged;
+}
+export function browserText(value:string,secrets:string[]=[]){let result='',offset=0;for(const [start,end] of browserPrivateRanges(value,secrets)){result+=value.slice(offset,start)+'••••';offset=end;}return result+value.slice(offset);}
 export function validateBrowserScreenshot(image:unknown):asserts image is BrowserScreenshot{
  exact(image,['mimeType','data','width','height']);ensure(image.mimeType==='image/png'&&typeof image.data==='string'&&image.data.length<=262144&&/^[A-Za-z0-9+/]*={0,2}$/.test(image.data),'Invalid browser screenshot');
  const bytes=Buffer.from(image.data,'base64');ensure(bytes.length>=57&&bytes.toString('base64')===image.data&&bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))&&bytes.readUInt32BE(8)===13&&bytes.toString('ascii',12,16)==='IHDR'&&bytes.subarray(-12).equals(Buffer.from('0000000049454e44ae426082','hex')),'Invalid browser screenshot PNG');
@@ -56,7 +64,7 @@ export function applyBrowserPage(w:Work,c:BrowserCommand,actor:Actor){
  else w.browserSession={id:c.sessionId,pages:[]};w.browserSession.pages.push(structuredClone(c.page));validateBrowserSession(w.browserSession);
 }
 export class BrowserSessions {
- readonly #store:Store<Mission>;readonly #owner:Store<Mission>;readonly #adapter?:BrowserAdapter;readonly #clock:()=>number;readonly #active=new Map<string,{identity:string;promise:Promise<CommitResult<Mission>>}>();readonly #generation=new Map<string,number>();readonly #controllers=new Set<AbortController>();#draining=false;unsettled=false;
+ readonly #store:Store<Mission>;readonly #owner:Store<Mission>;readonly #adapter?:BrowserAdapter;readonly #clock:()=>number;readonly #active=new Map<string,{identity:string;promise:Promise<CommitResult<Mission>>}>();readonly #generation=new Map<string,number>();readonly #controllers=new Set<AbortController>();readonly #reads=new Set<Promise<RawBrowserPage>>();#draining=false;unsettled=false;
  constructor(store:Store<Mission>,ownerStore:Store<Mission>,options:{adapter?:BrowserAdapter;clock?:()=>number}={}){this.#store=store;this.#owner=ownerStore;this.#adapter=options.adapter;this.#clock=options.clock??Date.now;}
  capture(input:Capture):Promise<CommitResult<Mission>>{
   input=structuredClone(input);exact(input,['missionId','workId','readId','address']);ensure([input.missionId,input.workId,input.readId].every(id)&&input.address===browserAddress(input.address),'Invalid browser read request');
@@ -72,12 +80,12 @@ export class BrowserSessions {
   if(existing){ensure(existing.address===input.address,'Browser read identity conflict');return dispatch(existing);}
   current(w,this.#clock());ensure((w.browserSession?.pages.length??0)<32,'Browser session page bound exceeded');ensure(this.#adapter,'Browser adapter unavailable');const controller=new AbortController();this.#controllers.add(controller);
   try{
-   if(this.#draining)throw new HostDrainError();const raw=await callTool(signal=>this.#adapter!.read({address:input.address,sessionId,signal}),{readOnly:true,signal:controller.signal,timeoutMs:TOOL_TIMEOUT_MS});
+   if(this.#draining)throw new HostDrainError();const raw=await callTool(signal=>{const read=Promise.resolve().then(()=>this.#adapter!.read({address:input.address,sessionId,signal}));this.#reads.add(read);void read.then(()=>this.#reads.delete(read),()=>this.#reads.delete(read));return read;},{readOnly:true,signal:controller.signal,timeoutMs:TOOL_TIMEOUT_MS});
    ensure(isCurrent(),'Browser read superseded');if(this.#draining)throw new HostDrainError();const fresh=await this.#store.readState(input.missionId);if(fresh.feedId!==state.feedId)throw new FeedAdmissionError();ensure(fresh.snapshot?.revision===snapshot.revision,'Work revision changed during browser read');
    const page:BrowserPage={readId:input.readId,expectedRevision:snapshot.revision,inputHash:workInputHash(w),at:this.#clock(),...sanitizePage(raw)};ensure(page.address===input.address,'Browser address changed during read');current(w,page.at);return await dispatch(page);
   }catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.unsettled=true;throw error;}finally{this.#controllers.delete(controller);}
  }
  async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);ensure(w,'Unknown browser Work');const s=w.browserSession;return {feedId:state.feedId,revision:state.snapshot!.revision,session:s?{id:s.id,startedAt:s.pages[0]!.at,pagesRead:s.pages.length,page:structuredClone(s.pages.at(-1)!),pages:structuredClone(s.pages)}:null};}
  beginDrain(){this.#draining=true;for(const c of this.#controllers)c.abort();}
- async drain(){this.beginDrain();await Promise.allSettled([...this.#active.values()].map(v=>v.promise));if(this.unsettled)throw Error('Browser bookkeeping is unsettled');}
+ async drain(){this.beginDrain();await Promise.allSettled([...this.#active.values()].map(v=>v.promise));await Promise.allSettled([...this.#reads]);if(this.unsettled)throw Error('Browser bookkeeping is unsettled');}
 }

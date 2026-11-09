@@ -34,3 +34,6 @@ for(const field of [
 test('only explicit benign field meanings expose their values',()=>{
  const page=sanitizePage({address:raw.address,title:'Order',blocks:[],fields:[{label:'수량',name:'quantity',type:'number',autocomplete:'',value:'2'},{label:'이름',name:'fullName',type:'text',autocomplete:'name',value:'홍길동'},{label:'방',name:'room',type:'select-one',autocomplete:'',value:'스터디룸 B'}]});assert.deepEqual(page.fields.map(f=>[f.value,f.masked]),[['2',false],['홍길동',false],['스터디룸 B',false]]);
 });
+test('private text ranges join whitespace and mask overlapping values without exposing suffixes',()=>{
+ const page=sanitizePage({address:raw.address,title:'Order',blocks:['Code: 4 5\n6','Value: abcd'],fields:[{label:'Security code',type:'number',autocomplete:'',value:'456'},{label:'Secret',type:'password',autocomplete:'',value:'abc'},{label:'Password',type:'password',autocomplete:'',value:'abcd'}]});assert.deepEqual(page.blocks,['Code: ••••','Value: ••••']);
+});

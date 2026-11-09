@@ -33,3 +33,9 @@ The Work producer uses the existing Application CAS/idempotency boundary, drain-
 - B15's generic library decision lacks a typed form-submission effect binding to the Work; the sidebar does not claim decision-pending. The image grants no submission authority.
 - B7's named order-history/business steps and their timestamps remain R-A's scope. Browser timestamps do not replace them.
 - Tests use fixtures and loopback-only browsers. No third-party browsing, live models, payment or submission occurred. Authenticated profiles, interactive filling and autonomous browser planning remain out of scope. The PR is not merged by this task.
+
+## Visual-review correction 1
+
+Codex reproduced a split-text reflection leak and early browser-drain completion on `9f36270`. Private matching now spans DOM text nodes, including visible text separated by hidden nodes or whitespace, while replacing only the affected text ranges. Metadata uses rendered text. The actual PNG invariant passes for the expanded fixture: different private codes still produce identical masked pixels. CI now runs this production screenshot/redaction check before its screen-contract capture.
+
+The browser service separately tracks adapter settlement, so cancellation of the caller-facing read cannot finish host drain before the adapter's async `finally`. Tests cover successful cleanup and bounded timeout reporting as unsettled. All 30 affected tests and typecheck pass; the four reference page PNGs remain unchanged. The six CI jobs on the previous head passed; final-head CI is required again after this correction.
