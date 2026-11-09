@@ -19,9 +19,10 @@ export class SelectableTextRuntime implements WorkRuntime {
  #draining=false;
  readonly #active=new Map<string,ConfiguredTextRuntime|undefined>();
  readonly #runs=new Set<Promise<RuntimeResult>>();
+ readonly #moderateRoom:ConfiguredRuntimeOptions['moderateRoom'];
  readonly #differentFamilyAvailable:ConfiguredRuntimeOptions['differentFamilyAvailable'];
- constructor(store:Store<Mission>,catalog:ConnectionCatalog,authorizations:readonly ExecutionAuthorization[],artifacts:TextArtifactStore,differentFamilyAvailable?:ConfiguredRuntimeOptions['differentFamilyAvailable']){
-  this.#store=store;this.#differentFamilyAvailable=differentFamilyAvailable;this.#catalog=catalog;this.#grants=structuredClone(authorizations);this.#artifacts=artifacts;
+ constructor(store:Store<Mission>,catalog:ConnectionCatalog,authorizations:readonly ExecutionAuthorization[],artifacts:TextArtifactStore,differentFamilyAvailable?:ConfiguredRuntimeOptions['differentFamilyAvailable'],moderateRoom?:ConfiguredRuntimeOptions['moderateRoom']){
+  this.#store=store;this.#moderateRoom=moderateRoom;this.#differentFamilyAvailable=differentFamilyAvailable;this.#catalog=catalog;this.#grants=structuredClone(authorizations);this.#artifacts=artifacts;
   for(const grant of this.#grants){if(!grant||typeof grant.id!=='string'||!grant.id||typeof grant.scope!=='string'||!grant.scope||!['mock-http','live'].includes(grant.mode)||!Number.isSafeInteger(grant.maxOutputTokensPerCall)||grant.maxOutputTokensPerCall<1||Object.keys(grant).some(k=>!['id','scope','mode','executor','verifier','maxOutputTokensPerCall'].includes(k))||![grant.executor,grant.verifier].every(list=>Array.isArray(list)&&list.every(p=>p&&typeof p.profileId==='string'&&/^[a-f0-9]{64}$/.test(p.configHash)&&Object.keys(p).every(k=>['profileId','configHash'].includes(k)))))throw new Error('Invalid execution authorization');}
   if(new Set(authorizations.map(a=>a.id)).size!==authorizations.length)throw new Error('Duplicate authorization identity');
  }
@@ -47,7 +48,7 @@ export class SelectableTextRuntime implements WorkRuntime {
    if(g&&(g.mode==='mock-http')!==(result.adapter.descriptor.evidenceClass==='fixture'))add('evidence_mode_mismatch',`${role}: Mock and live authorization cannot be interchanged.`);
   }
   if(diagnostics.length)return {diagnostics};
-  const runtime=new ConfiguredTextRuntime(this.#store,{enabled:true,authorization:{id:g!.id,scope:g!.scope,mode:g!.mode,executor:selected.executor.adapter.descriptor,verifier:selected.verifier.adapter.descriptor,maxOutputTokensPerCall:g!.maxOutputTokensPerCall},outputTokenCap:choice.outputTokenCap,executor:{identity:'selected-executor',adapter:selected.executor.adapter},verifier:{identity:'selected-verifier',adapter:selected.verifier.adapter},artifacts:this.#artifacts,connectionBindings:{executor:{profileId:selected.executor.profile.id,configHash:selected.executor.configHash},verifier:{profileId:selected.verifier.profile.id,configHash:selected.verifier.configHash}},differentFamilyAvailable:this.#differentFamilyAvailable});
+  const runtime=new ConfiguredTextRuntime(this.#store,{enabled:true,authorization:{id:g!.id,scope:g!.scope,mode:g!.mode,executor:selected.executor.adapter.descriptor,verifier:selected.verifier.adapter.descriptor,maxOutputTokensPerCall:g!.maxOutputTokensPerCall},outputTokenCap:choice.outputTokenCap,executor:{identity:'selected-executor',adapter:selected.executor.adapter},verifier:{identity:'selected-verifier',adapter:selected.verifier.adapter},artifacts:this.#artifacts,connectionBindings:{executor:{profileId:selected.executor.profile.id,configHash:selected.executor.configHash},verifier:{profileId:selected.verifier.profile.id,configHash:selected.verifier.configHash}},differentFamilyAvailable:this.#differentFamilyAvailable,moderateRoom:this.#moderateRoom});
   const available=runtime.availability(mission);if(!available.ready)add('runtime_unavailable',available.reason);
   return {diagnostics,...(diagnostics.length?{}:{runtime})};
  }

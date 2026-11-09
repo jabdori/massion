@@ -251,7 +251,7 @@ export class AssistantService {
   const assistantSource:AssistantSource={segmentId:segment.id,turnId,messageId,messageHash:hash(message),message:structuredClone(message),representative:{provider:route.provider,model:route.model},...(member?{memberId:member.id}:{})};
   const workId=assistantWorkId(turnId),gate=this.#product.executionGate(intake.value),commandId='assistant-work:'+turnId;
   let team;try{if(member){const skills=await this.#store.load(SKILLS_ID);team=memberProcedures(skills?.value as unknown as SkillsState??null,member.id,skills?.revision??0);const loader=new SkillsService(this.#ownerStore,{clock:this.#clock});for(const procedure of team.procedures)if(procedure.id!=='host-default-v1'){const used=await loader.use(procedure.id);if(used.status!=='committed'&&used.status!=='replayed')throw new DomainError('Procedure changed during load');}}}catch(error){return outcome('not_created',[diagnostic('procedure_unavailable',error instanceof Error?error.message:'Procedure unavailable')]);}
-  const command={type:'admit-work' as const,workId,title,budget:teamCallCount(team)*resolved.choice.outputTokenCap,...(team?{team}:{}),assistantSource,...(gate?{executionGate:gate}:{})};
+  const command={type:'admit-work' as const,workId,title,budget:teamCallCount(team,true)*resolved.choice.outputTokenCap,...(team?{team}:{}),assistantSource,...(gate?{executionGate:gate}:{})};
   let admitted:CommitResult<Mission>;
   try{admitted=await this.#admission.dispatch({missionId:intakeMissionId,commandId,expectedRevision:intake.revision,actorId:ASSISTANT_ACTOR_ID,command});}
   catch(error){

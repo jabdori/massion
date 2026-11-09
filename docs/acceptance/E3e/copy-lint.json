@@ -1,0 +1,41 @@
+{
+  "mode": "scoped-blocking",
+  "files": [
+    "src/accepted-result-source-draft.ts",
+    "src/apps-panel.ts",
+    "src/assistant-conversation-panel.ts",
+    "src/conversation-work-panel.ts",
+    "src/expired-run-panel.ts",
+    "src/knowledge-neighborhood-panel.ts",
+    "src/members-panel.ts",
+    "src/memory-conflict-panel.ts",
+    "src/memory-content-search-panel.ts",
+    "src/memory-expiry-panel.ts",
+    "src/memory-find-panel.ts",
+    "src/memory-usage-panel.ts",
+    "src/mission-catalog-panel.ts",
+    "src/mission-constraints-panel.ts",
+    "src/owner-file-document-draft.ts",
+    "src/reflection-trail-panel.ts",
+    "src/rejected-text-panel.ts",
+    "src/results-panel.ts",
+    "src/run-sequence-panel.ts",
+    "src/schedules-panel.ts",
+    "src/settings-panel.ts",
+    "src/surface-shell.ts",
+    "src/work-clarification-panel.ts",
+    "src/work-correction-panel.ts",
+    "src/work-inbox-panel.ts",
+    "src/work-prerequisite-panel.ts",
+    "src/work-room-panel.ts",
+    "src/workbench.ts"
+  ],
+  "findings": [],
+  "limits": [
+    "Static extraction only: dynamic data, variable aliases, lookup tables and indirect helper arguments are not resolved.",
+    "Recognizes direct DOM writes, element(tag, text), HTML-shaped literals, inline scripts and templates assigned to names ending in Client.",
+    "HTML scanning is not a browser parser: hidden markup is included; CSS content, computed visibility, custom entities and cross-element text composition are not checked.",
+    "Migrated panels, shell, workbench and the two rendered source helpers require keyed copy; other panels report only and match approved normalized ko text. Symbols and numbers are not copy. Roles, screens and runtime interpolation values are not validated. Escaped literal columns are approximate.",
+    "Direct copy calls validate static keys and object placeholder names. Dynamic keys/values and missing properties behind spreads or computed names are not resolved."
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e4]\n    - button \"결과물\" [ref=e5]\n    - button \"예약\" [ref=e6]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e9]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e10]\n  - complementary \"구성원과 작업\"\n    - generic\n      - switch \"활동 보기\" [checked=false, ref=e11]\n      - button \"검색\" [expanded=false, ref=e12]\n    - generic\n      - list\n        - listitem [level=1]\n          - button \"하나 작업 중\" [ref=e22]\n            - StaticText \"하나\"\n            - status \"작업 중\"\n          - list \"하나의 작업\"\n            - listitem [level=2]\n              - button \"프린터 토너 주문\" [ref=e31]\n                - StaticText \"프린터 토너 주문\"\n                - status\n                  - StaticText \"확인 대기\"\n      - list \"구성원\"\n        - listitem [level=1]\n          - button \"퀼\" [ref=e23]\n            - StaticText \"퀼\"\n            - status \"작업 중\"\n          - list \"퀼의 작업\"\n            - listitem [level=2]\n              - button \"이탈 원인 조사\" [ref=e32]\n                - StaticText \"이탈 원인 조사\"\n                - status\n                  - StaticText \"실행 중\"\n            - listitem [level=2]\n              - button \"경쟁사 가격\" [ref=e33]\n                - StaticText \"경쟁사 가격\"\n                - status\n                  - StaticText \"확인 대기\"\n        - listitem [level=1]\n          - button \"주노\" [ref=e24]\n            - StaticText \"주노\"\n            - status \"읽지 않음\"\n          - list \"주노의 작업\"\n            - listitem [level=2]\n              - button \"PR #84 검토\" [ref=e34]\n                - StaticText \"PR #84 검토\"\n                - status\n                  - StaticText \"완료\"\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 숨기기\" [expanded=true, ref=e13]\n      - heading \"하나\" [level=1, ref=e14]\n        - button \"하나\" [expanded=false, ref=e21]\n      - button \"작업 공간\" [ref=e15]\n      - button \"더 보기\" [expanded=false, ref=e16]\n    - region \"대화\" [ref=e17]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 5일 (목)\"\n          - paragraph\n            - StaticText \"프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.\"\n          - generic\n            - paragraph\n              - StaticText \"지난 주문과 같은 토너를 찾았어요.\"\n            - button \"복사\" [ref=e35]\n          - button \"프린터 토너 주문 확인 대기 작업 중 하나 4분 작성 확인 1/3\" [ref=e36]\n            - strong\n              - StaticText \"프린터 토너 주문\"\n            - StaticText \"확인 대기\"\n            - status \"작업 중\"\n              - StaticText \"하\"\n            - StaticText \"하나\"\n            - StaticText \"4분\"\n            - StaticText \"작성\"\n            - StaticText \"확인\"\n            - StaticText \"1/3\"\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e25]\n          - button \"파일 추가\" [disabled, ref=e26]\n          - button \"기본 권한\" [ref=e27]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e28]\n  - region \"작업\" [ref=e3]\n    - tablist \"열린 작업\"\n      - tab \"프린터 토너 주문\" [selected, ref=e18]\n      - button \"프린터 토너 주문 닫기\" [ref=e19]\n        - StaticText \"×\"\n    - button \"넓히기\" [ref=e7]\n    - button \"작업 공간 닫기\" [ref=e8]\n    - tabpanel\n      - region \"미션\" [ref=e20]\n        - generic\n          - article\n            - StaticText \"대기 중\"\n            - time\n              - StaticText \"4분\"\n            - button \"중지\" [ref=e29]\n            - heading \"프린터 토너 주문\" [level=3, ref=e30]\n            - StaticText \"하나\"\n            - StaticText \"확인\"\n            - generic\n              - sectionheader\n                - strong\n                  - StaticText \"절차\"\n                - StaticText \"0/0\"\n              - list\n                - listitem \"프린터 토너 주문 · 실행 중\" [level=1, ref=e38]\n                  - StaticText \"프린터 토너 주문\"\n                  - time\n                    - StaticText \"14:08\"\n            - group\n              - button \"확인 대기 요청한 결과와 근거 확인\" [expanded=false, ref=e37]\n                - strong\n                  - StaticText \"확인 대기\"\n                - StaticText \"요청한 결과와 근거 확인\""
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "sidebar": [
+      "하나",
+      "프린터 토너 주문",
+      "퀼",
+      "이탈 원인 조사",
+      "경쟁사 가격",
+      "주",
+      "주노",
+      "PR #84 검토"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "11월 5일 (목)",
+      "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.",
+      "지난 주문과 같은 토너를 찾았어요.",
+      "프린터 토너 주문",
+      "확인 대기",
+      "하나",
+      "4분",
+      "작성",
+      "확인",
+      "1/3"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ],
+    "pane": [
+      "프린터 토너 주문",
+      "×",
+      "대기 중",
+      "4분",
+      "중지",
+      "프린터 토너 주문",
+      "하",
+      "하나",
+      "확인",
+      "절차",
+      "0/0",
+      "프린터 토너 주문",
+      "14:08",
+      "확인 대기",
+      "요청한 결과와 근거 확인"
+    ]
+  }
+}

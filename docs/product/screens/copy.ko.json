@@ -16496,6 +16496,32 @@
   ],
   "provenance": "B14 approved artboard: CLI route how"
  },
+ "ui.room.verdict-passed": {
+  "ko": "맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8-done:pane"
+  ],
+  "evidence": {
+   "source": "approved prototype B8-done.dc.html",
+   "reason": "Check row verdict; E3c round-two polish carried into E3e"
+  }
+ },
+ "ui.room.verdict-failed": {
+  "ko": "아님",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8-fail:pane"
+  ],
+  "evidence": {
+   "source": "approved prototype B8-fail.dc.html",
+   "reason": "Check row verdict; E3c round-two polish carried into E3e"
+  }
+ },
  "ui.room.skipped": {
   "ko": "건너뜀 · {reason}",
   "roles": [
@@ -16517,5 +16543,101 @@
    "B8:pane"
   ],
   "provenance": "Q13 named worker steps and dependencies."
+ },
+ "ui.room.proposal": {
+  "ko": "제안",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.challenge": {
+  "ko": "반박",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.answer": {
+  "ko": "답변",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.concede": {
+  "ko": "인정",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.inferred": {
+  "ko": "추론",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.returned": {
+  "ko": "반려",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.escalated": {
+  "ko": "확인에 전달",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
+ },
+ "ui.room.moderation": {
+  "ko": "판별 기록",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B18:conversation",
+   "B18-room-b:conversation",
+   "B22-room:conversation",
+   "B22-room-steps:conversation"
+  ]
  }
 }

@@ -435,7 +435,7 @@ function clearSnapshot(message) {
   $('mission-link').hidden = true; $('mission-link').setAttribute('href','#');
   $('work-list').replaceChildren(); executionForms.clear();
   $('snapshot-time').textContent = copy("legacy.no-current-snapshot-is-available");
-  controls();
+  controls();if(chatView)renderChat();
 }
 function installSnapshot(value) {
   const changed = !snapshot || JSON.stringify(snapshot) !== JSON.stringify({revision:value.revision,value:value.value});
@@ -449,7 +449,7 @@ function installSnapshot(value) {
   paneFor(value.value);
   $('snapshot-time').textContent = copy("legacy.snapshot-read-at-revision",{value:new Date().toLocaleTimeString(),revision:value.revision});
   if (changed) renderMission();
-  controls();
+  controls();if(chatView)renderChat();
 }
 async function loadMission(id = selectedId, announce = true) {
   if (!id || !/^[a-zA-Z0-9:_-]{1,128}$/.test(id)) { report(copy("legacy.enter-a-valid-mission-id"), 'error'); return false; }

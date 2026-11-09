@@ -2,23 +2,7 @@
   "screen": "B26-later",
   "extends": "B26",
   "description": "Deferred budget decision with neutral waiting status.",
-  "steps": [
-    {
-      "action": "click",
-      "selector": "#activity-toggle",
-      "readySelector": "#activity-head:not([hidden])"
-    },
-    {
-      "action": "click",
-      "selector": "[id=\"activity-row-decision:rounding\"]",
-      "readySelector": "#activity-toggle:has(#activity-attention[hidden])"
-    },
-    {
-      "action": "click",
-      "selector": "#activity-toggle"
-    }
-  ],
   "gaps": [
-    "The production host has no deferred budget decision or reopen command; no budget outcome or approval is simulated."
+    "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
   ]
 }

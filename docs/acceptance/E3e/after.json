@@ -1,0 +1,579 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B3",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 28,
+      "failed": 7,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "dark",
+      "passed": 24,
+      "failed": 4,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [
+        "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B6-token.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 3,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-sent.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 3,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-later.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 33,
+      "failed": 36,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18-room-b.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "dark",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B21-name.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "dark",
+      "passed": 19,
+      "failed": 1,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [
+        "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B21-done-hana.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "dark",
+      "passed": 25,
+      "failed": 2,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B26-later.png"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 10,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B3",
+      "theme": "light",
+      "passed": 22,
+      "failed": 0,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3.png"
+    },
+    {
+      "screen": "B3-run",
+      "theme": "light",
+      "passed": 22,
+      "failed": 1,
+      "warnings": 1,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B3-run.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 28,
+      "failed": 7,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 2,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6.png"
+    },
+    {
+      "screen": "B6-token",
+      "theme": "light",
+      "passed": 24,
+      "failed": 4,
+      "warnings": 3,
+      "required": 28,
+      "visualFailures": [],
+      "gaps": [
+        "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B6-token.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "passed": 18,
+      "failed": 3,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-sent.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "passed": 18,
+      "failed": 3,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-later.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 33,
+      "failed": 36,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "Named team workers, business procedure steps, per-step timestamps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18-room-b.png"
+    },
+    {
+      "screen": "B21",
+      "theme": "light",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 1,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21.png"
+    },
+    {
+      "screen": "B21-name",
+      "theme": "light",
+      "passed": 33,
+      "failed": 0,
+      "warnings": 1,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B21-name.png"
+    },
+    {
+      "screen": "B21-done",
+      "theme": "light",
+      "passed": 19,
+      "failed": 1,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [
+        "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done.png"
+    },
+    {
+      "screen": "B21-done-hana",
+      "theme": "light",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 1,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "Undo of an admitted member is not implemented; the stored member conversation link is available."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B21-done-hana.png"
+    },
+    {
+      "screen": "B26",
+      "theme": "light",
+      "passed": 25,
+      "failed": 2,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26.png"
+    },
+    {
+      "screen": "B26-later",
+      "theme": "light",
+      "passed": 26,
+      "failed": 1,
+      "warnings": 3,
+      "required": 27,
+      "visualFailures": [],
+      "gaps": [
+        "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B26-later.png"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "passed": 39,
+      "failed": 1,
+      "warnings": 2,
+      "required": 40,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 39,
+      "failed": 39,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "passed": 23,
+      "failed": 8,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "passed": 24,
+      "failed": 12,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 26,
+      "failed": 10,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    }
+  ]
+}

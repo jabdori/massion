@@ -63,7 +63,7 @@ test('a failed verdict marks only its bound verification task as failed',async()
  const {app,nodes,work}=await scene('B7-fail');
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'settled'});renderMission()}`,app.context);
  assert.equal(nodes().filter(n=>hasClass(n,'room-step-marker')&&hasClass(n,'failed')).length,1);
- assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'3/4');
+ assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'2/3');
 });
 
 test('a rejected Stop reports the revision conflict while the Work stays running',async()=>{
@@ -71,4 +71,38 @@ test('a rejected Stop reports the revision conflict while the Work stays running
  await stop.fire('click');await settle();
  assert.equal(posted.length,1);assert.equal(runInContext('snapshot.value.works.find(w=>w.id==='+JSON.stringify(work.id)+').execution',app.context),'active');
  assert.match(app.node('status').className,/warning/);assert.match(app.node('status').textContent,/충돌/);assert.equal(app.node('page-status').hidden,true);assert.equal(runInContext('unknownOperation',app.context),null);
+});
+
+ test('B22 room steps use the B7 pane and never embed the legacy Work inspector',async()=>{
+ const {nodes,card}=await scene('B22-room-steps');
+ assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 돌리기','확인','기록']);
+ assert.ok(nodes().some(n=>n.id==='work-room-stop-pr84'));
+ assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-pr84'));
+ assert.doesNotMatch(card().textContent,/실행: active|검증: pending|시도 \/ 예산|측정 사용량|기준·기억·근거|선택한 원문 문서|원래 조직 역할/);
+ });
+
+for(const [screen,panel] of [['B7-done','record-text-summary'],['B7-fail','rejected-text-summary']])test(screen+' keeps its deliberate result reader without the legacy state dump',async()=>{
+ const {nodes,work}=await scene(screen!);assert.ok(nodes().some(n=>n.id==='work-'+panel+'-'+work.id));assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
+});
+
+test('failed procedure rows show only the current bound verdict evidence',async()=>{
+ const {app,nodes,work}=await scene('B7-fail');
+ const failed=()=>nodes().find(n=>hasClass(n,'room-step')&&hasClass(n,'failed'))!;
+ assert.equal(failed().children.find(n=>hasClass(n,'room-step-status'))?.textContent,work.verdict.evidence.map((e:any)=>e.detail).join(' · '));
+ runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='stale';renderMission()`,app.context);
+ assert.ok(!failed().children.some(n=>hasClass(n,'room-step-status')));
+});
+
+for(const [screen,word] of [['B8-done','맞음'],['B8-fail','아님']] as const)test(screen+' shows the verdict word instead of repeating the header count',async()=>{
+ const {nodes}=await scene(screen),group=nodes().find(n=>hasClass(n,'room-grid'))!.children[1]!;
+ assert.equal(descendants(group).filter(n=>hasClass(n,'room-field-note'))[0]?.textContent,word);
+});
+
+test('conversation and procedure counts use the same child tasks and failed check state',async()=>{
+ const {app,nodes,work}=await scene('B7-fail');
+ const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent;
+ assert.equal(count,'1/2');
+ const active=await scene('B7');
+ const card=active.app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(active.work.title))!;
+ assert.ok(card);assert.equal(descendants(card).find(n=>hasClass(n,'chat-steps'))?.textContent,active.nodes().find(n=>hasClass(n,'room-progress'))!.textContent);
 });

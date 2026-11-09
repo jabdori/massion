@@ -1,0 +1,18 @@
+[
+  {
+    "theme": "dark",
+    "nameAndShape": true,
+    "emptyNameDisabled": true,
+    "cancelAndEscape": true,
+    "reopenResetsDraft": true,
+    "commands": 0
+  },
+  {
+    "theme": "light",
+    "nameAndShape": true,
+    "emptyNameDisabled": true,
+    "cancelAndEscape": true,
+    "reopenResetsDraft": true,
+    "commands": 0
+  }
+]
