@@ -42,3 +42,7 @@ Other unsupported business summaries, unrecorded step times, layout drift and un
 The first CI pass exposed a source-link test that asserted before native hashing completed. It now waits for the actual digest promises; no fixed sleep or implementation change was needed. Codex then identified a pre-intent stale-review HTTP rejection classified as unknown delivery. The route now labels only definite validation/admission failures as rejected, allowing a refreshed owner decision. HTTP and client regressions retain the unknown-intent/save no-resend locks.
 
 Rule-decision admission refusals now carry the same explicit rejected/admission envelope, with HTTP and client coverage proving that a stale adoption may still be deferred. Hidden case panes clear their cached contents when the database feed resets.
+
+## Integration with updated main
+
+Merged `origin/main` at `08b5f23` after PR #126 added the MCP/Electron journeys while R-D was running. On head `a5c6afd`, the new MCP journey failed twice in agent-browser 0.41.2 / runner Chrome 156 before an accessibility snapshot, with `Failed to install browser network controls: CDP error (Runtime.evaluate): Cannot find default execution context`. Existing upstream investigation is linked in `docs/architecture/e2e-decisions-apps-desktop.md`. This is an unresolved CI browser-infrastructure failure, not evidence that the journey passed. Domain restrictions and app sandboxing remain enabled.
