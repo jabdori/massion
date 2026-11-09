@@ -39,7 +39,10 @@ jobs:
       - name: Drive real daemon and durable journeys with local model fixtures
         env:
           MASSION_SURREAL_BINARY: /tmp/massion-surreal/surreal
-        run: xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
+          MASSION_E2E_BROWSER: /usr/bin/google-chrome
+        run: |
+          "$MASSION_E2E_BROWSER" --version
+          xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
       - name: Upload accessibility snapshots, screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
