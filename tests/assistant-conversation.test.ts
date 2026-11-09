@@ -12,7 +12,7 @@ import {ProductService} from '../src/product.ts';
 import {Application} from '../src/application.ts';
 import {AssistantService,ASSISTANT_INSTRUCTION,workException} from '../src/assistant-service.ts';
 import {RunUnsettledError} from '../src/configured-runtime.ts';
-import {AssistantConversation,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,assistantRunId,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
+import {AssistantConversation,validateAssistantSource,ASSISTANT_ACTOR_ID,PENDING_GRACE_MS,assistantRunId,assistantTurnId,assistantWorkId,ownerMessageId,segmentId} from '../src/assistant-conversation.ts';
 import type {AssistantSegment} from '../src/assistant-conversation.ts';
 import {providerRequestHash} from '../src/provider-dispatch.ts';
 import {providerRequestId} from '../src/http-provider.ts';
@@ -552,4 +552,21 @@ test('B5 exception metadata comes from committed effects and original interrupti
  for(const path of ['/assistant/conversation','/assistant/conversation?segment=1']){const view=fixture.routes[path].body,turn=view.turns[0];assert.equal(turn.at,1793855280000);assert.equal(turn.work.missionRevision,committed.revision);assert.deepEqual(turn.work.exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});assert.deepEqual(turn.work.steps,{done:0,total:0});assert.equal(view.segment.messages[1].text,'지난 주문과 같은 토너를 찾아 결제 직전에서 멈췄어요.');assert.ok(view.members.every((m:any)=>m.look.shape==='square'));}
  const listed=fixture.routes['/assistant/works'].body.works;assert.ok(listed.every((w:any)=>w.missionRevision===committed.revision));assert.deepEqual(listed.find((w:any)=>w.workId==='toner').exception,{at:1793855520000,runId:'b5-run',fact:'payment-response-unknown'});
  validateMissionJournalLineage(structuredClone(store.inspect()) as any);
+});
+
+test('new conversation messages expose recorded host times without changing legacy journal replay',async t=>{
+ let now=Date.now();const start=now,f=await setup(t),{s}=await f.ready({clock:()=>now});
+ f.script.push({content:turn('Connected.'),answered:()=>{now+=1000;}});await say(s,'Connect this app.','timed-message');
+ const view=await s.read();assert.deepEqual(view.segment!.messages.map((m:any)=>m.at),[start,start+1000]);
+ validateMissionJournalLineage((f.store as InMemoryStore<any>).inspect() as any);
+ const legacy=new InMemoryStore<AssistantSegment>(),conversation=new AssistantConversation(legacy,[{id:'local-owner',roles:['owner']}],()=>start);
+ await conversation.dispatch({segment:1,commandId:'legacy',expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',segment:1,previous:null,messageId:ownerMessageId('legacy'),text:'Old message',turn:{id:turnOf('legacy'),status:'not_started',diagnostics:[{code:'unavailable',message:'Unavailable'}]}}});
+ assert.equal(Object.hasOwn((await legacy.load(segmentId(1)))!.value.messages[0]!,'at'),false);validateMissionJournalLineage(legacy.inspect() as any);
+});
+
+
+test('message-time source validation rejects malformed or invalid timestamps at the trust boundary',()=>{
+ const messageId=ownerMessageId('source-time'),turnId=assistantTurnId(messageId),message={id:messageId,ordinal:1,actorId:'local-owner',role:'owner',turnId:null,text:'Source'};
+ const source={segmentId:segmentId(1),turnId,messageId,message,messageHash:hash(message),representative:{provider:'fixture',model:'fixture'}};
+ for(const invalid of [null,{...message,at:-1},{...message,at:undefined}])assert.throws(()=>validateAssistantSource({...source,message:invalid},assistantWorkId(turnId)),/complete owner message/);
 });

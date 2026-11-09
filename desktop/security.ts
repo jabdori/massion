@@ -16,5 +16,9 @@ export function windowOptions(preload:string){
 }
 export function contentPolicy(html:string){
  const hashes=(tag:string)=>[...html.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`,'g'))].map(match=>`'sha256-${createHash('sha256').update(match[1]!).digest('base64')}'`).join(' ');
- return `default-src 'none'; script-src ${hashes('script')}; style-src ${hashes('style')}; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+ return `default-src 'none'; script-src ${hashes('script')}; style-src ${hashes('style')}; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src massion-app://document; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+export function isAppDocumentURL(value:string){return /^massion-app:\/\/document\/[a-f0-9]{64}$/.test(value);}
+export function allowWorkbenchRequest(details:{url:string;resourceType:string;webContentsId?:number;frame?:unknown},contents:{id:number;mainFrame:{url:string}}|undefined){
+ return !!contents&&details.webContentsId===contents.id&&details.frame===contents.mainFrame&&allowRequest(details.url)&&(details.resourceType==='mainFrame'&&isAppURL(details.url)||isAppURL(contents.mainFrame.url));
 }

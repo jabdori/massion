@@ -1,6 +1,8 @@
+import {appFrameClient} from './app-frame.ts';
 import {copy} from './ui-copy.ts';
 /** Apps on the surface (docs/architecture/apps.md, prototype B22, B22-room, B23, B23-github, B24): rail icons, the app page, the Work room app tab and Settings > Apps. Apps send views as data; every string is drawn through textContent. */
-export const appsStyle=String.raw`.app-mark{background:var(--bg-3);color:var(--fg)}.rail .app-mark{width:22px;height:22px;border-radius:6px;font-size:12px}.set-row .app-mark,.set-head .app-mark{background:var(--bg-3);color:var(--fg)}
+export const appsStyle=String.raw`#app-tool-outcomes{padding-bottom:0}.app-tool-outcome{display:block;margin-bottom:var(--space-12)}.app-tool-outcome .chat-exception-head{display:flex;align-items:center;gap:var(--space-8)}.app-tool-outcome label{display:grid;gap:var(--space-8);margin:var(--space-12) 0}.app-tool-outcome input{width:100%}.app-tool-outcome .chat-actions{display:flex;gap:var(--space-8)}
+.app-mark{background:var(--bg-3);color:var(--fg)}.rail .app-mark{width:22px;height:22px;border-radius:6px;font-size:12px}.set-row .app-mark,.set-head .app-mark{background:var(--bg-3);color:var(--fg)}
 .rail .app-branch{display:block;width:18px;height:18px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221.75%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%225.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%227%22%20cy%3D%2218.5%22%20r%3D%222%22%2F%3E%3Ccircle%20cx%3D%2217%22%20cy%3D%228.5%22%20r%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%207.5v9M17%2010.5c0%203.5-4%203-8.5%206.5%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat}
 .app-side-head{display:grid;gap:2px;padding:4px 8px 10px}.app-side-head strong{display:flex;align-items:center;justify-content:space-between;font-size:var(--type-sidebar-text-size)}.app-side-head span{color:var(--fg-3);font:12px var(--font-mono)}.app-group{margin:10px 8px 4px;color:var(--fg-3);font-size:12px}
 .app .app-row{display:grid;gap:2px;width:100%;padding:8px;border:0;border-radius:7px;background:transparent;color:var(--fg);text-align:left;font-weight:500}.app .app-row:hover,.app .app-row[aria-current=true]{background:var(--bg-3)}.app-row span{color:var(--fg-3);font-size:12px}
@@ -18,20 +20,45 @@ export const appsStyle=String.raw`.app-mark{background:var(--bg-3);color:var(--f
 #settings-apps .set-app-name,#settings-apps .set-app-source{display:inline;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:none;color:inherit;font-size:inherit;line-height:inherit;text-align:left}#settings-apps .set-app-name{justify-self:start;font-size:var(--type-settings-text-size);font-weight:var(--type-settings-heading-weight)}#settings-apps .set-app-source{font-weight:var(--type-settings-link-weight)}
 #settings-apps .set-app-recommendations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-8);border:0;border-radius:0;background:none;overflow:visible}#settings-apps .set-app-recommendations .set-row{padding:var(--space-12) var(--space-14);border:var(--card-conversation-border);border-radius:var(--card-conversation-radius);background:var(--bg-1)}
 #settings-apps .set-app-github::before{content:"";width:var(--type-pane-heading-size);height:var(--type-pane-heading-size);background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='7' cy='5.5' r='2'/%3E%3Ccircle cx='7' cy='18.5' r='2'/%3E%3Ccircle cx='17' cy='8.5' r='2'/%3E%3Cpath d='M7 7.5v9M17 10.5c0 3.5-4 3-8.5 6.5'/%3E%3C/svg%3E") center/contain no-repeat}#settings-apps .set-head .set-app-github::before{width:calc(var(--space-11)*2);height:calc(var(--space-11)*2)}`;
-export const appsPage=String.raw`<div id="page-app" class="page-body" hidden><div id="app-view" class="app-view" aria-live="polite"></div></div>`;
+export const appsPage=String.raw`<div id="page-app" class="page-body" hidden><div id="app-tool-outcomes" class="app-view" aria-live="polite" hidden></div><div id="app-view" class="app-view" aria-live="polite"></div></div>`;
 export const appsSide=String.raw`<nav id="side-app" aria-label="${copy('ui.apps')}" hidden></nav>`;
 export const appsPane=String.raw`<div id="pane-app" class="pane-app app-view" role="tabpanel" aria-label="${copy('ui.apps')}" hidden></div>`;
-export const appsClient=String.raw`
+export const appsClient=String.raw`${appFrameClient}
+
 // Each async read has its own generation: a response is drawn only if no newer request of its kind started since (A, B, A again drops the first A).
 let appQuery='',appGroups=new Set();
+const appReconciliations=new Set();
+const appUnresolved=a=>(Array.isArray(a?.unresolved)?a.unresolved:[]).filter(c=>c&&chatText(c.id)&&chatText(c.name)&&['pending','unknown'].includes(c.status));
 let appsList=[],appShown='',appItem='',appPage=null,appSeq=0,appItemSeq=0,appTabSeq=0,settingsApps=null,settingsApp='';
 const appsMark=name=>{const mark=element('span',[...name][0],'avatar app-mark');mark.setAttribute('aria-hidden','true');return mark;};
 /** Enabled apps from the conversation read (rail and room tabs); malformed entries are skipped. */
 function appsRail(view){
  appsList=(Array.isArray(view&&view.apps)?view.apps:[]).filter(a=>a&&chatText(a.id)&&chatText(a.name)&&typeof a.page==='boolean'&&typeof a.item==='boolean'&&(a.roomTab===null||chatText(a.roomTab)));
- const box=$('rail-apps'),shown=appsList.filter(a=>a.page),key=JSON.stringify(shown.map(a=>[a.id,a.name]));
+ const box=$('rail-apps'),shown=appsList.filter(a=>a.page||appUnresolved(a).length),key=JSON.stringify(shown.map(a=>[a.id,a.name]));
  if(box.appsKey!==key){box.appsKey=key;box.replaceChildren(...shown.map(a=>{const b=element('button',undefined,'icon');b.type='button';b.id='rail-app-'+a.id;b.setAttribute('aria-label',a.name);const mark=a.name==='GitHub'?element('span',undefined,'app-branch'):appsMark(a.name);mark.setAttribute('aria-hidden','true');b.append(mark);b.addEventListener('click',()=>void appOpen(a.id));return b;}));}
- box.hidden=!shown.length;appsCurrent();
+ box.hidden=!shown.length;appsCurrent();renderAppOutcomes(view?.feedId);
+}
+function renderAppOutcomes(feed=chatView?.feedId){
+ const area=$('app-tool-outcomes'),a=appsList.find(a=>a.id===appShown),calls=appUnresolved(a),signature=JSON.stringify([feed,appShown,calls]);
+ if(area.outcomeKey===signature)return;area.outcomeKey=signature;area.hidden=!calls.length;area.replaceChildren();$('app-view').hidden=!!calls.length&&!a?.page;if(!a)return;if(calls.length&&!a.page)area.append(element('h2',a.name));
+ for(const call of calls){
+  const card=element('section',undefined,'chat-exception app-tool-outcome'),head=element('p',undefined,'chat-exception-head');card.id='app-outcome-'+call.id;
+  head.append(element('strong',copy('conversation.text.01')),element('span',call.name));card.append(head,element('p',copy('ui.not-resent')));
+  if(call.status==='unknown'){
+   const form=element('form'),label=element('label',copy('page.button.08')),evidence=element('input'),actions=element('div',undefined,'chat-actions'),buttons=[],key=JSON.stringify([feed,a.id,call.id]);
+   evidence.id='app-reconcile-evidence-'+call.id;evidence.type='text';evidence.maxLength=2000;evidence.required=true;evidence.setAttribute('aria-label',copy('page.button.08'));label.append(evidence);form.append(label,actions);form.addEventListener('submit',event=>event.preventDefault());
+   const current=()=>area.outcomeKey===signature&&appShown===a.id&&chatView?.feedId===feed&&!reconnectRequired;
+   const controls=()=>{evidence.disabled=appReconciliations.has(key);for(const button of buttons)button.disabled=evidence.disabled||!evidence.value.trim();};
+   for(const outcome of ['done','not-done']){const button=chatButton(copy('ui.apps.reconcile-'+outcome),async()=>{
+    if(!current()||appReconciliations.has(key)||!evidence.value.trim())return;
+    const body={commandId:crypto.randomUUID(),action:'reconcile',appId:a.id,callId:call.id,outcome,evidence:evidence.value.trim()};appReconciliations.add(key);controls();
+    try{const {response,body:receipt}=await request('/assistant/apps',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify(body)});if(response.status===409&&receipt?.status==='conflict'){appReconciliations.delete(key);if(current())controls();}}catch{}
+    if(current())await readChat();
+   },'');button.id='app-reconcile-'+outcome+'-'+call.id;buttons.push(button);actions.append(button);}
+   evidence.addEventListener('input',controls);controls();card.append(form);
+  }
+  area.append(card);
+ }
 }
 function appsCurrent(){for(const b of $('rail-apps').children)b.setAttribute('aria-current',!$('page-app').hidden&&b.id==='rail-app-'+appShown?'page':'false');}
 async function appsRead(app,handler,ref,feed){try{const {response,body}=await request('/assistant/apps/view',{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(ref===undefined?{app,handler}:{app,handler,ref})});return response.ok?body:null;}catch{return null;}}
@@ -42,6 +69,7 @@ const appDeltaText=d=>'+'+d.adds+(d.deletes?' −'+d.deletes:'');
 function appsViewNodes(v,github=false){
  const label=github?appLabel:value=>value;
  if(!v||!chatText(v.title)||!Array.isArray(v.groups))return [element('p',copy('ui.panel.unavailable'),'app-meta')];
+ if(v.frame&&typeof v.frame.url==='string'&&v.frame.url.length<=256)return [element('h2',v.title),appFrame(v.title,v.frame.url)];
  const number=github&&/^(.*) #(\d+)$/.exec(v.title),heading=element('h2',number?number[1]+' ':v.title);if(number)heading.append(element('span','#'+number[2],'app-number'));const out=[heading];
  if(chatText(v.meta)){
   const parts=v.meta.split(' · ');
@@ -57,9 +85,9 @@ function appsViewNodes(v,github=false){
 }
 /** B22: the app's list in the sidebar with App settings at its foot, the selected item in the page. An app without an item handler, or a page without rows, shows the page view itself. */
 async function appOpen(id){
- const a=appsList.find(x=>x.id===id);if(!a)return;const seq=++appSeq;appShown=id;appItem='';appPage=null;appQuery='';appGroups=new Set();shellShow('app');$('page-heading').textContent=a.name;$('app-view').replaceChildren();renderAppSide();appsCurrent();
+ const a=appsList.find(x=>x.id===id);if(!a)return;const seq=++appSeq;appShown=id;appItem='';appPage=null;appQuery='';appGroups=new Set();shellShow('app');$('page-heading').textContent=a.name;$('app-view').replaceChildren();renderAppSide();appsCurrent();renderAppOutcomes();
  // A late response for an earlier open (another app, or this one reopened) is dropped before it touches the shared page.
- const page=await appsRead(id,'page',undefined,chatView&&chatView.feedId);if(seq!==appSeq)return;appPage=page;renderAppSide();
+ const page=a.page?await appsRead(id,'page',undefined,chatView&&chatView.feedId):{title:a.name,groups:[]};if(seq!==appSeq)return;appPage=page;renderAppSide();
  // Like B22, the first row opens with the page.
  const first=a.item&&page&&Array.isArray(page.groups)?page.groups.flatMap(g=>g&&Array.isArray(g.rows)?g.rows:[])[0]:null;if(first){if(!appItem)await appSelect(first.id);}else $('app-view').replaceChildren(...appsViewNodes(page));
 }

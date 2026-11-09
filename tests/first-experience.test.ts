@@ -13,7 +13,7 @@ async function first(screen='B1'){
 }
 test('first suggestions open an owner picker; selection and mail deferral make no command',async()=>{
  const {app,posted}=await first();assert.ok(find(app,'first-calculation'));
- await find(app,'first-calculation')!.fire('click');await settle();assert.ok(find(app,'first-assign'));
+ await find(app,'first-calculation')!.fire('click');await settle();assert.ok(find(app,'first-assign'));assert.equal(find(app,'first-mail-connect')!.tagName,'BUTTON');
  await find(app,'first-mail-later')!.fire('click');await settle();assert.match(app.node('chat-log').textContent,/나중에: Gmail 앱/);assert.equal(posted.length,0);
  await find(app,'first-mail-ask')!.fire('click');await settle();assert.ok(find(app,'first-mail-later'));assert.equal(posted.length,0);
  await find(app,'first-assign')!.fire('click');await settle();assert.equal(posted.filter(p=>p.path==='/assistant/messages').length,1);

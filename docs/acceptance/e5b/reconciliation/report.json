@@ -1,0 +1,22 @@
+{
+  "fixtureOnly": true,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "reconciliation": {
+    "actorId": "local-owner",
+    "at": 1794237089482,
+    "evidence": "Fixture receipt #42 confirms completion",
+    "outcome": "done"
+  },
+  "sendCountBefore": 1,
+  "sendCountAfterReconcile": 1,
+  "sendCountAfterNewWrite": 2,
+  "checks": [
+    "Unknown-outcome wording",
+    "Owner evidence and exact call",
+    "No resend on reconciliation or replay",
+    "Distinct later write admitted"
+  ]
+}

@@ -1,0 +1,25 @@
+
+> massion-desktop@0.1.0-dev.0 build
+> node build.mjs
+
+(node:21) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+> massion-desktop@0.1.0-dev.0 smoke
+> node tests/smoke.mjs
+
+[92:1109/153753.664561:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[92:1109/153753.669954:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[92:1109/153754.865641:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[92:1109/153754.867382:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[92:1109/153755.055747:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[92:1109/153755.057331:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[92:1109/153755.090855:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[92:1109/153755.721161:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[92:1109/153800.492603:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+{"electronSmoke":"passed","title":"Massion","accessibilityNodes":942,"security":"sandbox, isolation, CSP, navigation, permissions","theme":"dark/light","windowLifecycle":"close and reopen","notification":"existing Work pane and keyboard focus","artifacts":"/app/desktop/smoke-artifacts"}

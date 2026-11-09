@@ -1,0 +1,26 @@
+{
+  "mainFetch": true,
+  "mainSSE": true,
+  "childRequests": [
+    {
+      "path": "/",
+      "admitted": false,
+      "fetchDenied": true
+    },
+    {
+      "path": "/protocol/connect",
+      "admitted": false,
+      "fetchDenied": true
+    },
+    {
+      "path": "/protocol/request",
+      "admitted": false,
+      "fetchDenied": true
+    },
+    {
+      "path": "/protocol/events",
+      "admitted": false,
+      "fetchDenied": true
+    }
+  ]
+}

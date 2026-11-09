@@ -1,0 +1,16 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "앱" [ref=e6]
+      - strong
+        - StaticText "MCP"
+        - button "검색" [expanded=false, ref=e10]
+      - button "앱 설정" [ref=e15]
+        - StaticText "앱 설정"
+  - main "MCP" [ref=e2]
+    - heading "MCP" [level=2, ref=e16]

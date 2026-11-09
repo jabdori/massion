@@ -9,6 +9,8 @@ subsequently authorized the four exact B24-connect-mail occurrences below.
 
 ## E5b
 
+Resolution in PR #114: all 154 E5b allowances are removed after fresh 22-run capture and scoped blocking-gate verification. See [the E5b gate record](../e5b/allow-list-follow-up/README.md). Remaining data-producing limitations are retained separately in its residual ledger, not hidden by UI exceptions.
+
 - Screens: `B24*`, `B25*`.
 - Owner: [E5b PR #114](https://github.com/jabdori/massion/pull/114),
   `feat/mcp-apps` (open when checked).

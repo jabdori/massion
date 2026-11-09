@@ -1,5 +1,5 @@
 import {Application} from './application.ts';
-import {DomainError,hash,workInputHash,endsWork} from './domain.ts';
+import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Actor,Mission,Work} from './domain.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {withAdmissionFeed} from './storage.ts';
@@ -90,7 +90,7 @@ export function reconcileMonthly(snapshot:MonthlySnapshot):MonthlyAction[]{
   return action('hold');
  });
 }
-interface AccountWork {missionId:string;workId:string;title:string;memberId:string|null;runId?:string;at?:number;cap:number;roomCalls:number;consumed:number;unknown:boolean;terminal:boolean;pending:Set<string>}
+interface AccountWork {missionId:string;workId:string;title:string;memberId:string|null;runId?:string;at?:number;cap:number;roomCalls:number;consumed:number}
 export class MonthlyBudgetService {
  readonly #store:Store<any>;readonly #clock:()=>number;
  constructor(store:Store<any>,clock:()=>number=Date.now){this.#store=store;this.#clock=clock;}
@@ -100,13 +100,11 @@ export class MonthlyBudgetService {
   const add=(key:string,at:number|undefined,usage:any,memberId:string|null,covered:boolean)=>{if(calls.has(key))return;calls.add(key);if((at===undefined||!count(usage?.outputTokens))&&!covered)usageBounded=false;if(at===undefined){unknown=true;inputUnknown=true;return;}if(accountingPeriod(at,timezone)!==period)return;const member=members.get(memberId)??{inputTokens:0,outputTokens:0,unknown:false};for(const unit of ['inputTokens','outputTokens'] as const){if(count(usage?.[unit])){if(unit==='inputTokens')inputTokens+=usage[unit];else outputTokens+=usage[unit];member[unit]+=usage[unit];}else{member.unknown=true;if(unit==='outputTokens')unknown=true;else inputUnknown=true;}}members.set(memberId,member);};
   // shortcut: scan the retained feed; add a durable usage index when the journal exceeds the bounded local workload.
   while(cursor<position.cursor){const page=await this.#store.readCatchup(cursor,position.feedId,1000);ensure(page.events.length>0,'Incomplete accounting feed');for(const batch of page.events){if(batch.cursor>position.cursor)break;cursor=batch.cursor;for(const raw of batch.events){const e=raw as any,c=e?.command;if(!c)continue;const key=batch.aggregateId+'\0'+c.workId;
-   if(c.type==='admit-work')works.set(key,{missionId:batch.aggregateId,workId:c.workId,title:c.title,memberId:c.assistantSource?.memberId??null,cap:teamCallCount(c.team),roomCalls:teamCallCount(c.team,true),consumed:0,unknown:false,terminal:false,pending:new Set()});
+   if(c.type==='admit-work')works.set(key,{missionId:batch.aggregateId,workId:c.workId,title:c.title,memberId:c.assistantSource?.memberId??null,cap:teamCallCount(c.team),roomCalls:teamCallCount(c.team,true),consumed:0});
    const w=works.get(key);
    if(c.type==='activate-runtime'&&w){w.runId=c.run.id;w.at=c.run.ownership?.startedAt;w.cap=(c.run.roomVersion===1?w.roomCalls:w.cap)*c.run.outputTokenCap;}
    if(c.type==='claim-provider-dispatch'&&count(c.claim?.claimedAt))callTimes.set(key+'\0'+c.effectId,c.claim.claimedAt);
-   if(c.type==='admit-effect'&&w)w.pending.add(c.effect.id);
-   if(c.type==='receipt'&&w){w.pending.delete(c.effectId);let receipt;try{receipt=JSON.parse(c.receipt);}catch{}if(receipt?.provider&&receipt?.usage&&receipt.binding?.runId===w.runId){const at=callTimes.get(key+'\0'+c.effectId)??w.at;add(key+'\0'+c.effectId,at,receipt.usage,w.memberId,!!w.runId&&count(w.cap));if(at!==undefined&&count(receipt.usage.outputTokens))w.consumed+=receipt.usage.outputTokens;else w.unknown=true;}else if(c.outcome==='unknown')w.unknown=true;}
-   if(w&&endsWork(c.type))w.terminal=true;
+   if(c.type==='receipt'&&w){let receipt;try{receipt=JSON.parse(c.receipt);}catch{}if(receipt?.provider&&receipt?.usage&&receipt.binding?.runId===w.runId){const at=callTimes.get(key+'\0'+c.effectId)??w.at;add(key+'\0'+c.effectId,at,receipt.usage,w.memberId,!!w.runId&&count(w.cap));if(at!==undefined&&count(receipt.usage.outputTokens))w.consumed+=receipt.usage.outputTokens;} }
    if(c.type==='record-moderation'&&w){const mission=await this.#store.load(batch.aggregateId) as Snapshot<Mission>|null,entry=mission?.value.works.find(work=>work.id===c.workId)?.moderation?.find(entry=>entry.questionId===c.questionId);add(key+'\0moderation:'+c.questionId,entry?.startedAt,c.result?.usage,w.memberId,!!w.runId);if(count(c.result?.usage?.outputTokens))w.consumed+=c.result.usage.outputTokens;}
    if(['append-assistant-message','open-assistant-segment'].includes(c.type)&&c.turn?.ownership)turns.set(batch.aggregateId+'\0'+c.turn.id,c.turn);
    if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);if(t){t.status=c.status;t.usage=c.usage;}add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null,!!t?.route&&count(t.route.outputTokenCap));}
@@ -124,6 +122,7 @@ export class MonthlyBudgetService {
   }
   for(const t of a.turns.values())if(t.route&&(!t.usage||t.status==='unknown'||!count(t.usage.outputTokens)))reserved+=Math.max(0,t.route.outputTokenCap-(count(t.usage?.outputTokens)?t.usage.outputTokens:0));
   const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.state==='done'?d.limit:s!.value.limit??0)],[copy('ui.budget.after'),this.#amount(proposalLimit(s!.value,d))],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:proposalLimit(s!.value,d)}}));
+  ensure((await this.#store.readState()).feedId===a.feedId,'Accounting database changed');
   return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,usageBounded:a.usageBounded,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
  }
  #amount(n:number){return n.toLocaleString('ko-KR');}

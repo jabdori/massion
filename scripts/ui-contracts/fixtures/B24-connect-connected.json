@@ -1,10 +1,8 @@
 {
   "screen": "B24-connect-connected",
-  "extends": "B24-done",
-  "description": "GitHub connector: connected.",
-  "gaps": [
-    "Independent connected fixture; no real connection is made and the production result chip is unavailable."
-  ],
+  "extends": "B24-connect",
+  "description": "GitHub connector: connected. The production transition is covered by the E5b action harness; this contract capture reads its resulting fixture state.",
+  "gaps": [],
   "routes": {
     "/assistant/conversation": {
       "status": 200,
@@ -52,7 +50,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -60,7 +59,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -97,7 +96,14 @@
             "action": "연결",
             "state": "done",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": true
+            },
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
@@ -149,7 +155,8 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
             }
           ]
         },
@@ -157,7 +164,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 연결할까요?",
             "rows": [
@@ -194,11 +201,26 @@
             "action": "연결",
             "state": "done",
             "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "connection": {
+              "appId": "app-github",
+              "slot": "github-token",
+              "label": "GitHub token",
+              "connected": true
+            },
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
       }
     }
-  }
+  },
+  "reuse": [
+    "tests/app-connect-surface.test.ts",
+    "tests/conversation-cards.test.ts",
+    "tests/apps-surface.test.ts"
+  ],
+  "readySelector": "#chat-system-install",
+  "steps": [],
+  "now": 1793855520000
 }

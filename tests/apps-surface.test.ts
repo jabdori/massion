@@ -187,6 +187,13 @@ test('a late Settings > Apps read never replaces a newer one',async()=>{
  assert.match(app.node('settings-apps-body').textContent,/1\.4\.0/);assert.doesNotMatch(app.node('settings-apps-body').textContent,/old/);
 });
 
+test('a self-made install card opens its exact source Work without installing',async()=>{
+ const source={missionId:'intake',workId:'w-done',title:'PR #84 review'},card={id:'app-decision:source',at:T0,title:'PR list fetcher',question:'Install?',rows:[['Source',source.title]],source,action:'Install',state:'open'};
+ const {app,posted}=fixture(false,[card]);await settle();
+ const node=app.all().find(n=>n.id==='chat-decision-app-decision:source')!,link=button(node,'PR #84 review ›')[0];assert.ok(link);
+ await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/missions/intake'));assert.equal(posted.length,0);
+});
+
 test('Settings app search filters loaded installed, self-made and recommended rows without a request or focus loss',async()=>{
  const made={...github,id:'app-made',name:'PR list fetcher',origin:'self-made',memberId:'member-juno',source:{missionId:'intake',workId:'w-done',title:'PR #84 review'}};
  const {app}=fixture(true,[],[made],[{id:'member-juno',name:'주노'}]);await settle();await open(app);
@@ -224,7 +231,8 @@ test('Settings app detail never reveals secret values or claims an unproduced cr
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  const body=app.node('settings-apps-body');assert.match(body.textContent,/GitHub token/);assert.doesNotMatch(body.textContent,new RegExp(sentinel+'|저장됨|만료됨'));
  assert.equal(button(body,copy('settings.button.06')).length,0);
- assert.equal(app.all().filter(n=>n.type==='password').length,0);
+ assert.equal(app.all().filter(n=>n.type==='password'&&body.contains(n)).length,0);
+ assert.equal(app.node('app-connect-panel').hidden,true);assert.equal(app.node('app-connect-token').value,'');
  assert.equal(JSON.stringify([...app.storage.values(),...app.calls.map(c=>c.options?.body??'')]).includes(sentinel),false);
 });
 

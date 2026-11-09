@@ -1,0 +1,23 @@
+✔ desktop permits only controlled document paths without weakening workbench script and style policy (0.929542ms)
+✔ authenticated app view is published by main; URLs and failed or unrelated replies cannot publish (19.657ms)
+✖ a malformed request retains the authenticated host rejection without local JSON parsing (1.965958ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 139.456042
+
+✖ failing tests:
+
+test at desktop/tests/frame-origin.test.ts:37:1
+✖ a malformed request retains the authenticated host rejection without local JSON parsing (1.965958ms)
+  SyntaxError [Error]: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+      at JSON.parse (<anonymous>)
+      at proxyProtocol (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/desktop/transport.ts:27:61)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/desktop/tests/frame-origin.test.ts:42:17)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

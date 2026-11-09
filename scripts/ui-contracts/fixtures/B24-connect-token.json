@@ -1,188 +1,20 @@
 {
   "screen": "B24-connect-token",
-  "extends": "B24",
+  "extends": "B24-connect",
   "description": "GitHub connector: token.",
-  "gaps": [
-    "The production connector has no host-owned masked token pane. No secret is supplied or product action submitted."
+  "gaps": [],
+  "routes": {},
+  "reuse": [
+    "tests/app-connect-surface.test.ts",
+    "tests/conversation-cards.test.ts",
+    "tests/apps-surface.test.ts"
   ],
-  "routes": {
-    "/assistant/conversation": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "head": 1,
-        "members": [
-          {
-            "id": "member-quill",
-            "name": "퀼",
-            "look": {
-              "shape": "drop",
-              "color": "agent-1"
-            },
-            "modelGroup": "research"
-          },
-          {
-            "id": "member-juno",
-            "name": "주노",
-            "look": {
-              "shape": "round",
-              "color": "agent-6"
-            },
-            "modelGroup": "coding"
-          }
-        ],
-        "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": [
-            {
-              "id": "m:install",
-              "role": "owner",
-              "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
-            }
-          ]
-        },
-        "turns": [],
-        "decisions": [
-          {
-            "id": "install",
-            "at": 1793851920000,
-            "title": "GitHub",
-            "question": "GitHub 앱을 연결할까요?",
-            "rows": [
-              [
-                "도구",
-                "—"
-              ],
-              [
-                "읽기",
-                "저장소 · PR · 검사 결과"
-              ],
-              [
-                "쓰기",
-                "없음"
-              ],
-              [
-                "네트워크",
-                "api.github.com"
-              ],
-              [
-                "토큰",
-                "GitHub 토큰 1개"
-              ],
-              [
-                "이벤트",
-                "PR 열림 · 병합"
-              ],
-              [
-                "추가되는 것",
-                "GitHub 페이지 · PR 탭"
-              ]
-            ],
-            "detail": "GitHub · 1.4.0",
-            "action": "연결",
-            "state": "open",
-            "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
-          }
-        ],
-        "briefings": []
-      }
-    },
-    "/assistant/conversation?segment=1": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "head": 1,
-        "members": [
-          {
-            "id": "member-quill",
-            "name": "퀼",
-            "look": {
-              "shape": "drop",
-              "color": "agent-1"
-            },
-            "modelGroup": "research"
-          },
-          {
-            "id": "member-juno",
-            "name": "주노",
-            "look": {
-              "shape": "round",
-              "color": "agent-6"
-            },
-            "modelGroup": "coding"
-          }
-        ],
-        "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": [
-            {
-              "id": "m:install",
-              "role": "owner",
-              "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
-            }
-          ]
-        },
-        "turns": [],
-        "decisions": [
-          {
-            "id": "install",
-            "at": 1793851920000,
-            "title": "GitHub",
-            "question": "GitHub 앱을 연결할까요?",
-            "rows": [
-              [
-                "도구",
-                "—"
-              ],
-              [
-                "읽기",
-                "저장소 · PR · 검사 결과"
-              ],
-              [
-                "쓰기",
-                "없음"
-              ],
-              [
-                "네트워크",
-                "api.github.com"
-              ],
-              [
-                "토큰",
-                "GitHub 토큰 1개"
-              ],
-              [
-                "이벤트",
-                "PR 열림 · 병합"
-              ],
-              [
-                "추가되는 것",
-                "GitHub 페이지 · PR 탭"
-              ]
-            ],
-            "detail": "GitHub · 1.4.0",
-            "action": "연결",
-            "state": "open",
-            "line": "GitHub 앱 연결됨",
-            "remove": "app-github"
-          }
-        ],
-        "briefings": []
-      }
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#chat-decision-install .chat-actions button:first-child",
+      "readySelector": "#app-connect-token"
     }
-  }
+  ],
+  "now": 1793855520000
 }

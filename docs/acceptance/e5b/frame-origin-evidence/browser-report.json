@@ -1,0 +1,22 @@
+{
+  "browser": "agent-browser 0.41.2 / headless Chrome for Testing 157.0.8103.38",
+  "flow": "approved app -> conversation rail -> click app -> hosted iframe -> click resize -> leave -> reopen in other theme",
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "assertions": {
+    "realDevelopmentServer": true,
+    "appIconClick": true,
+    "hostedURLOnly": true,
+    "ownComputedStyles": true,
+    "initialResize": 617,
+    "buttonResize": 701,
+    "uniqueReopenedDocuments": true,
+    "parentDOMBlocked": true,
+    "networkFetchBlocked": true,
+    "opaqueOrigin": true,
+    "noNodeOrDesktopBridge": true
+  },
+  "fixture": "tests/support/frame-origin-host.ts"
+}

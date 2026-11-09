@@ -1,0 +1,405 @@
+{
+  "evidence": "Fixture-only; no real accounts, provider calls, keychain or native launcher.",
+  "tests": {
+    "command": "TMPDIR=<real scratchpad tmpdir> node --test tests/apps.test.ts tests/mcp-apps.test.ts tests/app-frame.test.ts tests/app-connect-surface.test.ts tests/apps-surface.test.ts tests/conversation-cards.test.ts tests/ui-contract-fixtures.test.ts tests/server.test.ts tests/ui-copy.test.ts tests/ui-copy-lint.test.ts",
+    "passed": 125,
+    "skipped": 1,
+    "failed": 0,
+    "skipReason": "Actual SurrealDB server not configured"
+  },
+  "typecheck": "passed",
+  "screens": {
+    "passed": 534,
+    "required": 542,
+    "failures": 8,
+    "warnings": 20,
+    "visualFailures": 0,
+    "infrastructureErrors": 0,
+    "rows": [
+      {
+        "screen": "B24-connect",
+        "theme": "dark",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24-connect.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-token",
+        "theme": "dark",
+        "passed": 28,
+        "failed": 0,
+        "warnings": 0,
+        "required": 28,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24-connect-token.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-connected",
+        "theme": "dark",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 3,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [
+          "The read-only contract host loads the connected result directly. The E5b acceptance harness proves the token-submit transition using a fixture command response, not a real account."
+        ],
+        "errors": [],
+        "pair": "pairs/dark/B24-connect-connected.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-later",
+        "theme": "dark",
+        "passed": 22,
+        "failed": 0,
+        "warnings": 3,
+        "required": 22,
+        "visualFailures": [],
+        "gaps": [
+          "The read-only contract host loads the deferred result directly. The E5b acceptance harness proves Later and Ask again through the decision endpoint."
+        ],
+        "errors": [],
+        "pair": "pairs/dark/B24-connect-later.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-mail",
+        "theme": "dark",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24-connect-mail.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect",
+        "theme": "light",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24-connect.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-token",
+        "theme": "light",
+        "passed": 28,
+        "failed": 0,
+        "warnings": 0,
+        "required": 28,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24-connect-token.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-connected",
+        "theme": "light",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 3,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [
+          "The read-only contract host loads the connected result directly. The E5b acceptance harness proves the token-submit transition using a fixture command response, not a real account."
+        ],
+        "errors": [],
+        "pair": "pairs/light/B24-connect-connected.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-later",
+        "theme": "light",
+        "passed": 22,
+        "failed": 0,
+        "warnings": 3,
+        "required": 22,
+        "visualFailures": [],
+        "gaps": [
+          "The read-only contract host loads the deferred result directly. The E5b acceptance harness proves Later and Ask again through the decision endpoint."
+        ],
+        "errors": [],
+        "pair": "pairs/light/B24-connect-later.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24-connect-mail",
+        "theme": "light",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24-connect-mail.png",
+        "group": "contracts"
+      },
+      {
+        "screen": "B24",
+        "theme": "dark",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B24-done",
+        "theme": "dark",
+        "passed": 23,
+        "failed": 1,
+        "warnings": 0,
+        "required": 24,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24-done.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B24-later",
+        "theme": "dark",
+        "passed": 22,
+        "failed": 1,
+        "warnings": 1,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B24-later.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25",
+        "theme": "dark",
+        "passed": 28,
+        "failed": 0,
+        "warnings": 1,
+        "required": 28,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B25.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25-done",
+        "theme": "dark",
+        "passed": 26,
+        "failed": 1,
+        "warnings": 1,
+        "required": 27,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B25-done.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25-later",
+        "theme": "dark",
+        "passed": 26,
+        "failed": 1,
+        "warnings": 1,
+        "required": 27,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/dark/B25-later.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B24",
+        "theme": "light",
+        "passed": 23,
+        "failed": 0,
+        "warnings": 0,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B24-done",
+        "theme": "light",
+        "passed": 23,
+        "failed": 1,
+        "warnings": 0,
+        "required": 24,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24-done.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B24-later",
+        "theme": "light",
+        "passed": 22,
+        "failed": 1,
+        "warnings": 1,
+        "required": 23,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B24-later.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25",
+        "theme": "light",
+        "passed": 28,
+        "failed": 0,
+        "warnings": 1,
+        "required": 28,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B25.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25-done",
+        "theme": "light",
+        "passed": 26,
+        "failed": 1,
+        "warnings": 1,
+        "required": 27,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B25-done.png",
+        "group": "install-contracts"
+      },
+      {
+        "screen": "B25-later",
+        "theme": "light",
+        "passed": 26,
+        "failed": 1,
+        "warnings": 1,
+        "required": 27,
+        "visualFailures": [],
+        "gaps": [],
+        "errors": [],
+        "pair": "pairs/light/B25-later.png",
+        "group": "install-contracts"
+      }
+    ]
+  },
+  "frameEvidence": [
+    {
+      "theme": "dark",
+      "screen": "B24-connect",
+      "png": ".runtime/e5b-ui/actions/dark-B24-connect.png",
+      "pair": ".runtime/e5b-ui/actions/dark-B24-connect-pair.png",
+      "commands": 0
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-later",
+      "png": ".runtime/e5b-ui/actions/dark-B24-connect-later.png",
+      "pair": ".runtime/e5b-ui/actions/dark-B24-connect-later-pair.png",
+      "commands": 1
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-token",
+      "png": ".runtime/e5b-ui/actions/dark-B24-connect-token.png",
+      "pair": ".runtime/e5b-ui/actions/dark-B24-connect-token-pair.png",
+      "commands": 2
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-connected",
+      "png": ".runtime/e5b-ui/actions/dark-B24-connect-connected.png",
+      "pair": ".runtime/e5b-ui/actions/dark-B24-connect-connected-pair.png",
+      "commands": 3
+    },
+    {
+      "theme": "dark",
+      "frameProbe": {
+        "network": "TypeError",
+        "parentAccess": "SecurityError",
+        "referrer": "no-referrer",
+        "sandbox": "allow-scripts",
+        "type": "probe"
+      },
+      "bridge": "Only ready and bounded resize; unknown effects and invalid resize ignored."
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect",
+      "png": ".runtime/e5b-ui/actions/light-B24-connect.png",
+      "pair": ".runtime/e5b-ui/actions/light-B24-connect-pair.png",
+      "commands": 0
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-later",
+      "png": ".runtime/e5b-ui/actions/light-B24-connect-later.png",
+      "pair": ".runtime/e5b-ui/actions/light-B24-connect-later-pair.png",
+      "commands": 1
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-token",
+      "png": ".runtime/e5b-ui/actions/light-B24-connect-token.png",
+      "pair": ".runtime/e5b-ui/actions/light-B24-connect-token-pair.png",
+      "commands": 2
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-connected",
+      "png": ".runtime/e5b-ui/actions/light-B24-connect-connected.png",
+      "pair": ".runtime/e5b-ui/actions/light-B24-connect-connected-pair.png",
+      "commands": 3
+    },
+    {
+      "theme": "light",
+      "frameProbe": {
+        "network": "TypeError",
+        "parentAccess": "SecurityError",
+        "referrer": "no-referrer",
+        "sandbox": "allow-scripts",
+        "type": "probe"
+      },
+      "bridge": "Only ready and bounded resize; unknown effects and invalid resize ignored."
+    }
+  ],
+  "mainIntegration": {
+    "base": "7acf5f1",
+    "typecheck": "passed",
+    "tests": {
+      "passed": 114,
+      "skipped": 0,
+      "failed": 0,
+      "command": "TMPDIR=<real scratchpad tmpdir> node --test tests/apps-surface.test.ts tests/app-connect-surface.test.ts tests/app-frame.test.ts tests/ui-contract-fixtures.test.ts tests/settings-surface.test.ts tests/settings-group-reconciliation.test.ts tests/surface-shell.test.ts"
+    }
+  }
+}

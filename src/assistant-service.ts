@@ -139,7 +139,7 @@ export class AssistantService {
     call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,works:(head.works??[]).map(({id,missionId})=>({id,missionId}))};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
-   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',messageId,text,turn};
+   const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
    const message=await this.#conversation.dispatch({segment:n,commandId,expectedRevision,actorId:OWNER,command});
    if(message.status==='conflict')return await this.#replay(n,messageId,turnId,text)??{message,turn:null};
    // Only a fresh committed pending turn permits the call.
@@ -162,7 +162,7 @@ export class AssistantService {
   // The model only proposes. Only an explicit owner confirmation may write or interrupt Work.
   const target=status==='answered'&&parsed!.steer?call.works.find(w=>w.id===parsed!.steer):undefined;
   const steer=target?await this.#prepareSteer(target.missionId,target.id):undefined;
-  const settle:AssistantCommand=status==='answered'?{type:'settle-assistant-turn',turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
+  const settle:AssistantCommand=status==='answered'?{type:'settle-assistant-turn',recordMessageTime:true,turnId,status,usage,receipt,reply:parsed!.reply,proposal:parsed!.proposal,...(steer?{steer}:{})}:{type:'settle-assistant-turn',turnId,status,usage,receipt};
   let fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,settle);
   // The reducer reads the clock again; a reply refused at the deadline still settles, once, as unknown. No second call.
   if(!fresh&&status!=='unknown'&&(await this.#load(n))?.value.turns.find(t=>t.id===turnId)?.status==='pending'){status='unknown';parsed=null;fresh=await this.#write(n,'assistant-settle:'+turnId,ASSISTANT_ACTOR_ID,{type:'settle-assistant-turn',turnId,status,usage,receipt});}
@@ -290,7 +290,7 @@ export class AssistantService {
      // Card facts (conversation-cards.md): the durable run start, settled steps under the root task (the check is one), and an unknown effect outcome not yet answered by quarantine; a plain cancel is not that answer (ADR 0002 §8).
      startedAt:work.runtimeRun?.ownership?.startedAt??null,endedAt:work.endedAt??null,memberId:work.assistantSource?.memberId??null,unknown:!work.runtimeRecovery&&work.effects.some(e=>e.status==='unknown'),exception:workException(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null}}:{})};
   });
-  return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text}))}:null,turns};
+  return {feedId:state.feedId,cursor:state.cursor,head,segment:snapshot?{number,revision:snapshot.revision,closed:snapshot.value.closed,full:snapshot.value.closed||!hasRoom(snapshot.value),previous:snapshot.value.previous?.id??null,messages:snapshot.value.messages.map(m=>({id:m.id,role:m.role,turnId:m.turnId,text:m.text,...(m.at!==undefined?{at:m.at}:{})}))}:null,turns};
  }
  /** Results (results-and-schedules.md): accepted Records of conversation Work in the intake Mission, newest first, with the exact identity the preview reads. No writes and no calls. */
  // ponytail: `at` is the run start because Records keep no acceptance time; at most 200 rows, page when owners keep more.

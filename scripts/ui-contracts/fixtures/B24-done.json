@@ -58,7 +58,15 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요.",
+              "at": 1793842261000
             }
           ]
         },
@@ -66,7 +74,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 설치할까요?",
             "rows": [
@@ -103,126 +111,11 @@
             "action": "설치",
             "state": "done",
             "line": "GitHub 설치됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
-      }
-    },
-    "/assistant/works": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "works": []
-      }
-    },
-    "/events": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "events": []
-      }
-    },
-    "/read-state": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": null
-      }
-    },
-    "/health": {
-      "status": 200,
-      "body": {
-        "status": "ready"
-      }
-    },
-    "/providers": {
-      "status": 200,
-      "body": {
-        "providers": [],
-        "selection": {
-          "status": "unavailable",
-          "code": "provider_unavailable",
-          "reason": "Read-only fixture"
-        }
-      }
-    },
-    "/connections": {
-      "status": 200,
-      "body": {
-        "host": null,
-        "providerTypes": [],
-        "connections": [],
-        "runtime": {
-          "connections": [],
-          "defaultRoutes": []
-        },
-        "configHash": "fixture",
-        "grants": [],
-        "representative": {
-          "intakeMissionId": "intake"
-        },
-        "modelGroups": [],
-        "fixtureModeEnabled": false,
-        "liveExecutionEnabled": false
-      }
-    },
-    "/assistant/schedules": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "revision": 1,
-        "schedules": []
-      }
-    },
-    "/read-state?mission=intake": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": {
-          "revision": 3,
-          "value": {
-            "id": "intake",
-            "purpose": "맡긴 일",
-            "scope": "local",
-            "constraints": [],
-            "criteria": {
-              "version": 1,
-              "description": "요청한 결과와 근거 확인",
-              "oracle": "bounded-text-review/v1"
-            },
-            "version": 1,
-            "works": [],
-            "memories": [],
-            "growth": [],
-            "relations": []
-          }
-        }
-      }
-    },
-    "/missions/intake": {
-      "status": 200,
-      "body": {
-        "revision": 3,
-        "value": {
-          "id": "intake",
-          "purpose": "맡긴 일",
-          "scope": "local",
-          "constraints": [],
-          "criteria": {
-            "version": 1,
-            "description": "요청한 결과와 근거 확인",
-            "oracle": "bounded-text-review/v1"
-          },
-          "version": 1,
-          "works": [],
-          "memories": [],
-          "growth": [],
-          "relations": []
-        }
       }
     },
     "/assistant/conversation?segment=1": {
@@ -271,7 +164,15 @@
               "id": "m:install",
               "role": "owner",
               "turnId": null,
-              "text": "massion 저장소에 열린 PR 정리해 줘."
+              "text": "massion 저장소에 열린 PR 정리해 줘.",
+              "at": 1793842260000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "열린 PR은 1개, 오늘 병합된 건 6개예요.",
+              "at": 1793842261000
             }
           ]
         },
@@ -279,7 +180,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793842260000,
             "title": "GitHub",
             "question": "GitHub 앱을 설치할까요?",
             "rows": [
@@ -316,7 +217,8 @@
             "action": "설치",
             "state": "done",
             "line": "GitHub 설치됨",
-            "remove": "app-github"
+            "remove": "app-github",
+            "answeredAt": 1793842260000
           }
         ],
         "briefings": []
@@ -405,5 +307,6 @@
         ]
       }
     }
-  }
+  },
+  "extends": "B24"
 }
