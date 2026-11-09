@@ -727,5 +727,5 @@ for(const kind of ['application/pdf','image/png'])test(`multi-step member Work c
  const output=kind==='application/pdf'?{format:'massion-result/v1',kind,text:'Answer bounded fixture text'}:{format:'massion-result/v1',kind,width:1,height:1,pixels:[255,0,0]};
  f.setOutput(JSON.stringify(output),kind==='application/pdf'?'Answer bounded':'#ff0000');f.script.push(v2('On it.','Create '+kind,'Quill'));await f.say(f.assistant,'Create '+kind);await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker}));assert.equal(w.artifact!.kind,kind);assert.equal(w.room!.artifact.sha256,w.artifact!.sha256);assert.equal(w.record!.room!.artifact.sha256,w.artifact!.sha256);
- const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.equal(w.verdict!.status,'passed');
+ const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.ok(w.room!.messages.every(m=>Number.isSafeInteger(m.at)));assert.equal(w.verdict!.status,'passed');assert.ok(w.verdict!.predicates?.length);
 });

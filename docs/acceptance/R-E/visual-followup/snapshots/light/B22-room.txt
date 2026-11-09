@@ -59,17 +59,19 @@
             - StaticText "PR #84 검토해 줘."
           - paragraph
             - StaticText "하나가 넘김: PR #84 검토 · 14:08"
-          - button "PR #84 검토 실행 중 4분 작성 확인 1/5" [ref=e37]
+          - button "PR #84 검토 실행 중 4분 읽기 테스트 확인 1/5" [ref=e37]
             - strong
               - StaticText "PR #84 검토"
             - StaticText "실행 중"
             - StaticText "4분"
-            - StaticText "작성"
+            - StaticText "읽기"
+            - StaticText "테스트"
             - StaticText "확인"
             - StaticText "1/5"
           - generic
             - StaticText "주노"
-            - StaticText "14:08"
+            - time
+              - StaticText "14:08"
             - paragraph
               - StaticText "테스트부터 확인할게요."
             - button "복사" [ref=e38]

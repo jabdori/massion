@@ -213,7 +213,7 @@ test('requested PDF and PNG bytes pass independent review on decoded file conten
  for(const output of [{format:'massion-result/v1',kind:'application/pdf',text:artifactText},{format:'massion-result/v1',kind:'image/png',width:1,height:1,pixels:[255,0,0]}]){
   const s=await setup(t,{binaryOutput:JSON.stringify(output),reviewQuote:output.kind==='image/png'?'#ff0000':'two open blockers'});await s.admit();
   const result=await s.product.run(s.missionId,s.workId,'binary-run',2),w=result.snapshot.value.works[0]!;
-  assert.equal(w.acceptance,'accepted');assert.equal(w.artifact?.kind,output.kind);assert.ok(w.record?.artifactSnapshot);
+  assert.equal(w.acceptance,'accepted');assert.equal(w.artifact?.kind,output.kind);assert.ok(w.record?.artifactSnapshot);assert.ok(w.verdict!.predicates?.length);assert.deepEqual(w.record!.verdict.predicates,w.verdict!.predicates);
   const reviewed=s.calls.find(c=>c.model==='verifier-v1')!.prompt.artifact;
   assert.equal(reviewed.kind,output.kind);assert.equal(reviewed.sha256,w.artifact!.sha256);assert.match(reviewed.content,output.kind==='image/png'?/#ff0000/:/two open blockers/);
   const binary=new BinaryArtifactStore(join(s.config.artifacts.root,'binary-results')),server=createWorkbench(s.store,s.root,{scheduleIntervalMs:0,artifacts:{read:a=>s.config.artifacts.read(a),readBytes:a=>binary.readBytes(a)}});
