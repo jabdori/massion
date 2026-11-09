@@ -67,10 +67,10 @@
             - DescriptionList
               - term "지금"
               - definition
-                - StaticText "0 출력 토큰"
+                - StaticText "0"
               - term "늘린 뒤"
               - definition
-                - StaticText "128 출력 토큰"
+                - StaticText "128"
               - term "멈춘 일"
               - definition
                 - StaticText "월말 요약"

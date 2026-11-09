@@ -24,5 +24,22 @@
   "contractFailures": 0,
   "geometryFailures": 0,
   "infrastructureErrors": 0,
-  "nativeInteractions": "defer, reopen, raise, Settings change, refresh; production HTTP and InMemoryStore fixture, no provider effects"
+  "nativeInteractions": "defer, reopen, raise, Settings change, refresh; production HTTP and InMemoryStore fixture, no provider effects",
+  "visualGateFollowUp": {
+    "baseCommit": "92e512a",
+    "relatedTests": 48,
+    "passed": 48,
+    "failed": 0,
+    "typecheck": "passed",
+    "copyLintFindings": 0,
+    "screenRows": 6,
+    "requiredOccurrencesPassed": 176,
+    "contractFailures": 0,
+    "geometryFailures": 0,
+    "infrastructureErrors": 0,
+    "visibleChecks": [
+      "B14-usage cycle has only utilization and reset time in both themes; no added token/period/timezone row",
+      "B26 current/proposed budget slots have localized numeric values without an output-token suffix in both themes"
+    ]
+  }
 }

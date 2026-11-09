@@ -23,7 +23,7 @@ test('overlapping admission reserves once; excess Work waits behind one owner de
  const s=(await store.load('mission'))!;assert.equal(s.value.works[1]!.execution,'budget-waiting');assert.equal(s.value.works[1]!.runtimeRun,undefined);
  const restarted=new MonthlyBudgetService(store,()=>now);assert.equal(await restarted.admit({missionId:'mission',workId:'two',runId:'another-id',amount:80}),'waiting');
  const view=await restarted.read();assert.equal(view.decisions.length,1);assert.equal(view.reserved,80);assert.equal(view.cost,null);assert.equal(view.unit,'output-tokens');
- const d=view.decisions[0]!;await restarted.decide({commandId:'later',decisionId:d.id,answer:'later',expectedRevision:view.revision});
+ const d=view.decisions[0]!;assert.deepEqual(d.rows,[['지금','100'],['늘린 뒤','160'],['멈춘 일','two']]);assert.equal(d.budget.limit,160);await restarted.decide({commandId:'later',decisionId:d.id,answer:'later',expectedRevision:view.revision});
  assert.equal((await restarted.read()).decisions[0]!.state,'later');assert.equal((await store.load('mission'))!.value.works[1]!.execution,'budget-waiting');
  const deferred=await restarted.read();await restarted.decide({commandId:'reopen',decisionId:d.id,answer:'ask',expectedRevision:deferred.revision});
  const opened=await restarted.read();assert.equal(opened.decisions[0]!.state,'open');

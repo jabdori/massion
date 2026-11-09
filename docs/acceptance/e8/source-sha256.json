@@ -1,9 +1,9 @@
 {
-  "src/monthly-budget.ts": "88299924952b580d5d107ceca0c89c1f504feddf9885766753cd987850ad6d8a",
+  "src/monthly-budget.ts": "04dfd540a89c96bebc6394cd87a06b0e647bfd719fd29355ff8bca24b846b2ad",
   "src/configured-runtime.ts": "a3558792bbd8415f1c82e820862ad13baeafd6a836001258698fa9fa3f663f6a",
   "src/server.ts": "38e074f0d38e167085a852467cbf30531bbb44581de4f4fd20e28c723cfc0c4f",
   "src/domain.ts": "4487bbf415c1e0054d90c9c0e5683320cb3d5b6b1f9e0bb5d1e6aae066ef5ae1",
-  "src/settings-panel.ts": "8daeeb6f81d273e265c19ec1821eb2544fa3564e2cc121b6b7b4a48aa95b9b0e",
+  "src/settings-panel.ts": "e831fcead3617d58874f725e955bcbf30d286b2ae0e8b91dce6031d18ad4fbea",
   "src/assistant-conversation-panel.ts": "9dd78093619ab93ad6f42142af69737de1ca116aa8c2d772ef26e1f323f55158",
   "src/backup-lineage.ts": "f5150cb91fcc4a200bc6724f8397466a17d015c28ced635eac614e69d10c2ebd",
   "src/portable-backup.ts": "fea624e860361aa58a7841972e602e1b21c9db9f622086e31b855e588dc66f51",

@@ -15,7 +15,7 @@ function fixture(options:{lost?:boolean;reads?:((n:number)=>Promise<any>) }={}){
 const node=(app:ReturnType<typeof harness>,id:string)=>app.all().find(n=>n.id===id)!;
 test('usage reads recorded period totals and provides Change and a real Refresh read',async()=>{
  const app=fixture();await settle();runInContext('shellShow("settings");settingsOpen("usage")',app.context);await settle();
- assert.match(app.node('settings-usage-body').textContent,/2026-11.*80.*월 예산.*100/s);assert.ok(node(app,'monthly-budget-change'));const before=app.calls.filter(c=>c.path==='/assistant/usage').length;
+ const cycle=app.all().find(n=>n.className==='set-row set-usage-cycle')!;assert.equal(cycle.textContent,'사용률—초기화 시각—');assert.match(app.node('settings-usage-body').textContent,/80.*월 예산.*100/s);assert.ok(node(app,'monthly-budget-change'));const before=app.calls.filter(c=>c.path==='/assistant/usage').length;
  await node(app,'monthly-budget-refresh').fire('click');await settle();assert.equal(app.calls.filter(c=>c.path==='/assistant/usage').length,before+1);
  await node(app,'monthly-budget-change').fire('click');const field=node(app,'monthly-budget-limit');field.value='200';await field.fire('input');await node(app,'monthly-budget-form').fire('submit');await settle();const post=app.calls.find(c=>c.path==='/assistant/usage'&&c.options?.method==='POST')!;assert.equal(JSON.parse(post.options.body).limit,200);assert.equal(JSON.parse(post.options.body).expectedRevision,2);
 });

@@ -1,4 +1,4 @@
-contract B14-usage (B14 설정 · 사용량) vs /Users/code/orca/workspaces/massion/e8-monthly-budget/.runtime/e8-usage-final/snapshots/dark/B14-usage.json
+contract B14-usage (B14 설정 · 사용량) vs /Users/code/orca/workspaces/massion/e8-monthly-budget/.runtime/e8-visual-gate/snapshots/dark/B14-usage.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -35,6 +35,5 @@ contract B14-usage (B14 설정 · 사용량) vs /Users/code/orca/workspaces/mass
   ok    settings     button   "새로고침" -> button "새로고침"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
-  budget settings     app {"chars":89,"strings":22,"sentences":0,"longest":20} proto {"chars":53,"strings":19,"sentences":0,"longest":11} source visibleTextBudget
-  warn  budget settings     chars 89 > 89
-PASS: 0 failures, 1 warnings, 34 required elements
+  budget settings     app {"chars":53,"strings":19,"sentences":0,"longest":11} proto {"chars":53,"strings":19,"sentences":0,"longest":11} source visibleTextBudget
+PASS: 0 failures, 0 warnings, 34 required elements
