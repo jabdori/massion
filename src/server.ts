@@ -1,3 +1,4 @@
+import {daemonGuard,inheritedDaemonSecret} from './daemon-auth.ts';
 import {createProtocolFeed} from './protocol-feed.ts';
 import {protocolSupport,protocolFeatures,protocolConnection,validHeader,validRange} from './protocol.ts';
 import type {ProtocolHeader,ProtocolRange,ProtocolFeatures,ProtocolRequest} from './protocol.ts';
@@ -59,7 +60,8 @@ function decodeMissionIdentifier(value:string):string {const decoded=decodeIdent
 /** Host steps own every `assistant-` command and run ID, so no caller can occupy one. */
 function callerCommand(value:unknown):asserts value is string {identifier(value,'command identity');if(value.startsWith('assistant-'))throw new RequestError(400,'assistant- command identities are reserved for host steps');}
 
-export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader;scheduleIntervalMs?:number;appNetwork?:AppNetwork;protocol?:{supported?:ProtocolRange;installed?:ProtocolRange;features?:ProtocolFeatures}}={}) {
+export function createWorkbench(store:Store<Mission>,workspaceRoot:string,options:{daemonSecret?:string;neighborhood?:NeighborhoodReader;inbox?:WorkInboxReader;catalog?:MissionCatalogReader;drainTimeoutMs?:number;providers?:ProviderRegistry;runtime?:WorkRuntime;connections?:ConnectionWorkbench;knowledge?:RelationImpactReader;artifacts?:ArtifactReader;scheduleIntervalMs?:number;appNetwork?:AppNetwork;protocol?:{supported?:ProtocolRange;installed?:ProtocolRange;features?:ProtocolFeatures}}={}) {
+ const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  const supported=options.protocol?.supported??protocolSupport,features=options.protocol?.features??protocolFeatures;
  protocolConnection(supported,supported,options.protocol?.installed,features);
  const drainTimeoutMs=options.drainTimeoutMs??10000;if(!Number.isSafeInteger(drainTimeoutMs)||drainTimeoutMs<1||drainTimeoutMs>30000)throw new Error('Invalid bounded host drain timeout');let draining=false,unsettled=false,drainPromise:Promise<{status:'drained'|'unsettled';timedOut:boolean}>|undefined;let running=false;const ownerStore=new Proxy(store,{get(target,key){if(key==='commit')return (input:Parameters<typeof store.commit>[0])=>{if(draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const product=new ProductService(ownerStore,options.providers,options.connections??options.runtime,options.artifacts);
@@ -80,6 +82,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
   const expected=`127.0.0.1:${port}`;
   if(req.headers.host!==expected){send(403,{error:'Loopback host required'});return;}
   if(req.headers.origin&&req.headers.origin!==`http://${expected}`){send(403,{error:'Cross-origin request denied'});return;}
+  if(authenticate&&!authenticate(req,res))return;
   const readBody=async(protocolEnvelope=false):Promise<Record<string,unknown>>=>{
    if(protocolPayload){if(draining)throw new HostDrainError();return protocolPayload;}
    if(req.headers['content-type']!=='application/json')throw new RequestError(415,'JSON required');
@@ -311,6 +314,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   shutdown=(async()=>{try{await startup;const result=await draining??{status:'drained',timedOut:false};console.log(JSON.stringify({hostShutdown:result}));process.exit(result.status==='drained'?0:1);}catch(error){console.error('Local host startup/drain unsettled; inspect the stored schema and original durable state. No write retry or remote stop inferred.',error instanceof Error?error.message:String(error));process.exit(1);}finally{clearTimeout(timer);}})();
  });
  const startup=(async()=>{
+ const daemonSecret=inheritedDaemonSecret();
  const hostStartup=await loadHostStartup(process.argv.slice(2));
  stopping.signal.throwIfAborted();
  const workspaceRoot=resolve('.runtime/workspaces'),artifacts=new TextArtifactStore(resolve(workspaceRoot,'model-artifacts'));
@@ -323,7 +327,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  const store=new SurrealStore<Mission>(transport);const connections=createHostConnections(store,artifacts,hostStartup,{transport:(url,init)=>fetch(url,init),readEnvironment:name=>process.env[name],settings:new SurrealHostSettings(transport)});
  await connections.restoreSettings();{const restored=connections.list();if(restored.persistence)console.log(JSON.stringify({hostSettings:{revision:restored.persistence.revision,grants:restored.grants.length,activeLiveGrants:restored.grants.filter(g=>g.mode==='live'&&g.status==='active').length,liveDisabledGrants:restored.grants.filter(g=>g.status==='live-disabled').length,defaultRoutes:restored.runtime.defaultRoutes.length,representativeRoute:restored.representative?.status??'off'}}));}
  stopping.signal.throwIfAborted();
- server=createWorkbench(store,workspaceRoot,{connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
+ server=createWorkbench(store,workspaceRoot,{daemonSecret,connections,artifacts:artifactReader,neighborhood:new SurrealNeighborhood(transport),inbox:new SurrealWorkInbox(transport),catalog:new SurrealMissionCatalog(transport),knowledge:new SurrealRelationImpact(transport)});
  server.listen(port,'127.0.0.1',()=>console.log(`Massion development workbench: http://127.0.0.1:${port}`));
  })().catch(error=>{if(error!==stopping.signal.reason)throw error;});
  try{await startup;}catch(error){if(!stopping.signal.aborted)throw error;}
