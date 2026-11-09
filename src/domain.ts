@@ -1,3 +1,4 @@
+import {applyBrowserPage,BROWSER_HOST} from './browser-runtime.ts';
 import {applyEffectDecision,isEffectDecisionCommand,EFFECT_HOST} from './effect-decisions.ts';
 import {applyRoom,validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,teamTaskReady,teamCallCount} from './internal-teams.ts';
@@ -48,6 +49,7 @@ export interface RuntimeRecovery {runId:string;actorId:string;reason:string;pend
 export interface WorkPrerequisite {workId:string;criteriaHash:string;inputHash:string;actorId:string;reason:string}
 export interface PrerequisiteRecord {workId:string;recordId:string;checksum:string;criteriaVersion:number;evidenceClass:'fixture'|'real-provider';artifact:Pick<Artifact,'id'|'version'|'sha256'|'kind'>}
 export interface Work {
+  browserSession?:import('./browser-runtime.ts').BrowserSession;
   room?:import('./member-rooms.ts').MemberRoom;
   team?:import('./internal-teams.ts').TeamProcedure;
   moderation?:import('./discriminator.ts').ModerationEntry[];
@@ -74,6 +76,7 @@ export interface ConversationMessage {id:string;ordinal:number;actorId:string;ro
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
 export interface Mission { memoryExpiries?:import('./memory-expiry.ts').MemoryExpiry[]; memoryTimeWatermark?:number; memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
 export type Command =
+  | import('./browser-runtime.ts').BrowserCommand
   | import('./effect-decisions.ts').EffectDecisionCommand
   | import('./member-rooms.ts').RoomCommand
   | import('./discriminator.ts').ModerationCommand
@@ -217,6 +220,7 @@ export function freshSourceWork(w:Work):boolean {
 /** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
 export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2}): { value: Mission; events: unknown[] } {
+  if(actor.id===BROWSER_HOST)ensure(command.type==='record-browser-page','Browser host has browser-only authority');
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
   text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||time===undefined,'Unexpected expiry clock context');
@@ -232,6 +236,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
   if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
   if(work&&['assign','delegate','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
   switch (command.type) {
+    case 'record-browser-page': {applyBrowserPage(needWork(),command,actor);break;}
     case 'propose-owner-effect': case 'answer-owner-effect': case 'dispatch-owner-effect': case 'record-owner-effect': {applyEffectDecision(state,command,actor,time);break;}
     case 'open-room': case 'record-room-turn': {applyRoom(needWork(),command,actor);break;}
     case 'reserve-moderation': case 'record-moderation': {applyModeration(needWork(),command,actor);break;}

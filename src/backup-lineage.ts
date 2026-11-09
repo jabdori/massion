@@ -1,3 +1,4 @@
+import {validateBrowserSession} from './browser-runtime.ts';
 import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
@@ -168,7 +169,8 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+    ['browserSession','room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+  if(Object.hasOwn(item,'browserSession'))validateBrowserSession(item.browserSession);
   if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
@@ -348,6 +350,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'record-browser-page':{required:['workId','sessionId','requestAddress','page']},
   'propose-owner-effect':{required:['workId','taskId','stepId','effectId','request']},
   'answer-owner-effect':{required:['workId','effectId','answer']},
   'dispatch-owner-effect':{required:['workId','effectId','feedId']},
@@ -442,6 +445,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       ensure(event.type === type, 'event and command type mismatch');
       ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
       if(isEffectDecisionCommand(command.type))ensure(command.type==='answer-owner-effect'?actor.id==='local-owner'&&!operation.commandId.startsWith('assistant-'):actor.id===EFFECT_HOST&&operation.commandId.startsWith(EFFECT_COMMAND_PREFIX),'effect command authority mismatch');
+      if(command.type==='record-browser-page')ensure(command.page.expectedRevision===operation.expectedRevision&&operation.commandId.startsWith('assistant-browser:'),'browser command identity mismatch');
       checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');

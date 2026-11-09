@@ -17118,5 +17118,50 @@
   "used_in": [
    "E7:first-experience"
   ]
+ },
+ "ui.browser.address": {
+  "ko": "주소",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B15:pane"
+  ],
+  "provenance": "R-B retained browser observations; read-only interface labels."
+ },
+ "ui.browser.masked": {
+  "ko": "••••",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B15:pane"
+  ],
+  "provenance": "R-B retained browser observations; read-only interface labels."
+ },
+ "ui.browser.started": {
+  "ko": "시작 · {time}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B15:pane"
+  ],
+  "provenance": "R-B retained browser observations; read-only interface labels."
+ },
+ "ui.browser.pages": {
+  "ko": "페이지 {count}개 읽음",
+  "roles": ["text"],
+  "used_in": ["B4:pane", "B7:pane", "B15:pane"],
+  "provenance": "R-B committed browser page count."
+ },
+ "ui.browser.activity": {
+  "ko": "{status} · 페이지 {count}개 읽음",
+  "roles": ["text"],
+  "used_in": ["B5:sidebar", "B7:sidebar"],
+  "provenance": "R-B committed browser page count in Work activity."
  }
 }

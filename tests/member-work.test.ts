@@ -707,3 +707,11 @@ for(const mode of ['answer','drain','next-room'])test('slow shadow moderation '+
  const until=Date.now()+1500;while(!(await f.intake()).works.find(w=>w.id===before.id)!.moderation![0]!.result&&Date.now()<until)await new Promise(r=>setTimeout(r,5));
  const after=(await f.intake()).works.find(w=>w.id===before.id)!;assert.equal(after.moderation![0]!.result!.decision,mode==='drain'?'unconfirmed':'shadow');assert.equal(after.moderation![0]!.result!.applied,false);assert.deepEqual(after.record,record);assert.equal(after.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect() as any);
  });
+
+test('conversation and global Work list expose committed browser counts before opening a Work',async t=>{
+ const {BrowserSessions}=await import('../src/browser-runtime.ts'),f=await setup(t);let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);
+ f.setExecutionHook(async()=>{entered();await held;});t.after(async()=>{release();await f.assistant.idle();});f.script.push(v1('Reading','Browser observation'));await f.say(f.assistant,'Read the public page');await started;
+ const w=(await f.intake()).works.at(-1)!,at=w.runtimeRun!.ownership!.startedAt+1,browser=new BrowserSessions(f.store,f.store,{clock:()=>at,adapter:{async read(){return {address:'https://example.com/',title:'Observed',blocks:['Public page'],fields:[]};}}});
+ await browser.capture({missionId:'intake',workId:w.id,readId:'observed:1',address:'https://example.com/'});
+ const view=await f.assistant.read(),list=await f.assistant.works();assert.deepEqual(view.turns.at(-1)!.work!.browser,{startedAt:at,pagesRead:1});assert.deepEqual(list.works.find(row=>row.workId===w.id)!.browser,{startedAt:at,pagesRead:1});
+});

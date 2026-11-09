@@ -1,0 +1,71 @@
+{
+  "data": {
+    "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e1]\n    - button \"하나\" [ref=e4]\n    - button \"결과물\" [ref=e5]\n    - button \"예약\" [ref=e6]\n    - group \"앱\"\n      - button \"GitHub\" [ref=e9]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e10]\n  - complementary \"구성원과 작업\"\n    - generic\n      - switch \"활동 보기, 확인 필요\" [checked=false, ref=e11]\n      - button \"검색\" [expanded=false, ref=e12]\n    - generic\n      - list\n        - listitem [level=1]\n          - button \"하나 작업 중\" [ref=e27]\n            - StaticText \"하나\"\n            - status \"작업 중\"\n          - list \"하나의 작업\"\n            - listitem [level=2]\n              - button \"프린터 토너 주문\" [ref=e36]\n                - StaticText \"프린터 토너 주문\"\n                - status\n                  - StaticText \"결정 대기\"\n      - list \"구성원\"\n        - listitem [level=1]\n          - button \"퀼\" [ref=e28]\n            - StaticText \"퀼\"\n            - status \"작업 중\"\n          - list \"퀼의 작업\"\n            - listitem [level=2]\n              - button \"이탈 원인 조사\" [ref=e37]\n                - StaticText \"이탈 원인 조사\"\n                - status\n                  - StaticText \"실행 중\"\n            - listitem [level=2]\n              - button \"경쟁사 가격\" [ref=e38]\n                - StaticText \"경쟁사 가격\"\n                - status\n                  - StaticText \"확인 대기\"\n        - listitem [level=1]\n          - button \"주노\" [ref=e29]\n            - StaticText \"주노\"\n            - status \"읽지 않음\"\n          - list \"주노의 작업\"\n            - listitem [level=2]\n              - button \"PR #84 검토\" [ref=e39]\n                - StaticText \"PR #84 검토\"\n                - status\n                  - StaticText \"완료\"\n  - main \"하나\" [ref=e2]\n    - sectionheader\n      - button \"사이드바 숨기기\" [expanded=true, ref=e13]\n      - heading \"하나\" [level=1, ref=e14]\n        - button \"하나\" [ref=e21]\n      - button \"작업 공간\" [ref=e15]\n      - button \"더 보기\" [expanded=false, ref=e16]\n    - region \"대화\" [ref=e17]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 5일 (목)\"\n          - paragraph\n            - StaticText \"프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.\"\n          - button \"3분 동안 작업 · 페이지 4개 읽음\" [ref=e30]\n          - generic\n            - paragraph\n              - StaticText \"지난 주문과 같은 토너를 찾았어요.\"\n            - button \"복사\" [ref=e40]\n          - region \"34,000원 결제할까요?\" [ref=e31]\n            - strong\n              - StaticText \"34,000원 결제할까요?\"\n            - StaticText \"14:12\"\n            - DescriptionList\n              - term \"상품\"\n              - definition\n                - StaticText \"레이저 토너 검정\"\n              - term \"판매처\"\n              - definition\n                - StaticText \"오피스몰 · https://shop.example.com\"\n              - term \"금액\"\n              - definition\n                - StaticText \"34,000원 · 배송비 포함 · 카드 끝자리 0000\"\n              - term \"결제 기한\"\n              - definition\n                - StaticText \"14:30까지\"\n              - term \"취소\"\n              - definition\n                - StaticText \"결제 후 취소 신청 가능\"\n            - button \"34,000원 결제\" [ref=e41]\n            - button \"나중에\" [ref=e42]\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e32]\n          - button \"파일 추가\" [disabled, ref=e33]\n          - button \"기본 권한\" [ref=e34]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e35]\n  - region \"작업\" [ref=e3]\n    - tablist \"열린 작업\"\n      - tab \"브라우저\" [selected, ref=e18]\n      - button \"브라우저 닫기\" [ref=e19]\n        - StaticText \"×\"\n    - button \"넓히기\" [ref=e7]\n    - button \"작업 공간 닫기\" [ref=e8]\n    - tabpanel\n      - tablist \"브라우저\"\n        - tab \"주문 / 결제\" [selected, ref=e22]\n      - textbox \"주소\" [ref=e20]: https://shop.example.com/checkout\n        - StaticText \"https://shop.example.com/checkout\"\n      - time\n        - StaticText \"시작 · 14:09\"\n      - paragraph\n        - StaticText \"페이지 4개 읽음\"\n      - tabpanel \"주문 / 결제\"\n        - heading \"주문 / 결제\" [level=3, ref=e23]\n        - paragraph\n          - StaticText \"오피스몰\"\n        - paragraph\n          - StaticText \"주문 / 결제\"\n        - paragraph\n          - StaticText \"레이저 토너 검정\"\n        - paragraph\n          - StaticText \"상품 금액\"\n        - paragraph\n          - StaticText \"31,000원\"\n        - paragraph\n          - StaticText \"배송비\"\n        - paragraph\n          - StaticText \"3,000원\"\n        - paragraph\n          - StaticText \"합계\"\n        - paragraph\n          - StaticText \"34,000원\"\n        - LabelText\n          - StaticText \"수량\"\n        - textbox \"수량\" [ref=e24]: 1\n          - StaticText \"1\"\n        - LabelText\n          - StaticText \"배송지\"\n        - textbox \"배송지\" [ref=e25]: ••••\n          - StaticText \"••••\"\n        - LabelText\n          - StaticText \"결제 카드\"\n        - textbox \"결제 카드\" [ref=e26]: ••••\n          - StaticText \"••••\"\n      - StaticText \"하나\""
+  },
+  "visibleTextBudget": {
+    "rail": [
+      "하",
+      "나"
+    ],
+    "sidebar": [
+      "하나",
+      "프린터 토너 주문",
+      "퀼",
+      "이탈 원인 조사",
+      "경쟁사 가격",
+      "주",
+      "주노",
+      "PR #84 검토"
+    ],
+    "header": [
+      "하",
+      "하나"
+    ],
+    "conversation": [
+      "11월 5일 (목)",
+      "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로.",
+      "3분 동안 작업 · 페이지 4개 읽음",
+      "지난 주문과 같은 토너를 찾았어요.",
+      "34,000원 결제할까요?",
+      "14:12",
+      "상품",
+      "레이저 토너 검정",
+      "판매처",
+      "오피스몰 · https://shop.example.com",
+      "금액",
+      "34,000원 · 배송비 포함 · 카드 끝자리 0000",
+      "결제 기한",
+      "14:30까지",
+      "취소",
+      "결제 후 취소 신청 가능",
+      "34,000원 결제",
+      "나중에"
+    ],
+    "composer": [
+      "＋",
+      "기본 권한"
+    ],
+    "pane": [
+      "브라우저",
+      "×",
+      "주문 / 결제",
+      "시작 · 14:09",
+      "페이지 4개 읽음",
+      "주문 / 결제",
+      "오피스몰",
+      "주문 / 결제",
+      "레이저 토너 검정",
+      "상품 금액",
+      "31,000원",
+      "배송비",
+      "3,000원",
+      "합계",
+      "34,000원",
+      "수량",
+      "배송지",
+      "결제 카드",
+      "하",
+      "하나"
+    ]
+  }
+}

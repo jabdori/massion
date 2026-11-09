@@ -1,0 +1,82 @@
+[
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "index": 0,
+    "address": "https://shop.example.com/checkout",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "주문 / 결제"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "index": 0,
+    "address": "https://shop.example.com/checkout",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "주문 / 결제"
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 0,
+    "address": "https://library.example.com/guide",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "이용 안내"
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 1,
+    "address": "https://library.example.com/availability",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "빈 시간"
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 2,
+    "address": "https://library.example.com/apply",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "신청"
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 0,
+    "address": "https://library.example.com/guide",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "이용 안내"
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 1,
+    "address": "https://library.example.com/availability",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "빈 시간"
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 2,
+    "address": "https://library.example.com/apply",
+    "commands": 0,
+    "dangerous": false,
+    "readonly": true,
+    "title": "신청"
+  }
+]

@@ -48,16 +48,6 @@
       "screen": "B5",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-dark"
-    },
-    {
-      "screen": "B5",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "unsupported product capability",
@@ -183,16 +173,6 @@
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b7-dark"
-    },
-    {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B7",
@@ -2461,168 +2441,8 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane link \"작업 공간 닫기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"{member}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "The browser session and read-only form now exist. The generic library decision has no typed form-submission effect binding to this Work, so its sidebar cannot claim decision-pending.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
       "screen": "B16",
@@ -3678,16 +3498,6 @@
       "screen": "B5",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-light"
-    },
-    {
-      "screen": "B5",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "unsupported product capability",
@@ -3813,16 +3623,6 @@
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b7-light"
-    },
-    {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B7",
@@ -6091,168 +5891,8 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane link \"작업 공간 닫기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"{member}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "The browser session and read-only form now exist. The generic library decision has no typed form-submission effect binding to this Work, so its sidebar cannot claim decision-pending.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
       "screen": "B16",
@@ -7300,38 +6940,6 @@
       ]
     },
     {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
       "screen": "B22-room",
       "theme": "dark",
       "kind": "contract",
@@ -7591,38 +7199,6 @@
       ]
     },
     {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
       "screen": "B22-room",
       "theme": "light",
       "kind": "contract",
@@ -7867,25 +7443,6 @@
       ]
     },
     {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
       "screen": "B7-done",
       "theme": "dark",
       "kind": "contract",
@@ -8059,25 +7616,6 @@
       "kind": "contract",
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 4,
-      "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 1,
       "category": "unrecorded step timestamp",
       "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
       "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
@@ -8279,56 +7817,6 @@
       ]
     },
     {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
       "screen": "B16",
       "theme": "dark",
       "kind": "gap",
@@ -8366,56 +7854,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
@@ -8457,6 +7895,26 @@
       "category": "capability",
       "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Browser read counts and observation timestamps now come from BrowserSessions. Named business procedures and timestamps for their individual steps remain outside this slice.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No host producer supplies named business steps or per-step timestamps; browser/page-read telemetry is produced by BrowserSessions.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Browser read counts and observation timestamps now come from BrowserSessions. Named business procedures and timestamps for their individual steps remain outside this slice.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     }
   ]
 }

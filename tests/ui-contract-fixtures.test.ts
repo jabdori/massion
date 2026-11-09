@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readdir,readFile} from 'node:fs/promises';
 import {request} from 'node:http';
 import {workbenchPage} from '../src/workbench.ts';
-import {hash} from '../src/domain.ts';
+import {hash,workInputHash} from '../src/domain.ts';
 import type {Mission} from '../src/domain.ts';
 
 const screens=(await readdir(new URL('../docs/product/screens/contracts/',import.meta.url))).filter(f=>f.endsWith('.json')).map(f=>f.slice(0,-5)).sort();
@@ -37,11 +37,12 @@ test('started Work snapshots have assigned executors and consistent task, attemp
   assert.equal(f.now,screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
-  const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean}>}).works;
+  const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean;started:boolean}>}).works;
   assert.deepEqual(mission.works.map(w=>w.id),summaries.map(w=>w.workId),screen);
   for(const work of mission.works){
    const summary=summaries.find(s=>s.workId===work.id)!;
    assert.equal(work.execution,summary.execution,screen);assert.equal(work.acceptance,summary.acceptance,screen);
+   if(!summary.started&&work.browserSession){assert.equal(work.execution,'queued');assert.equal(work.attempts[0]!.status,'queued');assert.equal(work.effects.length,0);continue;}
    assert.ok(work.assignments.some(a=>a.role==='executor'),screen+' '+work.id+' executor');
    assert.ok(work.tasks.length,screen);assert.notEqual(work.attempts[0]!.status,'queued',screen);
    if(summary.unknown){assert.ok(work.effects.some(e=>e.status==='unknown'),screen);assert.equal(work.record,undefined,screen);}
@@ -260,4 +261,10 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
    assert.doesNotMatch(JSON.stringify(view.segment?.messages??[]),/TOTAL: [34] cents|3센트 상품|반올림/);
   }
  }
+});
+
+
+test('browser fixture reads retain their exact Work inputs and redacted form values',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B4','B5','B15','B7']){const f=await loadFixture(screen),mission=(f.routes['/missions/intake']!.body as {value:Mission}).value,w=mission.works.find(w=>w.browserSession)!;assert.ok(w,screen);for(const page of w.browserSession!.pages){assert.equal(page.inputHash,workInputHash(w),screen);assert.ok(page.fields.filter(f=>f.masked).every(f=>f.value==='••••'));}const query=f.routes['/missions/intake/works/'+w.id+'/browser']!.body as any;assert.equal(query.session.pagesRead,w.browserSession!.pages.length);assert.deepEqual(query.session.page,w.browserSession!.pages.at(-1));}
 });
