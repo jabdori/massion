@@ -1,0 +1,21 @@
+/** E8 fixtures come from the production budget reducer and read projection, without invoking a provider. */
+import {writeFile} from 'node:fs/promises';
+import {MonthlyBudgetService} from '../../src/monthly-budget.ts';
+import {Application} from '../../src/application.ts';
+import {InMemoryStore} from '../../src/storage.ts';
+import type {Mission} from '../../src/domain.ts';
+import {loadFixture} from './fixture-host.ts';
+const base=await loadFixture('B7-done'),store=new InMemoryStore<Mission>(),clock=()=>base.now,budget=new MonthlyBudgetService(store,clock),app=new Application(store,[{id:'local-owner',roles:['owner']}],clock);
+await app.create({id:'monthly-fixture',purpose:'예산 대기',scope:'local',constraints:[],criteria:{version:1,description:'고정된 텍스트',oracle:'bounded-text-review/v1'}},'local-owner','e8-create');
+await app.dispatch({missionId:'monthly-fixture',commandId:'e8-admit',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'waiting',title:'월말 요약',budget:128}});
+await budget.configure({commandId:'e8-budget',expectedRevision:0,limit:0,timezone:'Asia/Seoul'});
+await budget.admit({missionId:'monthly-fixture',workId:'waiting',runId:'e8-run',amount:128});
+const original=base.routes['/assistant/conversation']!.body as any,feedId=original.feedId;
+const projection=async()=>{const view=await budget.read();return {view:{...view,feedId},conversation:{...original,segment:{...original.segment,messages:[]},turns:[],briefings:[],exceptions:[],decisions:view.decisions}};};
+const save=async(screen:string,fixture:unknown)=>writeFile(new URL('./fixtures/'+screen+'.json',import.meta.url),JSON.stringify(fixture,null,2)+'\n');
+const open=await projection();
+await save('B26',{screen:'B26',extends:'B7-done',description:'Monthly budget decision from the production owner budget service; no provider call or invented price.',readySelector:'.chat-decision',steps:[],gaps:[],reuse:['src/monthly-budget.ts: MonthlyBudgetService.configure/admit/read','scripts/ui-contracts/monthly-budget-fixtures.ts','B7-done: existing Work sidebar and immutable artifact reads'],routes:{'/assistant/conversation':{status:200,body:open.conversation},'/assistant/conversation?segment=1':{status:200,body:open.conversation},'/assistant/usage':{status:200,body:open.view}}});
+const decision=open.view.decisions[0]!;await budget.decide({commandId:'e8-later',expectedRevision:open.view.revision,decisionId:decision.id,answer:'later'});const later=await projection();
+await save('B26-later',{screen:'B26-later',extends:'B26',description:'The same recorded budget decision explicitly deferred by the owner; Work remains paused.',readySelector:'#chat-log .chat-system button',steps:[],gaps:[],routes:{'/assistant/conversation':{status:200,body:later.conversation},'/assistant/conversation?segment=1':{status:200,body:later.conversation},'/assistant/usage':{status:200,body:later.view}}});
+const usage={...await new MonthlyBudgetService(new InMemoryStore<Mission>(),clock).read(),feedId};
+await save('B14-usage',{screen:'B14-usage',extends:'B14',description:'Recorded calendar-month token usage and owner monthly limit; currency and provider utilization remain unknown.',gaps:[],steps:[{selector:'#rail-me',action:'click',readySelector:'#me-menu'},{selector:'#me-settings',action:'click',readySelector:'#page-settings'},{selector:'#settings-nav-usage',action:'click',readySelector:'#monthly-budget-refresh'}],routes:{'/assistant/usage':{status:200,body:usage}}});

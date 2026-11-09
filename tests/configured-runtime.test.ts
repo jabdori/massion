@@ -193,3 +193,15 @@ test('missing pinned memory blocks configured run before intent, budget or mock 
  const before=(await s.store.load(s.missionId))!;const result=await s.product.run(s.missionId,s.workId,'never-dispatched',before.revision);
  assert.equal(result.status,'blocked');assert.match(result.reason??'',/missing/);assert.equal(s.calls.length,0);assert.deepEqual(await s.store.load(s.missionId),before);
 });
+
+test('monthly admission pauses before any model call and a fresh owner increase resumes once through HTTP',async t=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const s=await setup(t);await s.admit();const budget=new MonthlyBudgetService(s.store);
+ await budget.configure({commandId:'monthly-configure',expectedRevision:0,limit:127,timezone:'Asia/Seoul'});
+ const paused=await s.product.run(s.missionId,s.workId,'monthly-first',2);assert.equal(paused.snapshot.value.works[0]!.execution,'budget-waiting',JSON.stringify(paused));assert.equal(s.calls.length,0);
+ const server=createWorkbench(s.store,s.root,{providers:s.product.providers,runtime:s.runtime});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
+ const origin='http://127.0.0.1:'+address.port;const view=await (await fetch(origin+'/assistant/usage')).json() as any;assert.equal(view.limit,127);assert.equal(view.spent,0);
+ const conversation=await (await fetch(origin+'/assistant/conversation')).json() as any;assert.equal(conversation.decisions[0].question,'이번 달 예산을 다 썼어요. 늘릴까요?');const d=conversation.decisions[0];
+ const body={commandId:'monthly-raise',decisionId:d.id,answer:'act',expectedRevision:d.budget.revision,limit:d.budget.limit};const post=()=>fetch(origin+'/assistant/decisions',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
+ const responses=await Promise.all([post(),post()]);assert.ok(responses.every(r=>r.status===200));assert.equal(s.calls.length,2,JSON.stringify((await s.store.load(s.missionId))!.value.works[0]));assert.equal((await s.store.load(s.missionId))!.value.works[0]!.acceptance,'accepted');
+ assert.equal((await post()).status,200);assert.equal(s.calls.length,2);const usage=await budget.read();assert.equal(usage.spent,10);assert.equal(usage.inputTokens,40);assert.equal(usage.reserved,0);assert.equal(usage.cost,null);
+});

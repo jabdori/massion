@@ -1,10 +1,8 @@
 {
   "screen": "B14-usage",
   "extends": "B14",
-  "description": "Usage settings with unknown values.",
-  "gaps": [
-    "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered."
-  ],
+  "description": "Recorded calendar-month token usage and owner monthly limit; currency and provider utilization remain unknown.",
+  "gaps": [],
   "steps": [
     {
       "selector": "#rail-me",
@@ -19,7 +17,28 @@
     {
       "selector": "#settings-nav-usage",
       "action": "click",
-      "readySelector": "#settings-usage-body .set-row"
+      "readySelector": "#monthly-budget-refresh"
     }
-  ]
+  ],
+  "routes": {
+    "/assistant/usage": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 0,
+        "revision": 0,
+        "period": "2026-11",
+        "timezone": "Asia/Seoul",
+        "unit": "output-tokens",
+        "limit": null,
+        "spent": 0,
+        "knownOutputTokens": 0,
+        "inputTokens": 0,
+        "cost": null,
+        "reserved": 0,
+        "members": [],
+        "decisions": []
+      }
+    }
+  }
 }

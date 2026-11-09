@@ -16499,5 +16499,237 @@
    "B8:pane"
   ],
   "provenance": "Q13 named worker steps and dependencies."
+ },
+ "ui.budget.title": {
+  "ko": "월간 예산",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.question": {
+  "ko": "이번 달 예산을 다 썼어요. 늘릴까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.now": {
+  "ko": "지금",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.after": {
+  "ko": "늘린 뒤",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.paused": {
+  "ko": "멈춘 일",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.raise": {
+  "ko": "예산 늘리기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.changed": {
+  "ko": "예산을 늘렸어요",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.tokens": {
+  "ko": "{count} 출력 토큰",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.waiting": {
+  "ko": "예산 대기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.monthly": {
+  "ko": "월 예산",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.change": {
+  "ko": "변경",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.refresh": {
+  "ko": "새로고침",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.save": {
+  "ko": "저장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.limit": {
+  "ko": "월간 예산 (출력 토큰)",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.period": {
+  "ko": "{period} · {timezone}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.unavailable": {
+  "ko": "사용량을 불러오지 못했어요",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.later": {
+  "ko": "나중에: 예산 늘리기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B26:conversation",
+   "B26-later:conversation",
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.utilization": {
+  "ko": "사용률",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.reset": {
+  "ko": "초기화 시각",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.updated": {
+  "ko": "마지막 업데이트 시각",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.recorded": {
+  "ko": "사용한 출력 토큰",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
+ },
+ "ui.budget.input": {
+  "ko": "입력 토큰",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B14-usage:settings"
+  ]
  }
 }

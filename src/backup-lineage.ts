@@ -1,3 +1,5 @@
+import {isMonthlyBudgetState,replayMonthlyBudget} from './monthly-budget.ts';
+import type {MonthlyBudgetState} from './monthly-budget.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
@@ -164,7 +166,9 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+    ['monthlyBudgetDecision','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt']);
+  if(Object.hasOwn(item,'monthlyBudgetDecision'))text(item.monthlyBudgetDecision,'monthly budget decision');
+  ensure(item.execution!=='budget-waiting'||typeof item.monthlyBudgetDecision==='string','Missing monthly budget decision');
   if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
@@ -175,7 +179,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if(Object.hasOwn(item,'organizationSnapshot'))pinnedOrganization(mission,value as Work);
   text(item.id, 'Work ID'); text(item.title, 'Work title'); integer(item.missionVersion, 'Work Mission version'); criteria(item.criteria);
   ensure(item.missionVersion <= mission.version && item.criteria.version <= mission.criteria.version, 'Work references future Mission or criteria');
-  oneOf(item.execution, ['queued', 'active', 'waiting', 'blocked', 'cancelled', 'settled'], 'Work execution');
+  oneOf(item.execution, ['budget-waiting', 'queued', 'active', 'waiting', 'blocked', 'cancelled', 'settled'], 'Work execution');
   oneOf(item.acceptance, ['pending', 'failed', 'stale', 'accepted'], 'Work acceptance');
   if (Object.hasOwn(item, 'missionSnapshot')) {
     const snapshot = object(item.missionSnapshot, 'Mission input snapshot', ['version', 'purpose', 'scope', 'constraints']);
@@ -357,6 +361,8 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'revise-mission-constraints': {required:['constraints','reason']},
   'revise-mission': { required: ['purpose', 'criteria'] },
   'admit-work': { required: ['workId', 'title', 'budget'], optional: ['team','executionGate','correction','conversationSource','assistantSource'] },
+  'wait-monthly-budget':{required:['workId','decisionId']},
+  'resume-monthly-budget':{required:['workId','decisionId']},
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
@@ -399,6 +405,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
   for (const operation of operations) {
+    if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSkillsState(operation.value)) { skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isPermissionsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayPermissions(operation as unknown as Operation<PermissionsState>, previous.get(operation.aggregateId) as unknown as Operation<PermissionsState> | undefined); previous.set(operation.aggregateId, operation); continue; }

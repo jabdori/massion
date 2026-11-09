@@ -1,3 +1,4 @@
+import {MonthlyBudgetService} from './monthly-budget.ts';
 import {TOOL_TIMEOUT_VERSION} from './tool-call.ts';
 import {parseTeamPlan,procedureSteps,teamCallCount,MAX_TEAM_STEPS} from './internal-teams.ts';
 import {clarificationInput,requireAnswered} from './work-clarification.ts';
@@ -86,6 +87,7 @@ export class RuntimeConfigurationChangedError extends DomainError {readonly diag
 export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,expectedRevision:number,outputTokenCap?:number):SelectionPreflight {
  const work=snapshot.value.works.find(w=>w.id===workId);if(!work)throw new DomainError('Unknown Work');
  const diagnostics:SelectionPreflight['diagnostics']=[];const add=(code:string,message:string)=>diagnostics.push({code,message});
+ if(work.execution==='budget-waiting')add('monthly_budget_waiting','An explicit owner monthly budget decision is required.');
  if(work.runtimeRun||work.runtimeRecovery||work.effects.length||work.assignments.length||work.artifact)add('work_already_started','A run or execution evidence was already admitted. Inspect durable state; this Work cannot be replayed.');
  if(work.execution==='cancelled')add('work_cancelled','This Work is cancelled and cannot admit a run.');
  if(snapshot.revision!==expectedRevision||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)add('revision_conflict','Work changed since this selection was checked. Refresh the Mission and check again.');
@@ -211,6 +213,10 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private async runOwned(missionId:string,workId:string,runId:string,expectedRevision:number,admitted:boolean,activationActorId:string,fence?:RuntimeFence):Promise<RuntimeResult>{
   const initial=await this.current(missionId,workId);let preflight=this.preflight(initial.snapshot,workId,expectedRevision);if(!admitted&&preflight.ready)preflight=hostBusyPreflight(preflight);
   if(!preflight.ready)return rejectedRun(preflight,initial.snapshot);
+  if(this.draining)throw new HostDrainError();
+  const monthlyStore=new Proxy(this.app.store,{get:(target,key)=>{if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(this.draining)throw new HostDrainError();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  const monthly=await new MonthlyBudgetService(monthlyStore).admit({missionId,workId,runId,amount:this.options.outputTokenCap*teamCallCount(initial.work.team)});
+  if(monthly==='waiting'||monthly==='replayed')return {status:monthly==='waiting'?'blocked':'already-started',snapshot:await this.snapshot(missionId),reason:'Monthly budget waiting or prior reservation; no provider call was sent.'};
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};
   let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{toolTimeoutVersion:TOOL_TIMEOUT_VERSION,ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
