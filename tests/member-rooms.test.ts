@@ -61,3 +61,9 @@ test('room artifact cannot be replaced after quote binding and an unfinished cha
  m=turn(m,'challenge',{kind:'challenge',text:'Names missing',quote:'two open blockers'});
  assert.throws(()=>apply(m,{type:'verify',workId:'w',verdict},{id:'checker',roles:['verifier']}),/Room/);
 });
+
+test('moderation quotes keep Unicode boundaries so optional shadow calls cannot stop valid Work',async()=>{
+ const {roomModerationInput}=await import('../src/member-rooms.ts'),{buildQuestion}=await import('../src/discriminator.ts');
+ const m=apply(seed(),open,host).value,w=m.works[0]!;w.room!.messages[0]!.text='a'.repeat(2047)+'😀';
+ const input=roomModerationInput(w,1,2);assert.doesNotThrow(()=>buildQuestion(input));assert.equal(input.quotes[0]!.quoted,'a'.repeat(2047));
+});
