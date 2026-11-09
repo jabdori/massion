@@ -1,0 +1,291 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B9",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 12,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "dark",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or update state."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "dark",
+      "passed": 16,
+      "failed": 10,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "dark",
+      "passed": 22,
+      "failed": 10,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B10-preview.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "dark",
+      "passed": 13,
+      "failed": 13,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B12.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "passed": 18,
+      "failed": 17,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B15.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "dark",
+      "passed": 12,
+      "failed": 12,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "dark",
+      "passed": 7,
+      "failed": 8,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "dark",
+      "passed": 11,
+      "failed": 10,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22.png"
+    },
+    {
+      "screen": "B9",
+      "theme": "light",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9.png"
+    },
+    {
+      "screen": "B9-restart",
+      "theme": "light",
+      "passed": 26,
+      "failed": 12,
+      "warnings": 0,
+      "required": 38,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or restart state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-restart.png"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "light",
+      "passed": 26,
+      "failed": 11,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [
+        "The header member popover in the contract has no corresponding production control.",
+        "The production header has no member profile/device-status popover or update state."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B9-update.png"
+    },
+    {
+      "screen": "B10",
+      "theme": "light",
+      "passed": 16,
+      "failed": 10,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10.png"
+    },
+    {
+      "screen": "B10-preview",
+      "theme": "light",
+      "passed": 22,
+      "failed": 10,
+      "warnings": 3,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B10-preview.png"
+    },
+    {
+      "screen": "B12",
+      "theme": "light",
+      "passed": 13,
+      "failed": 13,
+      "warnings": 0,
+      "required": 26,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B12.png"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "passed": 18,
+      "failed": 17,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [
+        "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
+        "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B15.png"
+    },
+    {
+      "screen": "B17",
+      "theme": "light",
+      "passed": 12,
+      "failed": 12,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17.png"
+    },
+    {
+      "screen": "B17-empty",
+      "theme": "light",
+      "passed": 7,
+      "failed": 8,
+      "warnings": 0,
+      "required": 15,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B17-empty.png"
+    },
+    {
+      "screen": "B22",
+      "theme": "light",
+      "passed": 11,
+      "failed": 10,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [
+        "region main: [300,44,1140,856] != [300,0,1140,900] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22.png"
+    }
+  ]
+}

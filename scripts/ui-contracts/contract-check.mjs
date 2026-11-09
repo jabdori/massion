@@ -46,7 +46,7 @@ const tree = (function walk(n, region, depth, path) {
   if (region === 'header' && seenMain && depth > 0 && r !== 'complementary') region = 'pane'; // outside landmarks, after main: the work pane
   if (r === 'navigation' && region === 'header') region = 'rail';
   else if (r === 'complementary') region = asides++ === 0 && !/업무|작업 공간/.test(n.name || '') ? 'sidebar' : 'pane';
-  else if (r === 'main' && (seenMainNext = true)) region = /^설정/.test(n.name || '') ? 'settings' : has(n, (x) => TEXTBOX.has(x.role)) ? 'main' : 'page';
+  else if (r === 'main' && (seenMainNext = true)) region = /^설정/.test(n.name || '') ? 'page' : has(n, (x) => TEXTBOX.has(x.role)) ? 'main' : 'page';
   else if (r === 'alertdialog' || r === 'dialog') region = 'dialog';
   else if (r === 'log' && region === 'main') region = 'log';
   const node = { role: r, name: (n.name || n.value || '').trim(), desc: (n.description || '').trim(), region, path, children: [] };

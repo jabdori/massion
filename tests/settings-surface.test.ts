@@ -71,6 +71,13 @@ test('Memory shows what you said, what was learned with its evidence, and the ch
  assert.ok(!state.posted.some(p=>/adopt/.test(JSON.stringify(p.body))),'Settings adopts nothing');
 });
 
+test('Memory search filters loaded instructions and changes without writing or changing their identities',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'memory');
+ const query=byId(app,'memory-query')!;query.value='Round';await query.fire('input');
+ const body=app.node('settings-memory-body');assert.match(body.textContent,/Round each line/);assert.doesNotMatch(body.textContent,/Plain tone|Short plain tone/);
+ assert.ok(byId(app,'memory-switch-rounding'));assert.equal(byId(app,'memory-switch-tone'),undefined);assert.deepEqual(state.posted,[]);
+});
+
 test('Members lists the Representative and each member with its model group; a row opens the member page and Message opens that conversation',async()=>{
  const {app}=fixture();await settle();await open(app,'members');
  const body=app.node('settings-members-body');assert.doesNotMatch(body.textContent,/★/);assert.match(body.textContent,sequence('하나',copy('settings.text.01'),'셈','Research'));

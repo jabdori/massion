@@ -18,6 +18,22 @@
       "selector": "#settings-nav-memory",
       "action": "click",
       "readySelector": "#memory-switch-rounding"
+    },
+    {
+      "action": "fill",
+      "selector": "#memory-query",
+      "value": "no matching fixture memory",
+      "readySelector": "#settings-memory-body .set-empty"
+    },
+    {
+      "action": "fill",
+      "selector": "#memory-query",
+      "value": "",
+      "readySelector": "#memory-switch-rounding"
+    },
+    {
+      "action": "click",
+      "selector": "#settings-memory-title"
     }
   ],
   "gaps": [],
@@ -25,7 +41,8 @@
     "tests/settings-surface.test.ts",
     "tests/results-schedules-surface.test.ts",
     "tests/skills-surface.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3d2: supported independently evaluated -> adopted Growth state, exact baseline/candidate and previousEffective; Settings does not adopt"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -39,7 +56,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -48,13 +65,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -623,7 +648,7 @@
                 "authority": "explicit",
                 "content": "줄마다 반올림",
                 "source": "소유자",
-                "effective": true
+                "effective": false
               },
               {
                 "id": "rounding",
@@ -632,15 +657,6 @@
                 "authority": "learned",
                 "content": "합계에서 한 번 반올림",
                 "source": "사례 3건 확인",
-                "effective": false
-              },
-              {
-                "id": "tone",
-                "version": 1,
-                "scope": "local",
-                "authority": "explicit",
-                "content": "짧고 담백하게 답하기",
-                "source": "소유자",
                 "effective": true
               }
             ],
@@ -658,7 +674,10 @@
                   "candidate": 3,
                   "heldOut": "{\"orders\":[1,2,3]}"
                 },
-                "status": "evaluated"
+                "status": "adopted",
+                "previousEffective": [
+                  "rounding@1"
+                ]
               }
             ],
             "relations": []
@@ -871,7 +890,7 @@
               "authority": "explicit",
               "content": "줄마다 반올림",
               "source": "소유자",
-              "effective": true
+              "effective": false
             },
             {
               "id": "rounding",
@@ -880,15 +899,6 @@
               "authority": "learned",
               "content": "합계에서 한 번 반올림",
               "source": "사례 3건 확인",
-              "effective": false
-            },
-            {
-              "id": "tone",
-              "version": 1,
-              "scope": "local",
-              "authority": "explicit",
-              "content": "짧고 담백하게 답하기",
-              "source": "소유자",
               "effective": true
             }
           ],
@@ -906,7 +916,10 @@
                 "candidate": 3,
                 "heldOut": "{\"orders\":[1,2,3]}"
               },
-              "status": "evaluated"
+              "status": "adopted",
+              "previousEffective": [
+                "rounding@1"
+              ]
             }
           ],
           "relations": []
@@ -924,7 +937,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -933,13 +946,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,

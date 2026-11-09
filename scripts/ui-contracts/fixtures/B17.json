@@ -8,6 +8,25 @@
       "selector": "#rail-schedules",
       "action": "click",
       "readySelector": "#schedule-detail"
+    },
+    {
+      "action": "click",
+      "selector": "#schedule-more",
+      "readySelector": "#schedule-budget"
+    },
+    {
+      "action": "click",
+      "selector": "#schedule-more"
+    },
+    {
+      "action": "click",
+      "selector": "#schedule-new",
+      "readySelector": "#schedules-empty"
+    },
+    {
+      "action": "click",
+      "selector": "#side-schedules .side-sched",
+      "readySelector": "#schedule-detail"
     }
   ],
   "gaps": [],
@@ -15,7 +34,8 @@
     "tests/settings-surface.test.ts",
     "tests/results-schedules-surface.test.ts",
     "tests/skills-surface.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)",
+    "E3d2: existing done-run segment projection; no run or effect is executed"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -29,7 +49,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -38,13 +58,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -406,7 +434,7 @@
           {
             "id": "morning",
             "title": "아침 브리핑",
-            "request": "어제 끝난 일, 돌아온 일, 결과를 모르는 일을 아침마다 알려 줘.",
+            "request": "어제 맡긴 일을 정리해 줘. 끝난 것, 다시 맡긴 것, 결과를 모르는 것.",
             "assignee": "하나",
             "destination": "하나와의 대화",
             "active": true,
@@ -425,14 +453,8 @@
                 "fact": "일 3개",
                 "turnIds": [
                   "assistant-turn:m:rounding-work"
-                ]
-              },
-              {
-                "id": "run-failed",
-                "at": 1793746800000,
-                "state": "failed",
-                "fact": "응답이 끊겼어요",
-                "turnIds": []
+                ],
+                "segment": 1
               }
             ]
           }
@@ -860,7 +882,7 @@
             "id": "member-quill",
             "name": "퀼",
             "look": {
-              "shape": "drop",
+              "shape": "square",
               "color": "agent-1"
             },
             "modelGroup": "research"
@@ -869,13 +891,21 @@
             "id": "member-juno",
             "name": "주노",
             "look": {
-              "shape": "round",
+              "shape": "square",
               "color": "agent-6"
             },
             "modelGroup": "coding"
           }
         ],
-        "apps": [],
+        "apps": [
+          {
+            "id": "app-github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "PR #"
+          }
+        ],
         "segment": {
           "number": 1,
           "revision": 1,
