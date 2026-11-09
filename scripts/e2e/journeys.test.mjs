@@ -1,5 +1,6 @@
 import test from 'node:test';
 import {desktopJourney} from './desktop.mjs';
+import {randomUUID} from 'node:crypto';
 import {APPS_ID} from '../../src/apps.ts';
 import {paymentJourney} from './decisions.mjs';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ import {stopOwnedChild} from '../../tests/support/owned-process.ts';
 import {exportPortableBackup,restorePortableBackup} from '../../src/portable-backup.ts';
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
-import {browserCommand} from './browser-command.mjs';
+import {browserCommand,browserEgressProxy} from './browser-command.mjs';
 
 const run=promisify(execFile),out=resolve('.runtime/e2e');
 // No skip: a missing database/browser must fail the required CI job.
@@ -24,12 +25,13 @@ await run('agent-browser',['--version']);
 test('real daemon + workbench + durable owner journeys',{timeout:480000},async t=>{
  await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
  const root=await mkdtemp(join(tmpdir(),'massion-owned-e9a-')),f=await growthStore(true);let database=(await f.transport.query('RETURN $session.db;',{}))[0];
- const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a'])).stdout.trim();
+ const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a'])).stdout.trim()+'-'+randomUUID().slice(0,8);
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('AGENT_BROWSER_')));
- Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
+ Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_PLUGINS:'[]'});
+ const egress=await browserEgressProxy();t.after(()=>egress.close());
  const browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{}));
  const browser=async(...args)=>{
-  const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--allowed-domains','127.0.0.1','--json',...args],{env,timeout:35000,maxBuffer:4e6}));
+  const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--proxy',egress.url,'--proxy-bypass','<-loopback>,127.0.0.1','--args','--force-webrtc-ip-handling-policy=disable_non_proxied_udp','--json',...args],{env,timeout:35000,maxBuffer:4e6}));
   if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;
  };
  const wait=async code=>browser('wait','--fn',code);

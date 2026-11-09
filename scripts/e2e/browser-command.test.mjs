@@ -16,3 +16,11 @@ test('other errors and a repeated context error fail',async()=>{
   assert.equal(calls,message===contextError?2:1);
  }
 });
+
+test('browser egress proxy refuses HTTP, tunnels and upgraded connections without forwarding',async t=>{
+ const {browserEgressProxy}=await import('./browser-command.mjs'),{request}=await import('node:http'),{connect}=await import('node:net');const proxy=await browserEgressProxy();t.after(()=>proxy.close());
+ const status=await new Promise((resolve,reject)=>{const req=request(proxy.url,{path:'http://192.0.2.1/private',headers:{host:'192.0.2.1'}},r=>{r.resume();resolve(r.statusCode);});req.on('error',reject);req.end();});assert.equal(status,403);
+ for(const message of ['CONNECT 192.0.2.1:443 HTTP/1.1\r\nHost: 192.0.2.1:443\r\n\r\n','GET ws://192.0.2.1/socket HTTP/1.1\r\nHost: 192.0.2.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n']){
+  const reply=await new Promise((resolve,reject)=>{const socket=connect(Number(new URL(proxy.url).port),'127.0.0.1');let text='';socket.setTimeout(2000,()=>socket.destroy(Error('Proxy did not close')));socket.on('connect',()=>socket.write(message));socket.on('data',data=>text+=data);socket.on('end',()=>resolve(text));socket.on('error',reject);});assert.match(reply,/^HTTP\/1.1 403 Forbidden/);
+ }
+});

@@ -15,8 +15,8 @@ function preparePage(){
  if(original.some(f=>[f.label,f.name,f.type,f.value,f.autocomplete].some(v=>v.length>4000)))throw Error('Browser field bound exceeded');
  const url=new URL(location.href),secrets=[url.username,url.password,url.hash.slice(1),...url.searchParams.values(),...original.filter(maskBrowserField).map(f=>f.value)].filter(Boolean).sort((a,b)=>b.length-a.length),clean=(value:string)=>browserText(value,secrets);
  for(const e of nodes){
-  if(['SCRIPT','IFRAME','FRAME','OBJECT','EMBED','CANVAS','VIDEO','AUDIO'].includes(e.tagName)||e.tagName.includes('-')||e.hasAttribute('contenteditable')){e.remove();continue;}
-  for(const attr of [...e.attributes])if(['value','placeholder','title','alt','aria-label','style'].includes(attr.name)||attr.name.startsWith('data-')){const value=clean(attr.value);if(value!==attr.value)e.setAttribute(attr.name,value);}
+  if(['SCRIPT','IFRAME','FRAME','OBJECT','EMBED','CANVAS','VIDEO','AUDIO'].includes(e.tagName)||e.tagName==='META'&&e.getAttribute('http-equiv')?.toLowerCase()==='refresh'||e.tagName.includes('-')||e.hasAttribute('contenteditable')){e.remove();continue;}
+  for(const attr of [...e.attributes]){if(attr.name.startsWith('on')){e.removeAttribute(attr.name);continue;}const value=clean(attr.value);if(value!==attr.value){if(['src','srcset','href','action','formaction'].includes(attr.name))e.removeAttribute(attr.name);else e.setAttribute(attr.name,value);}}
  }
  const walker=document.createTreeWalker(document.documentElement,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode())node.textContent=clean(node.textContent||'');
  // Match text across element boundaries before changing individual nodes; keep the page layout.
@@ -28,31 +28,33 @@ function preparePage(){
  }
  controls.forEach((e,index)=>{const f=original[index]!;if(!e.isConnected)return;if(maskBrowserField(f)){if(e instanceof HTMLInputElement&&e.type!=='hidden')e.type='text';if(e instanceof HTMLSelectElement){e.replaceChildren(new Option('••••','••••'));}e.value='••••';e.setAttribute('value','••••');}else{e.value=clean(f.value);e.setAttribute('value',clean(f.value));}});
  const policy=document.createElement('meta');policy.httpEquiv='Content-Security-Policy';policy.content="script-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'";document.head.prepend(policy);
- const style=document.createElement('style');style.textContent='*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';document.head.append(style);
+ const style=document.createElement('style');style.textContent='@layer massion-private-capture{*,*::before,*::after,*::marker{animation:none!important;transition:none!important;caret-color:transparent!important}*::before,*::after,*::marker{content:none!important}}';document.head.prepend(style);
+ for(const e of document.querySelectorAll('*'))for(const pseudo of ['::before','::after','::marker'])if(!['','none','normal'].includes(getComputedStyle(e,pseudo).content))throw Error('Browser generated content could not be suppressed');
  if(clean(document.body.innerText)!==document.body.innerText)throw Error('Browser screenshot redaction incomplete');
  return {address:location.href,title:clean(document.title),blocks:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText||'').trim().slice(0,4000)),fields:original.slice(0,64).map(f=>({...f,label:clean(f.label),value:maskBrowserField(f)?'••••':clean(f.value)}))};
 }
-export async function captureBrowserPage(run:(args:string[])=>Promise<any>,path:string):Promise<RawBrowserPage>{
+export async function captureBrowserPage(run:(args:string[])=>Promise<any>,path:string,assertDocument:(expected?:number)=>Promise<number>):Promise<RawBrowserPage>{
+ const documentId=await assertDocument();
  await run(['set','viewport','584','764']);
  const script=`const browserPrivateRanges=${browserPrivateRanges.toString()};const sensitiveBrowserField=${sensitiveBrowserField.toString()};const maskBrowserField=${maskBrowserField.toString()};const browserText=${browserText.toString()};(${preparePage.toString()})()`;
  const page=(await run(['eval','-b',Buffer.from(script).toString('base64')])).result as RawBrowserPage;
- await run(['screenshot',path]);if((await stat(path)).size>196608)throw Error('Browser screenshot byte bound exceeded');const bytes=await readFile(path);if(bytes.length<24)throw Error('Invalid browser screenshot');
+ await assertDocument(documentId);await run(['screenshot',path]);if((await stat(path)).size>196608)throw Error('Browser screenshot byte bound exceeded');const bytes=await readFile(path);if(bytes.length<24)throw Error('Invalid browser screenshot');
  const screenshot={mimeType:'image/png' as const,data:bytes.toString('base64'),width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};validateBrowserScreenshot(screenshot);return {...page,screenshot};
 }
 /** Hold a CDP session so disabling page scripts survives navigation until browser cleanup. */
-export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,signal?:AbortSignal):Promise<()=>Promise<void>>{
- signal?.throwIfAborted();const {cdpUrl}=await run(['get','cdp-url']);let url:URL;try{url=new URL(cdpUrl);}catch{throw Error('Browser script control unavailable');}
+export async function disableBrowserScripts(run:(args:string[])=>Promise<any>,signal?:AbortSignal):Promise<{assertDocument:(expected?:number)=>Promise<number>;close:()=>Promise<void>}>{
+ signal?.throwIfAborted();await run(['--no-pin-tab','get','url']);const bound=await run(['--pin-tab','get','url']);if(bound.url!=='about:blank')throw Error('Fresh browser page required');const {cdpUrl}=await run(['get','cdp-url']);let url:URL;try{url=new URL(cdpUrl);}catch{throw Error('Browser script control unavailable');}
  if(url.protocol!=='ws:'||url.hostname!=='127.0.0.1'||url.username||url.password||url.search||url.hash||!url.pathname.startsWith('/devtools/browser/'))throw Error('Local browser script control required');
  const socket=new WebSocket(url),deadline=AbortSignal.any([AbortSignal.timeout(5000),...(signal?[signal]:[])]);
  try{await new Promise<void>((resolve,reject)=>{const stop=()=>reject(Error('Browser script control unavailable')),timer=setTimeout(stop,5000);socket.addEventListener('open',()=>{clearTimeout(timer);resolve();},{once:true});socket.addEventListener('error',()=>{clearTimeout(timer);stop();},{once:true});});deadline.throwIfAborted();}catch(error){socket.close();throw error;}
- let sequence=0;
+ let sequence=0,pageSessionId='';
  const call=(method:string,params:object,sessionId?:string)=>new Promise<any>((resolve,reject)=>{
   const id=++sequence,timer=setTimeout(()=>finish(Error('Browser script control timed out')),5000),receive=(event:MessageEvent)=>{let message;try{message=JSON.parse(String(event.data));}catch{return;}if(message.id===id)finish(message.error?Error('Browser script control failed'):null,message.result);},closed=()=>finish(Error('Browser script control closed'));
   const finish=(error:Error|null,result?:unknown)=>{clearTimeout(timer);socket.removeEventListener('message',receive);socket.removeEventListener('close',closed);error?reject(error):resolve(result);};socket.addEventListener('message',receive);socket.addEventListener('close',closed);try{socket.send(JSON.stringify({id,method,params,...(sessionId?{sessionId}:{})}));}catch{closed();}
  });
- try{const {targetInfos}=await call('Target.getTargets',{}),pages=targetInfos.filter((t:any)=>t.type==='page'),blank=pages.filter((t:any)=>t.url==='about:blank');if(blank.length!==1||pages.some((t:any)=>!['about:blank','chrome://newtab/'].includes(t.url)))throw Error('Fresh browser page required');for(const p of pages)if(p.url==='chrome://newtab/')await call('Target.closeTarget',{targetId:p.targetId});const {sessionId}=await call('Target.attachToTarget',{targetId:blank[0].targetId,flatten:true});await call('Emulation.setScriptExecutionDisabled',{value:true},sessionId);signal?.throwIfAborted();}
+ try{const {targetInfos}=await call('Target.getTargets',{}),pages=targetInfos.filter((t:any)=>t.type==='page'),blank=pages.filter((t:any)=>t.url==='about:blank');if(blank.length!==1||pages.some((t:any)=>!['about:blank','chrome://newtab/'].includes(t.url)))throw Error('Fresh browser page required');for(const p of pages)if(p.url==='chrome://newtab/')await call('Target.closeTarget',{targetId:p.targetId});const {sessionId}=await call('Target.attachToTarget',{targetId:blank[0].targetId,flatten:true});pageSessionId=sessionId;await call('Emulation.setScriptExecutionDisabled',{value:true},sessionId);signal?.throwIfAborted();}
  catch(error){try{await call('Browser.close',{});}catch{}socket.close();throw error;}
- return async()=>{if(socket.readyState===WebSocket.OPEN)try{await call('Browser.close',{});}catch{}socket.close();};
+ return {async assertDocument(expected){const current=await run(['get','url']),{root}=await call('DOM.getDocument',{depth:-1,pierce:true},pageSessionId);if(root.documentURL!==current.url||!Number.isSafeInteger(root.backendNodeId)||expected!==undefined&&root.backendNodeId!==expected)throw Error('Browser document changed during capture');const pending=[root];let count=0;while(pending.length){const node=pending.pop();if(++count>50000)throw Error('Browser document bound exceeded');if(node.shadowRoots?.some((r:any)=>r.shadowRootType==='open'||r.shadowRootType==='closed'))throw Error('Author shadow DOM cannot be safely captured');pending.push(...(node.children??[]));}return root.backendNodeId;},async close(){if(socket.readyState===WebSocket.OPEN)try{await call('Browser.close',{});}catch{}socket.close();}};
 }
 export function localBrowserAdapter(env:Record<string,string|undefined>):BrowserAdapter|undefined{
  if(env.MASSION_BROWSER_READS===undefined||env.MASSION_BROWSER_READS==='0')return undefined;
@@ -65,9 +67,9 @@ export function localBrowserAdapter(env:Record<string,string|undefined>):Browser
   await writeFile(config,'{}\n',{mode:0o600});
   const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000'};
   const run=async(args:string[],cancel:AbortSignal|undefined=signal)=>{const {stdout}=await exec('agent-browser',['--config',config,'--session',session,'--headed','false','--hide-scrollbars','false','--allowed-domains',new URL(address).hostname,'--json',...args],{cwd:dir,env:childEnv,timeout:30000,maxBuffer:262144,signal:cancel});const result=JSON.parse(stdout);if(!result.success)throw Error('Browser read failed');return result.data;};
-  let closeControl:undefined|(()=>Promise<void>);
-  try{await run(['open']);closeControl=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,join(dir,'page.png'));}
+  let control:Awaited<ReturnType<typeof disableBrowserScripts>>|undefined;
+  try{await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,join(dir,'page.png'),control.assertDocument);}
   catch{throw Error('Local browser read failed');}
-  finally{try{await run(['close'],AbortSignal.timeout(5000));}catch{}await closeControl?.();await rm(dir,{recursive:true,force:true});}
+  finally{try{await run(['close'],AbortSignal.timeout(5000));}catch{}await control?.close();await rm(dir,{recursive:true,force:true});}
  }};
 }

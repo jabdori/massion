@@ -1,0 +1,9 @@
+{
+  "productionAppFrame": true,
+  "parentRetained": true,
+  "iframeHeight": 617,
+  "nonAllowedHostnameRejected": true,
+  "httpTunnelUpgradeDenied": true,
+  "loopbackBypass": "127.0.0.1",
+  "webrtcPolicy": "disable_non_proxied_udp"
+}

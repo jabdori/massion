@@ -13,6 +13,8 @@
   "hiddenSeparatorReflection": true,
   "spacedReflection": true,
   "cssHiddenReflection": true,
+  "generatedContentSuppressed": true,
+  "closedShadowRefused": true,
   "displayContentsReflection": true,
-  "pngSha256": "6d610a70dcc6e2628fbf2afbd8be325a9c1db895f90b7a13315d34d8746043f3"
+  "pngSha256": "7cc74a5a9ce7a9e3e0f641346b5f4f3fb99565a0558e5380475fcfd5fbf93d17"
 }
