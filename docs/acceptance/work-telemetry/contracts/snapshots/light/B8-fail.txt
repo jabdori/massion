@@ -1,0 +1,209 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e9]
+    - generic
+      - button "내 계정" [expanded=false, ref=e10]
+  - main "퀼 작업 중" [ref=e2]
+    - sectionheader
+      - button "사이드바 보기" [expanded=false, ref=e11]
+      - heading "퀼" [level=1, ref=e12]
+        - button "퀼" [expanded=false, ref=e19]
+        - status
+          - StaticText "작업 중"
+      - button "작업 공간" [ref=e13]
+      - button "더 보기" [expanded=false, ref=e14]
+    - region "대화" [ref=e15]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
+          - button "경쟁사 가격 확인 대기 4분 작성 확인 0/2" [ref=e25]
+            - strong
+              - StaticText "경쟁사 가격"
+            - StaticText "확인 대기"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "0/2"
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실패 14:08 – 14:08 작성 확인 확인 실패 · 근거 1건" [ref=e26]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실패"
+            - StaticText "14:08 – 14:08"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "확인 실패 · 근거 1건"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - StaticText "퀼"
+            - StaticText "14:11"
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e27]
+          - paragraph
+            - StaticText "기업 고객은 따로 봐 줘."
+          - generic
+            - StaticText "퀼"
+            - StaticText "14:11"
+            - paragraph
+              - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
+            - button "복사" [ref=e28]
+          - paragraph
+            - StaticText "앞으로 표 금액은 원 단위로 써 줘."
+          - generic
+            - StaticText "퀼"
+            - StaticText "14:12"
+            - paragraph
+              - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+            - button "복사" [ref=e29]
+          - generic
+            - paragraph
+              - strong
+                - StaticText "이탈 원인 조사"
+              - StaticText "실패"
+            - paragraph
+              - StaticText "확인 실패"
+            - button "다시 시도" [ref=e30]
+            - button "닫기" [ref=e31]
+          - generic
+            - heading "이탈 원인 조사" [level=3, ref=e32]
+            - article
+              - strong
+                - StaticText "나"
+              - time
+                - StaticText "14:08"
+              - paragraph
+                - StaticText "기업 고객은 따로 봐 줘."
+      - generic
+        - form
+          - textbox "퀼에게 메시지 보내기" [ref=e20]
+          - button "파일 추가" [disabled, ref=e21]
+          - button "기본 권한" [ref=e22]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e23]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "이탈 원인 조사" [selected, ref=e16]
+      - button "이탈 원인 조사 닫기" [ref=e17]
+        - StaticText "×"
+    - button "좁히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e18]
+        - generic
+          - article
+            - StaticText "실패"
+            - time
+              - StaticText "14:08 – 14:08"
+            - heading "이탈 원인 조사" [level=3, ref=e24]
+            - StaticText "맡은 사람"
+            - strong
+              - StaticText "퀼"
+            - StaticText "확인한 쪽"
+            - strong
+              - StaticText "gpt-6.1-terra"
+            - StaticText "연결"
+            - strong
+              - StaticText "알 수 없음"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "기준"
+                - StaticText "14:08"
+              - DescriptionList
+                - term "기준 내용"
+                - definition
+                  - StaticText "요청한 결과와 근거 확인"
+                - StaticText "14:08"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "확인"
+                - StaticText "1/1"
+              - DescriptionList
+                - term "요청한 결과와 근거 확인"
+                - definition
+                  - StaticText "확인 실패"
+                - StaticText "아님"
+                - term "확인"
+                - definition
+                  - StaticText "14:08"
+                - term "근거"
+                - definition
+                  - StaticText "해지 사유 7건 누락"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "전송 1회 보장"
+              - DescriptionList
+                - term "작성"
+                - definition
+                  - StaticText "완료"
+                - term "결과물"
+                - definition
+                  - StaticText "완료"
+                - term "확인"
+                - definition
+                  - StaticText "완료"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "기록"
+                - StaticText "없음"
+              - DescriptionList
+                - term "결과물"
+                - definition
+                  - StaticText "아직 없음"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "흐름"
+              - list
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "이탈 원인 조사"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "이탈 원인 조사"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - group
+                    - DisclosureTriangle "이탈 원인 조사" [expanded=false]
+                      - StaticText "이탈 원인 조사"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - group
+                    - DisclosureTriangle "작성" [expanded=false]
+                      - StaticText "작성"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - group
+                    - DisclosureTriangle "확인" [expanded=false]
+                      - StaticText "확인"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "확인 실패"
+                - listitem [level=1]
+                  - time
+                    - StaticText "14:08"
+                  - StaticText "실패"
+            - group
+              - button "확인 실패 근거 1건" [expanded=false, ref=e33]
+                - strong
+                  - StaticText "확인 실패"
+                - StaticText "근거 1건"

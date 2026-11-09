@@ -1,0 +1,1 @@
+{const OriginalDate=Date;globalThis.Date=class extends OriginalDate{constructor(...args){super(...(args.length?args:[1793855520000]))}static now(){return 1793855520000}}}

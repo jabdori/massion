@@ -1,0 +1,220 @@
+[
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "출처 고르기",
+        "가격 모으기",
+        "표 만들기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\n경쟁사 가격\n\n하나가 넘김 · 13:52\n\n퀼\n퀼\n조사\n표 정리\n확인\n절차\n2/3\n출처 고르기\n가격 모으기\n표 만들기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "check": {
+      "passed": 30,
+      "failed": 4,
+      "warnings": 2,
+      "required": 34
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "출처 고르기",
+        "가격 모으기",
+        "표 만들기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\n경쟁사 가격\n\n하나가 넘김 · 13:52\n\n퀼\n퀼\n조사\n표 정리\n확인\n절차\n2/3\n출처 고르기\n가격 모으기\n표 만들기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "check": {
+      "passed": 33,
+      "failed": 36,
+      "warnings": 2,
+      "required": 69
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "출처 확인",
+        "가격 정리",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n14:08 – 14:08\n중지\n경쟁사 가격\n\n하나가 넘김 · 14:08\n\n퀼\n퀼\n조사\n정리\n확인\n절차\n1/2\n출처 확인\n가격 정리\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "check": {
+      "passed": 33,
+      "failed": 36,
+      "warnings": 2,
+      "required": 69
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "출처 확인",
+        "가격 정리",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n14:08 – 14:08\n중지\n경쟁사 가격\n\n하나가 넘김 · 14:08\n\n퀼\n퀼\n조사\n정리\n확인\n절차\n1/2\n출처 확인\n가격 정리\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "check": {
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "읽기",
+        "테스트 돌리기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 14:08\n\n주\n주노\n읽기\n테스트\n확인\n절차\n0/2\n읽기\n테스트 돌리기\n선행 단계 · 읽기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "check": {
+      "passed": 34,
+      "failed": 6,
+      "warnings": 0,
+      "required": 40
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "읽기",
+        "테스트 돌리기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 14:08\n\n주\n주노\n읽기\n테스트\n확인\n절차\n0/2\n읽기\n테스트 돌리기\n선행 단계 · 읽기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "check": {
+      "passed": 42,
+      "failed": 7,
+      "warnings": 0,
+      "required": 49
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "읽기",
+        "테스트 돌리기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 14:08\n\n주\n주노\n읽기\n테스트\n확인\n절차\n0/2\n읽기\n테스트 돌리기\n선행 단계 · 읽기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "check": {
+      "passed": 42,
+      "failed": 7,
+      "warnings": 0,
+      "required": 49
+    },
+    "pane": {
+      "inspectionOpen": false,
+      "legacy": false,
+      "steps": [
+        "읽기",
+        "테스트 돌리기",
+        "확인",
+        "기록"
+      ],
+      "stop": true,
+      "text": "실행 중\n4분\n중지\nPR #84 검토\n\n하나가 넘김 · 14:08\n\n주\n주노\n읽기\n테스트\n확인\n절차\n0/2\n읽기\n테스트 돌리기\n선행 단계 · 읽기\n확인\n0/1\n기록\n확인 대기\n요청한 결과와 근거 확인",
+      "transcript": false
+    },
+    "transcriptInConversation": true,
+    "toggle": true,
+    "mobileOverflow": false,
+    "close": true
+  }
+]

@@ -13,14 +13,14 @@ function fixture(){
   task('survey','produce','settled','Skipped · 기존 설문',{role:'설문',title:'설문 발송',dependsOn:[],skipReason:'기존 설문'}),
   task('summary','produce','queued','',{role:'요약',title:'원인 요약',dependsOn:['group']})];
  const work={id:'w1',title:'Churn causes',missionVersion:1,criteria,execution:'active',acceptance:'pending',assistantSource:{memberId:member.id},tasks,attempts:[{id:'attempt:1',number:1,criteria,status:'active',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0}};
- const state={feed:'feed:a',revision:3,work,members:[member],hold:null as Promise<void>|null,missionStatus:200,deadline:undefined as number|undefined};
+ const state={feed:'feed:a',revision:3,work,members:[member],hold:null as Promise<void>|null,missionStatus:200,conversations:[] as any[],deadline:undefined as number|undefined};
  const list=()=>({missionId:'intake',missionRevision:state.revision,workId:work.id,title:work.title,memberId:work.assistantSource.memberId||null,execution:work.execution,acceptance:work.acceptance,unknown:false,started:true,startedAt:1,endedAt:null,turnId:'assistant-turn:m:a',segment:1});
  const app=harness(async(path)=>{
   if(path.startsWith('/assistant/conversation'))return reply({feedId:state.feed,cursor:1,head:1,members:state.members,runDeadlineAt:state.deadline,decisions:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
   if(path==='/assistant/works')return reply({feedId:state.feed,works:[list()]});
   if(path.startsWith('/events'))return reply({feedId:state.feed,cursor:1,events:[]});
   if(path==='/missions/intake'||path.startsWith('/read-state')){
-   const snapshot=structuredClone({revision:state.revision,value:{id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:[work],memories:[],growth:[],relations:[]}}),feedId=state.feed,hold=state.hold,status=state.missionStatus;
+   const snapshot=structuredClone({revision:state.revision,value:{id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:[work],memories:[],growth:[],relations:[],...(state.conversations.length?{conversations:state.conversations}:{})}}),feedId=state.feed,hold=state.hold,status=state.missionStatus;
    if(hold)await hold;return reply(path.startsWith('/read-state')?{feedId,cursor:1,snapshot}:snapshot,status);
   }
   return reply({error:'Not configured'},503);
@@ -28,7 +28,7 @@ function fixture(){
  const open=async()=>{await settle();await app.all().find(n=>n.id==='side-line-intake/w1')!.fire('click');await settle();};
  const progress=()=>app.all().find(n=>n.className==='room-steps'&&n.attributes.get('aria-label')==='절차');
  const people=()=>app.all().find(n=>n.className==='room-people room-compact');
- const results=()=>app.all().find(n=>n.className==='room-worker-results room-compact');
+ const results=()=>app.all().find(n=>n.className==='room-worker-results');
  return {app,state,open,progress,people,results};
 }
 
@@ -45,10 +45,10 @@ test('only worker steps become role chips after the member and before Check; com
  assert.equal(list.children.flatMap(n=>n.children).filter(n=>n.tagName==='TIME').length,0,'Work start time is not a recorded worker-step time');
  assert.equal(results()!.children.length,1,'only non-skipped worker output is shown');
  const compact=list.parentElement!.parentElement!;
- assert.ok(compact.parentElement!.children.indexOf(compact)<compact.parentElement!.children.indexOf(results()!),'results follow the procedure');
+ assert.ok(app.node('chat-log').contains(results()!),'worker output belongs to the conversation');assert.ok(!app.node('work-list').contains(results()!));
  const flow=app.all().find(n=>n.className==='room-flow')!;
  assert.equal(flow.children.filter(n=>n.textContent.includes('해지 내역 수집')).length,1);
- assert.match(flow.textContent,/해지 내역 수집.*퀼.*조사.*해지 41건/);
+ assert.match(flow.textContent,/해지 내역 수집.*퀼.*조사/);assert.doesNotMatch(flow.textContent,/해지 41건/);
  assert.match(flow.textContent,/설문 발송.*건너뜀 · 기존 설문/);
  assert.match(list.children[2]!.attributes.get('aria-label')!,/건너뜀 · 기존 설문/);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
@@ -83,9 +83,9 @@ test('switching Work tabs never shows another Work\'s cached roles or progress; 
 test('a newer Mission read wins over an older step response',async()=>{
  const {app,state,open,progress,results}=fixture();await open();let release=()=>{};
  state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);
- state.hold=null;state.revision++;state.work.tasks[4]!.status='settled';state.work.tasks[4]!.result='기업 고객 7곳';
+ state.hold=null;state.revision++;state.work.tasks[4]!.status='settled';state.work.tasks[4]!.result='기업 고객 7곳';Object.assign(state.work.tasks[4]!,{endedAt:Date.UTC(2026,10,5,0,7)});
  await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
- assert.ok(progress());assert.match(results()!.textContent,/기업 고객 7곳/);
+ assert.ok(progress());assert.match(results()!.textContent,/기업 고객 7곳/);assert.ok(results()!.textContent.includes(runInContext('chatTime('+Date.UTC(2026,10,5,0,7)+')',app.context)));
 });
 
 test('queued steps name their unfinished worker dependencies and clear them when those workers settle',async()=>{
@@ -111,8 +111,8 @@ for(const deadline of [false,true])test((deadline?'deadline':'minute')+' refresh
  app.context.setTimeout=(run:()=>void,delay:number)=>{timers.set(++next,{run,delay});return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
  if(deadline)state.deadline=Date.now()-1;
  await runInContext('readChat()',app.context);await settle();const timer=timers.get(runInContext('chatPendingTimer',app.context))!;assert.equal(timer.delay,deadline?1000:60000);
- state.revision++;state.work.tasks[4]!.status='settled';state.work.tasks[4]!.result='기업 고객 7곳';timer.run();await settle();
- assert.ok(progress());assert.match(results()!.textContent,/퀼.*분류.*기업 고객 7곳/);
+ state.revision++;state.work.tasks[4]!.status='settled';state.work.tasks[4]!.result='기업 고객 7곳';Object.assign(state.work.tasks[4]!,{endedAt:Date.UTC(2026,10,5,0,7)});timer.run();await settle();
+ assert.ok(progress());assert.match(results()!.textContent,/퀼.*분류.*기업 고객 7곳/);assert.ok(results()!.textContent.includes(runInContext('chatTime('+Date.UTC(2026,10,5,0,7)+')',app.context)));
  assert.equal(runInContext('chatThread',app.context),'member-q');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -123,8 +123,47 @@ test('Q14 room transcript shows inferred author claims and literal quotes withou
 
 test('Q14 transcript uses the latest read and clears on feed replacement and Work selection',async()=>{
  const {app,state,open}=fixture();const room={messages:[{ordinal:2,kind:'challenge',text:'이전 주장',quote:'이전 근거',inferred:true,status:'admitted'}],issue:null};Object.assign(state.work,{room});await open();await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
- let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);state.hold=null;state.revision++;room.messages[0]!.text='최신 주장';await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
- const transcript=()=>app.all().find(n=>n.className==='room-transcript');assert.match(transcript()!.textContent,/최신 주장/);assert.doesNotMatch(transcript()!.textContent,/이전 주장/);
+ let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);state.hold=null;state.revision++;room.messages[0]!.text='최신 주장';Object.assign(room.messages[0]!,{at:Date.UTC(2026,10,5,0,8)});await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
+ const transcript=()=>app.all().find(n=>n.className==='room-transcript');assert.match(transcript()!.textContent,/최신 주장/);assert.doesNotMatch(transcript()!.textContent,/이전 주장/);assert.ok(transcript()!.textContent.includes(runInContext('chatTime('+Date.UTC(2026,10,5,0,8)+')',app.context)));
  runInContext('paneOpen("elsewhere","w2","Other")',app.context);assert.equal(transcript(),undefined);await runInContext('paneSelect("intake/w1")',app.context);await settle();assert.ok(transcript());
  state.feed='feed:b';await runInContext('readChat()',app.context);await settle();assert.equal(transcript(),undefined);
+});
+
+test('recorded worker times reach the procedure, output and Work-bound conversation without borrowing Work time',async()=>{
+ const {app,state,open,progress,results}=fixture();
+ Object.assign(state.work,{admittedAt:Date.UTC(2026,10,5,0,0)});
+ Object.assign(state.work.tasks[3]!,{startedAt:Date.UTC(2026,10,5,0,1),endedAt:Date.UTC(2026,10,5,0,2)});
+ await open();
+ const time=(at:number)=>runInContext('chatTime('+at+')',app.context);
+ assert.equal(progress()!.children[0]!.children.find(n=>n.tagName==='TIME')?.textContent,time(Date.UTC(2026,10,5,0,1))+' – '+time(Date.UTC(2026,10,5,0,2)));
+ assert.equal(progress()!.children[1]!.children.find(n=>n.tagName==='TIME'),undefined);
+ assert.ok(results()!.children[0]!.children[0]!.children.some(n=>n.tagName==='TIME'&&n.textContent===time(Date.UTC(2026,10,5,0,2))));
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ const transcript=app.all().find(n=>n.className==='room-transcript')!;
+ assert.ok(transcript);assert.match(transcript.textContent,/조사.*퀼.*해지 41건/);assert.ok(transcript.children.some(n=>n.textContent.includes(time(Date.UTC(2026,10,5,0,2)))));
+ assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('room turns render their assignment role and recorded time, and owner discussion stays Work-bound',async()=>{
+ const {app,state,open}=fixture(),at=Date.UTC(2026,10,5,0,3);
+ Object.assign(state.work,{room:{messages:[{ordinal:2,assignmentId:'challenger',kind:'challenge',text:'해지 41건 확인',quote:'해지 41건',inferred:true,status:'admitted',at}],issue:null},assignments:[{id:'challenger',taskId:'collect',actorId:'worker',role:'executor'}]});
+ state.conversations=[{workId:'w1',messages:[{id:'m1',text:'이 작업 지시',at}]},{workId:'other',messages:[{id:'m2',text:'다른 작업 지시',at}]}];await open();
+ await app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ const transcript=app.all().find(n=>n.className==='room-transcript')!;
+ const challenge=transcript.children.find(n=>n.tagName==='ARTICLE'&&n.textContent.includes('반박'))!;
+ assert.ok(challenge.children[0]!.children.some(n=>n.textContent==='조사'));
+ assert.equal(challenge.children[0]!.children.find(n=>n.tagName==='TIME')?.textContent,runInContext('chatTime('+at+')',app.context));
+ assert.match(transcript.textContent,/이 작업 지시/);assert.doesNotMatch(transcript.textContent,/다른 작업 지시/);const note=transcript.children.find(n=>n.className==='chat-owner')!;assert.equal(note.children[0]!.children[0]!.textContent,'나');assert.equal(note.children[0]!.children.find(n=>n.tagName==='TIME')?.textContent,runInContext('chatTime('+at+')',app.context));
+ runInContext('paneOpen("elsewhere","w2","Other")',app.context);assert.equal(app.all().find(n=>n.className==='room-transcript'),undefined);await runInContext('paneSelect("intake/w1")',app.context);await settle();assert.ok(app.all().find(n=>n.className==='room-transcript')?.textContent.includes('이 작업 지시'));state.feed='feed:b';await runInContext('readChat()',app.context);await settle();assert.equal(app.all().find(n=>n.className==='room-transcript'),undefined);
+});
+
+test('predicate and check times follow the newest Mission read and disappear on feed replacement',async()=>{
+ const {app,state,open}=fixture(),at=Date.UTC(2026,10,5,0,9),criterion=criteria.description;
+ Object.assign(state.work,{artifact:{id:'a',version:1,sha256:'a'.repeat(64)},verdict:{id:'v',verifierAssignmentId:'check',artifactSha256:'a'.repeat(64),artifactVersion:1,criteriaVersion:1,status:'passed',checkedAt:at,predicates:[{criterion,passed:true,quote:'해지 41건',reason:'이전 판정'}],evidence:[{kind:'fixture',detail:'해지 41건',source:'fixture'}]}});
+ await open();let release=()=>{};state.hold=new Promise<void>(r=>{release=r;});const old=runInContext('loadMission("intake",false)',app.context);state.hold=null;state.revision++;
+ const verdict=(state.work as any).verdict;verdict.checkedAt=at+60000;verdict.predicates[0].reason='최신 판정';
+ await runInContext('loadMission("intake",false)',app.context);release();await old;await settle();
+ const fields=()=>app.all().filter(n=>n.className==='room-fields').map(n=>n.textContent).join('');
+ assert.match(fields(),/최신 판정/);assert.doesNotMatch(fields(),/이전 판정/);assert.ok(fields().includes(runInContext('chatTime('+(at+60000)+')',app.context)));
+ state.feed='feed:b';await runInContext('readChat()',app.context);await settle();assert.equal(fields(),'');
 });

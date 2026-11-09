@@ -25,12 +25,14 @@ the host-validated plan, never from inferred progress strings.
   replay, unknown outcomes, and journal restore; watch the new assertions fail.
 - [x] Extend domain/application, room/conversation validation and backup shapes;
   keep ownerStore, CAS/idempotency and no-resend behavior unchanged.
-- [ ] Render times/predicates and Work-bound messages in B7/B8/B18/B22 using existing
+- [x] Render times/predicates and Work-bound messages in B7/B8/B18/B22 using existing
   copy keys and components. Test feed replacement, timer expiry and late responses.
-- [ ] Regenerate affected fixtures from command producers, run scoped headless
+- [x] Regenerate affected fixtures from command producers, run scoped headless
   flows and remove only allow-list entries demonstrated resolved by the gate.
-- [ ] Run typecheck and related tests; commit/push one PR, then CI/Codex review
-  loop (at most four rounds). No merge or real providers/payments.
+- [x] Run typecheck and related tests.
+
+Publish one PR and run the CI/Codex review loop (at most four rounds). No merge
+or real providers/payments. Head-specific receipts remain on the PR.
 
 ## Limits
 
@@ -53,3 +55,10 @@ time. Existing expiry admission clocks retain their exact validation context.
 Accepted verdicts and room transcripts retain original timestamps after replay;
 legacy journals without the telemetry version produce no new fields. Room drain
 leaves the interrupted step unfinished and never records a late message/check.
+
+Final integrated local batch: 216 tests, 205 passed, 11 environment-gated skips,
+zero failures; typecheck passed. Twelve affected screens in both themes were
+recaptured after the final UI changes. The scoped diagnostic gate reports zero
+new, stale or infrastructure diagnostics after removing 94 resolved occurrences
+and remapping 30 existing residuals. Eight room interaction flows passed.
+[Screen evidence and remaining limitations](../acceptance/work-telemetry/README.md).

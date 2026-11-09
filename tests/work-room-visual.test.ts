@@ -17,7 +17,7 @@ async function scene(screen:string,rejectStatus=405){
  const work=(fixture.routes['/missions/intake']!.body as any).value.works[0],turn=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id);
  await runInContext('shellOpenWork('+JSON.stringify(turn.turnId)+')',app.context);await settle();
  const card=()=>app.all().find(n=>n.id==='work-card-'+work.id)!,nodes=()=>descendants(card());
- return {app,work,posted,card,nodes};
+ return {app,work,posted,card,nodes,fixture};
 }
 
 for(const [screen,status] of [['B7','확인 대기'],['B7-done','확인 완료'],['B7-fail','확인 실패'],['B7-unknown','확인 안 함']] as const)test(screen+' has a status/detail check bar and no unsolicited budget line',async()=>{
@@ -108,7 +108,7 @@ test('conversation and procedure counts use the same child tasks and failed chec
 });
 
 test('legacy procedures list exactly the child tasks counted by their progress',async()=>{
- const {nodes,work}=await scene('B7-churn'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
+ const {nodes,work}=await scene('B7'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
  assert.equal(steps.children.length,work.tasks.filter((task:any)=>task.parentId!==null).length);
  assert.ok(!steps.children.some(n=>n.children[1]?.textContent===work.title));
 });
@@ -141,4 +141,17 @@ test('both room fixtures retain current sibling Work with matching Mission snaps
   assert.deepEqual(rows.filter((w:any)=>w.memberId==='member-quill').map((w:any)=>[w.title,w.execution]),[['이탈 원인 조사','active'],['경쟁사 가격','active']]);
   for(const row of rows){const work=mission.works.find((w:any)=>w.id===row.workId);assert.ok(work);assert.equal(row.execution,work.execution);}
  }
+});
+
+test('bound check predicates and admission, check and steering times render literally; stale verdicts hide their telemetry',async()=>{
+ const {app,nodes,work,fixture}=await scene('B8-fail'),at=Date.UTC(2026,10,5,0,1),quote=Object.values(fixture.routes).map(route=>route.body as any).find(body=>body?.artifact?.sha256===work.artifact.sha256&&typeof body.content==='string').content.trim();
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.admittedAt=${at};w.instructions=[{text:'지시',at:${at+60000}}];w.verdict.checkedAt=${at+120000};w.criteria.description='원문 <img src=x>';w.verdict.predicates=[{criterion:'원문 <img src=x>',passed:true,quote:${JSON.stringify(quote)},reason:'일치 <b>그대로</b>'},{criterion:'원문 <img src=x>',passed:false,quote:${JSON.stringify(quote)},reason:'누락'}];w.verdict.evidence.push({kind:'provider-review',detail:JSON.stringify({checks:w.verdict.predicates}),source:'fixture'});renderMission()}`,app.context);
+ const text=()=>nodes().find(n=>hasClass(n,'room-detail'))!.textContent;
+ assert.match(text(),/원문 <img src=x>[\s\S]*맞음[\s\S]*일치 <b>그대로<\/b>/);assert.match(text(),/원문 <img src=x>[\s\S]*아님[\s\S]*누락/);
+ const time=(stamp:number)=>runInContext('chatTime('+stamp+')',app.context);
+ assert.ok(text().includes(time(at)));assert.ok(text().includes(time(at+120000)));
+ assert.ok(nodes().find(n=>hasClass(n,'room-flow'))!.children.some(n=>n.children[0]?.textContent===time(at+60000)));
+ assert.equal(nodes().filter(n=>n.tagName==='IMG').length,0);assert.doesNotMatch(text(),/"checks"/);assert.ok(text().includes(work.verdict.evidence[0].detail));
+ runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='old';renderMission()`,app.context);
+ assert.doesNotMatch(text(),/일치 <b>|아님누락/);
 });

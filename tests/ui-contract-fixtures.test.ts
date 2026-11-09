@@ -261,3 +261,17 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
   }
  }
 });
+
+test('R-A fixtures come from timed command producers and retain named worker dependencies and skips',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown']){
+  const fixture=await loadFixture(screen),work=(fixture.routes['/missions/intake']!.body as any).value.works[0];
+  assert.ok(Number.isSafeInteger(work.admittedAt),screen+' admission observation');
+  if(work.verdict)assert.ok(Number.isSafeInteger(work.verdict.checkedAt),screen+' check observation');
+  if(screen==='B7-churn'){
+   const steps=work.tasks.filter((t:any)=>t.step);assert.equal(steps.length,4);assert.ok(steps[1].step.dependsOn.includes(steps[0].id));
+   assert.ok(Number.isSafeInteger(steps[0].startedAt));assert.ok(steps[0].endedAt>=steps[0].startedAt);
+   assert.equal(steps[2].startedAt,undefined);assert.ok(Number.isSafeInteger(steps[2].endedAt));
+  }
+ }
+});

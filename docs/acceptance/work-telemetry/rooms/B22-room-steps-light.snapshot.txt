@@ -1,0 +1,166 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e9]
+    - generic
+      - button "내 계정" [expanded=false, ref=e10]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기" [checked=false, ref=e11]
+      - button "검색" [expanded=false, ref=e12]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e24]
+            - StaticText "하나"
+          - list "하나의 작업"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e25]
+            - StaticText "퀼"
+            - status "작업 중"
+          - list "퀼의 작업"
+            - listitem [level=2]
+              - button "이탈 원인 조사" [ref=e33]
+                - StaticText "이탈 원인 조사"
+                - status
+                  - StaticText "실행 중"
+            - listitem [level=2]
+              - button "경쟁사 가격" [ref=e34]
+                - StaticText "경쟁사 가격"
+                - status
+                  - StaticText "실행 중"
+        - listitem [level=1]
+          - button "주노" [ref=e26]
+            - StaticText "주노"
+            - status "작업 중"
+          - list "주노의 작업"
+            - listitem [level=2]
+              - button "PR #84 검토" [ref=e35]
+                - StaticText "PR #84 검토"
+                - status
+                  - StaticText "실행 중"
+  - main "주노 작업 중" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e13]
+      - heading "주노" [level=1, ref=e14]
+        - button "주노" [expanded=false, ref=e23]
+        - status
+          - StaticText "작업 중"
+      - button "작업 공간" [ref=e15]
+      - button "더 보기" [expanded=false, ref=e16]
+    - region "대화" [ref=e17]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "PR #84 검토해 줘."
+          - paragraph
+            - StaticText "하나가 넘김: PR #84 검토 · 14:08"
+          - button "PR #84 검토 실행 중 4분 작성 확인 1/5" [ref=e36]
+            - strong
+              - StaticText "PR #84 검토"
+            - StaticText "실행 중"
+            - StaticText "4분"
+            - StaticText "작성"
+            - StaticText "확인"
+            - StaticText "1/5"
+          - generic
+            - StaticText "주노"
+            - StaticText "14:08"
+            - paragraph
+              - StaticText "테스트부터 확인할게요."
+            - button "복사" [ref=e37]
+          - generic
+            - heading "PR #84 검토" [level=3, ref=e38]
+            - article
+              - strong
+                - StaticText "주노"
+              - StaticText "제안"
+              - StaticText "추론"
+              - time
+                - StaticText "14:10"
+              - paragraph
+                - StaticText "테스트 1개 통과"
+            - article
+              - strong
+                - StaticText "주노"
+              - StaticText "반박"
+              - StaticText "추론"
+              - time
+                - StaticText "14:11"
+              - paragraph
+                - StaticText "변경 파일 테스트 누락"
+              - blockquote
+                - StaticText "테스트 1개 통과"
+            - article
+              - strong
+                - StaticText "주노"
+              - StaticText "인정"
+              - StaticText "추론"
+              - time
+                - StaticText "14:11"
+              - paragraph
+                - StaticText "변경 파일 테스트 미확인"
+            - paragraph
+              - StaticText "확인에 전달"
+      - generic
+        - form
+          - textbox "주노에게 메시지 보내기" [ref=e27]
+          - button "파일 추가" [disabled, ref=e28]
+          - button "기본 권한" [ref=e29]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e30]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "PR #84 검토" [selected, ref=e18]
+      - button "PR #84 검토 닫기" [ref=e19]
+        - StaticText "×"
+      - tab "PR #84" [ref=e20]
+      - button "PR #84 닫기" [ref=e21]
+        - StaticText "×"
+    - button "넓히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e22]
+        - generic
+          - article
+            - StaticText "실행 중"
+            - time
+              - StaticText "4분"
+            - button "중지" [ref=e31]
+            - heading "PR #84 검토" [level=3, ref=e32]
+            - paragraph
+              - StaticText "하나가 넘김 · 14:08"
+            - list
+              - listitem "주노" [level=1, ref=e39]
+                - StaticText "주노"
+              - listitem "읽기" [level=1, ref=e40]
+              - listitem "테스트" [level=1, ref=e41]
+              - listitem "확인" [level=1, ref=e42]
+                - StaticText "확인"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "절차"
+                - StaticText "0/2"
+              - list "절차"
+                - listitem "읽기 · 주노 · 읽기 · 실행 중" [level=1, ref=e44]
+                  - StaticText "읽기"
+                - listitem "테스트 돌리기 · 주노 · 테스트 · 대기 중" [level=1, ref=e45]
+                  - StaticText "테스트 돌리기"
+                  - StaticText "선행 단계 · 읽기"
+                - listitem [level=1]
+                  - StaticText "확인"
+                  - StaticText "0/1"
+                - listitem [level=1]
+                  - StaticText "기록"
+            - group
+              - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e43]
+                - strong
+                  - StaticText "확인 대기"
+                - StaticText "요청한 결과와 근거 확인"
