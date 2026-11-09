@@ -196,5 +196,30 @@
       "typecheck": "passed"
     },
     "nextIntegratedMain": "08b5f23"
+  },
+  "selfDrivenLoop2": {
+    "head": "f0d5ea1ab3ee1ca24454e3a2e76d95b8502e659b",
+    "codeReviewReceipt": "https://github.com/jabdori/massion/pull/117#issuecomment-6748248315",
+    "codeReview": "no major issues",
+    "screens": "150 rows passed",
+    "desktop": "headless and mac-dev-package passed",
+    "install": "passed",
+    "ciFailures": [
+      "runtime-lifetime final acceptance fixture reached the 500ms deadline before its target boundary under full-suite load",
+      "E2E snapshot raced iframe initialization on the first attempt and owner chat rendering on the second"
+    ],
+    "fixes": [
+      "advance mocked Date only after the exact acceptance boundary; retain both rejection and committed-Record assertions",
+      "wait for iframe post-script resize before snapshot and for the drain owner message before capture"
+    ],
+    "relatedTests": {
+      "tests": 40,
+      "passed": 31,
+      "skipped": 9,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "e2eSyntax": "passed",
+    "newProductionChanges": false
   }
 }

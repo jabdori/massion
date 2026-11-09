@@ -136,8 +136,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
    const count=(await calls()).filter(c=>c.kind==='mcp-write').length;assert.equal(count,1);
    await assert.rejects(control({type:'call-mcp',commandId:'assistant-app-e9a2-next',scenario:'next'}),/Unresolved/);assert.equal((await calls()).filter(c=>c.kind==='mcp-write').length,count);
    await browser('reload');await wait("!!document.getElementById('rail-app-app-fixture-mcp')");await browser('click','#rail-app-app-fixture-mcp');await wait("!!document.getElementById('app-reconcile-evidence-assistant-app-e9a2-timeout')");
-   await capture('mcp-unknown',[/다시 보내지/,/comment/]);
    await wait("document.querySelector('#app-view iframe')?.style.height==='617px'");
+   await capture('mcp-unknown',[/다시 보내지/,/comment/]);
    const frame=await browser('eval',"(()=>{const f=document.querySelector('#app-view iframe');let blocked=false;try{void f.contentWindow.document.body;}catch{blocked=true;}return {sandbox:f.getAttribute('sandbox'),parentBlocked:blocked,escaped:!!document.body.dataset.appEscaped,src:f.src};})()");
    assert.equal(frame.result.sandbox,'allow-scripts');assert.equal(frame.result.parentBlocked,true);assert.equal(frame.result.escaped,false);assert.match(frame.result.src,/^http:\/\/127\.0\.0\.1:/);
    await capture('mcp-isolated-script',[/격리된 앱 · 실행됨/]);
@@ -153,7 +153,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   await journey('unknown outcome and drain mid-Work survive restart without resend',async()=>{
    await open();await say('unknown');await until(async()=>(await current()).value.works.find(w=>w.title==='unknown')?.effects.some(e=>e.status==='unknown'));
    await wait("[...document.querySelectorAll('.chat-exception')].some(node=>node.textContent.includes('unknown'))");await capture('unknown',[/unknown/]);const unknown=structuredClone((await current()).value.works.find(w=>w.title==='unknown'));assert.equal(unknown.record,undefined);
-   await say('drain');await until(async()=>(await calls()).some(c=>c.title==='drain'&&c.kind==='produce'));await capture('before-drain',[/drain/]);await stop();
+   await say('drain');await until(async()=>(await calls()).some(c=>c.title==='drain'&&c.kind==='produce'));await wait("document.getElementById('chat-log').textContent.includes('drain')");await capture('before-drain',[/drain/]);await stop();
    const before=await f.store.exportJournal(),count=(await calls()).length,drained=(await current()).value.works.find(w=>w.title==='drain');assert.ok(drained.effects.some(e=>e.status==='unknown'));assert.equal(drained.record,undefined);
    await start();await open();await wait("!!document.querySelector('.chat-exception')");await capture('restarted',[/unknown/,/drain/]);assert.deepEqual(await f.store.exportJournal(),before);assert.deepEqual((await current()).value.works.find(w=>w.id===unknown.id),unknown);assert.equal((await calls()).length,count);await stop();
   });
