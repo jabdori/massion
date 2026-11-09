@@ -43,3 +43,9 @@ test('an older action response cannot clear a later generation receipt or alter 
 });
 
 test('a greeting without a turn never prevents a later memory candidate from rendering',async()=>{const f=fixture();await f.open();assert.equal(runInContext('chatMemoryCard(undefined)',f.app.context),null);assert.ok(find(f.app,copy('conversation.button.05')));});
+
+test('an explicit stale-review rejection unlocks a new review without resending the old choice',async()=>{
+ const f=fixture();await f.open();f.state.post=async()=>{f.state.revision++;f.state.candidate.missionRevision++;return reply({error:'Memory candidate review changed',outcome:'rejected',phase:'admission',feedId:f.state.feed},409);};
+ await find(f.app,copy('conversation.button.05'))!.fire('click');await settle();assert.equal(f.state.posts.length,1);assert.ok(find(f.app,copy('conversation.button.05')));assert.equal([...f.app.storage.keys()].filter(k=>k.startsWith('massion.workbench.memory-candidate:')).length,0);
+ f.state.post=undefined;await find(f.app,copy('conversation.button.05'))!.fire('click');await settle();assert.equal(f.state.posts.length,2);assert.equal(f.state.posts[1].expectedRevision,f.state.revision);assert.equal(f.state.posts[1].missionRevision,f.state.candidate.missionRevision);
+});

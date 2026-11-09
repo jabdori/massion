@@ -11,7 +11,7 @@ No provider, payment, credential, network effect or automatic memory adoption is
 ## Verification
 
 - `npm run typecheck`; approved-copy lint: zero findings.
-- Final changed-path tests: 70 passed, zero failed or skipped.
+- Final changed-path tests: 72 passed, zero failed or skipped.
 - Related new/changed tests cover all four recurring bug classes: overlapping commands, drain during writes, stale feed/selection/deadline and late responses. Portable-backup roundtrip retains candidate decisions, names and source pins.
 - Existing assistant, member Work, protocol, explicit-memory, Growth and effect suites: 164 passed, 8 actual-DB cases skipped.
 - Browser contract captures: B2, B2-offline, B2-offline-failed, B9, B9-restart, B9-update, B12, B16, B16-later, B16-sent, B7-done, B7-unknown, B7-fail, B6, B7-churn, B18 and B18-room-b in both themes. These are affected-screen captures, not an all-screen local gate claim.
@@ -36,3 +36,7 @@ B6 still lacks the recorded research/team and enterprise-steering detail from it
 B16-sent now has a real rounding-rule activity row. Reading that row clears its own unread marker; the remaining PR unread marker follows the sent link, while the contract expects an unread marker before it. Retain the existing order diagnostic rather than reorder unrelated activities. The missing-producer gap and missing rule-row diagnostic are removed.
 
 Other unsupported business summaries, unrecorded step times, layout drift and unavailable integrations retain their existing exceptions. Full repository checks and all screen contracts run in CI; actual DB/provider/deployment validation is not claimed here.
+
+## Review fixes
+
+The first CI pass exposed a source-link test that asserted before native hashing completed. It now waits for the actual digest promises; no fixed sleep or implementation change was needed. Codex then identified a pre-intent stale-review HTTP rejection classified as unknown delivery. The route now labels only definite validation/admission failures as rejected, allowing a refreshed owner decision. HTTP and client regressions retain the unknown-intent/save no-resend locks.

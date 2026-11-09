@@ -1,3 +1,4 @@
+import {once} from 'node:events';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AssistantService,parseAssistantTurn} from '../src/assistant-service.ts';
@@ -94,4 +95,16 @@ test('portable backup roundtrip preserves candidate decisions, names and exact s
  await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2,head:0,operations:[]}),restoreJournal:async j=>{validateMissionJournalLineage(j.operations);for(const op of j.operations)await restored.commit({id:op.aggregateId,expectedRevision:op.expectedRevision,commandId:op.commandId,fingerprint:op.fingerprint,value:op.value,events:op.events,outbox:op.outbox});imported=true;return {status:'restored',head:j.head,checksum:''};}},join(root,'restored'));
  assert.equal(imported,true);assert.deepEqual(parsed.journal.operations,journal.operations);assert.deepEqual(await restored.load('intake'),await f.store.load('intake'));assert.deepEqual(await restored.load(segmentId(1,'member:quill')),await f.store.load(segmentId(1,'member:quill')));validateMissionJournalLineage(restored.inspect());
  const restoredChat=new AssistantService(restored,new ProductService(restored),undefined,{member,clock:()=>f.start});const view:any=await restoredChat.read();assert.equal(view.turns[0].memoryCandidate.status,'saved');assert.deepEqual(view.turns[0].memoryCandidate.sourceWork,(await f.mission()).memories[0]!.sourceWork);
+});
+
+test('HTTP rejects stale memory review before intent and lets the owner review again',async t=>{
+ const {createWorkbench}=await import('../src/server.ts'),{applyMembers,MEMBERS_ID}=await import('../src/members.ts');
+ const f=await setup();await f.send();const choice=await f.choice();
+ const roster=applyMembers(null,{type:'propose-member',decisionId:'fixture-member',topic:'Memory fixture',works:[{title:'Fixture source'}],count:2},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{observedAt:Date.now()});
+ const admitted=applyMembers(roster.value,{type:'admit-member',decisionId:'fixture-member',memberId:member.id,name:member.name,shape:'square'},owner,{observedAt:Date.now()});await f.store.commit({id:MEMBERS_ID,commandId:'fixture-members',fingerprint:hash(admitted.value),expectedRevision:0,...admitted,outbox:[]});
+ await f.product.admit('intake',{commandId:'concurrent-owner',expectedRevision:choice.missionRevision,workId:'concurrent',title:'Owner update',budget:0});
+ const server=createWorkbench(f.store,process.cwd(),{scheduleIntervalMs:0});t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
+ const post=(decision:any)=>fetch('http://127.0.0.1:'+address.port+'/assistant/memory-candidates',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':choice.feedId},body:JSON.stringify({member:member.id,...decision})});
+ const rejected=await post(choice),body=await rejected.json();assert.equal(rejected.status,409);assert.equal(body.outcome,'rejected');assert.equal(body.phase,'admission');assert.equal(body.feedId,choice.feedId);assert.equal((await f.mission()).memories.length,0);assert.equal((await f.chat.read() as any).turns[0].memoryCandidate.status,'proposed');
+ const saved=await post(await f.choice());assert.equal(saved.status,200);assert.equal((await saved.json()).status,'saved');assert.equal((await f.mission()).memories.length,1);
 });
