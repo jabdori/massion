@@ -8,31 +8,11 @@
       "screen": "B2",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b2-dark"
-    },
-    {
-      "screen": "B2",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
       "occurrence": 1,
       "category": "unsupported product capability",
       "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
       "ledger": "docs/acceptance/e3b/after-failures.md#b2-dark"
-    },
-    {
-      "screen": "B2",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The check-rule case-detail view is not implemented; no policy approval is simulated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The check-rule case-detail view is not implemented; no policy approval is simulated.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
     },
     {
       "screen": "B3-run",
@@ -93,36 +73,6 @@
       "category": "dependency",
       "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
       "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B6-token",
@@ -223,26 +173,6 @@
       "category": "business-procedure",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "memory-candidate",
-      "reason": "A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "memory-candidate",
-      "reason": "A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
     },
     {
       "screen": "B7-churn",
@@ -418,16 +348,6 @@
       "screen": "B7-done",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "rule-change-case",
-      "reason": "The conversation decision router has member/app/skill producers, not the illustrated rounding-rule-change case with old/new case counts and its original decision identity. Generic Growth or member decisions are not that case.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
       "occurrence": 1,
       "category": "business-activity",
@@ -508,16 +428,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -573,26 +483,6 @@
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-dark"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-dark"
     },
     {
       "screen": "B7-fail",
@@ -888,16 +778,6 @@
       "screen": "B7-unknown",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "rule-change-case",
-      "reason": "The conversation decision router has member/app/skill producers, not the illustrated rounding-rule-change case with old/new case counts and its original decision identity. Generic Growth or member decisions are not that case.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -1158,40 +1038,10 @@
       "screen": "B9",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -1208,40 +1058,10 @@
       "screen": "B9-restart",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -1278,40 +1098,10 @@
       "screen": "B9-update",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -1393,46 +1183,6 @@
       "category": "capability",
       "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
       "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page text \"반올림 규칙\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page link \"주문 할인 합계 계산\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page switch \"반올림 규칙 쓰기\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing page text \"반올림 규칙\"",
-      "occurrence": 2,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B13",
@@ -2015,36 +1765,6 @@
       "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-dark"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-dark"
-    },
-    {
       "screen": "B17",
       "theme": "dark",
       "kind": "contract",
@@ -2145,36 +1865,6 @@
       "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
     },
     {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
-    },
-    {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
-    },
-    {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B18-room-b",
       "theme": "dark",
       "kind": "contract",
@@ -2202,26 +1892,6 @@
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "memory-candidate-R-D",
-      "reason": "The owner assigned the B18 memory-candidate row and keep/discard controls to R-D; this telemetry correction does not fabricate a memory proposal.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "memory-candidate-R-D",
-      "reason": "The owner assigned the B18 memory-candidate row and keep/discard controls to R-D; this telemetry correction does not fabricate a memory proposal.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -2748,31 +2418,11 @@
       "screen": "B2",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "A check-rule-change case inspector and its decision-to-case identity are not produced by /assistant/conversation. Generic Growth scores exist, but are not this rule-change case view.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b2-light"
-    },
-    {
-      "screen": "B2",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
       "occurrence": 1,
       "category": "unsupported product capability",
       "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
       "ledger": "docs/acceptance/e3b/after-failures.md#b2-light"
-    },
-    {
-      "screen": "B2",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The check-rule case-detail view is not implemented; no policy approval is simulated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The check-rule case-detail view is not implemented; no policy approval is simulated.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
     },
     {
       "screen": "B3-run",
@@ -2833,36 +2483,6 @@
       "category": "dependency",
       "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
       "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Named research/team steps, enterprise-steering continuation and memory-candidate save/discard have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B6-token",
@@ -2963,26 +2583,6 @@
       "category": "business-procedure",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "memory-candidate",
-      "reason": "A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "memory-candidate",
-      "reason": "A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
     },
     {
       "screen": "B7-churn",
@@ -3158,16 +2758,6 @@
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "rule-change-case",
-      "reason": "The conversation decision router has member/app/skill producers, not the illustrated rounding-rule-change case with old/new case counts and its original decision identity. Generic Growth or member decisions are not that case.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
       "occurrence": 1,
       "category": "business-activity",
@@ -3248,16 +2838,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -3313,26 +2893,6 @@
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-light"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed memory-candidate proposal/save/discard producer exists in the member conversation.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-light"
     },
     {
       "screen": "B7-fail",
@@ -3628,16 +3188,6 @@
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "rule-change-case",
-      "reason": "The conversation decision router has member/app/skill producers, not the illustrated rounding-rule-change case with old/new case counts and its original decision identity. Generic Growth or member decisions are not that case.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -3898,40 +3448,10 @@
       "screen": "B9",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -3948,40 +3468,10 @@
       "screen": "B9-restart",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -4018,40 +3508,10 @@
       "screen": "B9-update",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
       "occurrence": 1,
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"사례 보기\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region conversation link \"반올림 규칙\" (found in sidebar)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "No identity-bound rounding decision, cases or adopted-memory result producer in the conversation response.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -4133,46 +3593,6 @@
       "category": "capability",
       "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
       "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page text \"반올림 규칙\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page link \"주문 할인 합계 계산\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page switch \"반올림 규칙 쓰기\"",
-      "occurrence": 1,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B12",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing page text \"반올림 규칙\"",
-      "occurrence": 2,
-      "category": "Memory names and source identity",
-      "reason": "Memory has content and a plain source string, not a separate display name or exact source Work identity. The instruction is not replaced with its ID-derived label.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B13",
@@ -4755,36 +4175,6 @@
       "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-light"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-light"
-    },
-    {
       "screen": "B17",
       "theme": "light",
       "kind": "contract",
@@ -4885,36 +4275,6 @@
       "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
     },
     {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The member-turn response schema emits reply/work/steer, not an identity-bound memory candidate. Existing explicit memory/Growth commands do not produce the candidate ID/version behind these save/discard buttons. No candidate is inferred from reply text.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Owner memory-candidate proposals with save/discard actions are not implemented; the normal acknowledgement is shown without fabricating a proposal.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B18-room-b",
       "theme": "light",
       "kind": "contract",
@@ -4942,26 +4302,6 @@
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"남기기\"",
-      "occurrence": 1,
-      "category": "memory-candidate-R-D",
-      "reason": "The owner assigned the B18 memory-candidate row and keep/discard controls to R-D; this telemetry correction does not fabricate a memory proposal.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"지우기\"",
-      "occurrence": 1,
-      "category": "memory-candidate-R-D",
-      "reason": "The owner assigned the B18 memory-candidate row and keep/discard controls to R-D; this telemetry correction does not fabricate a memory proposal.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -6105,44 +5445,14 @@
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
       "screen": "B16-sent",
       "theme": "dark",
       "kind": "contract",
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+      "reason": "The rule proposal now has a real activity row. Reading it clears that row unread marker; the remaining PR unread marker follows the sent link, while the contract expects one before it. Unrelated activity order is preserved.",
+      "ledger": "docs/acceptance/r-d/README.md#remaining-sent-row-chronology"
     },
     {
       "screen": "B4",
@@ -6195,44 +5505,34 @@
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
       "screen": "B16-sent",
       "theme": "light",
       "kind": "contract",
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+      "reason": "The rule proposal now has a real activity row. Reading it clears that row unread marker; the remaining PR unread marker follows the sent link, while the contract expects one before it. Unrelated activity order is preserved.",
+      "ledger": "docs/acceptance/r-d/README.md#remaining-sent-row-chronology"
     },
     {
-      "screen": "B16-sent",
-      "theme": "light",
+      "screen": "B6",
+      "theme": "dark",
       "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
+      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
+      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
     },
     {
       "screen": "B7",

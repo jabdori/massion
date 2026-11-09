@@ -1,0 +1,69 @@
+import {once} from 'node:events';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {RuleChangesService,withRuleBriefings} from '../src/rule-changes.ts';
+import {proposalFixture} from './support/growth-proposal-fixture.ts';
+import {ProductService} from '../src/product.ts';
+import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
+import {HostDrainError} from '../src/runtime-lifetime.ts';
+
+test('evaluated exact rounding evidence produces an owner decision; later/ask never adopt and act is replayed',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);const revision=(await f.store.load('mission'))!.revision;
+ await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:revision});
+ const service=new RuleChangesService(f.store,()=> 'mission'),cards=await service.decisions();assert.equal(cards.length,1);const card=cards[0]!;
+ assert.equal(card.state,'open');assert.deepEqual(card.rows.map(r=>r[0]),['지금','변경 후','주의']);assert.match(card.rows[0]![1],/TOTAL 4 cents/);assert.match(card.rows[1]![1],/3 cents/);assert.equal(card.ruleChange.growthId,'new-growth');assert.equal(card.ruleChange.cases.orders.length,2);
+ const before=(await f.store.load('mission'))!;assert.equal(before.value.memories.find(m=>m.version===2)!.effective,false);
+ const later={commandId:'rule-later',decisionId:card.id,answer:'later'};assert.equal((await service.decide(later)).status,'committed');assert.equal((await service.decisions())[0]!.state,'later');assert.doesNotMatch((await service.decisions())[0]!.line,/바꿈/);
+ await service.decide({commandId:'rule-ask',decisionId:card.id,answer:'ask'});const act={commandId:'rule-act',decisionId:card.id,answer:'act'};
+ const answers=await Promise.all([service.decide(act),service.decide(act)]);assert.ok(answers.every(r=>['committed','replayed'].includes(r.status)));
+ const after=(await f.store.load('mission'))!;assert.equal(after.revision,before.revision+3);assert.equal(after.value.memories.find(m=>m.version===2)!.effective,true);assert.deepEqual(after.value.works,before.value.works);
+ assert.equal((await service.decisions())[0]!.state,'done');assert.equal((await service.decide(act)).status,'replayed');validateMissionJournalLineage(await f.journal());
+});
+
+test('rule owner decisions retain drain fencing and refuse stale baseline/card identity',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});
+ const service=new RuleChangesService(f.store,()=> 'mission'),card=(await service.decisions())[0]!,before=(await f.store.load('mission'))!;
+ let draining=false;const owner=new Proxy(f.store,{get(target,key){if(key==='commit')return (input:any)=>{if(draining)throw new HostDrainError();return target.commit(input);};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
+ const guarded=new RuleChangesService(owner,()=> 'mission');draining=true;await assert.rejects(guarded.decide({commandId:'drained',decisionId:card.id,answer:'act'}),HostDrainError);assert.deepEqual(await f.store.load('mission'),before);
+ await new ProductService(f.store).saveMemory('mission',{commandId:'newer-rule',expectedRevision:before.revision,memory:{id:'rounding',version:3,content:'Round each line',source:'Owner replacement'}});
+ await assert.rejects(service.decide({commandId:'stale',decisionId:card.id,answer:'act'}),/baseline|binding|current/i);
+ await assert.rejects(service.decide({commandId:'wrong',decisionId:card.id+'x',answer:'later'}),/Unknown|identity/i);
+});
+
+test('owner proposal producers retain names and exact source Work metadata without guessing from source text',async t=>{
+ const f=await proposalFixture(t),current=(await f.store.load('mission'))!,work=current.value.works[0]!;
+ const {memoryWorkSource}=await import('../src/memory-candidates.ts'),sourceWork=memoryWorkSource(current.value,work);
+ await f.product.saveMemory('mission',{commandId:'named-memory',expectedRevision:current.revision,memory:{id:'named',version:1,name:'Named instruction',content:'Owner instruction',source:'Literal owner provenance',sourceWork}});
+ const after=(await f.store.load('mission'))!;assert.deepEqual(after.value.memories.at(-1)!.sourceWork,sourceWork);assert.equal(after.value.memories.at(-1)!.name,'Named instruction');
+ await f.product.proposeGrowth('mission',{...f.proposal,expectedRevision:after.revision,candidate:{...f.proposal.candidate,name:'Rounding policy',sourceWork}});const m=(await f.store.load('mission'))!.value.memories.at(-1)!;assert.deepEqual(m.sourceWork,sourceWork);assert.equal(m.name,'Rounding policy');validateMissionJournalLineage(await f.journal());
+});
+
+test('HTTP rule refusal before commit is explicit and does not prevent later deferral',async t=>{
+ const {createWorkbench}=await import('../src/server.ts');const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const card=(await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!,read=await f.store.readState();
+ await f.product.saveMemory('mission',{commandId:'new-baseline',expectedRevision:(await f.store.load('mission'))!.revision,memory:{id:'rounding',version:3,content:'Round each line',source:'Owner replacement'}});
+ const connections={list:()=>({representative:{intakeMissionId:'mission'}})} as any,server=createWorkbench(f.store,f.root,{connections,scheduleIntervalMs:0});t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
+ const post=(answer:string)=>fetch('http://127.0.0.1:'+address.port+'/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':read.feedId},body:JSON.stringify({commandId:'http-rule-'+answer,decisionId:card.id,answer})});
+ const before=(await f.store.load('mission'))!,rejected=await post('act'),body=await rejected.json();assert.equal(rejected.status,400);assert.equal(body.outcome,'rejected');assert.equal(body.phase,'admission');assert.equal(body.feedId,read.feedId);assert.deepEqual(await f.store.load('mission'),before);
+ const later=await post('later');assert.equal(later.status,200);assert.equal((await later.json()).status,'committed');assert.equal((await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!.state,'later');
+});
+
+test('briefing rule links include only exact open proposals already present when it ran',()=>{const briefings=[{id:'morning',at:20}],decisions=[{id:'open',at:10,state:'open',ruleChange:{}},{id:'later',at:10,state:'later',ruleChange:{}},{id:'future',at:30,state:'open',ruleChange:{}},{id:'other',at:10,state:'open'}];assert.deepEqual(withRuleBriefings(briefings,decisions),[{id:'morning',at:20,decisionIds:['open']}]);assert.deepEqual(briefings,[{id:'morning',at:20}]);});
+
+test('rule adoption records its own host time and exact replay keeps that time',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});let at=(await f.store.load('mission'))!.value.growth[0]!.ruleChange!.at+1000;const service=new RuleChangesService(f.store,()=> 'mission',()=>at),card=(await service.decisions())[0]!,answer={commandId:'timestamped-rule',decisionId:card.id,answer:'act'};
+ await service.decide(answer);const before=(await f.store.load('mission'))!;assert.equal(before.value.growth[0]!.adoptedAt,at);at++;assert.equal((await service.decide(answer)).status,'replayed');assert.deepEqual(await f.store.load('mission'),before);validateMissionJournalLineage(await f.journal());
+});
+
+test('legacy un-timestamped rule answers still reconcile without rewriting their journal',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const snapshot=(await f.store.load('mission'))!,g=snapshot.value.growth[0]!,service=new RuleChangesService(f.store,()=> 'mission'),card=(await service.decisions())[0]!,actor={id:'local-owner',roles:['owner'] as ['owner']};
+ const {apply,hash}=await import('../src/domain.ts'),command={type:'answer-rule-change' as const,growthId:g.id,baseline:g.baseline,candidate:g.candidate,decisionId:card.id,answer:'act' as const},derived=apply(snapshot.value,command,actor);await f.store.commit({id:'mission',commandId:'legacy-rule-answer',fingerprint:hash({actorId:actor.id,command}),expectedRevision:snapshot.revision,...derived,outbox:[]});
+ const before=await f.journal();assert.equal((await service.decide({commandId:'legacy-rule-answer',decisionId:card.id,answer:'act'})).status,'replayed');assert.deepEqual(await f.journal(),before);assert.equal((await f.store.load('mission'))!.value.growth[0]!.adoptedAt,undefined);validateMissionJournalLineage(before);
+});
+
+test('monthly budget and rule decisions share the owner route without crossing their state',async t=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts'),{Application}=await import('../src/application.ts'),{createWorkbench}=await import('../src/server.ts');const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const app=new Application(f.store,[{id:'local-owner',roles:['owner']}]);await app.dispatch({missionId:'mission',commandId:'budget-work',expectedRevision:(await f.store.load('mission'))!.revision,actorId:'local-owner',command:{type:'admit-work',workId:'budget-work',title:'Budget paused fixture',budget:4}});
+ const budget=new MonthlyBudgetService(f.store);await budget.configure({commandId:'monthly-limit',expectedRevision:0,limit:0,timezone:'Asia/Seoul'});assert.equal((await budget.admit({missionId:'mission',workId:'budget-work',runId:'budget-run',amount:4,selection:{executorProfileId:'fixture-executor',verifierProfileId:'fixture-verifier',authorizationId:'fixture',outputTokenCap:2}})).status,'waiting');
+ const server=createWorkbench(f.store,f.root,{connections:{list:()=>({representative:{intakeMissionId:'mission'}})} as any,scheduleIntervalMs:0});t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port,view=await (await fetch(base+'/assistant/conversation')).json(),rule=view.decisions.find((d:any)=>d.ruleChange),monthly=view.decisions.find((d:any)=>d.budget);assert.ok(rule);assert.ok(monthly);
+ const post=(body:unknown)=>fetch(base+'/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':view.feedId},body:JSON.stringify(body)});assert.equal((await post({commandId:'monthly-later',decisionId:monthly.id,expectedRevision:monthly.budget.revision,answer:'later'})).status,200);assert.equal((await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!.state,'open');
+ assert.equal((await post({commandId:'rule-later-after-budget',decisionId:rule.id,answer:'later'})).status,200);assert.equal((await budget.read()).decisions[0]!.state,'later');const work=(await f.store.load('mission'))!.value.works.find(w=>w.id==='budget-work')!;assert.equal(work.execution,'budget-waiting');assert.equal(work.runtimeRun,undefined);assert.deepEqual(work.effects,[]);assert.equal((await f.store.load('mission'))!.value.memories.find(m=>m.version===2)!.effective,false);validateMissionJournalLineage(await f.journal());
+});
