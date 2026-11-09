@@ -12,8 +12,8 @@
   "aggregate": {
     "command": "TMPDIR=/private/tmp/e3c-tests node --test --test-concurrency=4 tests/*.test.ts",
     "exitCode": 1,
-    "tests": 1916,
-    "pass": 1575,
+    "tests": 1917,
+    "pass": 1576,
     "fail": 1,
     "skipped": 340,
     "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
@@ -51,10 +51,23 @@
   },
   "regressions": {
     "focusedCommand": "node --test tests/work-room-visual.test.ts tests/conversation-visual-gate.test.ts tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/ui-tokens.test.ts tests/ui-contract-fixtures.test.ts",
-    "passed": 108,
+    "passed": 109,
     "failed": 0,
     "projectedUnknownReviewAddedCases": 6,
     "b22NativeSetupCases": 2,
-    "visualGate": "A-J implemented; computed card headers 38px, procedure header 34px/progress gap 8px, step height32px, no budget line, terminal Stop absent, failure/progress/current-connection labels checked."
+    "visualGate": "A-J implemented; computed card headers 38px, procedure header 34px/progress gap 8px, step height32px, no budget line, terminal Stop absent, failure/progress/current-connection labels checked.",
+    "commandFeedback": {
+      "actualStopRejection": "revision conflict, Work remains active, no automatic retry",
+      "nativeAssertions": 16,
+      "viewports": [
+        1440,
+        390
+      ],
+      "tones": [
+        "error",
+        "warning"
+      ],
+      "normalHelpersHidden": true
+    }
   }
 }

@@ -7,10 +7,10 @@ import type {Node} from './support/workbench-client.ts';
 
 const descendants=(node:Node):Node[]=>[node,...node.children.flatMap(descendants)];
 const hasClass=(node:Node,name:string)=>node.className.split(' ').includes(name);
-async function scene(screen:string){
+async function scene(screen:string,rejectStatus=405){
  const fixture=await loadFixture(screen),posted:string[]=[];
  const app=harness(async(path,options)=>{
-  if(options?.method==='POST'){posted.push(path);return reply({error:'Read-only fixture'},405);}
+  if(options?.method==='POST'){posted.push(path);return reply({error:'Read-only fixture',...(rejectStatus===409?{status:'conflict',reason:'revision'}:{})},rejectStatus);}
   const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);
   return r?reply(structuredClone(r.body),r.status):reply({},503);
  });await settle();
@@ -64,4 +64,11 @@ test('a failed verdict marks only its bound verification task as failed',async()
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'settled'});renderMission()}`,app.context);
  assert.equal(nodes().filter(n=>hasClass(n,'room-step-marker')&&hasClass(n,'failed')).length,1);
  assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'3/4');
+});
+
+test('a rejected Stop reports the revision conflict while the Work stays running',async()=>{
+ const {app,nodes,posted,work}=await scene('B7',409),stop=nodes().find(n=>n.id==='work-room-stop-'+work.id)!;
+ await stop.fire('click');await settle();
+ assert.equal(posted.length,1);assert.equal(runInContext('snapshot.value.works.find(w=>w.id==='+JSON.stringify(work.id)+').execution',app.context),'active');
+ assert.match(app.node('status').className,/warning/);assert.match(app.node('status').textContent,/충돌/);assert.equal(app.node('page-status').hidden,true);assert.equal(runInContext('unknownOperation',app.context),null);
 });

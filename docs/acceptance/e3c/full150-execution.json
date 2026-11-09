@@ -11,7 +11,7 @@
   "infrastructureErrors": 0,
   "blocking": false,
   "sourceFiles": 407,
-  "sourceInputSha256": "41d0cee47afc34fa4189f70e4e80ca9056d281597ed5dabb36d4365db8cd496d",
+  "sourceInputSha256": "3c28d76ce460b89640ca647743a7c934bb4ddf4928740bc764b44acc2ae79353",
   "captureInputsUnchanged": true,
   "b22Before": [
     {
@@ -44,5 +44,6 @@
       ],
       "infrastructureErrors": 0
     }
-  ]
+  ],
+  "revision": "Command feedback follow-up: repeated full CI command before the next push."
 }

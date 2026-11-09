@@ -89,7 +89,57 @@
         "content": "\"\"",
         "width": "8px"
       },
-      "strayConversation": false
+      "strayConversation": false,
+      "commandFeedback": [
+        {
+          "width": 1440,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 1440,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        }
+      ]
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -565,7 +615,57 @@
         "content": "\"\"",
         "width": "8px"
       },
-      "strayConversation": false
+      "strayConversation": false,
+      "commandFeedback": [
+        {
+          "width": 1440,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 1440,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        }
+      ]
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -1041,7 +1141,57 @@
         "content": "\"\"",
         "width": "8px"
       },
-      "strayConversation": false
+      "strayConversation": false,
+      "commandFeedback": [
+        {
+          "width": 1440,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 1440,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        }
+      ]
     },
     "inspection": true,
     "closeFocus": "chat-input",
@@ -1517,7 +1667,57 @@
         "content": "\"\"",
         "width": "8px"
       },
-      "strayConversation": false
+      "strayConversation": false,
+      "commandFeedback": [
+        {
+          "width": 1440,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 1440,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "error",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        },
+        {
+          "width": 390,
+          "tone": "warning",
+          "bottom": 125,
+          "pageHidden": true,
+          "paneBottom": 844,
+          "paneTop": 88,
+          "position": "sticky",
+          "text": "개정 충돌 · ",
+          "top": 88,
+          "visible": true
+        }
+      ]
     },
     "inspection": true,
     "closeFocus": "chat-input",

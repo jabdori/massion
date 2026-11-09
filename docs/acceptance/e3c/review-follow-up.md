@@ -41,4 +41,12 @@ The regression checks a pinned production-shaped profile/catalog, verifies the r
 
 Only missing producing capabilities and their strict-order diagnostics remain in the scoped ledger. Visual changes A–J are implemented changes, not capability deferrals. The original strict contracts remain unchanged; the Record layout follows the explicit visual-gate request to avoid a repeated body heading, and its generic Record data remains present.
 
-Final local verification: full150 exit0 with zero infrastructure errors; both B22 setups reached their actual nested evidence state; native visual/interaction checks20/20 passed; focused regressions108 passed; complete suite1,575 passed,340 skipped, one previously documented local macOS portable-inventory failure. No CI error policy, checker rule, timeout or contract was weakened.
+Final local verification: full150 exit0 with zero infrastructure errors; both B22 setups reached their actual nested evidence state; native visual/interaction checks20/20 passed; focused regressions109 passed; complete suite1,576 passed,340 skipped, one previously documented local macOS portable-inventory failure. No CI error policy, checker rule, timeout or contract was weakened.
+
+## Subsequent P2: command feedback visibility
+
+The generic Work-room sibling filter also hid the existing live `#status` region. Since `report()` routes an open-pane action's feedback there, revision conflicts and command warnings were invisible. The filter now keeps only that region's error/warning states visible; ordinary ready/loading/success helper text remains hidden. The region is sticky at the pane's top, so a rejected technical action remains visible after the owner scrolls into its inspection.
+
+A regression rejects the actual Stop command with a revision conflict, verifies that Work stays active, and checks that the existing warning reports the conflict without an automatic retry or unknown-command reclassification. Native browser assertions additionally verify both error and warning visibility in compact/wide rooms at 1440px and 390px in both themes, after scrolling the pane. Normal helper text is hidden again when cleared. These 16 viewport/tone assertions issue zero product commands and do not synthesize a provider outcome. The full 150-state CI-command gate is repeated before the follow-up push.
+
+Command-feedback follow-up verification: repeated full150 exit0 with zero infrastructure errors on the final inputs; native cases20/20 and viewport/tone feedback assertions16/16 passed; complete suite1,576 passed,340 skipped,one known local portable-inventory failure.
