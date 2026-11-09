@@ -34,7 +34,7 @@ test('started Work snapshots have assigned executors and consistent task, attemp
  const {loadFixture}=await hostModule();
  for(const screen of screens){
   const f=await loadFixture(screen);
-  assert.equal(f.now,1793855520000,screen);
+  assert.equal(f.now,screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
   const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean}>}).works;
@@ -212,15 +212,16 @@ test('B22 steps setup opens the Work room without expanding legacy evidence',asy
  const work=(fixture.routes['/missions/intake']!.body as any).value.works[0];assert.deepEqual(work.tasks.filter((t:any)=>t.step).map((t:any)=>t.step.title),['읽기','테스트 돌리기']);
 });
 
-test('E3e fixtures never manufacture payment, remote delegation or budget decisions',async()=>{
+test('E6c effect fixtures use production decisions; budget fallbacks still never fabricate a decision',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B4','B16','B16-sent','B16-later','B26','B26-later']){
   const fixture=await loadFixture(screen);
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
-   assert.deepEqual(view.decisions??[],[],screen+' '+path+' must not imply an unimplemented owner decision');
+   if(['B26','B26-later'].includes(screen)||path!=='/assistant/conversation')assert.deepEqual(view.decisions??[],[],screen+' '+path+' must not imply an unimplemented owner decision');
+   else {assert.equal(view.decisions.length,1);const d=view.decisions[0],mission=(fixture.routes['/missions/intake']!.body as any).value,source=mission.works.find((w:any)=>w.id===d.effect.workId).effects.find((e:any)=>e.id===d.id);assert.deepEqual(d.effect.request,source.ownerDecision.request);assert.equal(d.effect.status,source.status);assert.equal(d.state,screen==='B16-sent'?'done':screen==='B16-later'?'later':'open');}
   }
-  assert.ok(fixture.gaps.length,screen+' must explain the absent producer');
+  if(screen!=='B4')assert.ok(fixture.gaps.length,screen+' must explain the remaining absent producer');
  }
 });
 

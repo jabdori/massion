@@ -1,3 +1,4 @@
+import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
@@ -95,7 +96,8 @@ function assignment(value: unknown): asserts value is Assignment {
   oneOf(model.evidenceClass, ['fixture', 'real-provider'], 'evidence class');
 }
 function effect(value: unknown, recoveryPendingIds: readonly string[] = []): asserts value is Effect {
-  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt','providerDispatch']);
+  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt','providerDispatch','ownerDecision']);
+  if(item.ownerDecision)validateOwnerEffect(value as Effect,recoveryPendingIds.includes(String(item.id)));
   for (const key of ['id', 'taskId', 'target', 'authority']) text(item[key], `effect ${key}`);
   oneOf(item.status, ['pending', 'succeeded', 'failed', 'unknown'], 'effect status');
   if (item.status === 'pending') ensure(!Object.hasOwn(item, 'receipt'), 'pending effect has a receipt');
@@ -346,6 +348,10 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'propose-owner-effect':{required:['workId','taskId','stepId','effectId','request']},
+  'answer-owner-effect':{required:['workId','effectId','answer']},
+  'dispatch-owner-effect':{required:['workId','effectId','feedId']},
+  'record-owner-effect':{required:['workId','effectId','receipt']},
   'open-room':{required:['workId','content','producerAssignmentId','challengerAssignmentId']},
   'record-room-turn':{required:['workId','effectId']},
   'reserve-moderation':{required:['workId','entry'],optional:['hostVersion']},
@@ -434,7 +440,8 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const keys = COMMAND_KEYS[type as Command['type']];
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
-      ensure(operation.fingerprint === hash({ actorId: actor.id, command, expectedRevision: operation.expectedRevision }), 'command fingerprint mismatch');
+      ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
+      if(isEffectDecisionCommand(command.type))ensure(command.type==='answer-owner-effect'?actor.id==='local-owner'&&!operation.commandId.startsWith('assistant-'):actor.id===EFFECT_HOST&&operation.commandId.startsWith(EFFECT_COMMAND_PREFIX),'effect command authority mismatch');
       checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');
