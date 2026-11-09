@@ -63,4 +63,3 @@ function renderWorkRoom(work,inspection){
  return card;
 }
 `;
-
