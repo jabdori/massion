@@ -14,6 +14,7 @@ import type {OwnerException} from './notifications.ts';
 protocol.registerSchemesAsPrivileged([{scheme:'massion',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}},{scheme:'massion-app',privileges:{standard:true,secure:true}}]);
 
 export async function startDesktop(){
+ const headless=app.commandLine.hasSwitch('massion-headless');
  if(!app.requestSingleInstanceLock()){app.quit();return;}
  const origin=daemonOrigin(process.env.MASSION_DAEMON_ORIGIN??'http://127.0.0.1:8765');
  const directory=app.getPath('userData'),socket=join(directory,'daemon.sock');
@@ -26,7 +27,7 @@ export async function startDesktop(){
  const notifications=new Map<string,Notification>();
  function deliver(){if(ready&&pending&&window&&!window.isDestroyed()){if(tracker.current(pending))window.webContents.send(channels.focus,pending);pending=undefined;}}
  async function openWindow(){
-  if(window&&!window.isDestroyed()){if(window.isMinimized())window.restore();window.show();window.focus();deliver();return window;}
+  if(window&&!window.isDestroyed()){if(!headless){if(window.isMinimized())window.restore();window.show();window.focus();}deliver();return window;}
   ready=false;
   const current=new BrowserWindow(windowOptions(join(import.meta.dirname,'preload.cjs')));window=current;
   current.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -35,7 +36,7 @@ export async function startDesktop(){
   current.webContents.on('will-redirect',(event,url)=>{if(!isAppURL(url))event.preventDefault();});
   current.webContents.on('will-attach-webview',event=>event.preventDefault());
   current.on('closed',()=>{if(window===current){window=null;ready=false;}});
-  current.once('ready-to-show',()=>current.show());
+  if(!headless)current.once('ready-to-show',()=>current.show());
   await current.loadURL(appOrigin+'/');return current;
  }
  ipcMain.on(channels.ready,event=>{
@@ -98,7 +99,7 @@ export async function startDesktop(){
    }
    const fresh=tracker.update(view.body.feedId,works.body.works,decisions);
    for(const [key,notice] of notifications)if(!tracker.current({key} as OwnerException)){notice.close();notifications.delete(key);}
-   if(!Notification.isSupported()||quitting)return;
+   if(headless||!Notification.isSupported()||quitting)return;
    for(const item of fresh){
     const notice=new Notification({title:'Massion',body:item.title,silent:false});notifications.set(item.key,notice);
     notice.on('click',()=>{if(!tracker.current(item))return;pending=item;void openWindow();});

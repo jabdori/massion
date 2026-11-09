@@ -80,10 +80,33 @@ The app is written to `desktop/release/mac-<arch>/Massion.app` (`release/mac` on
 Intel). Packaging includes the standalone daemon runner outside ASAR, the core
 sources, their app-handler runner and runtime copy table, hashes bundled scripts/styles
 for CSP, and applies all seven ADR 0005 security fuse settings before signing
-would occur. No distribution identity, notarization or release is used; E9 owns
-those steps. The default Electron icon is retained for this development slice.
+would occur. No distribution identity, notarization or release is used; the owner
+follows the [release checklist](../docs/guide/release.md) for those steps. The
+default Electron icon is retained for this development slice.
 The packaging command finishes by checking the actual `.app` resource paths with
 external Node. Unit tests apply the resource filters instead of copying all files.
+
+The version comes from the root `package.json`, injected by
+`electron-builder.cjs`; the desktop manifest has no independent version.
+The `mac-dev-package` CI job uploads a `Massion-<version>-macOS-<arch>-unsigned.zip`
+archive and separate install-smoke evidence. Extract the archive with `ditto -x -k`
+to retain its bundle structure. It has no Developer ID signature or notarization.
+
+After packaging, run the macOS fixture journey without displaying a window:
+
+```sh
+npm run smoke:install --prefix desktop
+```
+
+This launches the actual `.app` executable with `--massion-headless`, a new private
+user-data directory and a loopback CDP port. It suppresses window display/focus,
+Dock activation and notifications, inspects an unknown Work through the bundled
+UI, preserves its state, and drains the disposable authenticated fixture daemon.
+It uses the lockfile-pinned local `agent-browser` 0.41.2, verifies app bytes,
+executable modes and symlink targets before and after the journey, and writes evidence under
+`desktop/smoke-artifacts/install/`. It does not use a real database or provider,
+change the installed app's data or prove a new model run. The existing Linux
+Xvfb security smoke remains a separate check.
 
 ## Current boundary
 

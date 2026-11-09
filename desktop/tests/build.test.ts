@@ -16,3 +16,11 @@ test('desktop build preserves iframe client strings and appends a separate focus
  assert.equal(scripts[0],original[0],'Workbench script remains intact, including iframe HTML');
  assert.equal(scripts[1],'\n'+await readFile(new URL('../host-client.js',import.meta.url),'utf8')+'\n');
 });
+
+test('desktop packaging uses the root candidate version',async()=>{
+ const {createRequire}=await import('node:module'),require=createRequire(import.meta.url);
+ const config=require('../electron-builder.cjs'),root=require('../../package.json'),desktop=require('../package.json');
+ assert.equal(config.extraMetadata.version,root.version);
+ assert.equal(desktop.version,undefined,'Desktop must not maintain a second version');
+ assert.equal(config.mac.identity,null);assert.equal(config.mac.notarize,false);
+});

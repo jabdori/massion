@@ -21,13 +21,24 @@ Installing an app does not connect an external account or prove that a token is
 valid. On Linux with Node 24, app code execution is unavailable because its
 required sandbox is unavailable; installation is not execution evidence.
 
+Payment and external-member adapters have explicit decision paths. A sent
+request or an arrival receipt is not an accepted result. Their automated
+journeys use local fixtures, not real purchases or remote delivery evidence.
+A timed-out MCP write remains unknown until you record reconciliation evidence;
+only then can a later distinct write proceed.
+
 You can manage model connections, explicit execution grants and per-task budgets
-through the supported settings and expanded details. There is no general
+through the supported settings and expanded details. Settings also shows monthly
+and per-member token usage and an explicit monthly output-token limit. Work that
+cannot reserve its bound waits for a budget decision. Accepting an increase can
+release unchanged waiting work through the normal admission path; a new month
+alone does not resume it. There is no general
 "autonomy level" that bypasses checking or permissions.
 
-## Not available yet
+## Remaining boundaries
 
-The current build has no payment execution adapter, external-member delegation,
-monthly budget wait/raise decision or MCP tool reconciliation journey. A matching
-prototype picture is not an implemented decision. Do not submit a real payment
-or assume a remote agent was contacted because a fixture depicts that state.
+There is no bundled production payment service or live third-party compatibility
+claim. A prototype picture, installed app or fixture receipt does not establish
+that an external account is connected, a purchase happened or a remote task was
+accepted. Review the actual configured adapter and its evidence before relying
+on an external effect.
