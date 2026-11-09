@@ -1,8 +1,209 @@
 {
   "screen": "B26-later",
   "extends": "B26",
-  "description": "Deferred budget decision with neutral waiting status.",
-  "gaps": [
-    "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated."
-  ]
+  "description": "The same recorded budget decision explicitly deferred by the owner; Work remains paused.",
+  "readySelector": "#chat-log .chat-system button",
+  "steps": [],
+  "gaps": [],
+  "routes": {
+    "/assistant/conversation": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "later",
+            "budget": {
+              "revision": 3,
+              "limit": 128
+            }
+          }
+        ],
+        "briefings": [],
+        "exceptions": []
+      }
+    },
+    "/assistant/conversation?segment=1": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 1,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": []
+        },
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "later",
+            "budget": {
+              "revision": 3,
+              "limit": 128
+            }
+          }
+        ],
+        "briefings": [],
+        "exceptions": []
+      }
+    },
+    "/assistant/usage": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "revision": 3,
+        "period": "2026-11",
+        "timezone": "Asia/Seoul",
+        "unit": "output-tokens",
+        "limit": 0,
+        "spent": 0,
+        "usageBounded": true,
+        "knownOutputTokens": 0,
+        "inputTokens": 0,
+        "cost": null,
+        "reserved": 0,
+        "members": [],
+        "decisions": [
+          {
+            "id": "monthly-budget:2026-11:0",
+            "at": 1793855520000,
+            "title": "월간 예산",
+            "question": "이번 달 예산을 다 썼어요. 늘릴까요?",
+            "rows": [
+              [
+                "지금",
+                "0"
+              ],
+              [
+                "늘린 뒤",
+                "128"
+              ],
+              [
+                "멈춘 일",
+                "월말 요약"
+              ]
+            ],
+            "action": "예산 늘리기",
+            "state": "later",
+            "budget": {
+              "revision": 3,
+              "limit": 128
+            }
+          }
+        ]
+      }
+    }
+  }
 }

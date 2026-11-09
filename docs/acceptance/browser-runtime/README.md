@@ -41,3 +41,7 @@ Codex reproduced a split-text reflection leak and early browser-drain completion
 The browser service separately tracks adapter settlement, so cancellation of the caller-facing read cannot finish host drain before the adapter's async `finally`. Tests cover successful cleanup and bounded timeout reporting as unsettled. All 30 affected tests and typecheck pass; the four reference page PNGs remain unchanged. The six CI jobs on the previous head passed; final-head CI is required again after this correction.
 
 The split-node regression also covers CSS `visibility:hidden` separators and `display:contents` wrappers. The visibility pass handles those cases, and a final rendered-text check refuses capture if a recognized private value remains. The expanded real-browser test passed with distinct per-field values and no private query parameters; the four reference screenshots stayed byte-identical.
+
+## Integration with PR #117
+
+Merged the monthly-budget mainline without dropping either slice's Work fields, command/backup validation, conversation notices or drain tasks. The allow-list merge preserves the union of both slices' removals. A new test pauses/resumes a Work with a retained browser observation and validates its complete journal. All 216 related browser, budget, effect, lineage and UI tests passed, followed by the focused runtime-actor version of the new test and typecheck. Twelve browser/budget screen-theme captures add no failures: [scoped merge gate](monthly-merge-gate.json). PR #132's MCP E2E correction remains included.

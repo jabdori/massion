@@ -222,3 +222,14 @@ test('retained raw-output depth accounts for the journal envelope without wideni
  const replay=new DiscriminatorService(store,async()=>assert.fail('Committed results and failure fallback never resolve a model'));
  assert.equal((await replay.replay('m',input(7))).status,'recorded');assert.deepEqual(await replay.ask('m','moderator',input(10)),{status:'fixed-rules',reason:'failures'});assert.equal(calls,3);
 });
+
+
+test('monthly accounting holds pending and unknown moderation caps and records only known usage',async()=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');
+ for(const known of [false,true]){
+  const {store}=await setup(),budget=new MonthlyBudgetService(store);await budget.configure({commandId:'monthly',expectedRevision:0,limit:10000,timezone:'UTC'});const startedAt=Date.now(),i=input(),host=await reservePending(store,i,startedAt);
+  const pending=await budget.read();assert.equal(pending.reserved,DISCRIMINATOR_POLICY.outputTokenReserve);assert.equal(pending.knownOutputTokens,0);
+  const output=answer(buildQuestion(i));await host.dispatch({missionId:'m',commandId:'monthly-result',expectedRevision:(await store.load('m'))!.revision,actorId:'discriminator-host',command:{type:'record-moderation',hostVersion:2,workId:'w',questionId:questionId(i),result:{rawOutput:known?output:null,output:known?output:null,model:'fixture',usage:known?{inputTokens:3,outputTokens:5}:null,latencyMs:1,hostTime:startedAt+1,decision:known?'shadow':'unconfirmed',applied:false,disabled:false}}});
+  const view=await budget.read();assert.equal(view.knownOutputTokens,known?5:0);assert.equal(view.spent,known?5:null);assert.equal(view.inputTokens,known?3:null);assert.equal(view.reserved,known?0:DISCRIMINATOR_POLICY.outputTokenReserve);validateMissionJournalLineage(store.inspect());
+ }
+});

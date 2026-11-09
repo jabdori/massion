@@ -115,3 +115,11 @@ test('host drain waits for interrupted browser cleanup and reports its deadline 
   await capture;await server.browserSessions.drain();
  }
 });
+
+test('monthly budget waiting and journal replay preserve the same browser observation',async()=>{
+ const s=await setup();await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;
+ const app=new Application(s.store,[{id:'runtime-representative',roles:['representative']},{id:'local-owner',roles:['owner']}]);
+ await app.dispatch({missionId:'intake',expectedRevision:3,commandId:'monthly-wait',actorId:'runtime-representative',command:{type:'wait-monthly-budget',workId:'work',decisionId:'monthly-budget:fixture'}});
+ const waiting=(await s.store.load('intake'))!.value.works[0]!;assert.equal(waiting.execution,'budget-waiting');assert.equal(waiting.monthlyBudgetDecision,'monthly-budget:fixture');assert.deepEqual(waiting.browserSession!.pages[0],page);validateMissionJournalLineage(s.store.inspect());
+ await app.dispatch({missionId:'intake',expectedRevision:4,commandId:'monthly-resume',actorId:'local-owner',command:{type:'resume-monthly-budget',workId:'work',decisionId:'monthly-budget:fixture'}});assert.deepEqual((await s.service.read('intake','work')).session!.page,page);validateMissionJournalLineage(s.store.inspect());
+});
