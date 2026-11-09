@@ -1,0 +1,740 @@
+{
+  "removed": [
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "business-procedure",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{duration}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane button \"중지\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane heading \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"하나가 넘김 · {time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role pane listitem \"조사\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane listitem \"확인\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"조사\" (found in sidebar)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"요약\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"기록\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 4,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"조사\" (found in sidebar)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 5,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 7,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "business-procedure",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{duration}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane button \"중지\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane heading \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"하나가 넘김 · {time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role pane listitem \"조사\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane listitem \"확인\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"조사\" (found in sidebar)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"요약\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"기록\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 4,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"조사\" (found in sidebar)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 5,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 7,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "unsupported step telemetry and order cascade",
+      "reason": "The compact room has real worker labels, a generic procedure count, an independent Check count and a Record stage. Task/TeamStep store no per-step file-read count or timestamp. The first prototype progress slot is file reading (4/11); the matcher instead consumes the later Check 0/1, then execution/time/progress/Record/check-bar matches cascade out of order. Existing generic counts and the handoff time are not file-read or procedure-edit telemetry.",
+      "ledger": "docs/acceptance/room-residuals/README.md#ordered-step-telemetry",
+      "sources": [
+        "src/domain.ts:31",
+        "src/internal-teams.ts",
+        "src/work-room-panel.ts:62",
+        "src/work-room-panel.ts:66",
+        "docs/product/screens/contracts/B22-room-steps.json"
+      ]
+    }
+  ],
+  "reclassified": [
+    {
+      "before": {
+        "screen": "B18-room-b",
+        "theme": "dark",
+        "kind": "gap",
+        "diagnostic": "Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
+        "occurrence": 1,
+        "category": "capability",
+        "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+        "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      },
+      "after": {
+        "screen": "B18-room-b",
+        "theme": "dark",
+        "kind": "gap",
+        "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+        "occurrence": 1,
+        "category": "pricing-table-and-memory-proposal",
+        "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+        "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+      }
+    },
+    {
+      "before": {
+        "screen": "B18-room-b",
+        "theme": "light",
+        "kind": "gap",
+        "diagnostic": "Named team workers, business procedure steps, typed pricing table, memory proposals and member-to-team room discussion have no producing host path. Exact source-linked Work inspection and owner/member conversation remain supported.",
+        "occurrence": 1,
+        "category": "capability",
+        "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+        "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      },
+      "after": {
+        "screen": "B18-room-b",
+        "theme": "light",
+        "kind": "gap",
+        "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+        "occurrence": 1,
+        "category": "pricing-table-and-memory-proposal",
+        "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+        "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+      }
+    }
+  ],
+  "gate": {
+    "code": 0,
+    "added": [],
+    "resolved": [],
+    "errors": []
+  }
+}

@@ -167,3 +167,18 @@ The actual-host browser flow additionally deletes a just-saved in-memory app
 slot: Settings shows reconnect again while the stored app receipt remains saved.
 Nine state/theme captures and the unchanged secret-redaction assertion are in
 `interaction/report.json`; this is controlled fixture evidence, not Keychain access.
+
+## Work-telemetry main integration
+
+Merge main `2db6dd2` (PR #129) with its Work timestamps, progress, independent
+check metadata and replay validators intact. Resolve only the shared allow-list:
+keep both branches' deletions, retain all 30 upstream remapped identities, and
+preserve R-C producer reasons. Main has 630 entries; the merged list has 530.
+The upstream reduction is 154 net entries, without resurrecting R-C's 100 removals.
+
+Typecheck passes. The 153 related telemetry, room, member, budget, backup,
+app-presence and lifecycle HTTP/structure tests pass without skips. Re-capture
+all 22 R-C screen/theme pairs: 670/708 required matches, zero geometry/token or
+infrastructure errors, and no new/stale diagnostic exceptions. The 38 remaining
+contract diagnostics and four capability gaps retain their existing producer
+reasons. Full-suite/all-screen and e2e validation remain CI-owned.
