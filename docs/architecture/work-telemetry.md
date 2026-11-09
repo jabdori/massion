@@ -89,3 +89,23 @@ B18/B22 artboards, in both themes and mobile. New data gets boundary/replay test
 the existing delayed-read and feed tests cover the new projections. Recapture
 without synthetic challenge injection, remove newly resolved allowances and run
 the PR's CI/current-head Codex loop again.
+
+## Monthly budget integration (PR #117)
+
+Merged main's monthly-budget Work state, reservation/decision guards and recovery
+without replacing telemetry fields or host clock contexts. The owner steering
+check still precedes reduction for budget-paused Work; the replay lookup still
+precedes that check. Backup validation accepts both the budget marker and original
+admission/task/check observations. Sidebar budget waiting retains priority over
+ordinary check waiting.
+
+The allow-list was reconciled by exact diagnostic identity, preserving removals
+from both branches: 804 base entries, 650 telemetry entries and 784 monthly-budget
+entries combine into 630. Both Korean copy sets and both appended test groups
+are retained. A budget approval/resume test also checks original admission time,
+independent predicates and journal replay across the budget decision.
+
+Related local tests: 251 total, 241 passed, 10 environment-gated skips, no failures;
+typecheck and copy diagnostic gate passed. Ten scoped screen/theme captures cover
+B26, B26-later, B14-usage and the two corrected room panes. Their combined scoped
+gate has no new, stale or infrastructure diagnostics. Full checks remain CI-owned.

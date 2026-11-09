@@ -1,0 +1,64 @@
+- generic
+  - navigation "주 메뉴" [ref=e25]
+    - button "하나" [ref=e27]
+    - button "결과물" [ref=e28]
+    - button "예약" [ref=e29]
+    - generic
+      - button "내 계정" [expanded=false, ref=e31]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e30]
+      - button "설정" [ref=e32]
+      - LabelText
+        - searchbox "설정 검색" [ref=e43]
+      - button "일반" [ref=e33]
+        - StaticText "일반"
+      - button "기억" [ref=e34]
+        - StaticText "기억"
+      - button "구성원" [ref=e35]
+        - StaticText "구성원"
+      - button "기기" [ref=e36]
+        - StaticText "기기"
+      - button "연결" [ref=e37]
+        - StaticText "연결"
+      - button "사용량" [ref=e38]
+        - StaticText "사용량"
+      - button "앱" [ref=e39]
+        - StaticText "앱"
+      - button "개선" [ref=e40]
+        - StaticText "개선"
+      - button "권한" [ref=e41]
+        - StaticText "권한"
+  - main "설정" [ref=e26]
+    - region "사용량" [ref=e42]
+      - heading "사용량" [level=2, ref=e44]
+      - generic
+        - heading "이번 주기" [level=3, ref=e45]
+        - strong
+          - StaticText "사용률"
+        - StaticText "—"
+        - status "이번 주기 사용률 —"
+        - strong
+          - StaticText "초기화 시각"
+        - StaticText "—"
+        - heading "구성원" [level=3, ref=e46]
+        - strong
+          - StaticText "하나"
+        - StaticText "—"
+        - status "하나 사용률 —"
+        - strong
+          - StaticText "월 예산"
+        - StaticText "128 출력 토큰"
+        - button "변경" [ref=e47]
+        - StaticText "마지막 업데이트 시각"
+        - status
+          - StaticText "—"
+        - button "새로고침" [ref=e48]
+        - form
+          - LabelText
+            - StaticText "월간 예산 (출력 토큰)"
+          - spinbutton "월간 예산 (출력 토큰)" [required, ref=e49]: 256
+            - StaticText "256"
+          - button "저장" [ref=e50]
+          - button "취소" [ref=e51]
+          - status
+            - StaticText "연결 끊김"

@@ -10,8 +10,9 @@ for(const durable of [false,true])test(`${durable?'actual SurrealDB':'in-memory 
  const f=await fixture(t,durable,{hold:'executor',runTimeoutMs:durable?1500:100}),result=await f.product.run('mission','fresh','deadline-run',(await f.current()).revision),w=result.snapshot.value.works.find(w=>w.id==='fresh')!;assert.equal(result.status,'blocked');assert.equal(f.calls.length,1);assert.equal(f.calls[0]!.signal.aborted,true);assert.equal(w.effects[0]!.status,'unknown');assert.equal(w.budget.reserved,4);assert.equal(w.budget.measured,null);assert.ok(w.runtimeInterruption);assert.ok(w.runtimeInterruption.observedAt>=w.runtimeRun!.ownership!.deadlineAt);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(f.runtime.owns('mission','fresh','deadline-run'),false);const journal=await f.journal();f.release();await pause(30);assert.deepEqual(await f.journal(),journal);assert.equal((await f.product.run('mission','fresh','another',(await f.current()).revision)).status,'already-started');assert.deepEqual((await f.current()).value.works[0],f.original.value.works[0]);const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage(await f.journal());
 });
 
-for(const committed of [false,true])test(`deadline during final acceptance ${committed?'acknowledgment preserves committed Record':'admission refuses late Record'}`,async t=>{
- const f=await fixture(t,false,{runTimeoutMs:500});let held=false,release!:()=>void;const gate=new Promise<void>(r=>release=r);t.after(()=>release());
+for(const committed of [false,true])test(`deadline during final acceptance ${committed?'acknowledgment preserves committed Record':'admission refuses late Record'}`,{timeout:10000},async t=>{
+ t.mock.timers.enable({apis:['Date'],now:Date.now()});
+ const f=await fixture(t,false,{runTimeoutMs:60000});let held=false,release!:()=>void;const gate=new Promise<void>(r=>release=r);t.after(()=>release());
  const base=f.store;
  const store=new Proxy(base,{get(target,key){
   if(!committed&&key==='lookupOperation')return async(identity:any)=>{
@@ -21,14 +22,14 @@ for(const committed of [false,true])test(`deadline during final acceptance ${com
   };
   if(committed&&key==='commit')return async(input:any)=>{
    const result=await target.commit(input);
-   if(!held&&input.value.works.find((w:any)=>w.id==='fresh')?.acceptance==='accepted'){held=true;await gate;}
+   if(!held&&input.id==='mission'&&input.value.works.find((w:any)=>w.id==='fresh')?.acceptance==='accepted'){held=true;await gate;}
    return result;
   };
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
  }});
  const {ConfiguredTextRuntime}=await import('../src/configured-runtime.ts'),runtime=new ConfiguredTextRuntime(store,f.config);
  const run=runtime.run('mission','fresh','accept-race',(await f.current()).revision);
- await f.until(()=>held);const deadline=(await f.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.ownership!.deadlineAt;await pause(Math.max(0,deadline-Date.now())+30);release();
+ await f.until(()=>held);const deadline=(await f.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.ownership!.deadlineAt;t.mock.timers.setTime(deadline+30);release();
  const result=await run,w=result.snapshot.value.works.find(w=>w.id==='fresh')!;
  assert.equal(result.status,committed?'settled':'blocked');assert.equal(w.acceptance,committed?'accepted':'pending');assert.equal(!!w.record,committed);assert.equal(!!w.runtimeInterruption,!committed);assert.equal(f.calls.length,2);
  assert.deepEqual((await f.current()).value.works[0],f.original.value.works[0]);

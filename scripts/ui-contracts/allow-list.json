@@ -188,16 +188,6 @@
       "screen": "B7",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -388,16 +378,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "work-room-messages",
-      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 5,
       "category": "work-room-messages",
@@ -412,16 +392,6 @@
       "occurrence": 1,
       "category": "business-procedure",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -523,16 +493,6 @@
       "category": "payment",
       "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
       "screen": "B7-done",
@@ -908,16 +868,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -1008,16 +958,6 @@
       "screen": "B7-unknown",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -1052,16 +992,6 @@
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -1108,16 +1038,6 @@
       "screen": "B8-done",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -1142,16 +1062,6 @@
       "occurrence": 2,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -1232,16 +1142,6 @@
       "occurrence": 4,
       "category": "check-time-and-predicates",
       "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -1942,56 +1842,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"변경\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings status \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"새로고침\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
@@ -2475,16 +2325,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
     },
     {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
-    },
-    {
       "screen": "B19",
       "theme": "dark",
       "kind": "contract",
@@ -2905,46 +2745,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-dark"
-    },
-    {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-dark"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-later-dark"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B2",
       "theme": "light",
       "kind": "contract",
@@ -3122,16 +2922,6 @@
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -3328,16 +3118,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "work-room-messages",
-      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 5,
       "category": "work-room-messages",
@@ -3352,16 +3132,6 @@
       "occurrence": 1,
       "category": "business-procedure",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -3463,16 +3233,6 @@
       "category": "payment",
       "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
       "screen": "B7-done",
@@ -3848,16 +3608,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -3948,16 +3698,6 @@
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -3992,16 +3732,6 @@
       "occurrence": 1,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -4048,16 +3778,6 @@
       "screen": "B8-done",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
@@ -4082,16 +3802,6 @@
       "occurrence": 2,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -4172,16 +3882,6 @@
       "occurrence": 4,
       "category": "check-time-and-predicates",
       "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -4885,56 +4585,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"변경\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings status \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"새로고침\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Usage/currency budget. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B14-usage",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
       "screen": "B15",
       "theme": "light",
       "kind": "contract",
@@ -5415,16 +5065,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
     },
     {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
-    },
-    {
       "screen": "B19",
       "theme": "light",
       "kind": "contract",
@@ -5845,66 +5485,6 @@
       "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-light"
-    },
-    {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-light"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b26-later-light"
-    },
-    {
-      "screen": "B26-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no budget-waiting admission, increase, deferral or reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B26",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
-    },
-    {
-      "screen": "B26",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No monthly budget aggregate, current/increased currency projection, budget-paused Work list or budget decision/defer/reopen producer exists. Existing work-budget edits apply only to fresh unstarted Work, not the stopped monthly-budget scenario. No approval or budget-wait separator is fabricated.",
-      "occurrence": 1,
-      "category": "pending-slice",
-      "reason": "Lead-assigned existing residual owned by the open E8 PR #117 (feat/monthly-budget) slice. The owning slice must remove this entry when resolved on landing.",
-      "ledger": "docs/acceptance/E3f/pending-slices.md#e8"
-    },
-    {
       "screen": "B15",
       "theme": "dark",
       "kind": "visual",
@@ -6364,82 +5944,6 @@
       ]
     },
     {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 3,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
@@ -6551,6 +6055,482 @@
       ]
     },
     {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "work-room-messages",
+      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "occurrence": 1,
+      "category": "pricing-table-and-memory-proposal",
+      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"요약\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "work-room-messages",
+      "reason": "The fourth Q13 worker is queued with no result; there is still no final summary-worker room instruction at contract pane order 53. The existing missing final summary occurrence now reports order after the earlier real summary role is rendered. No new worker message is invented.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "occurrence": 1,
+      "category": "pricing-table-and-memory-proposal",
+      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 2,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 3,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
+      "sources": [
+        "src/internal-teams.ts:9",
+        "src/internal-teams.ts:36",
+        "src/domain.ts:31",
+        "src/domain.ts:314",
+        "src/domain.ts:317",
+        "src/configured-runtime.ts:263",
+        "src/work-room-panel.ts:84"
+      ]
+    },
+    {
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "contract",
@@ -6625,186 +6605,6 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     }
   ]
 }
