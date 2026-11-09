@@ -128,3 +128,10 @@ test('a stale reconciliation snapshot cannot release a newer admitted runtime',a
  await service.reconcile(undefined,async(r,revision)=>{const admitted=await service.admit({missionId:r.missionId,workId:r.workId,runId:r.runId,amount:r.amount,selection:r.selection,expectedRevision:revision});assert.equal(admitted.status,'reserved');const current=(await store.load(r.missionId))!,w=current.value.works.find(w=>w.id===r.workId)!;await app.dispatch({missionId:r.missionId,commandId:r.runId,expectedRevision:admitted.reservation!.revision,actorId:'local-owner',command:{type:'activate-runtime',workId:r.workId,run:{id:r.runId,authorizationId:'fixture',criteriaHash:hash(w.criteria),inputHash:workInputHash(w),mode:'mock-http',outputTokenCap:40}}});});
  const before=store.inspect();await service.reconcile(stale);assert.deepEqual(store.inspect(),before);assert.equal((await service.read()).reserved,80);const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage(store.inspect());
 });
+
+test('a read never combines an older reservation snapshot with a newer accounting cursor',async()=>{
+ const {store,service}=await fixture(100),load=store.load.bind(store);let interleave=true;
+ store.load=async id=>{const snapshot=await load(id);if(id===MONTHLY_BUDGET_ID&&interleave){interleave=false;await selectedBudget(store).admit({missionId:'mission',workId:'one',runId:'concurrent-read',amount:80});}return snapshot;};
+ const view=await service.read();assert.equal(view.reserved,80);assert.equal(view.cursor,(await store.readState()).cursor);
+ assert.equal((await service.admit({missionId:'mission',workId:'two',runId:'second-read',amount:80})).status,'waiting');
+});

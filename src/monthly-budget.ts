@@ -112,8 +112,9 @@ export class MonthlyBudgetService {
   const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,usageBounded,members,works,turns};
  }
  async read(){
+  for(let attempt=0;attempt<5;attempt++){
   const before=await this.#store.readState(),s=await this.#state(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,period=accountingPeriod(this.#clock(),timezone),a=await this.#account(timezone,period);
-  ensure(before.feedId===a.feedId,'Accounting database changed');
+  ensure(before.feedId===a.feedId,'Accounting database changed');if(before.cursor!==a.cursor)continue;
   const missions=new Map<string,Snapshot<Mission>|null>();await Promise.all([...new Set([...a.works.values()].map(w=>w.missionId))].map(async id=>missions.set(id,await this.#store.load(id) as Snapshot<Mission>|null)));
   const fact=(missionId:string,workId:string)=>missions.get(missionId)?.value.works.find(w=>w.id===workId);
   let reserved=0;for(const r of s?.value.reservations??[]){if(r.state!=='reserved')continue;const w=a.works.get(r.missionId+'\0'+r.workId),actual=fact(r.missionId,r.workId);if(actual&&sent(actual)&&recordedSettlement(actual)!==undefined)continue;reserved+=Math.max(0,r.amount-(w?.consumed??0));}
@@ -122,8 +123,9 @@ export class MonthlyBudgetService {
   }
   for(const t of a.turns.values())if(t.route&&(!t.usage||t.status==='unknown'||!count(t.usage.outputTokens)))reserved+=Math.max(0,t.route.outputTokenCap-(count(t.usage?.outputTokens)?t.usage.outputTokens:0));
   const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.state==='done'?d.limit:s!.value.limit??0)],[copy('ui.budget.after'),this.#amount(proposalLimit(s!.value,d))],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:proposalLimit(s!.value,d)}}));
-  ensure((await this.#store.readState()).feedId===a.feedId,'Accounting database changed');
+  const end=await this.#store.readState();ensure(end.feedId===a.feedId,'Accounting database changed');if(end.cursor!==a.cursor)continue;
   return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,usageBounded:a.usageBounded,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
+  }throw new DomainError('Monthly accounting read contention');
  }
  #amount(n:number){return n.toLocaleString('ko-KR');}
  async configure(input:unknown){ensure(exact(input,['commandId','expectedRevision','limit','timezone'])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'configure-monthly-budget',limit:input.limit,timezone:input.timezone},OWNER);}
