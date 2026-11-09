@@ -12,5 +12,7 @@
   "splitNodeReflection": true,
   "hiddenSeparatorReflection": true,
   "spacedReflection": true,
-  "pngSha256": "6f5680973ab3b7b93821702b1c79261c2d83d193ef3f0bdaebf29ac030c592d6"
+  "cssHiddenReflection": true,
+  "displayContentsReflection": true,
+  "pngSha256": "6d610a70dcc6e2628fbf2afbd8be325a9c1db895f90b7a13315d34d8746043f3"
 }

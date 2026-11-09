@@ -22,14 +22,15 @@ function preparePage(){
  // Match text across element boundaries before changing individual nodes; keep the page layout.
  for(const visibleOnly of [false,true]){
   const spans:{node:Node;start:number;end:number;text:string}[]=[];let flat='';const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let node;
-  while(node=walker.nextNode()){if(visibleOnly&&!node.parentElement?.checkVisibility())continue;const text=node.textContent||'',start=flat.length;flat+=text;if(flat.length>262144)throw Error('Browser text bound exceeded');spans.push({node,start,end:flat.length,text});}
+  while(node=walker.nextNode()){if(visibleOnly){let parent=node.parentElement;if(!parent||getComputedStyle(parent).visibility!=='visible')continue;while(parent&&getComputedStyle(parent).display==='contents')parent=parent.parentElement;if(!parent?.checkVisibility({checkVisibilityCSS:true,checkOpacity:true}))continue;}const text=node.textContent||'',start=flat.length;flat+=text;if(flat.length>262144)throw Error('Browser text bound exceeded');spans.push({node,start,end:flat.length,text});}
   const ranges=browserPrivateRanges(flat,secrets);let index=0;
   for(const span of spans){while(index<ranges.length&&ranges[index]![1]<=span.start)index++;let offset=span.start,result='';for(let i=index;i<ranges.length&&ranges[i]![0]<span.end;i++){const [start,end]=ranges[i]!;result+=span.text.slice(offset-span.start,Math.max(start,span.start)-span.start);if(start>=span.start)result+='••••';offset=Math.min(end,span.end);}result+=span.text.slice(offset-span.start);if(result!==span.text)span.node.textContent=result;}
  }
  controls.forEach((e,index)=>{const f=original[index]!;if(!e.isConnected)return;if(maskBrowserField(f)){if(e instanceof HTMLInputElement&&e.type!=='hidden')e.type='text';if(e instanceof HTMLSelectElement){e.replaceChildren(new Option('••••','••••'));}e.value='••••';e.setAttribute('value','••••');}else{e.value=clean(f.value);e.setAttribute('value',clean(f.value));}});
  const policy=document.createElement('meta');policy.httpEquiv='Content-Security-Policy';policy.content="script-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'";document.head.prepend(policy);
  const style=document.createElement('style');style.textContent='*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';document.head.append(style);
- return {address:location.href,title:clean(document.title),blocks:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility()).slice(0,64).map(e=>((e as HTMLElement).innerText||'').trim().slice(0,4000)),fields:original.slice(0,64).map(f=>({...f,label:clean(f.label),value:maskBrowserField(f)?'••••':clean(f.value)}))};
+ if(clean(document.body.innerText)!==document.body.innerText)throw Error('Browser screenshot redaction incomplete');
+ return {address:location.href,title:clean(document.title),blocks:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText||'').trim().slice(0,4000)),fields:original.slice(0,64).map(f=>({...f,label:clean(f.label),value:maskBrowserField(f)?'••••':clean(f.value)}))};
 }
 export async function captureBrowserPage(run:(args:string[])=>Promise<any>,path:string):Promise<RawBrowserPage>{
  await run(['set','viewport','584','764']);
