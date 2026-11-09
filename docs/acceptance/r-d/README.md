@@ -11,7 +11,7 @@ No provider, payment, credential, network effect or automatic memory adoption is
 ## Verification
 
 - `npm run typecheck`; approved-copy lint: zero findings.
-- Final changed-path tests: 72 passed, zero failed or skipped.
+- Final changed-path tests: 74 passed, zero failed or skipped.
 - Related new/changed tests cover all four recurring bug classes: overlapping commands, drain during writes, stale feed/selection/deadline and late responses. Portable-backup roundtrip retains candidate decisions, names and source pins.
 - Existing assistant, member Work, protocol, explicit-memory, Growth and effect suites: 164 passed, 8 actual-DB cases skipped.
 - Browser contract captures: B2, B2-offline, B2-offline-failed, B9, B9-restart, B9-update, B12, B16, B16-later, B16-sent, B7-done, B7-unknown, B7-fail, B6, B7-churn, B18 and B18-room-b in both themes. These are affected-screen captures, not an all-screen local gate claim.
@@ -40,3 +40,5 @@ Other unsupported business summaries, unrecorded step times, layout drift and un
 ## Review fixes
 
 The first CI pass exposed a source-link test that asserted before native hashing completed. It now waits for the actual digest promises; no fixed sleep or implementation change was needed. Codex then identified a pre-intent stale-review HTTP rejection classified as unknown delivery. The route now labels only definite validation/admission failures as rejected, allowing a refreshed owner decision. HTTP and client regressions retain the unknown-intent/save no-resend locks.
+
+Rule-decision admission refusals now carry the same explicit rejected/admission envelope, with HTTP and client coverage proving that a stale adoption may still be deferred. Hidden case panes clear their cached contents when the database feed resets.

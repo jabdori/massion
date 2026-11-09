@@ -1,3 +1,4 @@
+import {once} from 'node:events';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {RuleChangesService} from '../src/rule-changes.ts';
@@ -35,4 +36,13 @@ test('owner proposal producers retain names and exact source Work metadata witho
  await f.product.saveMemory('mission',{commandId:'named-memory',expectedRevision:current.revision,memory:{id:'named',version:1,name:'Named instruction',content:'Owner instruction',source:'Literal owner provenance',sourceWork}});
  const after=(await f.store.load('mission'))!;assert.deepEqual(after.value.memories.at(-1)!.sourceWork,sourceWork);assert.equal(after.value.memories.at(-1)!.name,'Named instruction');
  await f.product.proposeGrowth('mission',{...f.proposal,expectedRevision:after.revision,candidate:{...f.proposal.candidate,name:'Rounding policy',sourceWork}});const m=(await f.store.load('mission'))!.value.memories.at(-1)!;assert.deepEqual(m.sourceWork,sourceWork);assert.equal(m.name,'Rounding policy');validateMissionJournalLineage(await f.journal());
+});
+
+test('HTTP rule refusal before commit is explicit and does not prevent later deferral',async t=>{
+ const {createWorkbench}=await import('../src/server.ts');const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const card=(await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!,read=await f.store.readState();
+ await f.product.saveMemory('mission',{commandId:'new-baseline',expectedRevision:(await f.store.load('mission'))!.revision,memory:{id:'rounding',version:3,content:'Round each line',source:'Owner replacement'}});
+ const connections={list:()=>({representative:{intakeMissionId:'mission'}})} as any,server=createWorkbench(f.store,f.root,{connections,scheduleIntervalMs:0});t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
+ const post=(answer:string)=>fetch('http://127.0.0.1:'+address.port+'/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':read.feedId},body:JSON.stringify({commandId:'http-rule-'+answer,decisionId:card.id,answer})});
+ const before=(await f.store.load('mission'))!,rejected=await post('act'),body=await rejected.json();assert.equal(rejected.status,400);assert.equal(body.outcome,'rejected');assert.equal(body.phase,'admission');assert.equal(body.feedId,read.feedId);assert.deepEqual(await f.store.load('mission'),before);
+ const later=await post('later');assert.equal(later.status,200);assert.equal((await later.json()).status,'committed');assert.equal((await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!.state,'later');
 });
