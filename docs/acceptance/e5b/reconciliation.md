@@ -18,3 +18,6 @@ The old PR-row/Work-result visual residuals are unchanged. No additional indepen
 
 
 Final affected-suite results: **173 passed, one real-DB skip, zero failures** across the app/backend/client/desktop-build checks ([log](desktop-ci/review-tests.txt)). The final offline/connection/reconciliation/build rerun passed **37/37** ([log](desktop-ci/offline-init-tests.txt)); UI layout/readback checks passed **24/24**. Root typecheck and desktop typecheck passed. The final rebuilt Linux Xvfb smoke exited 0 ([log](desktop-ci/smoke.log.txt)). The previous main-head `verify` and `headless` CI failures were reproduced and corrected; remote CI must run again on the pushed result.
+
+
+Final integration includes main `395193e` (#115/#116) without rebasing. Auto-merge preserved the reconciliation and startup fixes. Post-integration typecheck and related suites passed **239 tests, 4 opt-in skips, zero failures** ([log](desktop-ci/main395-tests.txt)); the actual reconciliation browser flow and rebuilt Linux Xvfb smoke passed again ([smoke](desktop-ci/main395-smoke.txt)). Only affected checks were run locally; the full suite remains CI work.

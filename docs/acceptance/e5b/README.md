@@ -45,3 +45,6 @@ The final post-#111 conversation/source-lineage, member Work and internal-team r
 ## Independent-review and CI follow-up
 
 The owner-reconciliation fix and its actual host/browser evidence are documented in [reconciliation.md](reconciliation.md). The unknown-write block remains until an evidenced owner command settles that exact call; no reconciliation resends it. This round also corrects the desktop bundle insertion and the offline draft initialization order exposed by CI.
+
+
+Final integration includes main `395193e` (#115/#116) without rebasing. Auto-merge preserved the reconciliation and startup fixes. Post-integration typecheck and related suites passed **239 tests, 4 opt-in skips, zero failures** ([log](desktop-ci/main395-tests.txt)); the actual reconciliation browser flow and rebuilt Linux Xvfb smoke passed again ([smoke](desktop-ci/main395-smoke.txt)). Only affected checks were run locally; the full suite remains CI work.
