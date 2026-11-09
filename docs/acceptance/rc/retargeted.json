@@ -1,0 +1,62 @@
+[
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 시작\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 시작\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no restart state or restart control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no restart state or restart control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 시작\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 시작\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no restart state or restart control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no restart state or restart control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  }
+]

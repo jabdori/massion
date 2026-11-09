@@ -1,7 +1,8 @@
 /** Named members and their admission decisions (docs/architecture/members.md, ADR 0003 §1, §2, §8). Identity lives here; Work context never does. */
 import {DomainError,hash} from './domain.ts';
-import type {Actor,Mission} from './domain.ts';
-import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,TITLE_BYTES} from './assistant-conversation.ts';
+import type {Actor,Mission,Work} from './domain.ts';
+import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,TITLE_BYTES,headSegment,segmentId} from './assistant-conversation.ts';
+import type {AssistantSegment} from './assistant-conversation.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
 import type {TimeObservation} from './memory-expiry.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
@@ -10,12 +11,14 @@ import {representativeName} from './surface-shell.ts';
 
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const MEMBERS_ID=ASSISTANT_CONVERSATION_PREFIX+'members',MEMBER_SHAPES=['round','square','drop','hex','diamond','cloud','clover','tri'] as const,MAX_MEMBERS=32,MAX_DECISIONS=32,LATER_MS=30*86400000;
-export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number}
+export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number;archivedAt?:number}
+export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number}
 export interface MemberDecision {id:string;at:number;topic:string;works:{title:string}[];count:number;handoff?:string;modelGroup:'default';state:'open'|'later'|'done';answeredAt?:number;memberId?:string}
 export interface MembersState {kind:'members';id:string;members:Member[];decisions:MemberDecision[]}
 export type MembersCommand =
  | {type:'propose-member';decisionId:string;topic:string;works:{title:string}[];count:number;handoff?:string}
  | {type:'set-member-group';memberId:string;modelGroup:string}
+ | {type:'archive-member'|'unarchive-member';memberId:string}
  | {type:'defer-member';decisionId:string}
  | {type:'reopen-member';decisionId:string}
  | {type:'admit-member';decisionId:string;memberId:string;name:string;shape:string};
@@ -60,6 +63,11 @@ export function applyMembers(current:MembersState|null,command:MembersCommand,ac
    d.state='done';d.answeredAt=at;d.memberId=command.memberId;break;
   }
   case 'set-member-group': {role('owner');ensure(exact(command,['type','memberId','modelGroup'])&&id(command.memberId)&&id(command.modelGroup),'Exact member group fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member,'Unknown member');member.modelGroup=command.modelGroup;break;}
+  case 'archive-member': case 'unarchive-member': {
+   role('owner');ensure(exact(command,['type','memberId'])&&id(command.memberId),'Exact member archive fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member,'Unknown member');
+   if(command.type==='archive-member'){ensure(member.archivedAt===undefined,'Member is already archived','conflict');ensure(at>=member.admittedAt,'Archive time precedes admission');member.archivedAt=at;}
+   else {ensure(member.archivedAt!==undefined,'Member is not archived','conflict');delete member.archivedAt;}break;
+  }
   default: throw new DomainError('Unknown command');
  }
  return {value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),time:structuredClone(time)}]};
@@ -86,8 +94,47 @@ export class MembersService {
  readonly #store:Store<any>;readonly #intake:()=>string|undefined;readonly #clock:()=>number;
  constructor(store:Store<any>,intake:()=>string|undefined,clock:()=>number=Date.now){this.#store=store;this.#intake=intake;this.#clock=clock;}
  async #state(){return await this.#store.load(MEMBERS_ID) as Snapshot<MembersState>|null;}
- async read(){const s=await this.#state(),v=s?.value;return {revision:s?.revision??0,members:(v?.members??[]).map(m=>({id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup})),decisions:v?v.decisions.map(d=>card(v,d)):[]};}
+ /** Only active identities reach the existing turn/admission path; historical reads retain archived identities. */
+ async roster(){return ((await this.#state())?.value.members??[]).filter(m=>m.archivedAt===undefined).map(m=>({id:m.id,name:m.name,modelGroup:m.modelGroup}));}
+ async read(){
+  for(let attempt=0;attempt<3;attempt++){
+   const initial=await this.#store.readState(MEMBERS_ID),feedId=initial.feedId,s=initial.snapshot as Snapshot<MembersState>|null,v=s?.value;let replaced=false;
+   const load=async(id:string)=>{const read=await this.#store.readState(id);if(read.feedId!==feedId){replaced=true;throw new DomainError('Database changed during member read','conflict');}return read.snapshot;};
+   try{
+    const missionIds=new Set<string>(),intake=this.#intake();if(intake&&!intake.startsWith(ASSISTANT_CONVERSATION_PREFIX))missionIds.add(intake);
+    const remember=(id:string|undefined)=>{if(id&&!id.startsWith(ASSISTANT_CONVERSATION_PREFIX))missionIds.add(id);};
+    const conversation=async(thread:string)=>{
+     let messageCount=0,lastActiveAt:number|null=null;
+     const activity=(at:number|undefined)=>{if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);};
+     const head=await headSegment({load},thread);
+     for(let n=1;n<=head;n++){
+      const segment=(await load(segmentId(n,thread)))?.value as AssistantSegment|undefined;
+      for(const message of segment?.messages??[]){messageCount++;activity(message.at);}
+      for(const turn of segment?.turns??[]){activity(turn.ownership?.startedAt);remember(turn.outcome?.missionId);remember(turn.steer?.missionId);}
+     }
+     return {messageCount,lastActiveAt};
+    };
+    // Follow every retained Mission pin, including old intake Missions; the UI Work list is truncated.
+    await conversation('');const activity=new Map<string,Awaited<ReturnType<typeof conversation>>>();
+    for(const m of v?.members??[])activity.set(m.id,await conversation(memberThread(m.id)));
+    const works:Work[]=[];for(const missionId of missionIds){const mission=(await load(missionId))?.value as Mission|undefined;works.push(...mission?.works??[]);}
+    const members:MemberRead[]=(v?.members??[]).map(m=>{
+     const own=works.filter(w=>w.assistantSource?.memberId===m.id),chat=activity.get(m.id)!;let lastActiveAt:number|null=chat.lastActiveAt;
+     for(const work of own)for(const at of [work.runtimeRun?.ownership?.startedAt,work.endedAt])if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);
+     // Current Schedule has no member binding: its only kind is the Representative's briefing.
+     return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:0};
+    });
+    await load(MEMBERS_ID);
+    return {feedId,revision:s?.revision??0,members:members.filter(m=>m.archivedAt===null),archived:members.filter(m=>m.archivedAt!==null),decisions:v?v.decisions.map(d=>card(v,d)):[]};
+   }catch(error){if(!replaced)throw error;}
+  }
+  throw new DomainError('Database changed during member read','conflict');
+ }
  async member(memberId:string){return (await this.#state())?.value.members.find(m=>m.id===memberId);}
+ async act(input:unknown):Promise<CommitResult<MembersState>>{
+  ensure(exact(input,['commandId','action','memberId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&['archive','unarchive'].includes(input.action as string),'Exact member lifecycle fields required');
+  return this.#dispatch(input.commandId,OWNER,{type:input.action==='archive'?'archive-member':'unarchive-member',memberId:input.memberId});
+ }
  /** Host-only step for the Representative (no HTTP route, so no caller can write a Representative proposal): the host writes the rows from Representative Works whose run started this calendar month (UTC). */
  async propose(input:unknown):Promise<CommitResult<MembersState>>{
   ensure((exact(input,['topic','workIds'])||exact(input,['topic','workIds','handoff'])&&line(input.handoff,TITLE_BYTES))&&Array.isArray(input.workIds)&&input.workIds.length<=64&&input.workIds.every(id)&&new Set(input.workIds).size===input.workIds.length,'Exact member proposal fields required');

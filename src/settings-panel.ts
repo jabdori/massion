@@ -33,7 +33,9 @@ export const settingsStyle=String.raw`.settings-stack{max-width:var(--settings-c
 export const settingsClient=String.raw`
 const settingsLabels=${JSON.stringify(Object.fromEntries(sections.map(([id,label])=>[id,label])))};
 const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
-const settingsStale={},settingsGen={};
+const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set();
+let settingsConnectionLifecycle=null,settingsKeyConnection='',settingsMembers=null,settingsDevices=null,settingsDataEpoch=-1,settingsDataFeed='',settingsDevicePicker=false,settingsActionError='';
+function settingsInvalidate(){settingsDataEpoch=-1;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
 let settingsShown='general',settingsCatalog=null,settingsMission=null,settingsRules=null,settingsHealth='',settingsAdding=false,settingsBusy=false,settingsEvidence=new Set(),settingsSkills=null,settingsMember='',settingsDetails=new Set(),settingsGroup='',settingsGroupUnknown=false,settingsGroupError='',settingsGroupAdding=false;
 const settingsRepName=()=>shellPages.chat[1];
 const settingsFamily=f=>({anthropic:copy('ui.panel.family-anthropic'),openai:copy('ui.panel.family-openai'),google:copy('ui.panel.family-google'),zhipu:copy('ui.panel.family-zhipu')})[f]||f||copy('ui.panel.unknown');
@@ -45,40 +47,66 @@ function settingsOpen(name,app=''){if(!$('page-settings').hidden)$('page-heading
 async function settingsRead(path,scope){try{const {response,body}=await request(path,{scope});return response.ok?body:null;}catch{return null;}}
 /** Each section's read has its own generation: a slower earlier read for the same section never overwrites a newer one. */
 async function settingsLoad(name){
- const gen=settingsGen[name]=(settingsGen[name]||0)+1,catalogGen=settingsGen.catalog||0,reconcileUnknown=settingsGroupUnknown,epoch=connectionEpoch,feed=chatView&&chatView.feedId,read=async path=>{const body=await settingsRead(path,'settings:'+name+':'+path);if(gen!==settingsGen[name]||epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)||path==='/connections'&&catalogGen!==(settingsGen.catalog||0))throw settingsStale;return body;};
+ if(settingsDataEpoch!==connectionEpoch||settingsDataFeed!==(chatView&&chatView.feedId)){settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;settingsDataEpoch=connectionEpoch;settingsDataFeed=chatView&&chatView.feedId;}
+ const gen=settingsGen[name]=(settingsGen[name]||0)+1,catalogGen=settingsGen.catalog||0,reconcileUnknown=settingsGroupUnknown,epoch=connectionEpoch,feed=chatView&&chatView.feedId,read=async path=>{const body=await settingsRead(path,'settings:'+name+':'+path);if(gen!==settingsGen[name]||epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)||path==='/connections'&&catalogGen!==(settingsGen.catalog||0))throw settingsStale;if(body?.feedId&&feed&&body.feedId!==feed){settingsInvalidate();throw settingsStale;}return body;};
  try{
  if(name==='general')await schedulesLoad();
  if(name==='memory'||name==='members'||name==='connections'){
   settingsCatalog=await read('/connections');
   if(reconcileUnknown&&settingsCatalog&&Array.isArray(settingsCatalog.modelGroups)&&typeof settingsCatalog.configHash==='string'&&settingsCatalog.configHash){settingsGroupUnknown=false;settingsGroupError='';}
  }
+ if(name==='connections')settingsConnectionLifecycle=await read('/connections/lifecycle');
  if(name==='memory'){const id=settingsCatalog&&settingsCatalog.representative&&settingsCatalog.representative.intakeMissionId;settingsMission=id?await read('/missions/'+encodeURIComponent(id)):null;}
- if(name==='devices')settingsHealth=(await read('/health'))?.status==='ready'?copy('ui.panel.ready'):copy('header.status.01');
+ if(name==='devices'){settingsHealth=(await read('/health'))?.status==='ready'?copy('ui.panel.ready'):copy('header.status.01');settingsDevices=await read('/assistant/devices');}
  if(name==='permissions')settingsRules=await read('/assistant/permissions');
  if(name==='apps')settingsApps=await read('/assistant/apps');
  if(name==='members'||name==='improvements')settingsSkills=await read('/assistant/skills');
+ if(name==='members'){settingsMembers=await read('/assistant/members');settingsApps=await read('/assistant/apps');}
  }catch(error){if(error===settingsStale)return;throw error;}
  if(settingsShown===name)renderSettings();
 }
 /** One owner command, sent once; a lost answer is not resent, the next read shows the state. */
 async function settingsPost(path,body){if(settingsBusy)return;settingsBusy=true;try{await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}finally{settingsBusy=false;await settingsLoad(settingsShown);}}
+const settingsMembersList=()=>Array.isArray(settingsMembers?.members)?settingsMembers.members:chatMembers();
+const settingsLifecycleKey=key=>String(chatView&&chatView.feedId)+':'+key;
+const settingsLifecycleLocked=key=>settingsPending.has(settingsLifecycleKey(key))||settingsUnknown.has(settingsLifecycleKey(key));
+async function settingsLifecyclePost(key,path,body){
+ const identity=settingsLifecycleKey(key);if(settingsLifecycleLocked(key)||settingsDataEpoch!==connectionEpoch)return false;
+ const epoch=connectionEpoch,feed=chatView&&chatView.feedId;settingsPending.add(identity);settingsActionError='';renderSettings();let ok=false;
+ try{const {response,body:result}=await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});
+  if(epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)){settingsUnknown.add(identity);return false;}
+  if(response.ok&&result&&['committed','replayed','completed','settled','saved','checked'].includes(result.status))ok=true;
+  else if(!response.ok&&result?.outcome==='rejected')settingsActionError=copy('ui.panel.unavailable');else settingsUnknown.add(identity);
+ }catch{settingsUnknown.add(identity);}finally{settingsPending.delete(identity);if(epoch===connectionEpoch&&feed===(chatView&&chatView.feedId))await settingsLoad(settingsShown);}
+ return ok;
+}
+function settingsDevicesView(){
+ const key=d=>'device:'+d.id,action=d=>{if(settingsShown!=='devices'||!settingsDevices?.devices?.includes(d))return;if(!d.admitted){chatOpenThread('');return;}return settingsLifecyclePost(key(d),'/assistant/devices',{deviceId:d.id,action:d.status==='connected'?'disconnect':'connect'});};
+ const devices=settingsDevices?.devices||[],add=chatButton(copy('settings.button.03'),()=>{settingsDevicePicker=!settingsDevicePicker;renderSettings();});add.id='settings-device-add';add.setAttribute('aria-expanded',String(settingsDevicePicker));
+ const rows=[settingsRow(copy('ui.panel.this-mac'),settingsHealth),...devices.map(d=>{const button=chatButton(copy(d.status==='connected'?'settings.button.12':'settings.button.06'),()=>action(d));button.id='settings-device-'+d.id;button.disabled=!d.available||d.status==='unknown'||settingsLifecycleLocked(key(d));const label=d.status==='connected'?copy('ui.panel.connected'):d.status==='offline'?copy('header.status.01'):d.status==='unavailable'?copy('ui.panel.unavailable'):copy('ui.panel.unknown');return settingsRow(d.name,label+' · '+d.agent,button);})];
+ if(settingsDevicePicker){const available=devices.filter(d=>d.status!=='connected');for(const d of available){const button=chatButton(d.name,()=>action(d));button.disabled=!d.available||d.status==='unknown'||settingsLifecycleLocked(key(d));rows.push(button);}if(!available.length)rows.push(element('div',copy('ui.settings.devices-empty'),'set-empty'));}
+ return [add,...settingsCard('',rows).slice(1)];
+}
 function settingsGroupName(id){const g=(settingsCatalog&&settingsCatalog.modelGroups||[]).find(g=>g.id===id);return id==='default'?copy('settings.text.01'):g?g.name:id;}
 function renderSettings(){
  const body=$('settings-'+settingsShown+'-body'),view=settingsShown==='connections'?$('settings-groups'):body;if(!view)return;
+ if(settingsDataEpoch!==connectionEpoch){view.replaceChildren(element('div',copy('ui.panel.unavailable'),'set-empty'));return;}
  if(settingsShown==='general')view.replaceChildren(...settingsGeneralView());
  if(settingsShown==='memory')view.replaceChildren(...settingsMemoryView());
- const member=settingsShown==='members'&&settingsMember?chatMembers().find(x=>x.id===settingsMember):null;$('settings-members-title').hidden=!!member;if(member){view.replaceChildren(...settingsMemberView(member));return;}settingsMember='';
+ const member=settingsShown==='members'&&settingsMember?settingsMembersList().find(x=>x.id===settingsMember):null;$('settings-members-title').hidden=!!member;if(member){view.replaceChildren(...settingsMemberView(member));settingsLifecycleStatus(view);return;}settingsMember='';
  if(settingsShown==='improvements')view.replaceChildren(...settingsImprovementsView());
  if(settingsShown==='members'){
-  const rep=element('button',undefined,'set-row'),avatar=element('span',settingsRepName().slice(0,1),'avatar');rep.type='button';rep.id='settings-member-representative';avatar.setAttribute('aria-hidden','true');rep.append(avatar,settingsText(settingsRepName()),element('span',copy('settings.text.01')+' ›','set-side'));rep.addEventListener('click',()=>chatOpenThread(''));
-  const rows=chatMembers().map(m=>{const row=element('button',undefined,'set-row'),a=element('span',[...m.name][0],'avatar');row.type='button';row.id='settings-member-'+m.id;shellLook(a,m);shellBusyAvatar(a,m,shellWorks.some(w=>w.memberId===m.id&&shellWorkBusy(w)));row.append(a,settingsText(m.name),element('span',settingsGroupName(m.modelGroup||'default')+' ›','set-side'));row.addEventListener('click',()=>{settingsMember=m.id;renderSettings();});return row;});
-  view.replaceChildren(...settingsCard('',[rep,...rows]).slice(1));}
- if(settingsShown==='devices')view.replaceChildren(...settingsCard('',[settingsRow(copy('ui.panel.this-mac'),settingsHealth)]).slice(1));
+  const rep=element('button',undefined,'set-row'),avatar=element('span',settingsRepName().slice(0,1),'avatar');rep.type='button';rep.id='settings-member-representative';avatar.setAttribute('aria-hidden','true');const repTimes=(chatRep?.turns||chatView?.turns||[]).map(t=>t.at).filter(Number.isSafeInteger),repAt=repTimes.length?Math.max(...repTimes):null,repMeta=repAt===null?'':copy('ui.settings.last-active',{time:chatTime(repAt)});rep.append(avatar,settingsText(settingsRepName(),repMeta),element('span',copy('settings.text.01')+' ›','set-side'));rep.setAttribute('aria-label',[settingsRepName(),repMeta,copy('settings.text.01')].filter(Boolean).join(' '));rep.addEventListener('click',()=>chatOpenThread(''));
+  const rows=settingsMembersList().map(m=>{const row=element('button',undefined,'set-row'),a=element('span',[...m.name][0],'avatar');row.type='button';row.id='settings-member-'+m.id;shellLook(a,m);shellBusyAvatar(a,m,shellWorks.some(w=>w.memberId===m.id&&shellWorkBusy(w)));a.setAttribute('aria-hidden','true');a.removeAttribute('role');a.removeAttribute('aria-label');row.append(a,settingsText(m.name,settingsMemberMeta(m)),element('span',settingsGroupName(m.modelGroup||'default')+' ›','set-side'));row.setAttribute('aria-label',[m.name,settingsMemberMeta(m),settingsGroupName(m.modelGroup||'default')].filter(Boolean).join(' '));row.addEventListener('click',()=>{settingsMember=m.id;renderSettings();});return row;});
+  view.replaceChildren(...settingsCard('',[rep,...rows]).slice(1));const archived=settingsMembers?.archived||[];if(archived.length)view.append(...settingsCard(copy('ui.settings.archived-count',{count:archived.length}),archived.map(m=>{const button=chatButton(copy('settings.button.10'),()=>settingsShown==='members'&&settingsMembers?.archived?.includes(m)&&settingsLifecyclePost('member:'+m.id,'/assistant/members',{memberId:m.id,action:'unarchive'}));button.disabled=settingsLifecycleLocked('member:'+m.id);return settingsRow(m.name,'',button);})));}
+ if(settingsShown==='devices')view.replaceChildren(...settingsDevicesView());
  if(settingsShown==='apps')view.replaceChildren(...settingsAppsView());
  if(settingsShown==='connections')view.replaceChildren(...settingsConnectionsView());
  if(settingsShown==='usage')view.replaceChildren(...settingsUsageView());
  if(settingsShown==='permissions')view.replaceChildren(...settingsPermissionsView());
+ settingsLifecycleStatus(view);
 }
+function settingsLifecycleStatus(view){if(settingsActionError||[...settingsUnknown].some(key=>key.startsWith(String(chatView&&chatView.feedId)+':'))){const status=element('p',settingsActionError||copy('ui.settings.command-unknown'),'set-line');status.setAttribute('role','status');view.append(status);}}
 function settingsGeneralView(){
  const name=element('input');name.id='settings-name';name.value=settingsRepName();name.readOnly=true;name.setAttribute('aria-label',copy('page.columnheader.02'));
  const rows=[settingsRow(copy('page.columnheader.02'),'',name)];
@@ -122,7 +150,15 @@ function settingsConnectionsView(){
   const chips=element('span',undefined,'set-chips');for(const m of g.models){const chip=element('span',m.model,'set-chip');chip.append(element('span',' '+settingsFamily(m.family)+(m.status==='available'?'':' · '+copy('ui.panel.unavailable'))));chips.append(chip);}text.append(chips);
   block.append(text,element('span',copy('ui.settings.provider-count',{count:new Set(g.models.map(m=>settingsFamily(m.family))).size}),'set-side'));return block;});
  const cli=(c.connections||[]).filter(x=>/-cli$/.test(x.providerType)),keys=(c.connections||[]).filter(x=>!/-cli$/.test(x.providerType));
- return [...settingsCard(copy('settings.heading.03'),groups),...settingsCard(copy('settings.heading.02'),cli.map(x=>settingsRow(x.label,copy('ui.panel.not-checked')))),...settingsCard(copy('settings.heading.01'),keys.map(x=>settingsRow(x.label,x.connectionStatus==='fixture'?copy('ui.panel.fixture'):x.credentialConfigured?copy('ui.panel.not-checked'):copy('settings.text.03'))))];
+ const row=x=>{
+  const state=(settingsConnectionLifecycle?.connections||[]).find(c=>c.connectionId===x.id&&c.configHash===x.configHash),o=state?.observation,key='connection:'+x.id;
+  const status=state?.credentialWriteStatus==='unknown'?copy('ui.panel.unknown'):state?.credentialStorage==='missing'?copy('settings.text.03'):o?.status==='expired'?copy('ui.apps.credential-expired'):state?.credentialStorage==='saved'||state?.credentialWriteStatus==='stored'?copy('ui.apps.credential-saved'):o?.status==='detected'?copy('ui.panel.connected'):o?.status==='absent'?copy('ui.apps.credential-missing'):x.connectionStatus==='fixture'?copy('ui.panel.fixture'):x.credentialConfigured===false?copy('settings.text.03'):copy('ui.panel.not-checked');
+  const recheck=chatButton(copy('settings.button.07'),()=>settingsShown==='connections'&&settingsCatalog?.connections?.includes(x)&&settingsLifecyclePost(key,'/connections/'+encodeURIComponent(x.id)+'/recheck',{expectedConfigHash:x.configHash}));recheck.id='settings-connection-recheck-'+x.id;recheck.disabled=settingsLifecycleLocked(key);
+  const controls=/-cli$/.test(x.providerType)?[recheck]:[];if(!/-cli$/.test(x.providerType)){const edit=chatButton(copy(o?.status==='expired'?'settings.button.06':state?.credentialStorage==='missing'||x.credentialConfigured===false?'settings.button.16':'settings.button.15'),()=>{if(settingsLifecycleLocked(key))return;settingsKeyConnection=x.id;renderSettings();document.getElementById('settings-key-value')?.focus();});edit.id='settings-connection-key-'+x.id;edit.disabled=!state?.canReplaceKey||state.credentialWriteStatus==='unknown'||settingsLifecycleLocked(key);controls.push(edit);}
+  const result=settingsRow(x.label,status,...controls);if(o?.update==='available')result.append(element('span',copy('ui.settings.update-available'),'set-side'));if(o?.restart==='required')result.append(element('span',copy('settings.status.01'),'set-side'));
+  if(settingsKeyConnection===x.id){const input=element('input');input.id='settings-key-value';input.type='password';input.autocomplete='new-password';input.maxLength=1024;input.setAttribute('aria-label',copy('ui.settings.key'));const save=chatButton(copy('ui.settings.key-save'),()=>{const apiKey=input.value;input.value='';if(!apiKey||settingsShown!=='connections'||settingsKeyConnection!==x.id||!settingsCatalog?.connections?.includes(x))return;settingsKeyConnection='';return settingsLifecyclePost(key,'/connections/'+encodeURIComponent(x.id)+'/key',{expectedConfigHash:x.configHash,apiKey});});save.id='settings-key-save';save.disabled=settingsLifecycleLocked(key);const cancel=chatButton(copy('conversation.link.25'),()=>{input.value='';settingsKeyConnection='';renderSettings();});result.append(input,cancel,save);}return result;
+ };
+ return [...settingsCard(copy('settings.heading.03'),groups),...settingsCard(copy('settings.heading.02'),cli.map(row)),...settingsCard(copy('settings.heading.01'),keys.map(row))];
 }
 async function settingsGroupSave(g,change){
  if(settingsBusy||settingsGroupUnknown||settingsShown!=='connections'||settingsGroup!==g.id)return;
@@ -167,10 +203,12 @@ function settingsPermissionsView(){
 const settingsWhen=at=>Number.isSafeInteger(at)?chatDay(at):'';
 const settingsSkillPost=body=>settingsPost('/assistant/skills',body);
 /** B19-juno: a member's skills, procedures, model group and recent improvements with Revert; unused skills are archived, never deleted. */
+function settingsMemberMeta(m){const counts=Number.isSafeInteger(m.workCount)&&Number.isSafeInteger(m.scheduleCount)?copy('ui.settings.member-counts',{count:m.workCount,schedules:m.scheduleCount}):'';return [(m.openWorkCount>0||shellWorks.some(w=>w.memberId===m.id&&shellWorkBusy(w)))?copy('sidebar.status.05'):'',counts].filter(Boolean).join(' · ');}
 function settingsMemberView(m){
  const k=settingsSkills||{skills:[],improvements:[]},mine=(k.skills||[]).filter(s=>s.memberId===m.id),inUse=mine.filter(s=>s.state==='active'),side=s=>s.author==='owner'?copy('ui.me-initial'):copy('ui.panel.version',{version:s.version})+' · '+settingsWhen(s.at);
  const back=chatButton('‹ '+copy('page.heading.02'),()=>{settingsMember='';renderSettings();},'set-back'),head=element('div',undefined,'set-head'),avatar=element('span',[...m.name][0],'avatar');avatar.setAttribute('aria-hidden','true');shellLook(avatar,m);
  head.append(avatar,element('h2',m.name),chatButton(copy('settings.link.02'),()=>chatOpenThread(m.id,m.name)));
+ const archive=chatButton(copy('settings.button.09'),()=>settingsShown==='members'&&settingsMember===m.id&&settingsLifecyclePost('member:'+m.id,'/assistant/members',{memberId:m.id,action:'archive'}));archive.id='settings-member-archive';archive.disabled=settingsLifecycleLocked('member:'+m.id)||m.archiveBlocked===true;
  const skills=inUse.filter(s=>s.kind==='skill').map(s=>settingsRow(s.name,'',element('span',side(s),'set-side')));
  const procedures=inUse.filter(s=>s.kind==='procedure').map(s=>{const row=element('div',undefined,'set-row'),steps=element('span',undefined,'set-steps');s.steps.forEach((step,i)=>{if(i)steps.append(element('i','›'));steps.append(element('span',step,'set-chip'));});row.append(steps,element('span',s.name,'set-side'));return row;});
  const g=((settingsCatalog&&settingsCatalog.modelGroups)||[]).find(x=>x.id===(m.modelGroup||'default'));
@@ -181,9 +219,10 @@ function settingsMemberView(m){
   row.append(text);if(c.reverted)row.append(element('span',c.reverted.to?copy('ui.panel.reverted-version',{version:c.reverted.to}):copy('ui.panel.reverted'),'set-side'));else if(c.revertible)row.append(chatButton(copy('page.button.09'),()=>settingsSkillPost({action:'revert',skillId:c.skillId})));wrap.append(row);
   if(open){const box=element('div',undefined,'set-evidence'),dl=element('dl');for(const [t,d] of [[copy('ui.panel.source'),c.source],[copy('ui.panel.result'),c.result],[copy('ui.panel.checked-by'),c.checkedBy]])if(d)dl.append(element('dt',t),element('dd',d));box.append(dl);wrap.append(box);}return wrap;});
  // ponytail: Undo restores the latest archive only; one line per skill if owners archive several at once.
- const archived=mine.filter(s=>s.state==='archived'),parts=[back,head,...settingsCard(copy('settings.heading.07'),skills),...settingsCard(copy('settings.heading.09'),procedures),...settingsCard(copy('settings.heading.03'),[group]),...settingsCard(copy('settings.heading.11'),recent)];
+ const boundApps=(settingsApps?.apps||[]).filter(a=>a.memberIds?.includes(m.id)).map(a=>settingsRow(a.name,a.version,a.enabled?chatButton(copy('settings.link.06'),()=>appOpen(a.id)):null));
+ const archived=mine.filter(s=>s.state==='archived'),parts=[back,head,...(settingsMemberMeta(m)?[element('p',settingsMemberMeta(m),'set-line')]:[]),...settingsCard(copy('settings.heading.07'),skills),...settingsCard(copy('settings.heading.09'),procedures),...settingsCard(copy('settings.heading.03'),[group]),...settingsCard(copy('ui.apps'),boundApps),...settingsCard(copy('page.heading.03'),[element('div',copy('ui.panel.unavailable'),'set-empty')]),...settingsCard(copy('settings.heading.11'),recent),...settingsCard(shellPages.schedules[1],[element('div',copy('ui.panel.unavailable'),'set-empty')])];
  if(archived.length){const last=(k.improvements||[]).find(c=>c.type==='archived'&&archived.some(s=>s.id===c.skillId)),lineEl=element('p',undefined,'set-line');lineEl.append(element('span',copy('ui.panel.archived-unused',{count:archived.length})),chatButton(copy('page.button.09'),()=>settingsSkillPost({action:'restore',skillId:last?last.skillId:archived[0].id}),''));parts.push(lineEl);}
- return parts;
+ parts.push(archive);return parts;
 }
 /** B14 Improvements: one card, what waits for the owner (the card itself is in the member conversation), what could not be checked, then each past improvement with its revert. */
 function settingsImprovementsView(){

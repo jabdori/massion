@@ -110,6 +110,24 @@ test('an identical answer racing a committed one replays instead of refusing the
  assert.deepEqual((await f.members.read()).members.map(m=>m.name),['셈'],'admitted once');
 });
 
+test('the admission roster blocks new Work for archived members and restores the same member without changing history',async t=>{
+ const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
+ await f.members.decide({commandId:'archive-admit',decisionId:(await f.members.read()).decisions[0]!.id,answer:'act',member:{name:'River',shape:'drop'}});
+ const member=(await f.members.read()).members[0]!,assistant=new AssistantService(f.store,f.product,f.m,{members:()=>f.members.roster()});
+ const request=async(title:string)=>{f.script.push(JSON.stringify({reply:'On it.',work:{title,member:'River'}}));const sent=await f.say(assistant,'Please '+title);await assistant.idle();return sent;};
+ const first=await request('First member Work');assert.equal(first.turn?.outcome?.work.status,'admitted');
+ const historical=structuredClone((await f.store.load('intake'))!.value.works);
+ await f.members.act({commandId:'archive-river',action:'archive',memberId:member.id});
+ const blocked=await request('Blocked member Work');assert.equal(blocked.turn?.outcome?.work.status,'not_created');
+ assert.deepEqual((await f.store.load('intake'))!.value.works,historical);
+ assert.deepEqual((await f.members.read()).members,[],'the existing read().members callback also excludes archived assignments');
+ await f.members.act({commandId:'unarchive-river',action:'unarchive',memberId:member.id});
+ const restored=await request('Restored member Work');assert.equal(restored.turn?.outcome?.work.status,'admitted');
+ const works=(await f.store.load('intake'))!.value.works as Mission['works'];assert.equal(works.length,historical.length+1);
+ assert.equal(works.at(-1)!.assistantSource!.memberId,member.id);assert.deepEqual(works.slice(0,-1),historical);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
 test('1:1 conversation: one thread per member through its model group, the member named as data, no Work admitted; lineage replays it',async t=>{
  const f=await setup(t),ids=await f.works();await f.members.propose({topic:'Data analysis',workIds:ids});
  await f.members.decide({commandId:'d-1',decisionId:(await f.members.read()).decisions[0]!.id,answer:'act',member:{name:'셈',shape:'drop'}});

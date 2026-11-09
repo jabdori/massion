@@ -6,6 +6,9 @@ import {createServer} from 'node:http';
 import {workbenchPage} from '../../src/workbench.ts';
 import {daemonGuard} from '../../src/daemon-auth.ts';
 import {EFFECT_SCREENS,effectFixture} from './effect-fixtures.ts';
+import {CONNECTION_SCREENS,settingsLifecycleFixture} from './settings-lifecycle-fixtures.ts';
+import {appLifecycleFixture} from './app-lifecycle-fixtures.ts';
+import {memberLifecycleFixture} from './member-lifecycle-fixtures.ts';
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
@@ -40,7 +43,12 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
    !response||!Number.isInteger(response.status)||response.status<200||response.status>599||!Object.hasOwn(response,'body'))throw new Error('Invalid fixture route: '+path);
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
- return parents.length===0&&EFFECT_SCREENS.includes(screen)?effectFixture(fixture):fixture;
+ if(parents.length!==0)return fixture;
+ if(EFFECT_SCREENS.includes(screen))return effectFixture(fixture);
+ if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))return memberLifecycleFixture(fixture);
+ if(['B23','B23-github','B23-github-expired'].includes(screen))return appLifecycleFixture(fixture);
+ if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')return settingsLifecycleFixture(fixture);
+ return fixture;
 }
 
 const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'");

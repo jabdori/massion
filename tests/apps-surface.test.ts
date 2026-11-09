@@ -24,6 +24,7 @@ function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=
   if(path==='/missions/intake')return reply(structuredClone(sourceFixture.routes[path]!.body));
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?rail:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:path==='/read-state?mission=intake'?structuredClone(sourceFixture.routes['/missions/intake']!.body):null});
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
   return reply({error:'Not configured'},503);
  });
@@ -121,7 +122,7 @@ test('self-made apps are listed apart with their maker and source Work',async()=
  const headings=app.node('settings-apps-body').children.filter(n=>n.tagName==='H3');assert.deepEqual(headings.map(n=>n.textContent),['설치됨 1','직접 만든 앱 1']);assert.ok(headings.every(n=>n.children.length===1),'counts are separate spans for approved spacing');assert.deepEqual(headings.map(n=>n.children[0]!.textContent),['1','1']);
  const source=button(app.node('settings-apps-body'),'PR #84 review ›')[0];assert.ok(source,'the recorded source Work is navigable');
  for(let parent=source.parentElement;parent;parent=parent.parentElement)assert.notEqual(parent.tagName,'BUTTON','source actions are never nested in an app button');
- await source.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);
+ await source.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.some(c=>c.path==='/read-state?mission=intake'),true);
  assert.equal(app.node('pane-tabs').children[0]!.children[0]!.textContent,'PR #84 review');
  assert.ok(app.all().find(n=>n.id==='work-card-pr84'),'the recorded source Work is loaded into the existing pane');
  assert.equal(app.calls.some(c=>c.options?.method==='POST'&&c.path!=='/assistant/apps/view'),false);
@@ -191,7 +192,7 @@ test('a self-made install card opens its exact source Work without installing',a
  const source={missionId:'intake',workId:'w-done',title:'PR #84 review'},card={id:'app-decision:source',at:T0,title:'PR list fetcher',question:'Install?',rows:[['Source',source.title]],source,action:'Install',state:'open'};
  const {app,posted}=fixture(false,[card]);await settle();
  const node=app.all().find(n=>n.id==='chat-decision-app-decision:source')!,link=button(node,'PR #84 review ›')[0];assert.ok(link);
- await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/missions/intake'));assert.equal(posted.length,0);
+ await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/read-state?mission=intake'));assert.equal(posted.length,0);
 });
 
 test('Settings app search filters loaded installed, self-made and recommended rows without a request or focus loss',async()=>{
@@ -249,4 +250,40 @@ test('overlapping Settings app commands send once and keep unknown outcomes read
   assert.equal(posted.length,1,action+' is admitted only once while busy');assert.equal(posted[0]!.body.action,action);assert.ok(posted[0]!.body.commandId);
   release();await settle();assert.equal(posted.length,1,'a lost response never triggers a resend');
  }
+});
+
+test('app settings show explicit bindings and storage observations and save only selected members',async()=>{
+ const installed={...github,memberIds:['member-a'],members:[{id:'member-a',name:'Member A'}],credential:{slot:'github-token',state:'saved',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);
+ await settle();await open(app);
+ runInContext("settingsApps.availableMembers=[{id:'member-a',name:'Member A'},{id:'member-b',name:'Member B'}]",app.context);
+ assert.ok(app.node('settings-apps-body').textContent.includes('Member A'));
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ assert.ok(app.node('settings-apps-body').textContent.includes(copy('ui.apps.credential-saved')));
+ const fields=app.all().filter(n=>n.id.startsWith('settings-app-member-'));
+ assert.deepEqual(fields.map(n=>n.id),['settings-app-member-member-a','settings-app-member-member-b']);
+ assert.equal((fields[0] as any).checked,true);(fields[1] as any).checked=true;
+ await app.all().find(n=>n.id==='settings-app-bind-members')!.fire('click');await settle();
+ assert.deepEqual(posted.at(-1)!.body.memberIds,['member-a','member-b']);assert.equal(posted.at(-1)!.body.action,'bind-members');
+});
+
+test('expired app reconnect opens the existing conversation decision without a settings token field',async()=>{
+ const installed={...github,memberIds:[],members:[],credential:{slot:'github-token',state:'expired',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);await settle();await open(app);
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ assert.ok(app.node('settings-apps-body').textContent.includes(copy('ui.apps.credential-expired')));
+ await app.all().find(n=>n.id==='settings-app-reconnect')!.fire('click');await settle();
+ assert.equal(posted.at(-1)!.path,'/assistant/apps');assert.equal(posted.at(-1)!.body.action,'reconnect');assert.equal(posted.at(-1)!.body.appId,'app-github');
+ assert.equal(app.node('page-chat').hidden,false);assert.equal(app.node('app-connect-token').value,'');
+ assert.ok(!app.node('settings-apps-body').children.some(n=>n.type==='password'));
+});
+
+test('a detached app binding control cannot mutate a different selection or a replaced database',async()=>{
+ const installed={...github,memberIds:[],members:[],credential:{slot:'github-token',state:'missing'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);await settle();await open(app);
+ runInContext("settingsApps.availableMembers=[{id:'member-a',name:'Member A'}]",app.context);
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ const save=app.all().find(n=>n.id==='settings-app-bind-members')!;assert.ok(save);
+ runInContext("settingsApp='different-app'",app.context);await save.fire('click');assert.equal(posted.length,0);
+ runInContext("settingsApp='app-github';connectionEpoch++",app.context);await save.fire('click');assert.equal(posted.length,0);
 });

@@ -1,0 +1,1002 @@
+[
+  {
+    "screen": "B13",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"하나 마지막 활성 {time} 기본\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"퀼 작업 중 · 일 {count} · 예약 {count} 조사\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings heading \"보관됨 1\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"보관 해제\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings button \"기기 연결\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"연결 끊기\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no credential-expiry field or reconnect control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no credential-expiry field or reconnect control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings text \"다시 시작 필요\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings text \"다시 시작 필요\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"앱\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"열기 ›\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"보관\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"앱\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"열기 ›\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order settings heading \"최근 개선\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "role settings button \"보관\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"{work_title} 1.4.0 · 주노, 퀼 켜짐\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: App member bindings/catalog/token reconnect. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: App member bindings/catalog/token reconnect. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"하나 마지막 활성 {time} 기본\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"퀼 작업 중 · 일 {count} · 예약 {count} 조사\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings heading \"보관됨 1\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"보관 해제\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member metadata/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings button \"기기 연결\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"연결 끊기\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B13-devices",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Remote device commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-expired",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no credential-expiry field or reconnect control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no credential-expiry field or reconnect control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings text \"다시 시작 필요\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings text \"다시 시작 필요\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 확인\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 변경\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"키 추가\"",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "Residual capability family: Connection credentials/lifecycle commands. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-update",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"앱\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"열기 ›\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"보관\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings heading \"앱\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"열기 ›\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order settings heading \"최근 개선\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B19-juno",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "role settings button \"보관\" (text exists without the required role)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: Member builtins/apps/memory/schedules/archive. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings link \"{work_title} 1.4.0 · 주노, 퀼 켜짐\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: App member bindings/catalog/token reconnect. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing settings button \"다시 연결\"",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Residual capability family: App member bindings/catalog/token reconnect. See the linked producer evidence.",
+    "ledger": "docs/acceptance/E3d1/remaining.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B23-github-expired",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "states": [
+    "connection-rechecked",
+    "key-stored",
+    "member-archived",
+    "member-restored",
+    "app-member-bound",
+    "app-token-stored"
+  ],
+  "externalNetworkCalls": 0,
+  "secretValuesInJournal": false
+}
