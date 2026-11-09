@@ -29,3 +29,7 @@ All tests use fixtures and mocks; no remote browsing, real model call, payment o
 Codex identified three reproducible issues on `74c25ca`: numeric `one-time-code` values were not masked, old browser tabs could not rebind after Mission/revision changes, and a read could become obsolete while Application lookup was awaiting storage. Added failing regressions for all three, then masked the standard autocomplete token, refreshed tab bindings only after a current authoritative Mission read, and fenced generation at the drain-aware commit admission boundary. The 60 affected tests and typecheck pass. The headless interaction check also reselects existing tabs after revision invalidation in both themes.
 
 CI's initial attempt hit the GitHub Actions/Checks API incident (https://www.githubstatus.com/incidents/tp8cghg7tlc4). On rerun, all 150 screen/theme contracts, e2e, install smoke and desktop jobs passed on `74c25ca`; that result does not replace final-head CI after these corrections.
+
+## Review correction 2
+
+Codex found two additional admission/context cases on `8bcab38`. A checkout open must not inherit the revision of an unrelated selected Mission; its revision check is now scoped to the checkout's Mission while the selection/feed fence still rejects stale responses. The commit-admission guard also checks the current runtime deadline, not only the observation timestamp. Both regression tests failed before the corrections; all 62 affected tests and typecheck pass afterward.

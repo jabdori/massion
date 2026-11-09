@@ -88,3 +88,10 @@ test('a read superseded while application lookup is held cannot cross commit adm
  const old=s.service.capture(request);await lookupEntered;const next=s.service.capture({...request,readId:'page:2'});await readEntered;releaseOld();
  const oldResult=await old.catch(error=>error);releaseNew();const nextResult=await next.catch(error=>error);assert.match(oldResult.message??'',/superseded/i);assert.equal(nextResult.status,'committed');assert.equal((await s.service.read('intake','work')).session?.page.title,'New');
 });
+test('runtime expiry during application lookup rejects commit admission',async()=>{
+ const {hash,workInputHash}=await import('../src/domain.ts'),s=await setup(),w=(await s.store.load('intake'))!.value.works[0]!;let clock=now;
+ await s.app.dispatch({missionId:'intake',expectedRevision:2,commandId:'start',actorId:'local-owner',command:{type:'activate-runtime',workId:'work',run:{id:'run',authorizationId:'fixture',criteriaHash:hash(w.criteria),inputHash:workInputHash(w),mode:'mock-http',outputTokenCap:1,ownership:{hostSessionId:'host',dispatchId:'dispatch',startedAt:now-1,deadlineAt:now+1000}}}});
+ let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r),lookup=s.store.lookupOperation.bind(s.store);let lookups=0;
+ s.store.lookupOperation=async identity=>{if(++lookups===1){entered();await gate;}return lookup(identity);};
+ const service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return raw;}},clock:()=>clock}),capture=service.capture(request);await started;clock+=2000;release();await assert.rejects(capture,/deadline|expired/);assert.equal((await service.read('intake','work')).session,null);
+});

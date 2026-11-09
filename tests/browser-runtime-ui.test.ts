@@ -159,3 +159,7 @@ for(const kind of ['generic','checkout'])for(const change of ['revision','missio
  if(change==='revision'){state.revision++;runInContext('snapshot.revision++;renderShell()',app.context);}else runInContext("paneOpen('other','other-work','Other');selectedId='other';snapshot={revision:99,value:{id:'other',works:[]}};renderPane()",app.context);
  await runInContext('paneSelect('+JSON.stringify(key)+')',app.context);await settle();assert.match(pane(app).textContent,/Observed checkout/);assert.equal(runInContext('selectedId',app.context),'mission:1');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
+
+test('opening checkout ignores the revision of an unrelated selected Mission',async()=>{
+ const {app}=fixture();await settle();runInContext("selectedId='other';snapshot={revision:999,value:{id:'other',works:[]}}",app.context);await checkout(app);assert.match(pane(app).textContent,/Observed checkout/);assert.equal(find(app,'browser-address').value,'https://shop.example.com/checkout');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
