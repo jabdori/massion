@@ -16,7 +16,8 @@ It requires a private user-data directory, disables GPU acceleration, suppresses
 window showing/focusing and notifications, and keeps the existing sandbox and
 transport authentication. The install smoke drives the actual bundled workbench
 through CDP on loopback: connect, inspect an unknown Work, open its details and
-confirm its uncertainty remains. It saves screenshots, a snapshot and a report,
+confirm its uncertainty remains. It uses the lockfile-pinned local browser tool and rejects any app byte, mode or
+symlink change after the smoke. It saves screenshots, a snapshot and a report,
 then stops only its own app and drains its disposable supervisor. No model,
 account, persistent installation or owner window is used.
 

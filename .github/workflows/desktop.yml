@@ -37,7 +37,6 @@ jobs:
           node-version: '24.19.0'
       - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm install --global agent-browser@0.41.2
       - run: npm run package:mac --prefix desktop
       - name: Exercise the built app without displaying a window
         run: npm run smoke:install --prefix desktop

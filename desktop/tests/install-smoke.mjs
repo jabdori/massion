@@ -11,10 +11,12 @@ import {launchDaemon,daemonCredential,drainDaemon} from '../daemon.ts';
 import {daemonTransport} from '../transport.ts';
 import {createProtocolClient} from '../../src/client-protocol.ts';
 import {loadFixture} from '../../scripts/ui-contracts/fixture-host.ts';
+import {appIntegrity} from './app-integrity.ts';
 import {browserCommand} from '../../scripts/e2e/browser-command.mjs';
 
 assert.equal(process.platform,'darwin','This smoke tests the built macOS .app');
-const executable=resolve(import.meta.dirname,'../release',process.arch==='x64'?'mac':'mac-'+process.arch,'Massion.app/Contents/MacOS/Massion');
+const bundle=resolve(import.meta.dirname,'../release',process.arch==='x64'?'mac':'mac-'+process.arch,'Massion.app');
+const executable=join(bundle,'Contents/MacOS/Massion'),integrity=await appIntegrity(bundle);
 await access(executable);
 const root=await mkdtemp(join(await realpath(tmpdir()),'massion-install-')),directory=join(root,'user'),socket=join(directory,'daemon.sock');
 const out=resolve(import.meta.dirname,'../smoke-artifacts/install');await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});await mkdir(directory,{mode:0o700});
@@ -24,7 +26,7 @@ Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
 const config=join(root,'browser.json');await writeFile(config,'{}');
 async function port(){const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const value=server.address().port;await new Promise(resolve=>server.close(resolve));return value;}
 const origin='http://127.0.0.1:'+await port(),debugPort=await port();let child,logs='';
-const browser=(...args)=>browserCommand(()=>run('agent-browser',['--config',config,'--session',session,'--cdp',String(debugPort),'--json',...args],{env,timeout:30000,maxBuffer:4e6}));
+const browser=(...args)=>browserCommand(()=>run(resolve(import.meta.dirname,'../node_modules/.bin/agent-browser'),['--config',config,'--session',session,'--cdp',String(debugPort),'--json',...args],{env,timeout:30000,maxBuffer:4e6}));
 try{
  await launchDaemon({node:process.execPath,runner:resolve(import.meta.dirname,'../daemon-runner.mjs'),entry:resolve(import.meta.dirname,'fixture-daemon.mjs'),directory,socket,origin});
  const client=createProtocolClient(daemonTransport(origin,()=>daemonCredential(socket,origin)));
@@ -54,10 +56,11 @@ try{
  const after=(await browser('eval',`protocol.query('/assistant/works',{scope:'install-after'}).then(r=>r.body.works.find(w=>w.workId===${JSON.stringify(work.workId)}))`)).result;
  assert.deepEqual(after,initial,'Inspection preserves the unknown outcome');
  assert.equal((await drainDaemon(socket,origin)).status,'drained');
- await writeFile(join(out,'report.json'),JSON.stringify({status:'passed',version:JSON.parse(await readFile(new URL('../../package.json',import.meta.url),'utf8')).version,architecture:process.arch,executable,headless:true,journey:'authenticated connection → unknown Work → activity → unchanged outcome',liveCalls:0,daemon:'drained'},null,2)+'\n');
- console.log('Packaged macOS install smoke passed: '+out);
 }finally{
  if(child&&child.exitCode===null&&child.signalCode===null){const exited=once(child,'exit');child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}}
  await browser('close').catch(()=>{});await drainDaemon(socket,origin).catch(()=>{});
  await writeFile(join(out,'app.log'),logs);await writeFile(join(out,'daemon.log'),await readFile(join(directory,'daemon.log'),'utf8').catch(()=>''));await rm(root,{recursive:true,force:true});
 }
+assert.equal(await appIntegrity(bundle),integrity,'The tested app must remain identical to the packaged input');
+await writeFile(join(out,'report.json'),JSON.stringify({status:'passed',version:JSON.parse(await readFile(new URL('../../package.json',import.meta.url),'utf8')).version,architecture:process.arch,executable,headless:true,appIntegrity:integrity,journey:'authenticated connection → unknown Work → activity → unchanged outcome',liveCalls:0,daemon:'drained'},null,2)+'\n');
+console.log('Packaged macOS install smoke passed: '+out);

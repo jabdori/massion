@@ -102,7 +102,8 @@ This launches the actual `.app` executable with `--massion-headless`, a new priv
 user-data directory and a loopback CDP port. It suppresses window display/focus,
 Dock activation and notifications, inspects an unknown Work through the bundled
 UI, preserves its state, and drains the disposable authenticated fixture daemon.
-It requires `agent-browser` 0.41.2 on PATH and writes evidence under
+It uses the lockfile-pinned local `agent-browser` 0.41.2, verifies app bytes,
+executable modes and symlink targets before and after the journey, and writes evidence under
 `desktop/smoke-artifacts/install/`. It does not use a real database or provider,
 change the installed app's data or prove a new model run. The existing Linux
 Xvfb security smoke remains a separate check.
