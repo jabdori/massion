@@ -1,0 +1,43 @@
+contract B4 (B4 결정 카드) vs /Users/code/orca/workspaces/massion/e3c-work-pane/.runtime/ui-contracts/snapshots/light/B4.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기, 확인 필요" -> switch "활동 보기, 확인 필요"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{work_title}" -> button "프린터 토너 주문"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{work_title}" -> button "이탈 원인 조사"
+  ok    sidebar      status   "실행 중" -> statictext "실행 중"
+  ok    sidebar      link     "{work_title}" -> button "경쟁사 가격"
+  ok    sidebar      status   "확인 대기" -> statictext "확인 대기"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      status   "읽지 않음" -> status "읽지 않음"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "나중에" -> button "나중에"
+  ok    pane         tab      "{work_title}" -> tab "프린터 토너 주문"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         chip     "{member}" -> button "중지"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":38,"strings":8,"sentences":0,"longest":9} proto {"chars":28,"strings":6,"sentences":0,"longest":9} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":229,"strings":24,"sentences":3,"longest":30} proto {"chars":238,"strings":22,"sentences":3,"longest":30} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":69,"strings":15,"sentences":0,"longest":13} proto {"chars":141,"strings":21,"sentences":0,"longest":19} source visibleTextBudget
+  FAIL  missing sidebar      status   "결정 대기"
+  FAIL  missing conversation button   "{duration} 동안 작업 · 페이지 {count} 읽음"
+  FAIL  region pane         text     "{amount}" (found in conversation)
+  FAIL  region pane         text     "{amount}" (found in conversation)
+  FAIL  region pane         text     "{amount}" (found in conversation)
+FAIL: 5 failures, 0 warnings, 35 required elements

@@ -36,7 +36,7 @@ for(const [component,values] of Object.entries(visual.components)){
  for(const [key,suffix] of [['radius','radius'],['pad','padding'],['fs','font-size'],['fw','font-weight'],['lh','line-height'],['bd','border'],['focus_ring','focus-width'],['shadow','shadow']]){
   if(values[key]!=null)add(name(component)+'-'+suffix,values[key]);
  }
- for(const key of ['height','editor_max_height'])if(typeof values[key]==='number')add(name(component)+'-'+name(key),px(values[key]));
+ for(const key of ['height','editor_max_height','label_width','row_line_height','time_width','dot_size','step_mark_size','stop_radius','header_height','procedure_header_height','step_height'])if(typeof values[key]==='number')add(name(component)+'-'+name(key),px(values[key]));
 }
 const spaces=new Set([0,...Object.keys(visual.rhythm.conversation_gaps_seen).map(Number)]);
 for(const values of Object.values(visual.components))for(const match of (values.pad||'').matchAll(/(\d+)px/g))spaces.add(Number(match[1]));

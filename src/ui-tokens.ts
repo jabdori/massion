@@ -340,6 +340,15 @@ export const uiTokensStyle=String.raw`:root{
  --card-pane-line-height:20px;
  --card-pane-border:1px solid var(--line);
  --card-pane-height:136px;
+ --work-room-label-width:96px;
+ --work-room-row-line-height:18px;
+ --work-room-time-width:44px;
+ --work-room-dot-size:5px;
+ --work-room-step-mark-size:13px;
+ --work-room-stop-radius:2px;
+ --work-room-header-height:38px;
+ --work-room-procedure-header-height:34px;
+ --work-room-step-height:32px;
  --pages-popup-radius:10px;
  --pages-popup-padding:16px;
  --pages-popup-border:1px solid var(--line);

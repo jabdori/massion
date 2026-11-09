@@ -1,51 +1,45 @@
 {
   "screen": "B7-churn",
-  "description": "Work room for B7-churn. Deterministic API data; freeze browser Date to now.",
+  "description": "Work room for B7-churn. Data-only domain commands and production readers; no provider calls, payment history or per-step timestamps.",
   "now": 1793855520000,
-  "readySelector": "[id=\"chat-card-assistant-turn:m:churn\"]",
+  "readySelector": "[id=\"chat-card-assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd\"]",
   "steps": [
     {
-      "selector": "[id=\"chat-card-assistant-turn:m:churn\"] .chat-card-open",
+      "selector": "#side-member-member-quill",
       "action": "click",
-      "readySelector": "#work-heading-churn"
+      "readySelector": "[id=\"chat-m:78d7cb72144445a05f97c847ddb3c0e9\"]"
+    },
+    {
+      "selector": "[id=\"side-line-intake/assistant-236a368dfcf6f32eaeb68fb0\"]",
+      "action": "click",
+      "readySelector": "#work-heading-assistant-236a368dfcf6f32eaeb68fb0"
     }
   ],
   "gaps": [
-    "The production Work pane exposes technical evidence instead of the contract timeline, criteria and step layout."
+    "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+    "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+    "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
+    "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
   ],
   "reuse": [
-    "tests/surface-shell.test.ts",
-    "tests/conversation-cards.test.ts",
-    "tests/support/record-artifact-fixture.ts (assignment, effect, verdict and accepted-record command sequence via the pure domain reducer)"
+    "tests/support/record-artifact-fixture.ts (application commands, independent assignments, effects, verdict and accepted record)",
+    "src/assistant-conversation.ts (AssistantConversation, message/turn/Work/run identities and source validation)",
+    "src/configured-runtime.ts (root/executor/verifier task and result structure)",
+    "src/assistant-service.ts (actual conversation and Work-list projections)",
+    "src/work-conversation.ts (owner-only Work discussion)",
+    "src/record-artifact.ts and src/rejected-text.ts (actual integrity-checked artifact readers)",
+    "src/runtime-lifetime.ts (bounded ownership and no-replay unknown interruption)",
+    "scripts/ui-contracts/fixtures/B18.json (existing member discussion copy and GitHub rail descriptor; read-only reuse)",
+    "scripts/ui-contracts/fixtures/B16.json (existing accepted PR #84 text for idle unread Juno); B18.json (active PR #84 for B7-churn)",
+    "src/assistant-conversation.ts and src/assistant-service.ts (three actual plain-reply member reads, without steer/proposal/outcome; existing Work state and exact readers unchanged)"
   ],
   "routes": {
     "/assistant/conversation": {
       "status": 200,
       "body": {
         "feedId": "fixture:B2",
-        "cursor": 1,
+        "cursor": 6,
         "head": 1,
-        "members": [
-          {
-            "id": "member-quill",
-            "name": "퀼",
-            "look": {
-              "shape": "drop",
-              "color": "agent-1"
-            },
-            "modelGroup": "research"
-          },
-          {
-            "id": "member-juno",
-            "name": "주노",
-            "look": {
-              "shape": "round",
-              "color": "agent-6"
-            },
-            "modelGroup": "coding"
-          }
-        ],
-        "apps": [],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -54,59 +48,240 @@
           "previous": null,
           "messages": [
             {
-              "id": "m:churn",
+              "id": "m:5bacf74c63c9982da724b62f5fbcef5d",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토"
+            },
+            {
+              "id": "r:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+              "role": "representative",
+              "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+              "text": "PR #84 검토"
+            },
+            {
+              "id": "m:17566e2a8155facdc82f844185d10cf6",
+              "role": "owner",
+              "turnId": null,
+              "text": "경쟁사 가격도 확인해 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+              "role": "representative",
+              "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+              "text": "가격 표를 정리하고 확인을 기다리고 있어요."
+            },
+            {
+              "id": "m:c47b25c227c848b8a866d24abe7ee3cd",
               "role": "owner",
               "turnId": null,
               "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
             },
             {
-              "id": "r:churn",
+              "id": "r:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
               "role": "representative",
-              "turnId": "assistant-turn:m:churn",
+              "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
               "text": "지난 90일 해지 건부터 볼게요."
             }
           ]
         },
         "turns": [
           {
-            "id": "assistant-turn:m:churn",
-            "messageId": "m:churn",
+            "id": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+            "messageId": "m:5bacf74c63c9982da724b62f5fbcef5d",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793855279999,
             "proposal": {
-              "title": "이탈 원인 조사"
+              "member": "주노",
+              "title": "PR #84 검토"
             },
             "outcome": {
               "missionId": "intake",
-              "work": {
-                "status": "admitted",
-                "diagnostics": []
-              },
               "run": {
-                "status": "requested",
-                "diagnostics": []
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
               }
             },
             "work": {
               "missionId": "intake",
-              "missionRevision": 3,
-              "workId": "churn",
-              "title": "이탈 원인 조사",
-              "memberId": "member-quill",
+              "missionRevision": 2,
+              "workId": "assistant-23d30218ff744dd5e72aabec",
+              "title": "PR #84 검토",
               "execution": "active",
               "acceptance": "pending",
-              "unknown": false,
               "started": true,
-              "startedAt": 1793855280000,
+              "starting": false,
+              "startedAt": 1793855279999,
               "endedAt": null,
-              "turnId": "assistant-turn:m:churn",
-              "segment": 1,
+              "memberId": "member-juno",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+                "fact": null
+              },
               "steps": {
-                "done": 1,
-                "total": 5
-              }
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
             }
+          },
+          {
+            "id": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+            "messageId": "m:17566e2a8155facdc82f844185d10cf6",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "member": "퀼",
+              "title": "경쟁사 가격"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "run": {
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 2,
+              "workId": "assistant-2840e7c8b74c0197c547ce73",
+              "title": "경쟁사 가격",
+              "execution": "waiting",
+              "acceptance": "pending",
+              "started": true,
+              "starting": false,
+              "startedAt": 1793855280000,
+              "endedAt": 1793855520000,
+              "memberId": "member-quill",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+                "fact": null
+              },
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
+            }
+          },
+          {
+            "id": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+            "messageId": "m:c47b25c227c848b8a866d24abe7ee3cd",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280001,
+            "proposal": {
+              "member": "퀼",
+              "title": "이탈 원인 조사"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "run": {
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 2,
+              "workId": "assistant-236a368dfcf6f32eaeb68fb0",
+              "title": "이탈 원인 조사",
+              "execution": "active",
+              "acceptance": "pending",
+              "started": true,
+              "starting": false,
+              "startedAt": 1793855280001,
+              "endedAt": null,
+              "memberId": "member-quill",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+                "fact": null
+              },
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
+            }
+          }
+        ],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
           }
         ],
         "decisions": [],
@@ -120,41 +295,63 @@
         "works": [
           {
             "missionId": "intake",
-            "missionRevision": 3,
-            "workId": "churn",
+            "missionRevision": 2,
+            "workId": "assistant-236a368dfcf6f32eaeb68fb0",
             "title": "이탈 원인 조사",
             "memberId": "member-quill",
             "execution": "active",
             "acceptance": "pending",
             "unknown": false,
+            "exception": {
+              "at": null,
+              "runId": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+              "fact": null
+            },
             "started": true,
-            "startedAt": 1793855280000,
+            "startedAt": 1793855280001,
             "endedAt": null,
-            "turnId": "assistant-turn:m:churn",
-            "segment": 1,
-            "steps": {
-              "done": 1,
-              "total": 5
-            }
+            "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+            "segment": 1
           },
           {
             "missionId": "intake",
-            "missionRevision": 3,
-            "workId": "pricing",
+            "missionRevision": 2,
+            "workId": "assistant-2840e7c8b74c0197c547ce73",
             "title": "경쟁사 가격",
             "memberId": "member-quill",
             "execution": "waiting",
             "acceptance": "pending",
             "unknown": false,
+            "exception": {
+              "at": null,
+              "runId": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+              "fact": null
+            },
             "started": true,
             "startedAt": 1793855280000,
+            "endedAt": 1793855520000,
+            "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+            "segment": 1
+          },
+          {
+            "missionId": "intake",
+            "missionRevision": 2,
+            "workId": "assistant-23d30218ff744dd5e72aabec",
+            "title": "PR #84 검토",
+            "memberId": "member-juno",
+            "execution": "active",
+            "acceptance": "pending",
+            "unknown": false,
+            "exception": {
+              "at": null,
+              "runId": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+              "fact": null
+            },
+            "started": true,
+            "startedAt": 1793855279999,
             "endedAt": null,
-            "turnId": "assistant-turn:m:pricing",
-            "segment": 1,
-            "steps": {
-              "done": 1,
-              "total": 3
-            }
+            "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+            "segment": 1
           }
         ]
       }
@@ -163,16 +360,16 @@
       "status": 200,
       "body": {
         "feedId": "fixture:B2",
-        "cursor": 1,
+        "cursor": 6,
         "events": []
       }
     },
     "/read-state": {
       "status": 200,
       "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": null
+        "snapshot": null,
+        "cursor": 6,
+        "feedId": "fixture:B2"
       }
     },
     "/health": {
@@ -223,410 +420,972 @@
     "/read-state?mission=intake": {
       "status": 200,
       "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
         "snapshot": {
-          "revision": 3,
+          "revision": 2,
           "value": {
-            "id": "intake",
-            "purpose": "맡긴 일",
-            "scope": "local",
             "constraints": [],
+            "conversations": [
+              {
+                "id": "conversation:93062916d6cd190500d87278a2d0c648bca8b0f8",
+                "messages": [
+                  {
+                    "actorId": "local-owner",
+                    "id": "e3c-churn-discussion",
+                    "ordinal": 1,
+                    "replyTo": null,
+                    "role": "owner",
+                    "text": "기업 고객은 따로 봐 줘."
+                  }
+                ],
+                "workId": "assistant-236a368dfcf6f32eaeb68fb0"
+              }
+            ],
             "criteria": {
-              "version": 1,
               "description": "요청한 결과와 근거 확인",
-              "oracle": "bounded-text-review/v1"
+              "oracle": "bounded-text-review/v1",
+              "version": 1
             },
+            "growth": [],
+            "id": "intake",
+            "memories": [],
+            "purpose": "맡긴 일",
+            "relations": [],
+            "scope": "local",
             "version": 1,
             "works": [
               {
-                "id": "churn",
-                "title": "이탈 원인 조사",
-                "missionVersion": 1,
-                "missionSnapshot": {
-                  "version": 1,
-                  "purpose": "맡긴 일",
-                  "scope": "local",
-                  "constraints": []
-                },
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "execution": "active",
                 "acceptance": "pending",
-                "tasks": [
+                "appliedMemoryVersions": [],
+                "assignments": [
                   {
-                    "id": "churn:root",
-                    "parentId": null,
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:root",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:root"
+                  },
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:executor"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:verifier:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
+                  }
+                ],
+                "assistantSource": {
+                  "memberId": "member-quill",
+                  "message": {
+                    "actorId": "local-owner",
+                    "id": "m:c47b25c227c848b8a866d24abe7ee3cd",
+                    "ordinal": 5,
+                    "role": "owner",
+                    "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.",
+                    "turnId": null
+                  },
+                  "messageHash": "2f3930e89abd0a7a6ab393edac1161f8b57ffef909caa7d564d82bf6655749d0",
+                  "messageId": "m:c47b25c227c848b8a866d24abe7ee3cd",
+                  "representative": {
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture"
+                  },
+                  "segmentId": "assistant-conversation:1",
+                  "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd"
+                },
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:attempt:1",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "number": 1,
                     "status": "active"
                   }
                 ],
-                "attempts": [
-                  {
-                    "id": "churn:attempt:1",
-                    "number": 1,
-                    "criteria": {
-                      "version": 1,
-                      "description": "요청한 결과와 근거 확인",
-                      "oracle": "bounded-text-review/v1"
-                    },
-                    "status": "active",
-                    "modelVersions": [
-                      "fixture-v1",
-                      "fixture-v1"
-                    ]
-                  }
-                ],
-                "assignments": [
-                  {
-                    "id": "churn:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "churn:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "churn:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "churn:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "effects": [
-                  {
-                    "id": "churn:effect",
-                    "taskId": "churn:root",
-                    "status": "succeeded",
-                    "target": "이탈 원인 조사",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "고정된 화면 검증 데이터"
-                  }
-                ],
-                "appliedMemoryVersions": [],
                 "budget": {
                   "limit": 8,
-                  "reserved": 1,
-                  "measured": 1
-                }
+                  "measured": 1,
+                  "reserved": 4,
+                  "unit": "output-tokens"
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "fixture-authorization",
+                    "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor",
+                    "receipt": "고정된 화면 검증 데이터",
+                    "status": "succeeded",
+                    "target": "fixture/claude-sonnet-5-5",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:executor"
+                  }
+                ],
+                "execution": "active",
+                "id": "assistant-236a368dfcf6f32eaeb68fb0",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "runtimeRun": {
+                  "authorizationId": "fixture-authorization",
+                  "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                  "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+                  "inputHash": "2ecb6309f5a72b0dd3d8e2991677576aef60d4597821e99792cede8eadc47190",
+                  "mode": "mock-http",
+                  "outputTokenCap": 4,
+                  "ownership": {
+                    "deadlineAt": 1793855580001,
+                    "dispatchId": "dispatch:e3c-work:churn",
+                    "hostSessionId": "host:e3c-fixture",
+                    "startedAt": 1793855280001
+                  }
+                },
+                "tasks": [
+                  {
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                    "parentId": null,
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                    "status": "queued"
+                  }
+                ],
+                "title": "이탈 원인 조사"
               },
               {
-                "id": "pricing",
-                "title": "경쟁사 가격",
-                "missionVersion": 1,
-                "missionSnapshot": {
-                  "version": 1,
-                  "purpose": "맡긴 일",
-                  "scope": "local",
-                  "constraints": []
-                },
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "execution": "waiting",
                 "acceptance": "pending",
-                "tasks": [
+                "appliedMemoryVersions": [],
+                "assignments": [
                   {
-                    "id": "pricing:root",
-                    "parentId": null,
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:root",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-2840e7c8b74c0197c547ce73:root"
+                  },
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:executor:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:verifier:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "assistant-2840e7c8b74c0197c547ce73:verifier"
+                  }
+                ],
+                "assistantSource": {
+                  "memberId": "member-quill",
+                  "message": {
+                    "actorId": "local-owner",
+                    "id": "m:17566e2a8155facdc82f844185d10cf6",
+                    "ordinal": 3,
+                    "role": "owner",
+                    "text": "경쟁사 가격도 확인해 줘.",
+                    "turnId": null
+                  },
+                  "messageHash": "dfbe077092f9f5379b215a263fb174296bbfc2a1a59d13035312bc4a5375e89b",
+                  "messageId": "m:17566e2a8155facdc82f844185d10cf6",
+                  "representative": {
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture"
+                  },
+                  "segmentId": "assistant-conversation:1",
+                  "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6"
+                },
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "assistant-2840e7c8b74c0197c547ce73:attempt:1",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "number": 1,
                     "status": "active"
                   }
                 ],
-                "attempts": [
-                  {
-                    "id": "pricing:attempt:1",
-                    "number": 1,
-                    "criteria": {
-                      "version": 1,
-                      "description": "요청한 결과와 근거 확인",
-                      "oracle": "bounded-text-review/v1"
-                    },
-                    "status": "active",
-                    "modelVersions": [
-                      "fixture-v1",
-                      "fixture-v1"
-                    ]
-                  }
-                ],
-                "assignments": [
-                  {
-                    "id": "pricing:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "pricing:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "pricing:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "pricing:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "effects": [
-                  {
-                    "id": "pricing:effect",
-                    "taskId": "pricing:root",
-                    "status": "succeeded",
-                    "target": "경쟁사 가격",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "고정된 화면 검증 데이터"
-                  }
-                ],
-                "appliedMemoryVersions": [],
                 "budget": {
                   "limit": 8,
-                  "reserved": 1,
-                  "measured": 1
+                  "measured": 1,
+                  "reserved": 4,
+                  "unit": "output-tokens"
                 },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "fixture-authorization",
+                    "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:executor",
+                    "receipt": "고정된 화면 검증 데이터",
+                    "status": "succeeded",
+                    "target": "fixture/claude-sonnet-5-5",
+                    "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
+                  }
+                ],
+                "endedAt": 1793855520000,
+                "execution": "waiting",
+                "id": "assistant-2840e7c8b74c0197c547ce73",
                 "instructions": [
                   {
-                    "actorId": "owner",
-                    "text": "확인 결과를 기다리기"
+                    "actorId": "local-owner",
+                    "text": "앞으로 표 금액은 원 단위로 써 줘."
                   }
-                ]
+                ],
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "runtimeRun": {
+                  "authorizationId": "fixture-authorization",
+                  "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                  "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+                  "inputHash": "7cb0541a3dbaf58152ba0be370bc2445e6409fd8c6ea5f174ad4d07ce8e94ff0",
+                  "mode": "mock-http",
+                  "outputTokenCap": 4,
+                  "ownership": {
+                    "deadlineAt": 1793855580000,
+                    "dispatchId": "dispatch:e3c-work:pricing",
+                    "hostSessionId": "host:e3c-fixture",
+                    "startedAt": 1793855280000
+                  }
+                },
+                "tasks": [
+                  {
+                    "id": "assistant-2840e7c8b74c0197c547ce73:root",
+                    "parentId": null,
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-2840e7c8b74c0197c547ce73:executor",
+                    "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "assistant-2840e7c8b74c0197c547ce73:verifier",
+                    "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                    "status": "queued"
+                  }
+                ],
+                "title": "경쟁사 가격"
+              },
+              {
+                "acceptance": "pending",
+                "appliedMemoryVersions": [],
+                "assignments": [
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:root",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-23d30218ff744dd5e72aabec:root"
+                  },
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:executor:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-23d30218ff744dd5e72aabec:executor"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:verifier:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "assistant-23d30218ff744dd5e72aabec:verifier"
+                  }
+                ],
+                "assistantSource": {
+                  "memberId": "member-juno",
+                  "message": {
+                    "actorId": "local-owner",
+                    "id": "m:5bacf74c63c9982da724b62f5fbcef5d",
+                    "ordinal": 1,
+                    "role": "owner",
+                    "text": "PR #84 검토",
+                    "turnId": null
+                  },
+                  "messageHash": "ddcc5640dfc46d6575c3d16e0050ea7732c439c6597a962f833ce64dfa61d6fa",
+                  "messageId": "m:5bacf74c63c9982da724b62f5fbcef5d",
+                  "representative": {
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture"
+                  },
+                  "segmentId": "assistant-conversation:1",
+                  "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d"
+                },
+                "attempts": [
+                  {
+                    "criteria": {
+                      "description": "요청한 결과와 근거 확인",
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
+                    },
+                    "id": "assistant-23d30218ff744dd5e72aabec:attempt:1",
+                    "modelVersions": [
+                      "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1"
+                    ],
+                    "number": 1,
+                    "status": "active"
+                  }
+                ],
+                "budget": {
+                  "limit": 8,
+                  "measured": 1,
+                  "reserved": 4,
+                  "unit": "output-tokens"
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "fixture-authorization",
+                    "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:executor",
+                    "receipt": "Existing data-only PR #84 fixture evidence; no provider invocation",
+                    "status": "succeeded",
+                    "target": "fixture/claude-sonnet-5-5",
+                    "taskId": "assistant-23d30218ff744dd5e72aabec:executor"
+                  }
+                ],
+                "execution": "active",
+                "id": "assistant-23d30218ff744dd5e72aabec",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "runtimeRun": {
+                  "authorizationId": "fixture-authorization",
+                  "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                  "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+                  "inputHash": "8e8271c80db22fcf2633a8d8d00f643ff719283b646fbaf1bde30e1646525d1b",
+                  "mode": "mock-http",
+                  "outputTokenCap": 4,
+                  "ownership": {
+                    "deadlineAt": 1793855579999,
+                    "dispatchId": "dispatch:e3c-work:pr84",
+                    "hostSessionId": "host:e3c-fixture",
+                    "startedAt": 1793855279999
+                  }
+                },
+                "tasks": [
+                  {
+                    "id": "assistant-23d30218ff744dd5e72aabec:root",
+                    "parentId": null,
+                    "status": "queued"
+                  },
+                  {
+                    "id": "assistant-23d30218ff744dd5e72aabec:executor",
+                    "parentId": "assistant-23d30218ff744dd5e72aabec:root",
+                    "status": "active"
+                  },
+                  {
+                    "id": "assistant-23d30218ff744dd5e72aabec:verifier",
+                    "parentId": "assistant-23d30218ff744dd5e72aabec:root",
+                    "status": "queued"
+                  }
+                ],
+                "title": "PR #84 검토"
               }
-            ],
-            "memories": [],
-            "growth": [],
-            "relations": []
+            ]
           }
-        }
+        },
+        "cursor": 6,
+        "feedId": "fixture:B2"
       }
     },
     "/missions/intake": {
       "status": 200,
       "body": {
-        "revision": 3,
+        "revision": 2,
         "value": {
-          "id": "intake",
-          "purpose": "맡긴 일",
-          "scope": "local",
           "constraints": [],
+          "conversations": [
+            {
+              "id": "conversation:93062916d6cd190500d87278a2d0c648bca8b0f8",
+              "messages": [
+                {
+                  "actorId": "local-owner",
+                  "id": "e3c-churn-discussion",
+                  "ordinal": 1,
+                  "replyTo": null,
+                  "role": "owner",
+                  "text": "기업 고객은 따로 봐 줘."
+                }
+              ],
+              "workId": "assistant-236a368dfcf6f32eaeb68fb0"
+            }
+          ],
           "criteria": {
-            "version": 1,
             "description": "요청한 결과와 근거 확인",
-            "oracle": "bounded-text-review/v1"
+            "oracle": "bounded-text-review/v1",
+            "version": 1
           },
+          "growth": [],
+          "id": "intake",
+          "memories": [],
+          "purpose": "맡긴 일",
+          "relations": [],
+          "scope": "local",
           "version": 1,
           "works": [
             {
-              "id": "churn",
-              "title": "이탈 원인 조사",
-              "missionVersion": 1,
-              "missionSnapshot": {
-                "version": 1,
-                "purpose": "맡긴 일",
-                "scope": "local",
-                "constraints": []
-              },
-              "criteria": {
-                "version": 1,
-                "description": "요청한 결과와 근거 확인",
-                "oracle": "bounded-text-review/v1"
-              },
-              "execution": "active",
               "acceptance": "pending",
-              "tasks": [
+              "appliedMemoryVersions": [],
+              "assignments": [
                 {
-                  "id": "churn:root",
-                  "parentId": null,
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:root",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:root"
+                },
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:executor"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:verifier:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
+                }
+              ],
+              "assistantSource": {
+                "memberId": "member-quill",
+                "message": {
+                  "actorId": "local-owner",
+                  "id": "m:c47b25c227c848b8a866d24abe7ee3cd",
+                  "ordinal": 5,
+                  "role": "owner",
+                  "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.",
+                  "turnId": null
+                },
+                "messageHash": "2f3930e89abd0a7a6ab393edac1161f8b57ffef909caa7d564d82bf6655749d0",
+                "messageId": "m:c47b25c227c848b8a866d24abe7ee3cd",
+                "representative": {
+                  "model": "claude-sonnet-5-5",
+                  "provider": "fixture"
+                },
+                "segmentId": "assistant-conversation:1",
+                "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd"
+              },
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:attempt:1",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "number": 1,
                   "status": "active"
                 }
               ],
-              "attempts": [
-                {
-                  "id": "churn:attempt:1",
-                  "number": 1,
-                  "criteria": {
-                    "version": 1,
-                    "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
-                  },
-                  "status": "active",
-                  "modelVersions": [
-                    "fixture-v1",
-                    "fixture-v1"
-                  ]
-                }
-              ],
-              "assignments": [
-                {
-                  "id": "churn:executor",
-                  "actorId": "executor",
-                  "role": "executor",
-                  "taskId": "churn:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "claude-sonnet-5-5",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                },
-                {
-                  "id": "churn:verifier",
-                  "actorId": "verifier",
-                  "role": "verifier",
-                  "taskId": "churn:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "gpt-6.1-terra",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                }
-              ],
-              "effects": [
-                {
-                  "id": "churn:effect",
-                  "taskId": "churn:root",
-                  "status": "succeeded",
-                  "target": "이탈 원인 조사",
-                  "authority": "소유자가 맡긴 일",
-                  "receipt": "고정된 화면 검증 데이터"
-                }
-              ],
-              "appliedMemoryVersions": [],
               "budget": {
                 "limit": 8,
-                "reserved": 1,
-                "measured": 1
-              }
+                "measured": 1,
+                "reserved": 4,
+                "unit": "output-tokens"
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "fixture-authorization",
+                  "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor",
+                  "receipt": "고정된 화면 검증 데이터",
+                  "status": "succeeded",
+                  "target": "fixture/claude-sonnet-5-5",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:executor"
+                }
+              ],
+              "execution": "active",
+              "id": "assistant-236a368dfcf6f32eaeb68fb0",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "runtimeRun": {
+                "authorizationId": "fixture-authorization",
+                "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+                "inputHash": "2ecb6309f5a72b0dd3d8e2991677576aef60d4597821e99792cede8eadc47190",
+                "mode": "mock-http",
+                "outputTokenCap": 4,
+                "ownership": {
+                  "deadlineAt": 1793855580001,
+                  "dispatchId": "dispatch:e3c-work:churn",
+                  "hostSessionId": "host:e3c-fixture",
+                  "startedAt": 1793855280001
+                }
+              },
+              "tasks": [
+                {
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                  "parentId": null,
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                  "status": "active"
+                },
+                {
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                  "status": "queued"
+                }
+              ],
+              "title": "이탈 원인 조사"
             },
             {
-              "id": "pricing",
-              "title": "경쟁사 가격",
-              "missionVersion": 1,
-              "missionSnapshot": {
-                "version": 1,
-                "purpose": "맡긴 일",
-                "scope": "local",
-                "constraints": []
-              },
-              "criteria": {
-                "version": 1,
-                "description": "요청한 결과와 근거 확인",
-                "oracle": "bounded-text-review/v1"
-              },
-              "execution": "waiting",
               "acceptance": "pending",
-              "tasks": [
+              "appliedMemoryVersions": [],
+              "assignments": [
                 {
-                  "id": "pricing:root",
-                  "parentId": null,
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:root",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-2840e7c8b74c0197c547ce73:root"
+                },
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:executor:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:verifier:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "assistant-2840e7c8b74c0197c547ce73:verifier"
+                }
+              ],
+              "assistantSource": {
+                "memberId": "member-quill",
+                "message": {
+                  "actorId": "local-owner",
+                  "id": "m:17566e2a8155facdc82f844185d10cf6",
+                  "ordinal": 3,
+                  "role": "owner",
+                  "text": "경쟁사 가격도 확인해 줘.",
+                  "turnId": null
+                },
+                "messageHash": "dfbe077092f9f5379b215a263fb174296bbfc2a1a59d13035312bc4a5375e89b",
+                "messageId": "m:17566e2a8155facdc82f844185d10cf6",
+                "representative": {
+                  "model": "claude-sonnet-5-5",
+                  "provider": "fixture"
+                },
+                "segmentId": "assistant-conversation:1",
+                "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6"
+              },
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "assistant-2840e7c8b74c0197c547ce73:attempt:1",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "number": 1,
                   "status": "active"
                 }
               ],
-              "attempts": [
-                {
-                  "id": "pricing:attempt:1",
-                  "number": 1,
-                  "criteria": {
-                    "version": 1,
-                    "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
-                  },
-                  "status": "active",
-                  "modelVersions": [
-                    "fixture-v1",
-                    "fixture-v1"
-                  ]
-                }
-              ],
-              "assignments": [
-                {
-                  "id": "pricing:executor",
-                  "actorId": "executor",
-                  "role": "executor",
-                  "taskId": "pricing:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "claude-sonnet-5-5",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                },
-                {
-                  "id": "pricing:verifier",
-                  "actorId": "verifier",
-                  "role": "verifier",
-                  "taskId": "pricing:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "gpt-6.1-terra",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                }
-              ],
-              "effects": [
-                {
-                  "id": "pricing:effect",
-                  "taskId": "pricing:root",
-                  "status": "succeeded",
-                  "target": "경쟁사 가격",
-                  "authority": "소유자가 맡긴 일",
-                  "receipt": "고정된 화면 검증 데이터"
-                }
-              ],
-              "appliedMemoryVersions": [],
               "budget": {
                 "limit": 8,
-                "reserved": 1,
-                "measured": 1
+                "measured": 1,
+                "reserved": 4,
+                "unit": "output-tokens"
               },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "fixture-authorization",
+                  "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6:executor",
+                  "receipt": "고정된 화면 검증 데이터",
+                  "status": "succeeded",
+                  "target": "fixture/claude-sonnet-5-5",
+                  "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
+                }
+              ],
+              "endedAt": 1793855520000,
+              "execution": "waiting",
+              "id": "assistant-2840e7c8b74c0197c547ce73",
               "instructions": [
                 {
-                  "actorId": "owner",
-                  "text": "확인 결과를 기다리기"
+                  "actorId": "local-owner",
+                  "text": "앞으로 표 금액은 원 단위로 써 줘."
                 }
-              ]
+              ],
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "runtimeRun": {
+                "authorizationId": "fixture-authorization",
+                "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                "id": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+                "inputHash": "7cb0541a3dbaf58152ba0be370bc2445e6409fd8c6ea5f174ad4d07ce8e94ff0",
+                "mode": "mock-http",
+                "outputTokenCap": 4,
+                "ownership": {
+                  "deadlineAt": 1793855580000,
+                  "dispatchId": "dispatch:e3c-work:pricing",
+                  "hostSessionId": "host:e3c-fixture",
+                  "startedAt": 1793855280000
+                }
+              },
+              "tasks": [
+                {
+                  "id": "assistant-2840e7c8b74c0197c547ce73:root",
+                  "parentId": null,
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-2840e7c8b74c0197c547ce73:executor",
+                  "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                  "status": "active"
+                },
+                {
+                  "id": "assistant-2840e7c8b74c0197c547ce73:verifier",
+                  "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                  "status": "queued"
+                }
+              ],
+              "title": "경쟁사 가격"
+            },
+            {
+              "acceptance": "pending",
+              "appliedMemoryVersions": [],
+              "assignments": [
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:root",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-23d30218ff744dd5e72aabec:root"
+                },
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:executor:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-23d30218ff744dd5e72aabec:executor"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:verifier:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "assistant-23d30218ff744dd5e72aabec:verifier"
+                }
+              ],
+              "assistantSource": {
+                "memberId": "member-juno",
+                "message": {
+                  "actorId": "local-owner",
+                  "id": "m:5bacf74c63c9982da724b62f5fbcef5d",
+                  "ordinal": 1,
+                  "role": "owner",
+                  "text": "PR #84 검토",
+                  "turnId": null
+                },
+                "messageHash": "ddcc5640dfc46d6575c3d16e0050ea7732c439c6597a962f833ce64dfa61d6fa",
+                "messageId": "m:5bacf74c63c9982da724b62f5fbcef5d",
+                "representative": {
+                  "model": "claude-sonnet-5-5",
+                  "provider": "fixture"
+                },
+                "segmentId": "assistant-conversation:1",
+                "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d"
+              },
+              "attempts": [
+                {
+                  "criteria": {
+                    "description": "요청한 결과와 근거 확인",
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
+                  },
+                  "id": "assistant-23d30218ff744dd5e72aabec:attempt:1",
+                  "modelVersions": [
+                    "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1"
+                  ],
+                  "number": 1,
+                  "status": "active"
+                }
+              ],
+              "budget": {
+                "limit": 8,
+                "measured": 1,
+                "reserved": 4,
+                "unit": "output-tokens"
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "fixture-authorization",
+                  "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d:executor",
+                  "receipt": "Existing data-only PR #84 fixture evidence; no provider invocation",
+                  "status": "succeeded",
+                  "target": "fixture/claude-sonnet-5-5",
+                  "taskId": "assistant-23d30218ff744dd5e72aabec:executor"
+                }
+              ],
+              "execution": "active",
+              "id": "assistant-23d30218ff744dd5e72aabec",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "runtimeRun": {
+                "authorizationId": "fixture-authorization",
+                "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
+                "id": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+                "inputHash": "8e8271c80db22fcf2633a8d8d00f643ff719283b646fbaf1bde30e1646525d1b",
+                "mode": "mock-http",
+                "outputTokenCap": 4,
+                "ownership": {
+                  "deadlineAt": 1793855579999,
+                  "dispatchId": "dispatch:e3c-work:pr84",
+                  "hostSessionId": "host:e3c-fixture",
+                  "startedAt": 1793855279999
+                }
+              },
+              "tasks": [
+                {
+                  "id": "assistant-23d30218ff744dd5e72aabec:root",
+                  "parentId": null,
+                  "status": "queued"
+                },
+                {
+                  "id": "assistant-23d30218ff744dd5e72aabec:executor",
+                  "parentId": "assistant-23d30218ff744dd5e72aabec:root",
+                  "status": "active"
+                },
+                {
+                  "id": "assistant-23d30218ff744dd5e72aabec:verifier",
+                  "parentId": "assistant-23d30218ff744dd5e72aabec:root",
+                  "status": "queued"
+                }
+              ],
+              "title": "PR #84 검토"
             }
-          ],
-          "memories": [],
-          "growth": [],
-          "relations": []
+          ]
         }
       }
     },
@@ -634,29 +1393,8 @@
       "status": 200,
       "body": {
         "feedId": "fixture:B2",
-        "cursor": 1,
+        "cursor": 6,
         "head": 1,
-        "members": [
-          {
-            "id": "member-quill",
-            "name": "퀼",
-            "look": {
-              "shape": "drop",
-              "color": "agent-1"
-            },
-            "modelGroup": "research"
-          },
-          {
-            "id": "member-juno",
-            "name": "주노",
-            "look": {
-              "shape": "round",
-              "color": "agent-6"
-            },
-            "modelGroup": "coding"
-          }
-        ],
-        "apps": [],
         "segment": {
           "number": 1,
           "revision": 1,
@@ -665,63 +1403,679 @@
           "previous": null,
           "messages": [
             {
-              "id": "m:churn",
+              "id": "m:5bacf74c63c9982da724b62f5fbcef5d",
+              "role": "owner",
+              "turnId": null,
+              "text": "PR #84 검토"
+            },
+            {
+              "id": "r:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+              "role": "representative",
+              "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+              "text": "PR #84 검토"
+            },
+            {
+              "id": "m:17566e2a8155facdc82f844185d10cf6",
+              "role": "owner",
+              "turnId": null,
+              "text": "경쟁사 가격도 확인해 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+              "role": "representative",
+              "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+              "text": "가격 표를 정리하고 확인을 기다리고 있어요."
+            },
+            {
+              "id": "m:c47b25c227c848b8a866d24abe7ee3cd",
               "role": "owner",
               "turnId": null,
               "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
             },
             {
-              "id": "r:churn",
+              "id": "r:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
               "role": "representative",
-              "turnId": "assistant-turn:m:churn",
+              "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
               "text": "지난 90일 해지 건부터 볼게요."
             }
           ]
         },
         "turns": [
           {
-            "id": "assistant-turn:m:churn",
-            "messageId": "m:churn",
+            "id": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+            "messageId": "m:5bacf74c63c9982da724b62f5fbcef5d",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793855279999,
             "proposal": {
-              "title": "이탈 원인 조사"
+              "member": "주노",
+              "title": "PR #84 검토"
             },
             "outcome": {
               "missionId": "intake",
-              "work": {
-                "status": "admitted",
-                "diagnostics": []
-              },
               "run": {
-                "status": "requested",
-                "diagnostics": []
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
               }
             },
             "work": {
               "missionId": "intake",
-              "missionRevision": 3,
-              "workId": "churn",
-              "title": "이탈 원인 조사",
-              "memberId": "member-quill",
+              "missionRevision": 2,
+              "workId": "assistant-23d30218ff744dd5e72aabec",
+              "title": "PR #84 검토",
               "execution": "active",
               "acceptance": "pending",
-              "unknown": false,
               "started": true,
-              "startedAt": 1793855280000,
+              "starting": false,
+              "startedAt": 1793855279999,
               "endedAt": null,
-              "turnId": "assistant-turn:m:churn",
-              "segment": 1,
+              "memberId": "member-juno",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+                "fact": null
+              },
               "steps": {
-                "done": 1,
-                "total": 5
-              }
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
             }
+          },
+          {
+            "id": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+            "messageId": "m:17566e2a8155facdc82f844185d10cf6",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280000,
+            "proposal": {
+              "member": "퀼",
+              "title": "경쟁사 가격"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "run": {
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 2,
+              "workId": "assistant-2840e7c8b74c0197c547ce73",
+              "title": "경쟁사 가격",
+              "execution": "waiting",
+              "acceptance": "pending",
+              "started": true,
+              "starting": false,
+              "startedAt": 1793855280000,
+              "endedAt": 1793855520000,
+              "memberId": "member-quill",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+                "fact": null
+              },
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
+            }
+          },
+          {
+            "id": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+            "messageId": "m:c47b25c227c848b8a866d24abe7ee3cd",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855280001,
+            "proposal": {
+              "member": "퀼",
+              "title": "이탈 원인 조사"
+            },
+            "outcome": {
+              "missionId": "intake",
+              "run": {
+                "diagnostics": [],
+                "status": "requested"
+              },
+              "work": {
+                "diagnostics": [],
+                "status": "admitted"
+              }
+            },
+            "work": {
+              "missionId": "intake",
+              "missionRevision": 2,
+              "workId": "assistant-236a368dfcf6f32eaeb68fb0",
+              "title": "이탈 원인 조사",
+              "execution": "active",
+              "acceptance": "pending",
+              "started": true,
+              "starting": false,
+              "startedAt": 1793855280001,
+              "endedAt": null,
+              "memberId": "member-quill",
+              "unknown": false,
+              "exception": {
+                "at": null,
+                "runId": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+                "fact": null
+              },
+              "steps": {
+                "done": 0,
+                "total": 2
+              },
+              "progress": {
+                "make": {
+                  "done": 0,
+                  "total": 1
+                },
+                "check": {
+                  "done": 0,
+                  "total": 1
+                }
+              },
+              "evidenceCount": null
+            }
+          }
+        ],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
           }
         ],
         "decisions": [],
         "briefings": []
+      }
+    },
+    "/assistant/conversation?member=member-quill": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 6,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:78d7cb72144445a05f97c847ddb3c0e9",
+              "role": "owner",
+              "turnId": null,
+              "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+              "role": "representative",
+              "turnId": "assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+              "text": "지난 90일 해지 건부터 볼게요."
+            },
+            {
+              "id": "m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "role": "owner",
+              "turnId": null,
+              "text": "기업 고객은 따로 봐 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "role": "representative",
+              "turnId": "assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+            },
+            {
+              "id": "m:1ca60cc469f239dffc0b45068be23d03",
+              "role": "owner",
+              "turnId": null,
+              "text": "앞으로 표 금액은 원 단위로 써 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+              "role": "representative",
+              "turnId": "assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+              "text": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+            "messageId": "m:78d7cb72144445a05f97c847ddb3c0e9",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855518000
+          },
+          {
+            "id": "assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+            "messageId": "m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855519000
+          },
+          {
+            "id": "assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+            "messageId": "m:1ca60cc469f239dffc0b45068be23d03",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855520000
+          }
+        ],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "member": {
+          "id": "member-quill",
+          "name": "퀼"
+        },
+        "decisions": []
+      }
+    },
+    "/assistant/conversation?segment=1&member=member-quill": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 1,
+        "segment": {
+          "number": 1,
+          "revision": 6,
+          "closed": false,
+          "full": false,
+          "previous": null,
+          "messages": [
+            {
+              "id": "m:78d7cb72144445a05f97c847ddb3c0e9",
+              "role": "owner",
+              "turnId": null,
+              "text": "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+              "role": "representative",
+              "turnId": "assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+              "text": "지난 90일 해지 건부터 볼게요."
+            },
+            {
+              "id": "m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "role": "owner",
+              "turnId": null,
+              "text": "기업 고객은 따로 봐 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "role": "representative",
+              "turnId": "assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+              "text": "기업 고객은 따로 나눠서 같이 정리할게요."
+            },
+            {
+              "id": "m:1ca60cc469f239dffc0b45068be23d03",
+              "role": "owner",
+              "turnId": null,
+              "text": "앞으로 표 금액은 원 단위로 써 줘."
+            },
+            {
+              "id": "r:assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+              "role": "representative",
+              "turnId": "assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+              "text": "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+            }
+          ]
+        },
+        "turns": [
+          {
+            "id": "assistant-turn:m:78d7cb72144445a05f97c847ddb3c0e9",
+            "messageId": "m:78d7cb72144445a05f97c847ddb3c0e9",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855518000
+          },
+          {
+            "id": "assistant-turn:m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+            "messageId": "m:47f6c3bb2c3059d4b3c3eb8c4b1b0af2",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855519000
+          },
+          {
+            "id": "assistant-turn:m:1ca60cc469f239dffc0b45068be23d03",
+            "messageId": "m:1ca60cc469f239dffc0b45068be23d03",
+            "status": "answered",
+            "displayStatus": "answered",
+            "at": 1793855520000
+          }
+        ],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "member": {
+          "id": "member-quill",
+          "name": "퀼"
+        },
+        "decisions": []
+      }
+    },
+    "/assistant/conversation?member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 0,
+        "segment": null,
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "member": {
+          "id": "member-juno",
+          "name": "주노"
+        },
+        "decisions": []
+      }
+    },
+    "/assistant/conversation?segment=1&member=member-juno": {
+      "status": 200,
+      "body": {
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "head": 0,
+        "segment": null,
+        "turns": [],
+        "members": [
+          {
+            "id": "member-quill",
+            "name": "퀼",
+            "look": {
+              "shape": "square",
+              "color": "agent-1"
+            },
+            "modelGroup": "research"
+          },
+          {
+            "id": "member-juno",
+            "name": "주노",
+            "look": {
+              "shape": "square",
+              "color": "agent-6"
+            },
+            "modelGroup": "coding"
+          }
+        ],
+        "apps": [
+          {
+            "id": "github",
+            "name": "GitHub",
+            "page": true,
+            "item": true,
+            "roomTab": "GitHub"
+          }
+        ],
+        "member": {
+          "id": "member-juno",
+          "name": "주노"
+        },
+        "decisions": []
+      }
+    },
+    "/missions/intake/run-ownership?work=assistant-236a368dfcf6f32eaeb68fb0": {
+      "status": 200,
+      "body": {
+        "observedAt": 1793855520000,
+        "missionId": "intake",
+        "workId": "assistant-236a368dfcf6f32eaeb68fb0",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "runId": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
+        "ownership": {
+          "deadlineAt": 1793855580001,
+          "dispatchId": "dispatch:e3c-work:churn",
+          "hostSessionId": "host:e3c-fixture",
+          "startedAt": 1793855280001
+        },
+        "currentHostSessionId": "host:e3c-reader",
+        "localDispatchActive": false,
+        "deadlineHasPassed": false,
+        "interruption": null,
+        "execution": "active",
+        "acceptance": "pending",
+        "providerDispatchClaims": [],
+        "unresolvedEffectIds": [],
+        "replayPermitted": false
+      }
+    },
+    "/missions/intake/conversation?work=assistant-236a368dfcf6f32eaeb68fb0": {
+      "status": 200,
+      "body": {
+        "missionId": "intake",
+        "workId": "assistant-236a368dfcf6f32eaeb68fb0",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "conversation": {
+          "id": "conversation:93062916d6cd190500d87278a2d0c648bca8b0f8",
+          "messages": [
+            {
+              "actorId": "local-owner",
+              "id": "e3c-churn-discussion",
+              "ordinal": 1,
+              "replyTo": null,
+              "role": "owner",
+              "text": "기업 고객은 따로 봐 줘."
+            }
+          ],
+          "workId": "assistant-236a368dfcf6f32eaeb68fb0"
+        }
+      }
+    },
+    "/missions/intake/run-ownership?work=assistant-2840e7c8b74c0197c547ce73": {
+      "status": 200,
+      "body": {
+        "observedAt": 1793855520000,
+        "missionId": "intake",
+        "workId": "assistant-2840e7c8b74c0197c547ce73",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "runId": "assistant-run:assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
+        "ownership": {
+          "deadlineAt": 1793855580000,
+          "dispatchId": "dispatch:e3c-work:pricing",
+          "hostSessionId": "host:e3c-fixture",
+          "startedAt": 1793855280000
+        },
+        "currentHostSessionId": "host:e3c-reader",
+        "localDispatchActive": false,
+        "deadlineHasPassed": false,
+        "interruption": null,
+        "execution": "waiting",
+        "acceptance": "pending",
+        "providerDispatchClaims": [],
+        "unresolvedEffectIds": [],
+        "replayPermitted": false
+      }
+    },
+    "/missions/intake/conversation?work=assistant-2840e7c8b74c0197c547ce73": {
+      "status": 200,
+      "body": {
+        "missionId": "intake",
+        "workId": "assistant-2840e7c8b74c0197c547ce73",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "conversation": null
+      }
+    },
+    "/missions/intake/run-ownership?work=assistant-23d30218ff744dd5e72aabec": {
+      "status": 200,
+      "body": {
+        "observedAt": 1793855520000,
+        "missionId": "intake",
+        "workId": "assistant-23d30218ff744dd5e72aabec",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "runId": "assistant-run:assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
+        "ownership": {
+          "deadlineAt": 1793855579999,
+          "dispatchId": "dispatch:e3c-work:pr84",
+          "hostSessionId": "host:e3c-fixture",
+          "startedAt": 1793855279999
+        },
+        "currentHostSessionId": "host:e3c-reader",
+        "localDispatchActive": false,
+        "deadlineHasPassed": false,
+        "interruption": null,
+        "execution": "active",
+        "acceptance": "pending",
+        "providerDispatchClaims": [],
+        "unresolvedEffectIds": [],
+        "replayPermitted": false
+      }
+    },
+    "/missions/intake/conversation?work=assistant-23d30218ff744dd5e72aabec": {
+      "status": 200,
+      "body": {
+        "missionId": "intake",
+        "workId": "assistant-23d30218ff744dd5e72aabec",
+        "revision": 2,
+        "feedId": "fixture:B2",
+        "cursor": 6,
+        "conversation": null
       }
     }
   }
