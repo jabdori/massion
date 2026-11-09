@@ -1,0 +1,131 @@
+{
+  "pairsInspected": {
+    "dark": [
+      "B13",
+      "B13-devices",
+      "B13-general",
+      "B13-general-restart",
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update",
+      "B14-usage",
+      "B19",
+      "B19-juno",
+      "B20",
+      "B20-coding",
+      "B23",
+      "B23-github",
+      "B23-github-expired"
+    ],
+    "light": [
+      "B13",
+      "B13-devices",
+      "B13-general",
+      "B13-general-restart",
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update",
+      "B14-usage",
+      "B19",
+      "B19-juno",
+      "B20",
+      "B20-coding",
+      "B23",
+      "B23-github",
+      "B23-github-expired"
+    ]
+  },
+  "method": "Artboard left / captured application right; all pairs inspected in four-screen contact sheets, plus full-size General and source-artboard inspection. Accessible labels/order are checked separately by the unchanged contract runner.",
+  "observations": [
+    "Settings full-height region and centered 640px column match the approved geometry.",
+    "General readonly and disabled unknown controls reflect absent host preferences; restart is not fabricated.",
+    "Configured-only connection states stay unverified and default-route controls are disabled.",
+    "Member archive, app/member bindings, retained memory and member schedules remain absent host capabilities, with corresponding visible gaps.",
+    "Model edit controls use decoded SVG masks, actual profile IDs and recorded busy identities.",
+    "No pixel-similarity score is claimed."
+  ],
+  "mainIntegration": {
+    "main": "d435690",
+    "changedAndReinspected": [
+      "B14",
+      "B14-expired",
+      "B14-restart",
+      "B14-update"
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "reason": "Added supported no-credential API metadata rows. All other Settings pair bytes must match the inspected pre-integration captures.",
+    "byteIdenticalPreviouslyInspectedPairs": 24,
+    "reinspectedChangedPairs": [
+      [
+        "B14",
+        "dark"
+      ],
+      [
+        "B14-expired",
+        "dark"
+      ],
+      [
+        "B14-restart",
+        "dark"
+      ],
+      [
+        "B14-update",
+        "dark"
+      ],
+      [
+        "B14",
+        "light"
+      ],
+      [
+        "B14-expired",
+        "light"
+      ],
+      [
+        "B14-restart",
+        "light"
+      ],
+      [
+        "B14-update",
+        "light"
+      ]
+    ]
+  },
+  "reviewRound": "PR109 visual gate A1-A9 and group unknown reconciliation",
+  "measurements": {
+    "B13CardBorders": [
+      94,
+      159,
+      224,
+      289
+    ],
+    "B19JunoSupportedCardBorders": [
+      172,
+      215,
+      258,
+      301,
+      358,
+      403,
+      460,
+      523
+    ],
+    "B20CardBorders": [
+      120,
+      175,
+      230,
+      287,
+      348,
+      409,
+      454,
+      511,
+      560
+    ]
+  },
+  "allFinalPairsRecapturedAndInspected": true,
+  "approvedCopyCorrection": "A2: two B23 heading strings gain the space before count; no role/order/occurrence/budget change",
+  "A9": "No host expiry/update producer; evidence in ci-follow-up.md"
+}

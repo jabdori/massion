@@ -1,0 +1,25 @@
+contract B13-devices (B13 설정 · 기기) vs /Users/code/orca/workspaces/massion/e3d1-settings/.runtime/e3d1-before/snapshots/light/B13-devices.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "내 계정"
+  ok    sidebar      text     "설정" -> statictext "설정"
+  ok    sidebar      link     "일반" -> button "일반"
+  ok    sidebar      link     "기억" -> button "기억"
+  ok    sidebar      link     "구성원" -> button "구성원"
+  ok    sidebar      link     "기기" -> button "기기"
+  ok    sidebar      link     "연결" -> button "연결"
+  ok    sidebar      link     "앱" -> button "앱"
+  ok    sidebar      link     "개선" -> button "개선"
+  ok    sidebar      link     "권한" -> button "권한"
+  ok    settings     heading  "기기" -> heading "기기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":20,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
+  budget settings     app {"chars":10,"strings":3,"sentences":0,"longest":5} proto {"chars":86,"strings":10,"sentences":0,"longest":25} source visibleTextBudget
+  FAIL  order  rail         button   "내 계정" (occurrence already consumed or found earlier)
+  FAIL  missing sidebar      textbox  "설정 검색"
+  FAIL  missing sidebar      link     "사용량"
+  FAIL  role   settings     button   "기기 연결" (text exists without the required role)
+  FAIL  missing settings     button   "연결 끊기"
+  FAIL  missing settings     button   "다시 연결"
+FAIL: 6 failures, 0 warnings, 20 required elements

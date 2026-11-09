@@ -1,0 +1,442 @@
+{
+  "rows": [
+    {
+      "screen": "B13",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "dark",
+      "passed": 17,
+      "failed": 3,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 2,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 7,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B14-usage.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "dark",
+      "passed": 31,
+      "failed": 12,
+      "warnings": 1,
+      "required": 43,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "dark",
+      "passed": 31,
+      "failed": 6,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 0,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B20-coding.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 8,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "dark",
+      "passed": 32,
+      "failed": 0,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [],
+      "gaps": [
+        "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+        "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "dark",
+      "passed": 32,
+      "failed": 1,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [
+        "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+        "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+        "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23-github-expired.png"
+    },
+    {
+      "screen": "B13",
+      "theme": "light",
+      "passed": 17,
+      "failed": 5,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13.png"
+    },
+    {
+      "screen": "B13-devices",
+      "theme": "light",
+      "passed": 17,
+      "failed": 3,
+      "warnings": 0,
+      "required": 20,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13-devices.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "Notification and installed-version rows are not implemented in production general settings."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "passed": 21,
+      "failed": 2,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [
+        "Production general settings has no notification, installed-version or restart-required state/control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B13-general-restart.png"
+    },
+    {
+      "screen": "B14",
+      "theme": "light",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14.png"
+    },
+    {
+      "screen": "B14-expired",
+      "theme": "light",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no credential-expiry field or reconnect control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-expired.png"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "light",
+      "passed": 29,
+      "failed": 7,
+      "warnings": 0,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary has no restart state or restart control."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-restart.png"
+    },
+    {
+      "screen": "B14-update",
+      "theme": "light",
+      "passed": 29,
+      "failed": 5,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "Connection recheck and API-key edit controls from the contract are not exposed by the production settings summary.",
+        "The production connection summary renders subscription logins as Not checked; update status and recheck controls are unavailable."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-update.png"
+    },
+    {
+      "screen": "B14-usage",
+      "theme": "light",
+      "passed": 30,
+      "failed": 4,
+      "warnings": 0,
+      "required": 34,
+      "visualFailures": [],
+      "gaps": [
+        "The host has no usage cycle, per-member utilization or currency budget producer; values remain unknown and no budget mutation or no-op refresh is offered."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B14-usage.png"
+    },
+    {
+      "screen": "B19",
+      "theme": "light",
+      "passed": 31,
+      "failed": 12,
+      "warnings": 1,
+      "required": 43,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "light",
+      "passed": 31,
+      "failed": 6,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19-juno.png"
+    },
+    {
+      "screen": "B20",
+      "theme": "light",
+      "passed": 30,
+      "failed": 0,
+      "warnings": 0,
+      "required": 30,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B20.png"
+    },
+    {
+      "screen": "B20-coding",
+      "theme": "light",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B20-coding.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "light",
+      "passed": 21,
+      "failed": 8,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "Installed app members are not exposed by AppsService.read(); no per-member assignment is inferred.",
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23.png"
+    },
+    {
+      "screen": "B23-github",
+      "theme": "light",
+      "passed": 32,
+      "failed": 0,
+      "warnings": 0,
+      "required": 32,
+      "visualFailures": [],
+      "gaps": [
+        "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+        "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23-github.png"
+    },
+    {
+      "screen": "B23-github-expired",
+      "theme": "light",
+      "passed": 32,
+      "failed": 1,
+      "warnings": 0,
+      "required": 33,
+      "visualFailures": [],
+      "gaps": [
+        "Per-member contribution bindings are not produced by AppsService.read(); manifest contributions are names only.",
+        "Token permission labels do not expose credential storage or expiry state; no Saved status is inferred.",
+        "AppsService.act() has no token reconnect/save command, and AppsService.read() has no expired-token producer."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23-github-expired.png"
+    }
+  ]
+}
