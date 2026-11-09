@@ -245,7 +245,7 @@ async function startChatWork(turnId){
  const turn=chatView?.turns.find(t=>t.id===turnId)??chatRoomTurns().find(t=>t.id===turnId);if(!turn?.work||busy||loading||reconnectRequired||unknownOperation||recoveryProblem||chatSending||chatStarting.has(turnId))return;const work=turn.work;if(work.started||work.unknown||work.acceptance!=='pending'||['cancelled','settled'].includes(work.execution))return;
  // One request per card at a time; the card label from the reread, not a status line, says how it ended.
  chatStarting.add(turnId);renderChat();
- try{await write('/missions/'+encodeURIComponent(work.missionId)+'/run',{commandId:crypto.randomUUID(),workId:work.workId,expectedRevision:work.missionRevision},work.missionId,copy('legacy.run-finished-inspect-its-execution-and-independent'),true);}
+ try{await write('/missions/'+encodeURIComponent(work.missionId)+'/run',{commandId:crypto.randomUUID(),workId:work.workId,expectedRevision:work.missionRevision},work.missionId,copy('legacy.run-finished-inspect-its-execution-and-independent'));}
  catch{}finally{chatStarting.delete(turnId);await readChat();renderChat();}
 }
 /** Retry sends nothing: the owner's original request goes back into the input so the conditions can change before a new Send.

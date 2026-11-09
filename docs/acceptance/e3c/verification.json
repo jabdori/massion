@@ -80,6 +80,18 @@
       "endpoint": "/missions/:id/run",
       "newApi": false,
       "path": "existing durable long-run writer"
+    },
+    "revisionSubmissionIsolation": {
+      "targetedCommand": "node --test tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/conversation-visual-gate.test.ts tests/work-room-visual.test.ts",
+      "passed": 94,
+      "failed": 0,
+      "views": [
+        "Representative",
+        "projected member"
+      ],
+      "assertions": "revisionSubmissions is unchanged during run admission and after unknown response/view switch",
+      "fix": "Remove the fifth boolean argument; write infers long-running behavior from the /run path.",
+      "visualChanges": false
     }
   }
 }

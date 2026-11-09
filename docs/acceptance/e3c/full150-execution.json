@@ -11,7 +11,7 @@
   "infrastructureErrors": 0,
   "blocking": false,
   "sourceFiles": 407,
-  "sourceInputSha256": "f7fc28a690b17343fac78ae77cbd4fa39e33f3cf7f1a9fd950ad842839e1985d",
+  "sourceInputSha256": "4cfc3d4d95c4ac375c264c546e1c2091b4a03b9cd10baa30b84db833beeeb39f",
   "captureInputsUnchanged": true,
   "b22Before": [
     {
@@ -45,5 +45,5 @@
       "infrastructureErrors": 0
     }
   ],
-  "revision": "Projected Start follow-up: repeated full CI command before push."
+  "revision": "Final low-priority revision-submission isolation fix; all150 repeated before push, no visual changes."
 }

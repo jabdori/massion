@@ -478,8 +478,9 @@ for(const projected of [false,true])test((projected?'projected member':'Represen
  await settle();await openTurn(app,0).fire('click');await settle();await app.tick();
  if(projected)runInContext("chatRep.turns[0].at=Date.now();chatThread='member-quill';chatView={...chatView,turns:[],segment:{...chatView.segment,messages:[]}};renderChat()",app.context);
  const card=app.all().find(n=>n.id==='chat-card-assistant-turn:m:'+String(1).repeat(32))!,start=card.children.find(n=>n.tagName==='BUTTON'&&n.textContent==='시작')!;
- assert.ok(start);assert.equal(start.hidden,false);await start.fire('click');await start.fire('click');await settle();assert.equal(posts,1);
+ const revisions=runInContext('[...revisionSubmissions]',app.context);
+ assert.ok(start);assert.equal(start.hidden,false);await start.fire('click');await start.fire('click');await settle();assert.equal(posts,1);assert.deepEqual(runInContext('[...revisionSubmissions]',app.context),revisions,'run admission is not a mission revision submission');
  const body=JSON.parse(app.calls.find(c=>c.path==='/missions/intake/run'&&c.options?.method==='POST')!.options.body);assert.equal(body.workId,'a');assert.equal(body.expectedRevision,2);assert.ok(body.commandId);
  finish();await settle();assert.equal(runInContext('unknownOperation?.commandId',app.context),body.commandId);
- runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await start.fire('click');await settle();assert.equal(posts,1,'an unknown run request cannot be resent after switching views');
+ runInContext("paneTabs=[];paneActive='';chatThread='';chatView=chatRep;renderChat()",app.context);await start.fire('click');await settle();assert.equal(posts,1,'an unknown run request cannot be resent after switching views');assert.deepEqual(runInContext('[...revisionSubmissions]',app.context),revisions);
 });
