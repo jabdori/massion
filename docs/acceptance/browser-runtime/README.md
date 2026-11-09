@@ -1,35 +1,35 @@
 # Browser runtime (R-B)
 
-The host now retains sanitized Work browser sessions, observed addresses, form values and structured page snapshots. Page counts come from committed observations, including before a Work is selected. B4 displays observed checkout amounts; B15 displays three observed pages and read-only form fields; B7 displays page-read activity; B5 retains page counts and its original unknown-outcome controls.
+## Blocking visual correction
+
+B15/B4 now display the adapter's sanitized PNG, not a reconstruction from text or readonly app inputs. The browser pane has one tab strip, a domain-only address pill and the captured page. B15 shows the observed three pages; B4 retains its single contract browser tab. The duplicate Work/browser header row, visible metadata dump and start/count lines under the address are gone. The contract's known actor appears as a small corner marker; no cursor or action coordinates are invented.
+
+B4's decision seller is `오피스몰 · shop.example.com`. B7 adds the recorded chat activity line `작업 중 · 페이지 N개 읽음` and separates its time, count and browser control. R-A-owned named steps are unchanged.
 
 ## Verification
 
-- Node 24.21.0 with the canonical `/private/tmp` TMPDIR: 278 related core, storage-lineage, UI, effect and fixture tests passed. The additional Work projection test and 18 updated fixture tests passed. Member-work integration tests passed; the separate surface regression found during development was fixed and all 113 combined client tests subsequently passed.
-- `npm run typecheck` passed. Copy lint reported zero findings. Full-suite and all 75 screen contracts run in CI, per the owner's local verification budget.
-- `node scripts/ui-contracts/run.mjs B4 B5 B15 B7`: all eight screen/theme runs captured with zero infrastructure or geometry errors. B4 passes 35/35 required elements; B5 16/17, B15 34/35 and B7 39/40. Remaining requirements are below.
-- `node scripts/ui-contracts/verify-browser.mjs`: eight observed page/theme states, keyboard tab selection, readonly inputs, no form/iframe/script element, no product commands, mobile overflow and close. Screenshots are under [interactions](interactions/). Masked field values are also asserted in the UI/unit tests.
-- [Contract report](report.md), [targeted gate](gate.json), [dark B4](screenshots/dark/B4.png), [dark B15](screenshots/dark/B15.png), [dark B7](screenshots/dark/B7.png), [light B15](screenshots/light/B15.png). Prototype/workbench comparisons are in [pairs](pairs/).
+- Node 24.21.0, canonical private TMPDIR: 231 related core, lineage, screenshot, UI, effect and fixture tests passed. Typecheck and copy lint passed; the design detector returned no findings. CI owns the full suite and all 150 screen/theme contracts.
+- The final local B15/B4/B7 capture covers both themes, with zero new contract, geometry or infrastructure failures. B4 passes 35/35 required elements; B15 34/35 and B7 39/40. The existing residuals below remain. [Targeted gate](visual-gate.json), [report](report.md).
+- `node scripts/ui-contracts/verify-browser.mjs`: 12 states across themes and desktop/mobile, including actual 584×764 PNGs, domain-only pills, keyboard page tabs, authoritative tab reselection, readonly image content, zero product commands, no horizontal overflow, and B7 chat/row spacing.
+- Screenshots: [B15 dark](screenshots/dark/B15.png), [B15 light](screenshots/light/B15.png), [B4 dark](screenshots/dark/B4.png), [B4 light](screenshots/light/B4.png), [B7 dark](screenshots/dark/B7.png). Prototype/app pairs are under `pairs/`; interactions and mobile images are under `interactions/`.
 
-The scoped gate removes 52 obsolete diagnostic identities and adds two narrower B7 gap descriptions (net 50 fewer exceptions). The narrower gap preserves missing business-step producers while removing the resolved browser telemetry claim. No contract requirement was relaxed.
+## Security correction
 
-## Remaining contracts
+Every form value is masked by default. Only explicit benign meanings may expose values; payment/security/code markers in the label, name or autocomplete override them. Korean `보안 코드`, English `Security code`, `name=csc` and `autocomplete=cc-csc` are tested in the sanitizer and committed Work/journal path. Passwords, hidden inputs and other authentication fields stay masked.
+
+The production capture routine scrubs the DOM and reflected private values before the only screenshot operation. The harmless page-script sentinel must not execute. Two different private values produce identical masked PNG bytes, while the benign quantity remains visible: [report](redaction-report.json), [masked image](redaction.png). No unmasked screenshot is written. PNG type, dimensions, canonical base64, per-image size and cumulative session size are validated.
+
+The original Blink launch flag stalled screenshots in a minimal local reproduction. A retained CDP session now disables page scripts before navigation while allowing image capture. It accepts only the isolated loopback debugger with a fresh blank page, closes any browser-created new-tab page, and remains held until cleanup. The DOM also receives a restrictive CSP before capture.
+
+## Provenance
+
+`node scripts/ui-contracts/capture-browser-pages.mjs` serves the local reference HTML/CSS under `scripts/ui-contracts/browser-pages/`, then invokes the same `captureBrowserPage` routine used by the opt-in adapter. Generated PNGs and observed metadata are hash-bound to those sources. The fixture's local documents map to declared example-domain identities; no example domain was contacted. No prototype HTML is injected into the workbench.
+
+The Work producer uses the existing Application CAS/idempotency boundary, drain-aware store and journal replay. Earlier reviews added regressions for one-time-code fields, late-response supersession at commit admission, current deadline checks and target-Mission tab/revision binding. The original scope removed 52 obsolete diagnostic identities and replaced two combined B7 gaps with narrower descriptions: net 50 fewer exceptions. This visual correction adds no exceptions and relaxes no screen contract.
+
+## Remaining contracts and limits
 
 - B5 order-history inspection still needs its connector and exact remote order identity. Unknown payment is never retried.
-- B15's generic library submission decision still lacks a typed effect binding to the Work. The read-only page does not grant submission authority; its sidebar therefore does not claim decision-pending.
-- B7 still lacks its named order-history step, individual business-step timestamps and the previously recorded payment/receipt and source-handoff facts. Browser observation timestamps do not stand in for those facts.
-
-## Provenance and limits
-
-Browser fixture pages use the production `BrowserSessions` producer and sanitizer, with exact adapter read shapes and Work input hashes. B4 and the added B15 Work validate their complete generated journals. B5 retains its recorded expired/unknown Work fixture and attaches earlier production-captured reads with the same Work input hash. B7 starts from the existing recorded Mission fixture and commits observations through the normal service. Background histories remain the recorded screen fixtures.
-
-All tests use fixtures and mocks; no remote browsing, real model call, payment or submission occurred. The optional headless CLI launch/cleanup was checked against a fake executable, not a live third-party site. The opt-in adapter uses a fresh session with scripts disabled and no imported login state. This slice does not implement autonomous browser planning, interactive form filling, authenticated profiles, order-history reconciliation or a form-submission adapter.
-
-## Review correction 1
-
-Codex identified three reproducible issues on `74c25ca`: numeric `one-time-code` values were not masked, old browser tabs could not rebind after Mission/revision changes, and a read could become obsolete while Application lookup was awaiting storage. Added failing regressions for all three, then masked the standard autocomplete token, refreshed tab bindings only after a current authoritative Mission read, and fenced generation at the drain-aware commit admission boundary. The 60 affected tests and typecheck pass. The headless interaction check also reselects existing tabs after revision invalidation in both themes.
-
-CI's initial attempt hit the GitHub Actions/Checks API incident (https://www.githubstatus.com/incidents/tp8cghg7tlc4). On rerun, all 150 screen/theme contracts, e2e, install smoke and desktop jobs passed on `74c25ca`; that result does not replace final-head CI after these corrections.
-
-## Review correction 2
-
-Codex found two additional admission/context cases on `8bcab38`. A checkout open must not inherit the revision of an unrelated selected Mission; its revision check is now scoped to the checkout's Mission while the selection/feed fence still rejects stale responses. The commit-admission guard also checks the current runtime deadline, not only the observation timestamp. Both regression tests failed before the corrections; all 62 affected tests and typecheck pass afterward.
+- B15's generic library decision lacks a typed form-submission effect binding to the Work; the sidebar does not claim decision-pending. The image grants no submission authority.
+- B7's named order-history/business steps and their timestamps remain R-A's scope. Browser timestamps do not replace them.
+- Tests use fixtures and loopback-only browsers. No third-party browsing, live models, payment or submission occurred. Authenticated profiles, interactive filling and autonomous browser planning remain out of scope. The PR is not merged by this task.

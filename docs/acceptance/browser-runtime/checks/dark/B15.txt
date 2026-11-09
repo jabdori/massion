@@ -1,4 +1,4 @@
-contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-rb-final/snapshots/dark/B15.json
+contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-image-final/snapshots/dark/B15.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -18,14 +18,14 @@ contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-r
   ok    header       button   "더 보기" -> button "더 보기"
   ok    conversation button   "복사" -> button "복사"
   ok    conversation button   "나중에" -> button "나중에"
-  ok    pane         tab      "{work_title}" -> tab "스터디룸 신청"
-  ok    pane         tab      "{work_title}" -> button "스터디룸 신청 닫기"
-  ok    pane         tab      "{work_title}" -> tab "브라우저"
+  ok    pane         tab      "{work_title}" -> tab "이용 안내"
+  ok    pane         tab      "{work_title}" -> tab "빈 시간"
+  ok    pane         tab      "{work_title}" -> tab "신청"
   ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
-  ok    pane         text     "{work_title}" -> tab "이용 안내"
-  ok    pane         text     "{work_title}" -> tab "빈 시간"
-  ok    pane         text     "{work_title}" -> tab "신청"
-  ok    pane         text     "이름" -> statictext "이름"
+  ok    pane         text     "{work_title}" -> statictext "library.example.com"
+  ok    pane         text     "{work_title}" -> image "브라우저 페이지"
+  ok    pane         text     "{work_title}" -> heading "신청"
+  ok    pane         text     "이름" -> term "이름"
   ok    pane         text     "{date}" -> statictext "11월 11일 (수)"
   ok    pane         text     "{count}" -> statictext "4명"
   ok    pane         chip     "{member}" -> statictext "하나"
@@ -38,6 +38,6 @@ contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-r
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget conversation app {"chars":221,"strings":15,"sentences":3,"longest":37} proto {"chars":252,"strings":20,"sentences":3,"longest":36} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":79,"strings":22,"sentences":0,"longest":10} proto {"chars":123,"strings":24,"sentences":0,"longest":19} source visibleTextBudget
+  budget pane         app {"chars":33,"strings":6,"sentences":0,"longest":19} proto {"chars":123,"strings":24,"sentences":0,"longest":19} source visibleTextBudget
   FAIL  missing sidebar      status   "결정 대기"
 FAIL: 1 failures, 0 warnings, 35 required elements

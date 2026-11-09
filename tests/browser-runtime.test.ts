@@ -95,3 +95,9 @@ test('runtime expiry during application lookup rejects commit admission',async()
  s.store.lookupOperation=async identity=>{if(++lookups===1){entered();await gate;}return lookup(identity);};
  const service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return raw;}},clock:()=>clock}),capture=service.capture(request);await started;clock+=2000;release();await assert.rejects(capture,/deadline|expired/);assert.equal((await service.read('intake','work')).session,null);
 });
+
+test('security labels, names and autocomplete never commit a numeric security code',async()=>{
+ for(const field of [{label:'보안 코드',name:'field',autocomplete:''},{label:'Security code',name:'field',autocomplete:''},{label:'수량',name:'csc',autocomplete:''},{label:'수량',name:'quantity',autocomplete:'cc-csc'}]){
+  const s=await setup(async()=>({...raw,blocks:['Reflected value: 456'],fields:[{...field,type:'number',value:'456'}]}));await s.service.capture(request);const read=await s.service.read('intake','work'),operation=s.store.inspect().at(-1)!;assert.equal(read.session!.page.fields[0]!.masked,true);assert.equal(read.session!.page.fields[0]!.value,'••••');assert.equal(read.session!.page.blocks[0],'Reflected value: ••••');assert.doesNotMatch(JSON.stringify(operation),/"value":"456"|Reflected value: 456/);
+ }
+});

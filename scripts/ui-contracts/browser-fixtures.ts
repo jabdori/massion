@@ -1,3 +1,5 @@
+import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {Application} from '../../src/application.ts';
 import {BrowserSessions,browserSummary} from '../../src/browser-runtime.ts';
 import type {RawBrowserPage} from '../../src/browser-runtime.ts';
@@ -6,7 +8,14 @@ import type {Mission} from '../../src/domain.ts';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 import type {ScreenFixture} from './fixture-host.ts';
 
-export const checkoutPage:RawBrowserPage={address:'https://shop.example.com/checkout',title:'주문 / 결제',blocks:['오피스몰','주문 / 결제','레이저 토너 검정','상품 금액','31,000원','배송비','3,000원','합계','34,000원'],fields:[{label:'수량',type:'number',value:'1',autocomplete:''},{label:'배송지',type:'text',value:'집 · 저장된 주소',autocomplete:'street-address'},{label:'결제 카드',type:'text',value:'4111111111111111',autocomplete:'cc-number'}]};
+const pagesRoot=new URL('./browser-pages/',import.meta.url),captured=JSON.parse(await readFile(new URL('captured.json',pagesRoot),'utf8'));
+async function capturedPage(name:string):Promise<RawBrowserPage>{
+ const {sourceSha256,screenshot,...page}=captured[name],html=await readFile(new URL(name+'.html',pagesRoot)),css=await readFile(new URL('page.css',pagesRoot));if(createHash('sha256').update(html).update(css).digest('hex')!==sourceSha256||screenshot.file!==name+'.png')throw Error('Browser fixture source changed; regenerate screenshots');
+ const bytes=await readFile(new URL(screenshot.file,pagesRoot));if(createHash('sha256').update(bytes).digest('hex')!==screenshot.sha256)throw Error('Browser fixture screenshot changed; regenerate from source');
+ return {...page,screenshot:{mimeType:'image/png',width:screenshot.width,height:screenshot.height,data:bytes.toString('base64')}};
+}
+export const checkoutPage=await capturedPage('checkout');
+const libraryPages=await Promise.all(['library-guide','library-availability','library-form'].map(capturedPage));
 export async function capturePages(store:InMemoryStore<Mission>,missionId:string,workId:string,pages:RawBrowserPage[],now:number){
  let current=pages[0]!,clock=now-pages.length*60000;const service=new BrowserSessions(store,store,{adapter:{async read(){return structuredClone(current);}},clock:()=>clock});
  for(const [index,page] of pages.entries()){current=page;clock+=60000;await service.capture({missionId,workId,readId:'fixture-page:'+index,address:page.address});}
@@ -27,11 +36,7 @@ export async function browserFixture(template:ScreenFixture){
   const snapshot=(fixture.routes['/read-state?mission=intake']!.body as any).snapshot;workId=snapshot.value.works.find((w:any)=>w.execution==='active'&&w.acceptance==='pending').id;
   await store.commit({id:missionId,expectedRevision:0,commandId:'recorded-fixture-baseline',fingerprint:'recorded-fixture-baseline',value:structuredClone(snapshot.value),events:[],outbox:[]});
  }
- const pages:RawBrowserPage[]=library?[
-  {address:'https://library.example.com/guide',title:'이용 안내',blocks:['시립도서관','이용 안내','스터디룸'],fields:[]},
-  {address:'https://library.example.com/availability',title:'빈 시간',blocks:['시립도서관','빈 시간','11월 11일 (수)','15:00–17:00'],fields:[]},
-  {address:'https://library.example.com/apply',title:'신청',blocks:['시립도서관','이용 안내','신청','스터디룸 신청'],fields:[{label:'이름',type:'text',value:'홍길동',autocomplete:'name'},{label:'연락처',type:'tel',value:'010-0000-0000',autocomplete:'tel'},{label:'날짜',type:'date',value:'11월 11일 (수)',autocomplete:''},{label:'시간',type:'time',value:'15:00–17:00',autocomplete:''},{label:'방',type:'select-one',value:'스터디룸 B',autocomplete:''},{label:'인원',type:'select-one',value:'4명',autocomplete:''}]}
- ]:unknown?[checkoutPage,checkoutPage,checkoutPage,checkoutPage]:[{address:'https://research.example.com/pricing',title:'요금제',blocks:['요금제 비교','공개 요금 안내'],fields:[]},{address:'https://research.example.com/plans',title:'플랜 안내',blocks:['플랜 안내','공개 이용 조건'],fields:[]}];
+ const pages:RawBrowserPage[]=library?libraryPages:unknown?[checkoutPage,checkoutPage,checkoutPage,checkoutPage]:[{address:'https://research.example.com/pricing',title:'요금제',blocks:['요금제 비교','공개 요금 안내'],fields:[]},{address:'https://research.example.com/plans',title:'플랜 안내',blocks:['플랜 안내','공개 이용 조건'],fields:[]}];
  const service=await capturePages(store,missionId,workId,pages,fixture.now),snapshot=(await store.load(missionId))!;if(library||unknown)validateMissionJournalLineage(store.inspect());
  const read=fixture.routes['/read-state?mission=intake']!.body as any;if(library)read.snapshot.value.works.unshift(snapshot.value.works[0]);else if(unknown)read.snapshot.value.works.find((w:any)=>w.id===workId).browserSession=snapshot.value.works[0]!.browserSession;else read.snapshot.value=snapshot.value;if(!unknown)read.snapshot.revision=snapshot.revision;
  fixture.routes['/missions/intake']={status:200,body:structuredClone(read.snapshot)};

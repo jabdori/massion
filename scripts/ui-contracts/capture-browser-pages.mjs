@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createServer} from 'node:http';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {join,resolve} from 'node:path';
+import {createHash} from 'node:crypto';
+import {captureBrowserPage,disableBrowserScripts} from '../../src/headless-browser.ts';
+import {sanitizePage} from '../../src/browser-runtime.ts';
+const root=fileURLToPath(new URL('./browser-pages/',import.meta.url)),exec=promisify(execFile),output=resolve('.runtime/browser-pages');await mkdir(output,{recursive:true});
+const session=(await exec('agent-browser',['session','id','--scope','worktree','--prefix','massion-page-capture'])).stdout.trim(),config=join(output,'config.json');await writeFile(config,'{}\n');
+const names={'library-guide':'https://library.example.com/guide','library-availability':'https://library.example.com/availability','library-form':'https://library.example.com/apply',checkout:'https://shop.example.com/checkout'},files=['page.css','redaction.html',...Object.keys(names).map(n=>n+'.html')];
+const server=createServer(async(req,res)=>{const url=new URL(req.url??'/','http://fixture'),path=url.pathname.slice(1);if(!files.includes(path)){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',path.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src "+(path==='redaction.html'?"'unsafe-inline'":"'none'")+"; style-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-src 'none'");let body=await readFile(join(root,path),'utf8');if(path==='redaction.html'){const secret=url.searchParams.get('secret');if(!['456','987'].includes(secret)){res.writeHead(400);res.end();return;}body=body.replaceAll('{{secret}}',secret);}res.end(body);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('AGENT_BROWSER_')));Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000'});
+const run=async args=>{const {stdout}=await exec('agent-browser',['--config',config,'--session',session,'--headed','false','--hide-scrollbars','false','--allowed-domains','127.0.0.1','--json',...args],{env,timeout:45000,maxBuffer:512*1024});const r=JSON.parse(stdout);assert.ok(r.success,r.error);return r.data;},manifest={};
+let closeControl;try{
+ await run(['close']);await run(['open']);closeControl=await disableBrowserScripts(run);
+ for(const [name,address] of Object.entries(names)){
+  await run(['open','http://127.0.0.1:'+server.address().port+'/'+name+'.html']);
+  const page=await captureBrowserPage(run,join(root,name+'.png')),image=page.screenshot;
+  const observed=(await run(['eval','-b',Buffer.from(`JSON.stringify({text:document.body.innerText,fields:Array.from(document.querySelectorAll('input')).map(e=>e.value)})`).toString('base64')])).result;
+  assert.doesNotMatch(observed,/4111111111111111|010-0000-0000/);const sanitized=sanitizePage({...page,address});
+  manifest[name]={address,title:page.title,blocks:page.blocks,fields:page.fields,screenshot:{mimeType:image.mimeType,width:image.width,height:image.height,file:name+'.png',sha256:createHash('sha256').update(Buffer.from(image.data,'base64')).digest('hex')},sourceSha256:createHash('sha256').update(await readFile(join(root,name+'.html'))).update(await readFile(join(root,'page.css'))).digest('hex')};
+ }
+ const images=[];for(const secret of ['456','987']){await run(['open','http://127.0.0.1:'+server.address().port+'/redaction.html?secret='+secret]);const page=await captureBrowserPage(run,join(output,'redaction-'+secret+'.png'));assert.deepEqual(page.fields.map(f=>f.value),['••••','••••','••••','••••','2']);assert.ok(page.blocks.every(text=>!text.includes(secret)));assert.equal((await run(['eval','Boolean(globalThis.massionPageScriptRan)'])).result,false);images.push(page.screenshot.data);}assert.equal(images[0],images[1],'Different private values must produce identical masked PNG bytes');await writeFile(join(output,'redaction-report.json'),JSON.stringify({cases:['보안 코드','Security code','name=csc','autocomplete=cc-csc'],scriptExecuted:false,identicalMaskedPixels:true,pngSha256:createHash('sha256').update(Buffer.from(images[0],'base64')).digest('hex')},null,2)+'\n');
+ await writeFile(join(root,'captured.json'),JSON.stringify(manifest,null,2)+'\n');console.log('Captured four sanitized reference pages through the production adapter routine.');
+}finally{await run(['close']).catch(()=>{});await closeControl?.();await new Promise(r=>server.close(r));}

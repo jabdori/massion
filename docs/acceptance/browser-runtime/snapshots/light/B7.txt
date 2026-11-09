@@ -19,7 +19,7 @@
             - status "작업 중"
           - list "하나의 작업"
             - listitem [level=2]
-              - button "프린터 토너 주문" [ref=e32]
+              - button "프린터 토너 주문" [ref=e33]
                 - StaticText "프린터 토너 주문"
                 - status
                   - StaticText "실행 중"
@@ -30,12 +30,12 @@
             - status "작업 중"
           - list "퀼의 작업"
             - listitem [level=2]
-              - button "이탈 원인 조사" [ref=e33]
+              - button "이탈 원인 조사" [ref=e34]
                 - StaticText "이탈 원인 조사"
                 - status
                   - StaticText "실행 중"
             - listitem [level=2]
-              - button "경쟁사 가격" [ref=e34]
+              - button "경쟁사 가격" [ref=e35]
                 - StaticText "경쟁사 가격"
                 - status
                   - StaticText "확인 대기"
@@ -45,7 +45,7 @@
             - status "읽지 않음"
           - list "주노의 작업"
             - listitem [level=2]
-              - button "PR #84 검토" [ref=e35]
+              - button "PR #84 검토" [ref=e36]
                 - StaticText "PR #84 검토"
                 - status
                   - StaticText "완료"
@@ -66,17 +66,17 @@
           - generic
             - paragraph
               - StaticText "PR #84 검토"
-            - button "복사" [ref=e36]
+            - button "복사" [ref=e37]
           - button "4분 동안 작업 ›" [ref=e25]
           - paragraph
             - StaticText "경쟁사 가격도 확인해 줘."
           - generic
             - paragraph
               - StaticText "가격 표를 정리하고 확인을 기다리고 있어요."
-            - button "복사" [ref=e37]
+            - button "복사" [ref=e38]
           - paragraph
             - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
-          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 0/2" [ref=e38]
+          - button "경쟁사 가격 확인 대기 작업 중 퀼 4분 작성 확인 0/2" [ref=e39]
             - strong
               - StaticText "경쟁사 가격"
             - StaticText "확인 대기"
@@ -92,10 +92,10 @@
           - generic
             - paragraph
               - StaticText "지난 90일 해지 건부터 볼게요."
-            - button "복사" [ref=e39]
+            - button "복사" [ref=e40]
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 0/2" [ref=e40]
+          - button "이탈 원인 조사 실행 중 작업 중 퀼 4분 작성 확인 0/2" [ref=e41]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실행 중"
@@ -108,11 +108,13 @@
             - StaticText "0/2"
           - paragraph
             - StaticText "프린터 토너 하나 주문해 줘. 지난번이랑 같은 걸로."
+          - paragraph
+            - StaticText "작업 중 · 페이지 2개 읽음"
           - generic
             - paragraph
               - StaticText "지난 주문과 같은 토너를 찾았어요."
-            - button "복사" [ref=e41]
-          - button "프린터 토너 주문 실행 중 작업 중 하나 4분 작성 확인 0/2" [ref=e42]
+            - button "복사" [ref=e42]
+          - button "프린터 토너 주문 실행 중 작업 중 하나 4분 작성 확인 0/2" [ref=e43]
             - strong
               - StaticText "프린터 토너 주문"
             - StaticText "실행 중"
@@ -147,9 +149,9 @@
             - button "중지" [ref=e30]
             - heading "프린터 토너 주문" [level=3, ref=e31]
             - list
-              - listitem "하나" [level=1, ref=e43]
+              - listitem "하나" [level=1, ref=e44]
                 - StaticText "하나"
-              - listitem "확인" [level=1, ref=e44]
+              - listitem "확인" [level=1, ref=e45]
                 - StaticText "확인"
             - generic
               - sectionheader
@@ -161,11 +163,10 @@
                   - StaticText "작성"
                 - listitem "확인 · 대기 중" [level=1, ref=e48]
                   - StaticText "확인"
-            - generic
-              - time
-                - StaticText "14:11"
-              - StaticText "페이지 2개 읽음"
-              - button "브라우저" [ref=e45]
+            - time
+              - StaticText "14:11"
+            - StaticText "페이지 2개 읽음"
+            - button "브라우저" [ref=e32]
             - group
               - button "확인 대기 요청한 결과와 근거 확인" [expanded=false, ref=e46]
                 - strong

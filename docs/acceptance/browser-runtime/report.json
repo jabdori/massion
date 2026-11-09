@@ -2,30 +2,6 @@
   "blocking": false,
   "rows": [
     {
-      "screen": "B4",
-      "theme": "dark",
-      "passed": 35,
-      "failed": 0,
-      "warnings": 0,
-      "required": 35,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/dark/B4.png"
-    },
-    {
-      "screen": "B5",
-      "theme": "dark",
-      "passed": 16,
-      "failed": 1,
-      "warnings": 0,
-      "required": 17,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/dark/B5.png"
-    },
-    {
       "screen": "B15",
       "theme": "dark",
       "passed": 34,
@@ -36,6 +12,18 @@
       "gaps": [],
       "errors": [],
       "pair": "pairs/dark/B15.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 35,
+      "failed": 0,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
     },
     {
       "screen": "B7",
@@ -54,30 +42,6 @@
       "pair": "pairs/dark/B7.png"
     },
     {
-      "screen": "B4",
-      "theme": "light",
-      "passed": 35,
-      "failed": 0,
-      "warnings": 0,
-      "required": 35,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/light/B4.png"
-    },
-    {
-      "screen": "B5",
-      "theme": "light",
-      "passed": 16,
-      "failed": 1,
-      "warnings": 0,
-      "required": 17,
-      "visualFailures": [],
-      "gaps": [],
-      "errors": [],
-      "pair": "pairs/light/B5.png"
-    },
-    {
       "screen": "B15",
       "theme": "light",
       "passed": 34,
@@ -88,6 +52,18 @@
       "gaps": [],
       "errors": [],
       "pair": "pairs/light/B15.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 35,
+      "failed": 0,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
     },
     {
       "screen": "B7",

@@ -6,7 +6,8 @@ import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 import {harness,reply,settle,Node} from './support/workbench-client.ts';
 
 const at=Date.UTC(2026,10,10,3),owner={id:'owner',roles:['owner'] as const};
-const page=(title='Observed checkout')=>({readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at,address:'https://shop.example.com/checkout',title,blocks:['Observed item <script>not executable</script>'],fields:[{label:'Recipient',value:'Observed recipient',masked:false},{label:'Card',value:'never show this',masked:true}]});
+const screenshot={mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',width:1,height:1};
+const page=(title='Observed checkout')=>({screenshot,readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at,address:'https://shop.example.com/checkout',title,blocks:['Observed item <script>not executable</script>'],fields:[{label:'Recipient',value:'Observed recipient',masked:false},{label:'Card',value:'never show this',masked:true}]});
 const request={kind:'payment',adapterId:'fixture-payment',checkoutId:'checkout:1',item:'Toner',quantity:1,subtotal:31000,shipping:3000,total:34000,currency:'KRW',merchant:'Shop',origin:'https://shop.example.com',destination:'Saved address',method:'Saved card',expiresAt:Date.now()+60000,cancellation:'Cancel',pagesRead:9,startedAt:at-60000};
 function decision(){return {id:'decision:1',at,title:'Order',question:'Pay?',rows:[['Item','Toner']],action:'34,000원 결제',state:'open',effect:{kind:'payment',missionId:'mission:1',workId:'work:1',effectId:'effect:1',status:'pending',request:{...request}}};}
 function fixture(){
@@ -24,6 +25,7 @@ function fixture(){
   if(path.startsWith('/events'))return reply({feedId:state.feed,cursor:1,events:[]});
   return reply({},503);
  });
+ app.context.URL=URL;
  return {app,state};
 }
 const descendants=(node:Node):Node[]=>[node,...node.children.flatMap(descendants)];
@@ -34,14 +36,26 @@ const refresh=async(app:ReturnType<typeof harness>)=>{await app.node('chat-lates
 const openWork=async(app:ReturnType<typeof harness>)=>{await runInContext("paneOpen('mission:1','work:1','Order');loadMission('mission:1')",app.context);await settle();};
 function deferred(){let release!:(value:ReturnType<typeof reply>)=>void;const promise=new Promise<ReturnType<typeof reply>>(resolve=>release=resolve);return {promise,release};}
 
- test('checkout shows only observed text and readonly masked fields through the existing decision binding',async()=>{
+const pageTabs=(app:ReturnType<typeof harness>)=>descendants(app.node('pane-tabs')).filter(n=>n.attributes.get('role')==='tab');
+const visibleText=(node:Node):string=>node.hidden||node.className==='visually-hidden'?'':node.children.length?node.children.map(visibleText).join(''):node.textContent;
+
+test('checkout renders a read-only PNG, one browser tab and a domain pill without visible metadata or form controls',async()=>{
  const {app}=fixture();await settle();await checkout(app);
- assert.match(pane(app).textContent,/Observed checkout/);assert.match(pane(app).textContent,/<script>not executable<\/script>/);
- assert.equal(find(app,'browser-address').value,'https://shop.example.com/checkout');
- const inputs=descendants(pane(app)).filter(n=>n.tagName==='INPUT');assert.equal(inputs.length,3);assert.ok(inputs.every(n=>(n as any).readOnly===true));
- assert.equal(find(app,'browser-field-0').value,'Observed recipient');assert.equal(find(app,'browser-field-1').value,'••••');assert.ok(!inputs.some(n=>n.value.includes('never show')));
- assert.match(pane(app).textContent,/페이지 2개 읽음/);assert.equal(pane(app).attributes.get('data-session-id'),'browser:1');assert.doesNotMatch(pane(app).textContent,/browser:1/);assert.equal(descendants(pane(app)).some(n=>['IFRAME','FORM','A','SCRIPT'].includes(n.tagName)),false);
+ const image=find(app,'browser-screenshot');assert.ok(image);assert.equal(image.tagName,'IMG');assert.equal(image.attributes.get('src'),'data:image/png;base64,'+screenshot.data);assert.equal(image.attributes.get('alt'),'브라우저 페이지');
+ assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.equal(find(app,'browser-address').tagName,'SPAN');
+ assert.deepEqual(pageTabs(app).map(n=>n.textContent),['브라우저']);assert.equal(descendants(pane(app)).some(n=>n.attributes.get('role')==='tablist'),false);
+ assert.doesNotMatch(visibleText(pane(app)),/Observed|Recipient|Card|페이지|시작|checkout|https:/);
+ assert.match(find(app,'browser-page-alternative').textContent,/Observed checkout/);assert.match(find(app,'browser-page-alternative').textContent,/••••/);assert.doesNotMatch(pane(app).textContent,/never show this/);
+ assert.equal(find(app,'browser-page-alternative').className,'visually-hidden');assert.equal(pane(app).attributes.get('data-session-id'),'browser:1');
+ assert.equal(descendants(pane(app)).some(n=>['INPUT','IFRAME','FORM','A','SCRIPT','BUTTON','TIME'].includes(n.tagName)),false);
  const query=app.calls.find(c=>c.path.endsWith('/browser'))!;assert.equal(query.path,'/missions/mission%3A1/works/work%3A1/browser');assert.equal(query.options.headers['X-Massion-Feed'],'feed:a');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+for(const kind of ['legacy','wrong-mime','empty','bad-base64','zero-width','bad-height'])test(kind+' image never falls back to structured page text',async()=>{
+ const {app,state}=fixture();state.session.page={...page()};
+ if(kind==='legacy')delete state.session.page.screenshot;
+ else state.session.page.screenshot={...screenshot,...(kind==='wrong-mime'?{mimeType:'image/svg+xml'}:kind==='empty'?{data:''}:kind==='bad-base64'?{data:'not an image URL'}:kind==='zero-width'?{width:0}:{height:1.5})};
+ await settle();await checkout(app);assert.match(pane(app).textContent,/사용 불가/);assert.doesNotMatch(pane(app).textContent,/Observed|Recipient|Card/);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);
 });
 
 for(const kind of ['none','failure','malformed','wrong-feed','old-revision'])test(kind+' observation leaves checkout unavailable without fabricating page data',async()=>{
@@ -67,7 +81,7 @@ for(const change of ['feed','thread','decision','decision-change','tab','epoch']
  if(change==='decision-change'){state.decisions[0]!.effect.request.total=35000;await refresh(app);}
  if(change==='tab')runInContext("paneOpen('mission:1','other','Other')",app.context);
  if(change==='epoch')runInContext('requireReconnect();renderShell()',app.context);
- assert.doesNotMatch(pane(app).textContent,/Observed checkout|Observed item/);
+ assert.doesNotMatch(pane(app).textContent,/Observed checkout|Observed item/);assert.doesNotMatch(pageTabs(app).map(n=>n.textContent).join(' '),/Observed/);
  hold.release(reply({feedId:'feed:a',revision:2,session:state.session}));await settle();assert.doesNotMatch(pane(app).textContent,/Observed checkout|Observed item/);
 });
 
@@ -80,13 +94,13 @@ for(const deadline of ['payment','run'])test(deadline+' deadline clears a cached
  assert.doesNotMatch(pane(app).textContent,/Observed checkout|Observed item/);assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
-test('Work opens a generic browser tab and activity counts only stored pages',async()=>{
+test('Work opens its observed image and activity counts only stored pages',async()=>{
  const {app}=fixture();await settle();await openWork(app);
  const open=find(app,'work-browser-work:1');assert.ok(open,'Work needs a browser opener');
  const telemetry=find(app,'work-browser-pages-work:1');assert.equal(telemetry.textContent,'페이지 2개 읽음');
  const activity=find(app,'work-browser-activity-work:1');assert.match(activity.textContent,/페이지 2개 읽음/);
  await open.fire('click');await settle();assert.equal(pane(app).hidden,false);assert.match(pane(app).textContent,/Observed checkout/);
- assert.ok(find(app,'pane-tab-browser:mission:1/work:1'));assert.equal(find(app,'browser-field-0').value,'Observed recipient');
+ assert.ok(find(app,'browser-screenshot'));assert.equal(pageTabs(app).length,2);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -101,13 +115,16 @@ test('conversation fold derives read telemetry and first-read time from the stor
  assert.match(node.textContent,/페이지 2개 읽음/);
 });
 
-test('generic browser tabs use only stored page titles and keep selected observed fields readonly',async()=>{
- const {app,state}=fixture();state.mission.works[0].browserSession.pages=[{...page('Search results'),readId:'read:0',at:at-60000},{...page('Library form'),readId:'read:1'}, {...page('Review request'),readId:'read:2'}];
+test('generic browser tabs use observed titles and select the matching image with keyboard navigation',async()=>{
+ const {app,state}=fixture();state.mission.works[0].browserSession.pages=[{...page('이용 안내'),readId:'read:0',at:at-60000},{...page('빈 시간'),readId:'read:1'}, {...page('신청'),readId:'read:2'}];
+ state.mission.works[0].browserSession.pages[1].screenshot={...screenshot,width:2};
  state.session={...state.session,pagesRead:3,page:state.mission.works[0].browserSession.pages[2]};
  await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();
- const tabs=descendants(pane(app)).filter(n=>n.attributes.get('role')==='tab');assert.deepEqual(tabs.map(n=>n.textContent),['Search results','Library form','Review request']);
- await find(app,'browser-page-tab-1').fire('click');assert.match(pane(app).textContent,/Library form/);assert.equal(find(app,'browser-page-tab-1').attributes.get('aria-selected'),'true');
- assert.equal(find(app,'browser-member').children[1]!.textContent,'하나');assert.equal((find(app,'browser-field-0') as any).readOnly,true);
+ const tabs=pageTabs(app);assert.deepEqual(tabs.map(n=>n.textContent),['이용 안내','빈 시간','신청']);
+ await find(app,'browser-page-tab-1').fire('click');assert.match(pane(app).textContent,/빈 시간/);assert.equal(find(app,'browser-page-tab-1').attributes.get('aria-selected'),'true');
+ assert.equal(find(app,'browser-member').children[1]!.textContent,'하나');assert.equal(find(app,'browser-screenshot').attributes.get('width'),'2');
+ assert.notEqual(find(app,'browser-member').className,'pane-people');
+ const keydown=find(app,'browser-page-tab-1').listeners.get('keydown')![0]!;keydown({key:'ArrowRight',preventDefault(){}});assert.equal(find(app,'browser-page-tab-2').attributes.get('aria-selected'),'true');
 });
 
 test('an unknown payment retains its committed browser fold with no second payment action',async()=>{
@@ -161,5 +178,50 @@ for(const kind of ['generic','checkout'])for(const change of ['revision','missio
 });
 
 test('opening checkout ignores the revision of an unrelated selected Mission',async()=>{
- const {app}=fixture();await settle();runInContext("selectedId='other';snapshot={revision:999,value:{id:'other',works:[]}}",app.context);await checkout(app);assert.match(pane(app).textContent,/Observed checkout/);assert.equal(find(app,'browser-address').value,'https://shop.example.com/checkout');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+ const {app}=fixture();await settle();runInContext("selectedId='other';snapshot={revision:999,value:{id:'other',works:[]}}",app.context);await checkout(app);assert.match(pane(app).textContent,/Observed checkout/);assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+
+test('checkout ignores a previously selected historical page and always shows the current image',async()=>{
+ const {app,state}=fixture();state.mission.works[0].browserSession.pages[0]={...page('Old observation'),readId:'read:0',screenshot:{...screenshot,width:2}};
+ await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();await find(app,'browser-page-tab-0').fire('click');assert.equal(find(app,'browser-screenshot').attributes.get('width'),'2');
+ await checkout(app);assert.equal(find(app,'browser-screenshot').attributes.get('width'),'1');assert.deepEqual(pageTabs(app).map(n=>n.textContent),['브라우저']);
+});
+
+test('generic browser uses validated response history when no snapshot history matches',async()=>{
+ const {app,state}=fixture();state.works=[{missionId:'mission:1',missionRevision:2,workId:'work:1',title:'Order',turnId:'turn:1',memberId:null,started:true,unknown:false,execution:'active',acceptance:'pending',browser:{startedAt:at-60000,pagesRead:2}}];await settle();await openWork(app);delete state.mission.works[0].browserSession;
+ state.session.pages=[{...page('이용 안내'),readId:'read:0'},state.session.page];
+ await find(app,'work-browser-work:1').fire('click');await settle();
+ assert.deepEqual(pageTabs(app).map(n=>n.textContent),['이용 안내','Observed checkout']);
+ state.session.pages[1]={...page('Different latest'),readId:'read:other'};
+ await runInContext('browserClear();renderPane()',app.context);await settle();assert.deepEqual(pageTabs(app).map(n=>n.textContent),['Observed checkout']);
+});
+
+for(const identity of ['representative','member','unknown'])test(identity+' actor uses the recorded Work identity without inventing an unknown member',async()=>{
+ const {app,state}=fixture();state.works=[{missionId:'mission:1',missionRevision:2,workId:'work:1',title:'Order',turnId:'turn:1',memberId:identity==='representative'?null:identity==='member'?'member:1':'missing',started:true,unknown:false,execution:'active',acceptance:'pending'}];
+ await settle();await checkout(app);const member=app.all().find(n=>n.id==='browser-member');
+ if(identity==='unknown')assert.equal(member,undefined);else{assert.ok(member);assert.equal(member.children[1]!.textContent,identity==='representative'?'하나':'민수');assert.equal(member.parentElement?.id,'browser-page');}
+});
+
+for(const execution of ['active','waiting','queued','settled','blocked'])test(execution+' Work only shows live browser chat activity while actively running',async()=>{
+ const {app}=fixture();await settle();await openWork(app);
+ const node=runInContext('chatTurnState('+JSON.stringify({id:'turn:activity',displayStatus:'replied',work:{missionId:'mission:1',workId:'work:1',started:execution!=='queued',unknown:false,execution,acceptance:'pending'}})+')',app.context) as Node;
+ if(execution==='active')assert.equal(node.textContent,'작업 중 · 페이지 2개 읽음');else assert.doesNotMatch(node.textContent,/페이지/);
+ const noReads=runInContext("chatTurnState({id:'no-reads',displayStatus:'replied',work:{missionId:'mission:1',workId:'other',started:true,unknown:false,execution:'active',acceptance:'pending'}})",app.context) as Node;assert.doesNotMatch(noReads.textContent,/페이지/);
+});
+
+
+test('an image load failure shows unavailable without a text fallback',async()=>{
+ const {app}=fixture();await settle();await checkout(app);await find(app,'browser-screenshot').fire('error');assert.match(find(app,'browser-page').textContent,/사용 불가/);assert.doesNotMatch(find(app,'browser-page').textContent,/Observed|Recipient|Card/);
+});
+
+
+for(const displayStatus of ['unknown','not_started','failed'])test(displayStatus+' turn cannot be relabelled as live browser activity',async()=>{
+ const {app}=fixture();await settle();await openWork(app);
+ const node=runInContext('chatTurnState('+JSON.stringify({id:'turn:status',displayStatus,work:{missionId:'mission:1',workId:'work:1',started:true,unknown:false,execution:'active',acceptance:'pending'}})+')',app.context) as Node;assert.doesNotMatch(node.textContent,/작업 중|페이지/);
+});
+
+test('response history takes precedence over an older snapshot history',async()=>{
+ const {app,state}=fixture();state.session.pages=[{...page('응답의 이용 안내'),readId:'response:0'},state.session.page];
+ await settle();await openWork(app);await find(app,'work-browser-work:1').fire('click');await settle();assert.deepEqual(pageTabs(app).map(n=>n.textContent),['응답의 이용 안내','Observed checkout']);
 });

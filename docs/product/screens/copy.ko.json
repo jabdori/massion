@@ -17119,6 +17119,18 @@
    "E7:first-experience"
   ]
  },
+ "ui.browser.image": {
+  "ko": "브라우저 페이지",
+  "roles": ["img"],
+  "used_in": ["B4:pane", "B15:pane"],
+  "provenance": "R-B sanitized page screenshot alternative label."
+ },
+ "ui.browser.working": {
+  "ko": "작업 중 · 페이지 {count}개 읽음",
+  "roles": ["text"],
+  "used_in": ["B7:conversation"],
+  "provenance": "R-B active Work with committed browser reads."
+ },
  "ui.browser.address": {
   "ko": "주소",
   "roles": [

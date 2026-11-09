@@ -1,0 +1,152 @@
+{
+  "library-guide": {
+    "address": "https://library.example.com/guide",
+    "title": "이용 안내",
+    "blocks": [
+      "시립도서관",
+      "이용 안내",
+      "스터디룸",
+      "신청",
+      "내 신청",
+      "이용 안내",
+      "스터디룸",
+      "이용 하루 전까지 취소 가능"
+    ],
+    "fields": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 584,
+      "height": 764,
+      "file": "library-guide.png",
+      "sha256": "48cf99a0e878ce334c20de0e0a0550b1a0ad11ed825767e2ab0ce56a61548d67"
+    },
+    "sourceSha256": "9b3c3a6192ba81c13ea9f67b3c95bb2903cc8af42abc55ff68631b70246a251a"
+  },
+  "library-availability": {
+    "address": "https://library.example.com/availability",
+    "title": "빈 시간",
+    "blocks": [
+      "시립도서관",
+      "이용 안내",
+      "스터디룸",
+      "신청",
+      "내 신청",
+      "빈 시간",
+      "스터디룸 B",
+      "11월 11일 (수)",
+      "15:00–17:00 · 4명"
+    ],
+    "fields": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 584,
+      "height": 764,
+      "file": "library-availability.png",
+      "sha256": "93bd069f85526dfed95b1ce0943e4a5c7ee38810aaee692baa6cccc8816c1137"
+    },
+    "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
+  },
+  "library-form": {
+    "address": "https://library.example.com/apply",
+    "title": "신청",
+    "blocks": [
+      "시립도서관",
+      "이용 안내",
+      "스터디룸",
+      "신청",
+      "내 신청",
+      "스터디룸 신청"
+    ],
+    "fields": [
+      {
+        "autocomplete": "name",
+        "label": "이름",
+        "name": "",
+        "type": "text",
+        "value": "홍길동"
+      },
+      {
+        "autocomplete": "tel",
+        "label": "연락처",
+        "name": "",
+        "type": "tel",
+        "value": "••••"
+      },
+      {
+        "autocomplete": "",
+        "label": "날짜",
+        "name": "",
+        "type": "select-one",
+        "value": "11월 11일 (수)"
+      },
+      {
+        "autocomplete": "",
+        "label": "시간",
+        "name": "",
+        "type": "select-one",
+        "value": "15:00–17:00"
+      },
+      {
+        "autocomplete": "",
+        "label": "방",
+        "name": "",
+        "type": "select-one",
+        "value": "스터디룸 B"
+      },
+      {
+        "autocomplete": "",
+        "label": "인원",
+        "name": "",
+        "type": "select-one",
+        "value": "4명"
+      }
+    ],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 584,
+      "height": 764,
+      "file": "library-form.png",
+      "sha256": "c83cf227b8ff34a127e44a9fa3ff18f3e91390fa24a38e499fb332ac366ad203"
+    },
+    "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
+  },
+  "checkout": {
+    "address": "https://shop.example.com/checkout",
+    "title": "주문 / 결제",
+    "blocks": [
+      "오피스몰",
+      "장바구니",
+      "주문 / 결제",
+      "내 주문",
+      "주문 / 결제",
+      "레이저 토너 검정",
+      "수량 1 · 지난 주문과 같은 상품",
+      "31,000원",
+      "배송지",
+      "집 · 저장된 주소",
+      "결제 수단",
+      "",
+      "배송비",
+      "3,000원",
+      "합계",
+      "34,000원"
+    ],
+    "fields": [
+      {
+        "autocomplete": "cc-number",
+        "label": "결제 수단",
+        "name": "",
+        "type": "text",
+        "value": "••••"
+      }
+    ],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 584,
+      "height": 764,
+      "file": "checkout.png",
+      "sha256": "b80639741bac60207fd975c05f81f22f5e28cb6189cb68fe55b7f2b81e6a2891"
+    },
+    "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
+  }
+}
