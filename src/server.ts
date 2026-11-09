@@ -1,4 +1,4 @@
-import {MonthlyBudgetService,BUDGET_DECISION_PREFIX} from './monthly-budget.ts';
+import {MonthlyBudgetService,BUDGET_DECISION_PREFIX,monthlyRunId} from './monthly-budget.ts';
 import {daemonGuard,inheritedDaemonSecret} from './daemon-auth.ts';
 import {createProtocolFeed} from './protocol-feed.ts';
 import {protocolSupport,protocolFeatures,protocolConnection,validHeader,validRange} from './protocol.ts';
@@ -44,7 +44,7 @@ import type {WorkRuntime} from './configured-runtime.ts';
 import {ProviderRegistry} from './providers.ts';
 import {ProductService} from './product.ts';
 import {readWorkBudgetHistory,readWorkInterventionHistory} from './work-budget-history.ts';
-import {DomainError,hash} from './domain.ts';
+import {DomainError} from './domain.ts';
 import {workbenchPage} from './workbench.ts';
 import {SurrealRelationImpact,validateImpactInput,RelationImpactLimitError} from './relation-impact.ts';
 import type {RelationImpactReader} from './relation-impact.ts';
@@ -73,8 +73,8 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const monthlyBudget=new MonthlyBudgetService(ownerStore);
  let budgetTask:Promise<void>|undefined,budgetAgain=false;
  const queueBudgetResume=()=>{
-  if(draining)return;budgetAgain=true;if(budgetTask)return;
-  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;try{const state=await store.readState();await withAdmissionFeed(state.feedId,()=>monthlyBudget.resumeReleased(async(r,revision)=>{if(product.runtime)await product.run(r.missionId,r.workId,'monthly-run:'+hash([r.decisionId,r.missionId,r.workId]).slice(0,48),revision);}));}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueBudgetResume();});
+  if(draining||!product.runtime)return;budgetAgain=true;if(budgetTask)return;
+  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;try{if(!product.runtime?.hasActiveAdmission?.()){const state=await store.readState();await withAdmissionFeed(state.feedId,()=>monthlyBudget.resumeReleased(async(r,revision)=>{if(product.runtime)await product.run(r.missionId,r.workId,monthlyRunId(r.decisionId!,r.missionId,r.workId),revision);},async(r,revision)=>!product.runtime?.hasActiveAdmission?.()&&!!(await product.preflight(r.missionId,r.workId,revision))?.ready));}}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueBudgetResume();});
  };
  const members=new MembersService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId),memberChats=new Map<string,AssistantService>();
  // The host scheduler (results-and-schedules.md) writes the briefing from the Representative's conversation read; it stops when the host drains or closes.

@@ -8,6 +8,7 @@ import {copy} from './ui-copy.ts';
 
 export const MONTHLY_BUDGET_ID=ASSISTANT_CONVERSATION_PREFIX+'monthly-budget',BUDGET_DECISION_PREFIX='monthly-budget:';
 const OWNER='local-owner',HOST='runtime-representative';
+export const monthlyRunId=(decisionId:string,missionId:string,workId:string)=>'monthly-run:'+hash([decisionId,missionId,workId]).slice(0,48);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
 const count=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
@@ -20,7 +21,7 @@ interface Reservation {missionId:string;workId:string;runId:string;amount:number
 interface BudgetDecision {id:string;period:string;at:number;state:'open'|'later'|'done';limit:number;nextLimit:number;actorId?:string}
 export interface MonthlyBudgetState {kind:'monthly-budget';id:string;limit:number|null;timezone:string;actorId:string;reservations:Reservation[];decisions:BudgetDecision[]}
 function proposalLimit(state:MonthlyBudgetState,d:BudgetDecision):number {return d.state!=='done'&&state.limit!==d.limit?Math.max(d.nextLimit,(state.limit??0)+Math.max(1,state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0))):d.nextLimit;}
-type BudgetCommand={type:'release-monthly-budget';missionId:string;workId:string;runId:string}|{type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean;timezone?:string}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
+type BudgetCommand={type:'release-monthly-budget';missionId:string;workId:string;runId:string;workRevision?:number}|{type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean;timezone?:string}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
 export const isMonthlyBudgetState=(v:unknown):v is MonthlyBudgetState=>!!v&&typeof v==='object'&&(v as MonthlyBudgetState).kind==='monthly-budget';
 export function applyMonthlyBudget(current:MonthlyBudgetState|null,command:BudgetCommand,actor:Actor,at:number){
  ensure(count(at)&&id(actor.id),'Invalid budget actor/time');const host=command.type==='reserve-monthly-budget'||command.type==='release-monthly-budget';ensure(actor.id===(host?HOST:OWNER)&&actor.roles.includes(host?'representative':'owner'),'Budget authority denied');
@@ -31,7 +32,7 @@ export function applyMonthlyBudget(current:MonthlyBudgetState|null,command:Budge
   ensure(!state||state.limit===null||state.timezone===command.timezone,'Accounting timezone is already pinned');
   if(state){state.timezone=command.timezone;state.limit=command.limit;state.actorId=actor.id;for(const d of state.decisions)if(d.state!=='done'){d.limit=command.limit;d.nextLimit=Math.max(command.limit+1,command.limit+state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}}else state={kind:'monthly-budget',id:MONTHLY_BUDGET_ID,limit:command.limit,timezone:command.timezone,actorId:actor.id,reservations:[],decisions:[]};
  }else if(command.type==='release-monthly-budget'){
-  ensure(exact(command,['type','missionId','workId','runId'])&&[command.missionId,command.workId,command.runId].every(id),'Invalid reservation release');const r=state!.reservations.find(r=>r.missionId===command.missionId&&r.workId===command.workId&&r.runId===command.runId);ensure(r?.state==='reserved','Exact unused reservation required');r.state='released';
+  ensure(exact(command,['type','missionId','workId','runId',...(command.workRevision!==undefined?['workRevision']:[])])&&(command.workRevision===undefined||count(command.workRevision)&&command.workRevision>0)&&[command.missionId,command.workId,command.runId].every(id),'Invalid reservation release');const r=state!.reservations.find(r=>r.missionId===command.missionId&&r.workId===command.workId&&r.runId===command.runId);ensure(r?.state==='reserved'&&(command.workRevision===undefined||r.revision===command.workRevision),'Exact unused reservation required');r.state='released';
  }else if(command.type==='reserve-monthly-budget'){
   const e=command.entry;ensure(exact(command,['type','entry','used','available',...(command.timezone!==undefined?['timezone']:[])])&&exact(e,['missionId','workId','runId','amount','inputHash','revision','title','period','at'])&&[e.missionId,e.workId,e.runId].every(id)&&count(e.amount)&&e.amount>0&&/^[a-f0-9]{64}$/.test(e.inputHash)&&count(e.revision)&&e.revision>0&&typeof e.title==='string'&&e.title.length<=16000&&e.period===accountingPeriod(at,state!.timezone)&&e.at===at&&count(command.used)&&typeof command.available==='boolean','Invalid run reservation');
   const previous=state!.reservations.find(r=>r.missionId===e.missionId&&r.workId===e.workId);ensure(!previous||previous.state==='released','Work already has a monthly admission');ensure(state!.reservations.length<10000,'Monthly reservation bound reached');
@@ -93,7 +94,7 @@ export class MonthlyBudgetService {
    const old=s?.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId);if(old){if(old.state==='waiting'){await this.#pause(old);return 'waiting';}if(old.state==='reserved')return 'replayed';}
    const view=s&&s.value.limit!==null?await this.read():{knownOutputTokens:0,reserved:0,usageBounded:true},snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution),'Only fresh Work can reserve monthly budget');
    const at=this.#clock(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,entry={...input,inputHash:workInputHash(w),revision:snapshot.revision,title:w.title,period:accountingPeriod(at,timezone),at};
-   const result=await this.#dispatch('monthly-reserve:'+hash(input).slice(0,48),s?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.usageBounded,...(!s?{timezone}:{})},HOST,at);
+   const result=await this.#dispatch('monthly-reserve:'+hash([input,snapshot.revision]).slice(0,48),s?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.usageBounded,...(!s?{timezone}:{})},HOST,at);
    if(result.status==='conflict')continue;if(result.status==='replayed')return 'replayed';const r=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(r.state==='waiting'){await this.#pause(r);return 'waiting';}return 'reserved';
   }throw new DomainError('Monthly budget admission contention');
  }
@@ -104,19 +105,24 @@ export class MonthlyBudgetService {
    const result=await new Application(this.#store,[{id:HOST,roles:['representative']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-wait:'+hash([r.decisionId,r.missionId,r.workId]).slice(0,48),actorId:HOST,command:{type:'wait-monthly-budget',workId:r.workId,decisionId:r.decisionId!}});if(result.status!=='conflict')return;
   }throw new DomainError('Budget waiting admission contention');
  }
- async release(missionId:string,workId:string,runId:string){
-  for(let attempt=0;attempt<3;attempt++){const s=await this.#state();if(!s||!s.value.reservations.some(r=>r.missionId===missionId&&r.workId===workId&&r.runId===runId&&r.state==='reserved'))return;const result=await this.#dispatch('monthly-release:'+hash([missionId,workId,runId]).slice(0,48),s.revision,{type:'release-monthly-budget',missionId,workId,runId},HOST);if(result.status!=='conflict')return;}throw new DomainError('Monthly reservation release contention');
+ async release(missionId:string,workId:string,runId:string,workRevision?:number){
+  for(let attempt=0;attempt<3;attempt++){const s=await this.#state();if(!s||!s.value.reservations.some(r=>r.missionId===missionId&&r.workId===workId&&r.runId===runId&&r.state==='reserved'&&(workRevision===undefined||r.revision===workRevision)))return;const result=await this.#dispatch('monthly-release:'+hash([missionId,workId,runId,...(workRevision!==undefined?[workRevision]:[])]).slice(0,48),s.revision,{type:'release-monthly-budget',missionId,workId,runId,...(workRevision!==undefined?{workRevision}:{})},HOST);if(result.status!=='conflict')return;}throw new DomainError('Monthly reservation release contention');
  }
- async resume(decisionId:string,run:(r:Reservation,revision:number)=>Promise<unknown>){
+ async resume(decisionId:string,run:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>){
   const state=await this.#state(),d=state?.value.decisions.find(d=>d.id===decisionId);ensure(d?.state==='done','An explicit budget increase is required');
-  const errors:unknown[]=[];for(const r of state!.value.reservations.filter(r=>r.decisionId===decisionId&&r.state==='released')){try{
-   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(!s||!w||w.execution!=='budget-waiting'||w.runtimeRun||w.runtimeRecovery||w.effects.length||w.assignments.length||w.artifact||workInputHash(w)!==r.inputHash)continue;
-   const result=await new Application(this.#store,[{id:OWNER,roles:['owner']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-resume:'+hash([decisionId,r.missionId,r.workId]).slice(0,48),actorId:OWNER,command:{type:'resume-monthly-budget',workId:r.workId,decisionId}});
-   if(result.status==='committed')await run(r,result.revision);
+  const errors:unknown[]=[];for(const r of state!.value.reservations.filter(r=>['released','reserved'].includes(r.state)&&(r.decisionId===decisionId||r.decisionId===undefined&&r.runId===monthlyRunId(decisionId,r.missionId,r.workId)))){try{
+   const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(!s||!w||!['budget-waiting','queued'].includes(w.execution)||w.acceptance!=='pending'||w.runtimeRun||w.runtimeRecovery||w.effects.length||w.assignments.length||w.artifact||w.verdict||w.record||workInputHash(w)!==r.inputHash||w.execution==='budget-waiting'&&w.monthlyBudgetDecision!==decisionId||w.execution==='queued'&&w.monthlyBudgetDecision)continue;
+   if(w.execution==='queued'&&ready&&!await ready({...r,decisionId},s.revision))continue;
+   // Fence an in-flight activation before releasing its reservation generation.
+   const result=await new Application(this.#store,[{id:OWNER,roles:['owner']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:(w.execution==='queued'?'monthly-recover:':'monthly-resume:')+hash([decisionId,r.missionId,r.workId,...(w.execution==='queued'?[s.revision]:[])]).slice(0,48),actorId:OWNER,command:{type:'resume-monthly-budget',workId:r.workId,decisionId}});
+   if(result.status!=='committed')continue;
+   const current=(await this.#state())?.value.reservations.find(entry=>entry.missionId===r.missionId&&entry.workId===r.workId),runId=monthlyRunId(decisionId,r.missionId,r.workId);
+   if(current?.state==='reserved'){if(current.runId!==runId||current.revision>=result.revision)continue;await this.release(r.missionId,r.workId,current.runId,current.revision);}
+   await run({...r,decisionId,runId},result.revision);
   }catch(error){errors.push(error);}}if(errors.length)throw errors[0];
  }
- async resumeReleased(run:(r:Reservation,revision:number)=>Promise<unknown>){
-  const state=await this.#state(),errors:unknown[]=[];for(const d of state?.value.decisions??[])if(d.state==='done'){try{await this.resume(d.id,run);}catch(error){errors.push(error);}}if(errors.length)throw errors[0];
+ async resumeReleased(run:(r:Reservation,revision:number)=>Promise<unknown>,ready?:(r:Reservation,revision:number)=>Promise<boolean>){
+  const state=await this.#state(),errors:unknown[]=[];for(const d of state?.value.decisions??[])if(d.state==='done'){try{await this.resume(d.id,run,ready);}catch(error){errors.push(error);}}if(errors.length)throw errors[0];
  }
  async #dispatch(commandId:string,expectedRevision:number,command:BudgetCommand,actorId:string,at=this.#clock()):Promise<CommitResult<MonthlyBudgetState>>{
   const identity={id:MONTHLY_BUDGET_ID,commandId,fingerprint:hash({actorId,command,expectedRevision})},s=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
