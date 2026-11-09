@@ -21,7 +21,7 @@ for(const committed of [false,true])test(`deadline during final acceptance ${com
   };
   if(committed&&key==='commit')return async(input:any)=>{
    const result=await target.commit(input);
-   if(!held&&input.value.works.find((w:any)=>w.id==='fresh')?.acceptance==='accepted'){held=true;await gate;}
+   if(!held&&input.id==='mission'&&input.value.works.find((w:any)=>w.id==='fresh')?.acceptance==='accepted'){held=true;await gate;}
    return result;
   };
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;

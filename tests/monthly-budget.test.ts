@@ -65,3 +65,47 @@ test('an unrelated revision conflict cannot leave a budget-blocked Work looking 
  const {store,service}=await fixture(0),commit=store.commit.bind(store);let conflict=true;store.commit=async input=>{if(input.id==='mission'&&(input.events[0] as any)?.type==='wait-monthly-budget'&&conflict){conflict=false;return {status:'conflict',revision:input.expectedRevision,reason:'revision'};}return commit(input);};
  assert.equal(await service.admit({missionId:'mission',workId:'one',runId:'run',amount:80}),'waiting');assert.equal((await store.load('mission'))!.value.works[0]!.execution,'budget-waiting');
 });
+
+test('pending, crashed and unknown Representative/member calls retain their cap until a known settlement',async()=>{
+ const {AssistantConversation,ownerMessageId,assistantTurnId,ASSISTANT_ACTOR_ID}=await import('../src/assistant-conversation.ts');
+ for(const thread of ['', 'member:member-one'])for(const status of ['pending','crashed','unknown','settled']){
+  const {store,service}=await fixture(),commandId='turn-'+status,messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId),chat=new AssistantConversation(store,[{id:'local-owner',roles:['owner']},{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],()=>now,thread);
+  await chat.dispatch({segment:1,commandId,expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',segment:1,previous:null,messageId,text:'Fixture request',turn:{id:turnId,status:'pending',route:{profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http',outputTokenCap:60},ownership:{hostSessionId:'fixture-host',dispatchId:'fixture-dispatch',startedAt:now,deadlineAt:now+1000},requestHash:'b'.repeat(64),contextMessageIds:[]}}});
+  if(status==='unknown'||status==='settled')await chat.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:1,actorId:ASSISTANT_ACTOR_ID,command:status==='unknown'?{type:'settle-assistant-turn',turnId,status:'unknown',usage:{inputTokens:null,outputTokens:null},receipt:'Unresolved fixture call'}:{type:'settle-assistant-turn',turnId,status:'answered',usage:{inputTokens:2,outputTokens:7},receipt:'Known fixture usage',reply:'Fixture answer',proposal:null}});
+  const restarted=new MonthlyBudgetService(store,()=>status==='crashed'?now+3600000:now),view=await restarted.read();assert.equal(view.reserved,status==='settled'?0:60,thread+' '+status);
+  assert.equal(await restarted.admit({missionId:'mission',workId:'one',runId:'run',amount:50}),status==='settled'?'reserved':'waiting',thread+' '+status);
+  assert.equal((await service.read()).cost,null);
+ }
+});
+
+test('an owner acceptance cannot miss a Work whose initial pause commit is still in flight',async t=>{
+ const {store,service}=await fixture(0),commit=store.commit.bind(store);let hold=true,entered!:()=>void,release!:()=>void;const pending=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);t.after(()=>release());
+ store.commit=async input=>{if(hold&&(input.events[0] as any)?.type==='wait-monthly-budget'){hold=false;entered();await gate;}return commit(input);};
+ const admission=service.admit({missionId:'mission',workId:'one',runId:'run',amount:80});await pending;const v=await service.read(),d=v.decisions[0]!,resumed:string[]=[];
+ try{await service.decide({commandId:'racing-raise',decisionId:d.id,answer:'act',expectedRevision:v.revision,limit:d.budget.limit});await service.resume(d.id,async r=>{resumed.push(r.workId);});}finally{release();}
+ await admission;assert.deepEqual(resumed,['one']);const work=(await store.load('mission'))!.value.works[0]!;assert.equal(work.execution,'queued');assert.equal(work.monthlyBudgetDecision,undefined);assert.equal(work.runtimeRun,undefined);
+});
+
+test('fresh owner-steered Work retains its inputs through both sufficient and exhausted monthly admission',async()=>{
+ for(const limit of [100,0]){const {store,service,app}=await fixture(limit),s=(await store.load('mission'))!;await app.dispatch({missionId:'mission',commandId:'steer',expectedRevision:s.revision,actorId:'local-owner',command:{type:'steer',workId:'one',instruction:'Keep this owner instruction'}});const original=(await store.load('mission'))!.value.works[0]!;assert.equal(original.execution,'waiting');
+  assert.equal(await service.admit({missionId:'mission',workId:'one',runId:'run',amount:80}),limit?'reserved':'waiting');const work=(await store.load('mission'))!.value.works[0]!;assert.deepEqual(work.instructions,original.instructions);assert.equal(work.execution,limit?'waiting':'budget-waiting');}
+});
+
+test('a deferred old-period decision offers a current increase after another period raised the shared limit',async()=>{
+ const {store,service}=await fixture(0);await service.admit({missionId:'mission',workId:'one',runId:'old-run',amount:80});const old=await service.read(),oldId=old.decisions[0]!.id;await service.decide({commandId:'defer-old',decisionId:oldId,answer:'later',expectedRevision:old.revision});
+ const next=new MonthlyBudgetService(store,()=>Date.parse('2026-12-01T10:00:00Z'));await next.admit({missionId:'mission',workId:'two',runId:'new-run',amount:80});const current=await next.read(),newDecision=current.decisions.find(d=>d.id!==oldId)!;await next.decide({commandId:'raise-new',decisionId:newDecision.id,answer:'act',expectedRevision:current.revision,limit:newDecision.budget.limit});
+ const raised=await next.read();await next.decide({commandId:'reopen-old',decisionId:oldId,answer:'ask',expectedRevision:raised.revision});const reopened=await next.read(),proposal=reopened.decisions.find(d=>d.id===oldId)!;assert.ok(proposal.budget.limit>reopened.limit!);assert.equal(proposal.rows[0]![1],'80');
+ assert.equal((await next.decide({commandId:'raise-old',decisionId:oldId,answer:'act',expectedRevision:reopened.revision,limit:proposal.budget.limit})).status,'committed');assert.equal((await store.load('mission'))!.value.works[0]!.execution,'budget-waiting');
+});
+
+test('steering budget-paused Work is rejected without stranding its original owner decision',async()=>{
+ const {store,service,app}=await fixture(0);await service.admit({missionId:'mission',workId:'one',runId:'run',amount:80});const s=(await store.load('mission'))!,before=store.inspect();
+ await assert.rejects(app.dispatch({missionId:'mission',commandId:'paused-steer',expectedRevision:s.revision,actorId:'local-owner',command:{type:'steer',workId:'one',instruction:'Changed after pause'}}),/monthly budget|budget.paused/i);assert.deepEqual(store.inspect(),before);
+ const v=await service.read(),d=v.decisions[0]!;await service.decide({commandId:'raise-after-refusal',decisionId:d.id,answer:'act',expectedRevision:v.revision,limit:d.budget.limit});const resumed:string[]=[];await service.resume(d.id,async r=>{resumed.push(r.workId);});assert.deepEqual(resumed,['one']);
+});
+
+test('one unsettled resumed run cannot strand the other Works authorized by the same owner decision',async()=>{
+ const {store,service}=await fixture(0);for(const workId of ['one','two'])await service.admit({missionId:'mission',workId,runId:'run-'+workId,amount:80});const v=await service.read(),d=v.decisions[0]!;await service.decide({commandId:'raise-all',decisionId:d.id,answer:'act',expectedRevision:v.revision,limit:d.budget.limit});
+ const original=Object.assign(new Error('Original run is unsettled; never resend'),{name:'RunUnsettledError'}),attempted:string[]=[];await assert.rejects(service.resume(d.id,async r=>{attempted.push(r.workId);if(r.workId==='one')throw original;}),e=>e===original);
+ assert.deepEqual(attempted,['one','two']);assert.ok((await store.load('mission'))!.value.works.every(w=>w.execution==='queued'&&!w.monthlyBudgetDecision));await service.resume(d.id,async r=>{attempted.push(r.workId);});assert.deepEqual(attempted,['one','two']);
+});

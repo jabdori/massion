@@ -19,7 +19,7 @@ import type {Mission} from '../src/domain.ts';
 import {createWorkbench} from '../src/server.ts';
 
 const artifactText='The review has two open blockers: missing coverage and an unresolved dependency.';
-interface MockOptions {forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
+interface MockOptions {outputTokens?:number;forgeHash?:boolean;failReview?:boolean;unknownExecutor?:boolean;holdExecutor?:boolean;tamperBeforeReview?:()=>Promise<void>}
 async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=new InMemoryStore<Mission>()){
  const calls:{model:string;prompt:any;correlation:string}[]=[];let release!:(value?:unknown)=>void;const held=new Promise(resolve=>{release=resolve;});
  const modelServer=createServer(async(req,res)=>{let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);calls.push({model:body.model,prompt,correlation:String(req.headers['x-client-request-id'])});
@@ -30,7 +30,7 @@ async function setup(t:TestContext,options:MockOptions={},store:Store<Mission>=n
    if(options.tamperBeforeReview)await options.tamperBeforeReview();
    content=JSON.stringify({artifactSha256:options.forgeHash?'0'.repeat(64):prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:options.failReview?'failed':'passed',checks:[{criterion:prompt.criteria.description,passed:!options.failReview,quote:'two open blockers',reason:options.failReview?'Mock independent review found inadequate detail':'Mock review confirms the bounded acceptance claim'}]});
   }
-  res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'chatcmpl-mock',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content,refusal:null}}],usage:{prompt_tokens:20,completion_tokens:5,total_tokens:25}}));
+  res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'chatcmpl-mock',object:'chat.completion',created:1,model:body.model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content,refusal:null}}],usage:{prompt_tokens:20,completion_tokens:options.outputTokens??5,total_tokens:20+(options.outputTokens??5)}}));
  });modelServer.listen(0,'127.0.0.1');await once(modelServer,'listening');const address=modelServer.address();assert.ok(address&&typeof address==='object');const endpoint=`http://127.0.0.1:${address.port}/v1/chat/completions`;
  const adapter=(model:string)=>new OpenAICompatibleChatAdapter({provider:'local-contract-server',model,configVersion:'v1',endpoint,enabled:true,transportMode:'local-http-mock',bounds:{maxInputBytes:32768,maxOutputTokens:64,maxResponseBytes:65536,timeoutMs:2000},authorization:{provider:'local-contract-server',model,configVersion:'v1',endpoint,maxInputBytes:32768,maxOutputTokens:64},transport:fetch});
  const executor=adapter('executor-v1'),verifier=adapter('verifier-v1');const root=await mkdtemp(join(tmpdir(),'massion-provider-runtime-'));const artifacts=new TextArtifactStore(join(root,'artifacts'));
@@ -211,4 +211,12 @@ test('a definite activation rejection releases only its unused monthly reservati
  const commit=s.store.commit.bind(s.store);s.store.commit=async input=>input.commandId==='rejected-activation'?{status:'conflict',revision:input.expectedRevision,reason:'revision'}:commit(input);
  assert.equal((await s.runtime.run(s.missionId,s.workId,'rejected-activation',2)).status,'conflict');assert.equal((await budget.read()).reserved,0);assert.equal(s.calls.length,0);
  assert.equal((await s.runtime.run(s.missionId,s.workId,'explicit-new-run',2)).status,'settled');assert.equal(s.calls.length,2);
+});
+
+
+test('first monthly configuration accounts for a previously unmetered run before its activation commits',async t=>{
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts');const s=await setup(t,{outputTokens:64});await s.admit();const other=s.missionId+'-other';await s.product.create({id:other,purpose:'Second Work',scope:'local-contract',constraints:[],criteria:{version:1,description:'Identify two open blockers',oracle:TEXT_REVIEW_ORACLE}},'other-create');await s.product.admit(other,{commandId:'other-admit',expectedRevision:1,workId:s.workId,title:'Other bounded note',budget:128});
+ const commit=s.store.commit.bind(s.store);let entered!:()=>void,release!:()=>void;const pending=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);t.after(()=>release());s.store.commit=async input=>{if(input.commandId==='before-first-limit'){entered();await gate;}return commit(input);};
+ const first=s.runtime.run(s.missionId,s.workId,'before-first-limit',2);await pending;const budget=new MonthlyBudgetService(s.store),before=await budget.read();let second;try{await budget.configure({commandId:'first-limit',expectedRevision:before.revision,limit:128,timezone:before.timezone});second=await new ConfiguredTextRuntime(s.store,s.config).run(other,s.workId,'after-first-limit',2);}finally{release();}
+ await first;assert.equal(before.reserved,128);assert.equal(second!.snapshot.value.works[0]!.execution,'budget-waiting');assert.equal(s.calls.length,2);assert.equal((await budget.read()).spent,128);const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');assert.ok(s.store instanceof InMemoryStore);validateMissionJournalLineage(s.store.inspect());
 });

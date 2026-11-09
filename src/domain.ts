@@ -273,7 +273,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     }
     case 'wait-monthly-budget': case 'resume-monthly-budget': {
       const w=needWork();role(actor,command.type==='wait-monthly-budget'?'representative':'owner');ensure(Object.keys(command).length===3,'Exact monthly waiting fields required');text(command.decisionId,'budget decision');ensure(!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&!w.artifact&&w.acceptance==='pending','Only fresh Work may wait for monthly budget');
-      if(command.type==='wait-monthly-budget'){ensure(['queued','blocked'].includes(w.execution),'Work cannot wait for budget');w.execution='budget-waiting';w.monthlyBudgetDecision=command.decisionId;}else{ensure(w.execution==='budget-waiting'&&w.monthlyBudgetDecision===command.decisionId,'Exact waiting budget decision required');w.execution='queued';delete w.monthlyBudgetDecision;}break;
+      if(command.type==='wait-monthly-budget'){ensure(['queued','blocked','waiting'].includes(w.execution),'Work cannot wait for budget');w.execution='budget-waiting';w.monthlyBudgetDecision=command.decisionId;}else{ensure(w.execution==='budget-waiting'&&w.monthlyBudgetDecision===command.decisionId,'Exact waiting budget decision required');w.execution='queued';delete w.monthlyBudgetDecision;}break;
     }
     case 'revise-budget': {
       role(actor,'owner'); const w=needWork(); open(w); text(command.reason,'budget change reason');

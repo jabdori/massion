@@ -18,31 +18,32 @@ export function accountingPeriod(at:number,timezone:string):string {
 }
 interface Reservation {missionId:string;workId:string;runId:string;amount:number;inputHash:string;revision:number;title:string;period:string;at:number;state:'reserved'|'waiting'|'released';decisionId?:string}
 interface BudgetDecision {id:string;period:string;at:number;state:'open'|'later'|'done';limit:number;nextLimit:number;actorId?:string}
-export interface MonthlyBudgetState {kind:'monthly-budget';id:string;limit:number;timezone:string;actorId:string;reservations:Reservation[];decisions:BudgetDecision[]}
-type BudgetCommand={type:'release-monthly-budget';missionId:string;workId:string;runId:string}|{type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
+export interface MonthlyBudgetState {kind:'monthly-budget';id:string;limit:number|null;timezone:string;actorId:string;reservations:Reservation[];decisions:BudgetDecision[]}
+function proposalLimit(state:MonthlyBudgetState,d:BudgetDecision):number {return d.state!=='done'&&state.limit!==d.limit?Math.max(d.nextLimit,(state.limit??0)+Math.max(1,state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0))):d.nextLimit;}
+type BudgetCommand={type:'release-monthly-budget';missionId:string;workId:string;runId:string}|{type:'configure-monthly-budget';limit:number;timezone:string}|{type:'reserve-monthly-budget';entry:Omit<Reservation,'state'|'decisionId'>;used:number;available:boolean;timezone?:string}|{type:'decide-monthly-budget';decisionId:string;answer:'act'|'later'|'ask';limit?:number};
 export const isMonthlyBudgetState=(v:unknown):v is MonthlyBudgetState=>!!v&&typeof v==='object'&&(v as MonthlyBudgetState).kind==='monthly-budget';
 export function applyMonthlyBudget(current:MonthlyBudgetState|null,command:BudgetCommand,actor:Actor,at:number){
  ensure(count(at)&&id(actor.id),'Invalid budget actor/time');const host=command.type==='reserve-monthly-budget'||command.type==='release-monthly-budget';ensure(actor.id===(host?HOST:OWNER)&&actor.roles.includes(host?'representative':'owner'),'Budget authority denied');
- ensure(current!==null||command.type==='configure-monthly-budget','Configure a monthly budget first');
- let state=current?structuredClone(current):null;
+ ensure(current!==null||command.type==='configure-monthly-budget'||command.type==='reserve-monthly-budget'&&typeof command.timezone==='string','Monthly reservation needs its original timezone');
+ let state:MonthlyBudgetState|null=current?structuredClone(current):command.type==='reserve-monthly-budget'?{kind:'monthly-budget',id:MONTHLY_BUDGET_ID,limit:null,timezone:command.timezone!,actorId:actor.id,reservations:[],decisions:[]}:null;
  if(command.type==='configure-monthly-budget'){
   ensure(exact(command,['type','limit','timezone'])&&count(command.limit)&&typeof command.timezone==='string'&&command.timezone.length<=100,'Invalid monthly budget fields');try{accountingPeriod(at,command.timezone);}catch{throw new DomainError('Invalid accounting timezone');}
-  ensure(!state||state.timezone===command.timezone,'Accounting timezone is already pinned');
-  if(state){state.limit=command.limit;state.actorId=actor.id;for(const d of state.decisions)if(d.state!=='done'){d.limit=command.limit;d.nextLimit=Math.max(command.limit+1,command.limit+state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}}else state={kind:'monthly-budget',id:MONTHLY_BUDGET_ID,limit:command.limit,timezone:command.timezone,actorId:actor.id,reservations:[],decisions:[]};
+  ensure(!state||state.limit===null||state.timezone===command.timezone,'Accounting timezone is already pinned');
+  if(state){state.timezone=command.timezone;state.limit=command.limit;state.actorId=actor.id;for(const d of state.decisions)if(d.state!=='done'){d.limit=command.limit;d.nextLimit=Math.max(command.limit+1,command.limit+state.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}}else state={kind:'monthly-budget',id:MONTHLY_BUDGET_ID,limit:command.limit,timezone:command.timezone,actorId:actor.id,reservations:[],decisions:[]};
  }else if(command.type==='release-monthly-budget'){
   ensure(exact(command,['type','missionId','workId','runId'])&&[command.missionId,command.workId,command.runId].every(id),'Invalid reservation release');const r=state!.reservations.find(r=>r.missionId===command.missionId&&r.workId===command.workId&&r.runId===command.runId);ensure(r?.state==='reserved','Exact unused reservation required');r.state='released';
  }else if(command.type==='reserve-monthly-budget'){
-  const e=command.entry;ensure(exact(command,['type','entry','used','available'])&&exact(e,['missionId','workId','runId','amount','inputHash','revision','title','period','at'])&&[e.missionId,e.workId,e.runId].every(id)&&count(e.amount)&&e.amount>0&&/^[a-f0-9]{64}$/.test(e.inputHash)&&count(e.revision)&&e.revision>0&&typeof e.title==='string'&&e.title.length<=16000&&e.period===accountingPeriod(at,state!.timezone)&&e.at===at&&count(command.used)&&typeof command.available==='boolean','Invalid run reservation');
+  const e=command.entry;ensure(exact(command,['type','entry','used','available',...(command.timezone!==undefined?['timezone']:[])])&&exact(e,['missionId','workId','runId','amount','inputHash','revision','title','period','at'])&&[e.missionId,e.workId,e.runId].every(id)&&count(e.amount)&&e.amount>0&&/^[a-f0-9]{64}$/.test(e.inputHash)&&count(e.revision)&&e.revision>0&&typeof e.title==='string'&&e.title.length<=16000&&e.period===accountingPeriod(at,state!.timezone)&&e.at===at&&count(command.used)&&typeof command.available==='boolean','Invalid run reservation');
   const previous=state!.reservations.find(r=>r.missionId===e.missionId&&r.workId===e.workId);ensure(!previous||previous.state==='released','Work already has a monthly admission');ensure(state!.reservations.length<10000,'Monthly reservation bound reached');
-  const ready=command.available&&command.used+e.amount<=state!.limit;
+  const limit=state!.limit,ready=limit===null||command.available&&command.used+e.amount<=limit;
   const entry:Reservation={...structuredClone(e),state:ready?'reserved':'waiting'};
-  if(!ready){let d=state!.decisions.find(d=>d.period===e.period&&d.state!=='done');if(!d){d={id:BUDGET_DECISION_PREFIX+e.period+':'+state!.decisions.length,period:e.period,at,state:'open',limit:state!.limit,nextLimit:state!.limit};state!.decisions.push(d);}entry.decisionId=d.id;d.nextLimit=Math.max(state!.limit+1,command.used+e.amount+state!.reservations.filter(r=>r.decisionId===d!.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}
+  if(!ready){ensure(limit!==null,'Missing owner limit');let d=state!.decisions.find(d=>d.period===e.period&&d.state!=='done');if(!d){d={id:BUDGET_DECISION_PREFIX+e.period+':'+state!.decisions.length,period:e.period,at,state:'open',limit,nextLimit:limit};state!.decisions.push(d);}entry.decisionId=d.id;d.nextLimit=Math.max(limit+1,command.used+e.amount+state!.reservations.filter(r=>r.decisionId===d!.id&&r.state==='waiting').reduce((sum,r)=>sum+r.amount,0));}
   if(previous)state!.reservations[state!.reservations.indexOf(previous)]=entry;else state!.reservations.push(entry);
  }else{
   ensure(exact(command,['type','decisionId','answer',...(command.limit!==undefined?['limit']:[])])&&id(command.decisionId)&&['act','later','ask'].includes(command.answer),'Invalid budget decision');
   const d=state!.decisions.find(d=>d.id===command.decisionId);ensure(d,'Unknown budget decision');
   if(command.answer==='ask'){ensure(d.state==='later','Only a deferred budget decision can reopen');d.state='open';}
-  else{ensure(d.state==='open','Only an open budget decision can be answered');if(command.answer==='later')d.state='later';else{ensure(count(command.limit)&&command.limit===d.nextLimit&&command.limit>state!.limit,'Monthly limit must increase to the reviewed limit');state!.limit=command.limit;state!.actorId=actor.id;d.state='done';for(const r of state!.reservations)if(r.decisionId===d.id&&r.state==='waiting')r.state='released';}d.actorId=actor.id;}
+  else{ensure(d.state==='open','Only an open budget decision can be answered');if(command.answer==='later')d.state='later';else{ensure(state!.limit!==null&&count(command.limit)&&command.limit===proposalLimit(state!,d)&&command.limit>state!.limit,'Monthly limit must increase to the reviewed limit');d.nextLimit=command.limit;state!.limit=command.limit;state!.actorId=actor.id;d.state='done';for(const r of state!.reservations)if(r.decisionId===d.id&&r.state==='waiting')r.state='released';}d.actorId=actor.id;}
  }
  return {value:state!,events:[{type:command.type,actor:actor.id,command:structuredClone(command),time:{observedAt:at}}]};
 }
@@ -70,33 +71,35 @@ export class MonthlyBudgetService {
    if(c.type==='receipt'&&w){w.pending.delete(c.effectId);let receipt;try{receipt=JSON.parse(c.receipt);}catch{}if(receipt?.provider&&receipt?.usage&&receipt.binding?.runId===w.runId){add(key+'\0'+c.effectId,callTimes.get(key+'\0'+c.effectId)??w.at,receipt.usage,w.memberId);if(count(receipt.usage.outputTokens))w.consumed+=receipt.usage.outputTokens;else w.unknown=true;}else if(c.outcome==='unknown')w.unknown=true;}
    if(w&&['accept','verify','cancel','block-work','expire-runtime','stop-owned-runtime','quarantine-runtime'].includes(c.type))w.terminal=true;
    if(['append-assistant-message','open-assistant-segment'].includes(c.type)&&c.turn?.ownership)turns.set(batch.aggregateId+'\0'+c.turn.id,c.turn);
-   if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null);}
+   if(c.type==='settle-assistant-turn'){const t=turns.get(batch.aggregateId+'\0'+c.turnId);if(t){t.status=c.status;t.usage=c.usage;}add(batch.aggregateId+'\0'+c.turnId,t?.ownership?.startedAt,c.usage,batch.aggregateId.includes(':member:')?batch.aggregateId.slice((ASSISTANT_CONVERSATION_PREFIX+'member:').length,batch.aggregateId.lastIndexOf(':')):null);}
   }} }
-  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,members,works};
+  const end=await this.#store.readState();ensure(end.feedId===position.feedId,'Accounting database changed');return {...position,inputTokens,outputTokens,unknown,inputUnknown,members,works,turns};
  }
  async read(){
   const before=await this.#store.readState(),s=await this.#state(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,period=accountingPeriod(this.#clock(),timezone),a=await this.#account(timezone,period);
   ensure(before.feedId===a.feedId,'Accounting database changed');
   let reserved=0;for(const r of s?.value.reservations??[]){if(r.state!=='reserved')continue;const w=a.works.get(r.missionId+'\0'+r.workId);if(w?.terminal&&!w.unknown&&!w.pending.size)continue;reserved+=Math.max(0,r.amount-(w?.consumed??0));}
   for(const w of a.works.values())if(w.runId&&(!w.terminal||w.unknown||w.pending.size)&&!s?.value.reservations.some(r=>r.missionId===w.missionId&&r.workId===w.workId))reserved+=Math.max(0,w.cap-w.consumed);
-  const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.limit)],[copy('ui.budget.after'),this.#amount(d.nextLimit)],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:d.nextLimit}}));
+  for(const t of a.turns.values())if(t.route&&(!t.usage||t.status==='unknown'||!count(t.usage.outputTokens)))reserved+=Math.max(0,t.route.outputTokenCap-(count(t.usage?.outputTokens)?t.usage.outputTokens:0));
+  const decisions=(s?.value.decisions??[]).map(d=>({id:d.id,at:d.at,title:copy('ui.budget.title'),question:copy('ui.budget.question'),rows:[[copy('ui.budget.now'),this.#amount(d.state==='done'?d.limit:s!.value.limit??0)],[copy('ui.budget.after'),this.#amount(proposalLimit(s!.value,d))],[copy('ui.budget.paused'),s!.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting').map(r=>r.title).join(' · ')]],action:copy('ui.budget.raise'),state:d.state,...(d.state==='done'?{line:copy('ui.budget.changed')}:{}),budget:{revision:s!.revision,limit:proposalLimit(s!.value,d)}}));
   return {feedId:a.feedId,cursor:a.cursor,revision:s?.revision??0,period,timezone,unit:'output-tokens' as const,limit:s?.value.limit??null,spent:a.unknown?null:a.outputTokens,knownOutputTokens:a.outputTokens,inputTokens:a.inputUnknown?null:a.inputTokens,cost:null,reserved,members:[...a.members].map(([memberId,v])=>({memberId,...v})),decisions};
  }
  #amount(n:number){return n.toLocaleString('ko-KR');}
  async configure(input:unknown){ensure(exact(input,['commandId','expectedRevision','limit','timezone'])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'configure-monthly-budget',limit:input.limit,timezone:input.timezone},OWNER);}
- async decide(input:unknown){ensure(exact(input,['commandId','expectedRevision','decisionId','answer',...((input as any)?.answer==='act'?['limit']:[])])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget answer fields required');return this.#dispatch(input.commandId,input.expectedRevision,{type:'decide-monthly-budget',decisionId:input.decisionId,answer:input.answer,...(input.answer==='act'?{limit:input.limit}:{})},OWNER);}
- async admit(input:{missionId:string;workId:string;runId:string;amount:number}):Promise<'unmetered'|'reserved'|'waiting'|'replayed'> {
+ async decide(input:unknown){ensure(exact(input,['commandId','expectedRevision','decisionId','answer',...((input as any)?.answer==='act'?['limit']:[])])&&id(input.commandId)&&count(input.expectedRevision),'Exact monthly budget answer fields required');if(input.answer==='act'){const s=await this.#state(),d=s?.value.decisions.find(d=>d.id===input.decisionId);if(s&&s.revision===input.expectedRevision&&d?.state==='open'&&input.limit===proposalLimit(s.value,d))for(const r of s.value.reservations.filter(r=>r.decisionId===d.id&&r.state==='waiting'))await this.#pause(r);}return this.#dispatch(input.commandId,input.expectedRevision,{type:'decide-monthly-budget',decisionId:input.decisionId,answer:input.answer,...(input.answer==='act'?{limit:input.limit}:{})},OWNER);}
+ async admit(input:{missionId:string;workId:string;runId:string;amount:number}):Promise<'reserved'|'waiting'|'replayed'> {
   for(let attempt=0;attempt<5;attempt++){
-   const s=await this.#state();if(!s)return 'unmetered';
-   const old=s.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId);if(old){if(old.state==='waiting'){await this.#pause(old);return 'waiting';}if(old.state==='reserved')return 'replayed';}
-   const view=await this.read(),snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&w.acceptance==='pending'&&['queued','blocked'].includes(w.execution),'Only fresh Work can reserve monthly budget');
-   const at=this.#clock(),entry={...input,inputHash:workInputHash(w),revision:snapshot.revision,title:w.title,period:accountingPeriod(at,s.value.timezone),at};
-   const result=await this.#dispatch('monthly-reserve:'+hash(input).slice(0,48),s.revision,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.spent!==null},HOST,at);
+   const s=await this.#state();
+   const old=s?.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId);if(old){if(old.state==='waiting'){await this.#pause(old);return 'waiting';}if(old.state==='reserved')return 'replayed';}
+   const view=s&&s.value.limit!==null?await this.read():{knownOutputTokens:0,reserved:0,spent:0},snapshot=await this.#store.load(input.missionId) as Snapshot<Mission>|null,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w&&!w.runtimeRun&&!w.effects.length&&!w.assignments.length&&w.acceptance==='pending'&&['queued','blocked','waiting'].includes(w.execution),'Only fresh Work can reserve monthly budget');
+   const at=this.#clock(),timezone=s?.value.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,entry={...input,inputHash:workInputHash(w),revision:snapshot.revision,title:w.title,period:accountingPeriod(at,timezone),at};
+   const result=await this.#dispatch('monthly-reserve:'+hash(input).slice(0,48),s?.revision??0,{type:'reserve-monthly-budget',entry,used:view.knownOutputTokens+view.reserved,available:view.spent!==null,...(!s?{timezone}:{})},HOST,at);
    if(result.status==='conflict')continue;if(result.status==='replayed')return 'replayed';const r=result.value.reservations.find(r=>r.missionId===input.missionId&&r.workId===input.workId)!;if(r.state==='waiting'){await this.#pause(r);return 'waiting';}return 'reserved';
   }throw new DomainError('Monthly budget admission contention');
  }
  async #pause(r:Reservation){
   for(let attempt=0;attempt<3;attempt++){
+   const budget=await this.#state();if(!budget?.value.reservations.some(entry=>entry.missionId===r.missionId&&entry.workId===r.workId&&entry.decisionId===r.decisionId&&entry.state==='waiting'))return;
    const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(w?.execution==='budget-waiting'&&w.monthlyBudgetDecision===r.decisionId)return;ensure(s&&w&&workInputHash(w)===r.inputHash,'Waiting Work input changed');
    const result=await new Application(this.#store,[{id:HOST,roles:['representative']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-wait:'+hash([r.decisionId,r.missionId,r.workId]).slice(0,48),actorId:HOST,command:{type:'wait-monthly-budget',workId:r.workId,decisionId:r.decisionId!}});if(result.status!=='conflict')return;
   }throw new DomainError('Budget waiting admission contention');
@@ -106,11 +109,11 @@ export class MonthlyBudgetService {
  }
  async resume(decisionId:string,run:(r:Reservation,revision:number)=>Promise<unknown>){
   const state=await this.#state(),d=state?.value.decisions.find(d=>d.id===decisionId);ensure(d?.state==='done','An explicit budget increase is required');
-  for(const r of state!.value.reservations.filter(r=>r.decisionId===decisionId&&r.state==='released')){
+  const errors:unknown[]=[];for(const r of state!.value.reservations.filter(r=>r.decisionId===decisionId&&r.state==='released')){try{
    const s=await this.#store.load(r.missionId) as Snapshot<Mission>|null,w=s?.value.works.find(w=>w.id===r.workId);if(!s||!w||w.execution!=='budget-waiting'||workInputHash(w)!==r.inputHash)continue;
    const result=await new Application(this.#store,[{id:OWNER,roles:['owner']}]).dispatch({missionId:r.missionId,expectedRevision:s.revision,commandId:'monthly-resume:'+hash([decisionId,r.missionId,r.workId]).slice(0,48),actorId:OWNER,command:{type:'resume-monthly-budget',workId:r.workId,decisionId}});
    if(result.status==='committed')await run(r,result.revision);
-  }
+  }catch(error){errors.push(error);}}if(errors.length)throw errors[0];
  }
  async #dispatch(commandId:string,expectedRevision:number,command:BudgetCommand,actorId:string,at=this.#clock()):Promise<CommitResult<MonthlyBudgetState>>{
   const identity={id:MONTHLY_BUDGET_ID,commandId,fingerprint:hash({actorId,command,expectedRevision})},s=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
