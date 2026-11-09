@@ -1,1 +1,0 @@
-{const D=Date;globalThis.Date=class extends D{constructor(...a){super(...(a.length?a:[1793855520000]))}static now(){return 1793855520000}}}
