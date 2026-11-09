@@ -1,0 +1,31 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "MCP" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "앱" [ref=e6]
+      - strong
+        - StaticText "MCP"
+        - button "검색" [expanded=false, ref=e10]
+      - button "앱 설정" [ref=e9]
+        - StaticText "앱 설정"
+  - main "MCP" [ref=e2]
+    - generic
+      - heading "MCP" [level=2, ref=e11]
+      - generic
+        - strong
+          - StaticText "결과 모름"
+        - StaticText "comment"
+        - paragraph
+          - StaticText "다시 보내지 않음"
+        - form
+          - LabelText
+            - StaticText "근거"
+            - textbox "근거" [required, ref=e14]
+          - button "실행됨" [disabled, ref=e12]
+          - button "실행되지 않음" [disabled, ref=e13]

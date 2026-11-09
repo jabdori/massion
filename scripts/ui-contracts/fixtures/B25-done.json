@@ -64,19 +64,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "다음 PR 검토부터 이걸로 목록을 가져올게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -86,7 +96,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -111,8 +121,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -125,7 +135,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -170,37 +180,11 @@
             "action": "설치",
             "state": "done",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": []
-      }
-    },
-    "/assistant/works": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "works": [
-          {
-            "missionId": "intake",
-            "missionRevision": 3,
-            "workId": "pr84",
-            "title": "PR #84 검토",
-            "memberId": "member-juno",
-            "execution": "settled",
-            "acceptance": "accepted",
-            "unknown": false,
-            "started": true,
-            "startedAt": 1793850000000,
-            "endedAt": 1793851080000,
-            "turnId": "assistant-turn:m:pr84",
-            "segment": 1,
-            "steps": {
-              "done": 1,
-              "total": 5
-            }
-          }
-        ]
       }
     },
     "/events": {
@@ -264,446 +248,6 @@
         "schedules": []
       }
     },
-    "/read-state?mission=intake": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "snapshot": {
-          "revision": 3,
-          "value": {
-            "id": "intake",
-            "purpose": "맡긴 일",
-            "scope": "local",
-            "constraints": [],
-            "criteria": {
-              "version": 1,
-              "description": "요청한 결과와 근거 확인",
-              "oracle": "bounded-text-review/v1"
-            },
-            "version": 1,
-            "works": [
-              {
-                "id": "pr84",
-                "title": "PR #84 검토",
-                "missionVersion": 1,
-                "missionSnapshot": {
-                  "version": 1,
-                  "purpose": "맡긴 일",
-                  "scope": "local",
-                  "constraints": []
-                },
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "execution": "settled",
-                "acceptance": "accepted",
-                "tasks": [
-                  {
-                    "id": "pr84:root",
-                    "parentId": null,
-                    "status": "settled",
-                    "result": "화면 검증 데이터 준비"
-                  }
-                ],
-                "attempts": [
-                  {
-                    "id": "pr84:attempt:1",
-                    "number": 1,
-                    "criteria": {
-                      "version": 1,
-                      "description": "요청한 결과와 근거 확인",
-                      "oracle": "bounded-text-review/v1"
-                    },
-                    "status": "settled",
-                    "modelVersions": [
-                      "fixture-v1",
-                      "fixture-v1"
-                    ],
-                    "results": [
-                      {
-                        "taskId": "pr84:root",
-                        "result": "화면 검증 데이터 준비"
-                      }
-                    ]
-                  }
-                ],
-                "assignments": [
-                  {
-                    "id": "pr84:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "pr84:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "pr84:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "pr84:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "effects": [
-                  {
-                    "id": "pr84:effect",
-                    "taskId": "pr84:root",
-                    "status": "succeeded",
-                    "target": "PR #84 검토",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "고정된 화면 검증 데이터"
-                  }
-                ],
-                "appliedMemoryVersions": [],
-                "budget": {
-                  "limit": 8,
-                  "reserved": 1,
-                  "measured": 1
-                },
-                "artifact": {
-                  "id": "artifact-pr84",
-                  "version": 1,
-                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                  "path": "fixtures/pr84.txt",
-                  "kind": "text"
-                },
-                "verdict": {
-                  "id": "verdict-pr84",
-                  "verifierAssignmentId": "pr84:verifier",
-                  "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                  "artifactVersion": 1,
-                  "criteriaVersion": 1,
-                  "status": "passed",
-                  "evidence": [
-                    {
-                      "kind": "fixture",
-                      "detail": "고정된 결과 확인",
-                      "source": "UI contract fixture"
-                    }
-                  ]
-                },
-                "record": {
-                  "artifactSnapshot": {
-                    "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                    "path": "fixtures/snapshots/pr84.txt"
-                  },
-                  "id": "record-pr84",
-                  "workId": "pr84",
-                  "criteria": {
-                    "version": 1,
-                    "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
-                  },
-                  "artifact": {
-                    "id": "artifact-pr84",
-                    "version": 1,
-                    "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                    "path": "fixtures/pr84.txt",
-                    "kind": "text"
-                  },
-                  "verdict": {
-                    "id": "verdict-pr84",
-                    "verifierAssignmentId": "pr84:verifier",
-                    "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                    "artifactVersion": 1,
-                    "criteriaVersion": 1,
-                    "status": "passed",
-                    "evidence": [
-                      {
-                        "kind": "fixture",
-                        "detail": "고정된 결과 확인",
-                        "source": "UI contract fixture"
-                      }
-                    ]
-                  },
-                  "receipts": [
-                    {
-                      "id": "pr84:effect",
-                      "taskId": "pr84:root",
-                      "status": "succeeded",
-                      "target": "PR #84 검토",
-                      "authority": "소유자가 맡긴 일",
-                      "receipt": "고정된 화면 검증 데이터"
-                    }
-                  ],
-                  "assignments": [
-                    {
-                      "id": "pr84:executor",
-                      "actorId": "executor",
-                      "role": "executor",
-                      "taskId": "pr84:root",
-                      "model": {
-                        "provider": "fixture",
-                        "model": "claude-sonnet-5-5",
-                        "configVersion": "fixture-v1",
-                        "reason": "Deterministic UI fixture; no model invocation",
-                        "evidenceClass": "fixture"
-                      },
-                      "extensionVersion": "fixture-v1"
-                    },
-                    {
-                      "id": "pr84:verifier",
-                      "actorId": "verifier",
-                      "role": "verifier",
-                      "taskId": "pr84:root",
-                      "model": {
-                        "provider": "fixture",
-                        "model": "gpt-6.1-terra",
-                        "configVersion": "fixture-v1",
-                        "reason": "Deterministic UI fixture; no model invocation",
-                        "evidenceClass": "fixture"
-                      },
-                      "extensionVersion": "fixture-v1"
-                    }
-                  ],
-                  "memoryVersions": [],
-                  "evidenceClass": "fixture",
-                  "checksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3"
-                },
-                "endedAt": 1793851080000
-              }
-            ],
-            "memories": [],
-            "growth": [],
-            "relations": []
-          }
-        }
-      }
-    },
-    "/missions/intake": {
-      "status": 200,
-      "body": {
-        "revision": 3,
-        "value": {
-          "id": "intake",
-          "purpose": "맡긴 일",
-          "scope": "local",
-          "constraints": [],
-          "criteria": {
-            "version": 1,
-            "description": "요청한 결과와 근거 확인",
-            "oracle": "bounded-text-review/v1"
-          },
-          "version": 1,
-          "works": [
-            {
-              "id": "pr84",
-              "title": "PR #84 검토",
-              "missionVersion": 1,
-              "missionSnapshot": {
-                "version": 1,
-                "purpose": "맡긴 일",
-                "scope": "local",
-                "constraints": []
-              },
-              "criteria": {
-                "version": 1,
-                "description": "요청한 결과와 근거 확인",
-                "oracle": "bounded-text-review/v1"
-              },
-              "execution": "settled",
-              "acceptance": "accepted",
-              "tasks": [
-                {
-                  "id": "pr84:root",
-                  "parentId": null,
-                  "status": "settled",
-                  "result": "화면 검증 데이터 준비"
-                }
-              ],
-              "attempts": [
-                {
-                  "id": "pr84:attempt:1",
-                  "number": 1,
-                  "criteria": {
-                    "version": 1,
-                    "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
-                  },
-                  "status": "settled",
-                  "modelVersions": [
-                    "fixture-v1",
-                    "fixture-v1"
-                  ],
-                  "results": [
-                    {
-                      "taskId": "pr84:root",
-                      "result": "화면 검증 데이터 준비"
-                    }
-                  ]
-                }
-              ],
-              "assignments": [
-                {
-                  "id": "pr84:executor",
-                  "actorId": "executor",
-                  "role": "executor",
-                  "taskId": "pr84:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "claude-sonnet-5-5",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                },
-                {
-                  "id": "pr84:verifier",
-                  "actorId": "verifier",
-                  "role": "verifier",
-                  "taskId": "pr84:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "gpt-6.1-terra",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                }
-              ],
-              "effects": [
-                {
-                  "id": "pr84:effect",
-                  "taskId": "pr84:root",
-                  "status": "succeeded",
-                  "target": "PR #84 검토",
-                  "authority": "소유자가 맡긴 일",
-                  "receipt": "고정된 화면 검증 데이터"
-                }
-              ],
-              "appliedMemoryVersions": [],
-              "budget": {
-                "limit": 8,
-                "reserved": 1,
-                "measured": 1
-              },
-              "artifact": {
-                "id": "artifact-pr84",
-                "version": 1,
-                "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                "path": "fixtures/pr84.txt",
-                "kind": "text"
-              },
-              "verdict": {
-                "id": "verdict-pr84",
-                "verifierAssignmentId": "pr84:verifier",
-                "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                "artifactVersion": 1,
-                "criteriaVersion": 1,
-                "status": "passed",
-                "evidence": [
-                  {
-                    "kind": "fixture",
-                    "detail": "고정된 결과 확인",
-                    "source": "UI contract fixture"
-                  }
-                ]
-              },
-              "record": {
-                "artifactSnapshot": {
-                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                  "path": "fixtures/snapshots/pr84.txt"
-                },
-                "id": "record-pr84",
-                "workId": "pr84",
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "artifact": {
-                  "id": "artifact-pr84",
-                  "version": 1,
-                  "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                  "path": "fixtures/pr84.txt",
-                  "kind": "text"
-                },
-                "verdict": {
-                  "id": "verdict-pr84",
-                  "verifierAssignmentId": "pr84:verifier",
-                  "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-                  "artifactVersion": 1,
-                  "criteriaVersion": 1,
-                  "status": "passed",
-                  "evidence": [
-                    {
-                      "kind": "fixture",
-                      "detail": "고정된 결과 확인",
-                      "source": "UI contract fixture"
-                    }
-                  ]
-                },
-                "receipts": [
-                  {
-                    "id": "pr84:effect",
-                    "taskId": "pr84:root",
-                    "status": "succeeded",
-                    "target": "PR #84 검토",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "고정된 화면 검증 데이터"
-                  }
-                ],
-                "assignments": [
-                  {
-                    "id": "pr84:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "pr84:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "pr84:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "pr84:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "memoryVersions": [],
-                "evidenceClass": "fixture",
-                "checksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3"
-              },
-              "endedAt": 1793851080000
-            }
-          ],
-          "memories": [],
-          "growth": [],
-          "relations": []
-        }
-      }
-    },
     "/assistant/conversation?segment=1": {
       "status": 200,
       "body": {
@@ -750,19 +294,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "다음 PR 검토부터 이걸로 목록을 가져올게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -772,7 +326,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -797,8 +351,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -811,7 +365,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -856,7 +410,8 @@
             "action": "설치",
             "state": "done",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": []
@@ -908,19 +463,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "다음 PR 검토부터 이걸로 목록을 가져올게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -930,7 +495,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -955,8 +520,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -969,7 +534,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -1014,7 +579,8 @@
             "action": "설치",
             "state": "done",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": [],
@@ -1075,19 +641,29 @@
               "id": "m:pr84",
               "role": "owner",
               "turnId": null,
-              "text": "PR #84 검토해 줘."
+              "text": "PR #84 검토해 줘.",
+              "at": 1793842800000
             },
             {
               "id": "r:pr84",
               "role": "representative",
               "turnId": "assistant-turn:m:pr84",
-              "text": "테스트부터 확인할게요."
+              "text": "테스트부터 확인할게요.",
+              "at": 1793842800000
             },
             {
               "id": "r:made-app",
               "role": "representative",
               "turnId": null,
-              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요."
+              "text": "PR 목록을 매번 손으로 모았어요. 가져오는 앱으로 만들었어요.",
+              "at": 1793844180000
+            },
+            {
+              "id": "r:install-result",
+              "role": "representative",
+              "turnId": null,
+              "text": "다음 PR 검토부터 이걸로 목록을 가져올게요.",
+              "at": 1793844241000
             }
           ]
         },
@@ -1097,7 +673,7 @@
             "messageId": "m:pr84",
             "status": "answered",
             "displayStatus": "answered",
-            "at": 1793855280000,
+            "at": 1793842800000,
             "proposal": {
               "title": "PR #84 검토"
             },
@@ -1122,8 +698,8 @@
               "acceptance": "accepted",
               "unknown": false,
               "started": true,
-              "startedAt": 1793850000000,
-              "endedAt": 1793851080000,
+              "startedAt": 1793842800000,
+              "endedAt": 1793843880000,
               "turnId": "assistant-turn:m:pr84",
               "segment": 1,
               "steps": {
@@ -1136,7 +712,7 @@
         "decisions": [
           {
             "id": "install",
-            "at": 1793851920000,
+            "at": 1793844240000,
             "title": "PR 목록 가져오기",
             "question": "PR 목록 가져오기를 설치할까요?",
             "rows": [
@@ -1181,7 +757,8 @@
             "action": "설치",
             "state": "done",
             "line": "PR 목록 가져오기 설치됨",
-            "remove": "app-pr-list"
+            "remove": "app-pr-list",
+            "answeredAt": 1793844240000
           }
         ],
         "briefings": [],
@@ -1332,31 +909,7 @@
           }
         ]
       }
-    },
-    "/missions/intake/record-artifact?work=pr84&record=record-pr84&version=1&sha256=2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03": {
-      "status": 200,
-      "body": {
-        "feedId": "fixture:B2",
-        "cursor": 1,
-        "revision": 3,
-        "missionId": "intake",
-        "workId": "pr84",
-        "recordId": "record-pr84",
-        "recordChecksum": "fb53af4f0b41f135210f65e2278a5938352966d5366c0eacb4bb062fb58f5af3",
-        "artifactId": "artifact-pr84",
-        "artifactVersion": 1,
-        "artifactSha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-        "evidenceClass": "fixture",
-        "content": "PR #84 검토\n테스트 1/1 · 읽기 11/11 · 확인 1/1\n",
-        "byteLength": 58,
-        "artifact": {
-          "id": "artifact-pr84",
-          "version": 1,
-          "sha256": "2a6069862b2548dfaaf16195d610520acc0aa07df203f1d8ec960298704aeb03",
-          "kind": "text"
-        },
-        "criteriaVersion": 1
-      }
     }
-  }
+  },
+  "extends": "B25"
 }

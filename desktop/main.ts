@@ -1,16 +1,17 @@
+import {AppDocuments,appDocumentHeaders} from '../src/app-documents.ts';
 import {app,BrowserWindow,ipcMain,nativeTheme,Notification,protocol,session,Menu} from 'electron';
 import {readFile,mkdir,chmod} from 'node:fs/promises';
 import {join} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createProtocolClient} from '../src/client-protocol.ts';
-import {appOrigin,channels,windowOptions,isAppURL,allowRequest,validSender,contentPolicy} from './security.ts';
+import {appOrigin,channels,windowOptions,isAppURL,allowWorkbenchRequest,validSender,contentPolicy,isAppDocumentURL} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
 import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential} from './daemon.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
 
-protocol.registerSchemesAsPrivileged([{scheme:'massion',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}}]);
+protocol.registerSchemesAsPrivileged([{scheme:'massion',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true,stream:true}},{scheme:'massion-app',privileges:{standard:true,secure:true}}]);
 
 export async function startDesktop(){
  if(!app.requestSingleInstanceLock()){app.quit();return;}
@@ -20,6 +21,8 @@ export async function startDesktop(){
  const client=createProtocolClient(daemonTransport(origin,credential)),tracker=new ExceptionTracker();
  let window:BrowserWindow|null=null,ready=false,pending:OwnerException|undefined,quitting=false,reading=false;
  let timer:ReturnType<typeof setTimeout>|undefined;
+ const documents=new AppDocuments();
+ const readDocument=(url:string)=>isAppDocumentURL(url)?documents.read(new URL(url).pathname):undefined;
  const notifications=new Map<string,Notification>();
  function deliver(){if(ready&&pending&&window&&!window.isDestroyed()){if(tracker.current(pending))window.webContents.send(channels.focus,pending);pending=undefined;}}
  async function openWindow(){
@@ -28,7 +31,7 @@ export async function startDesktop(){
   const current=new BrowserWindow(windowOptions(join(import.meta.dirname,'preload.cjs')));window=current;
   current.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   current.webContents.on('will-navigate',(event,url)=>{if(!isAppURL(url))event.preventDefault();});
-  current.webContents.on('will-frame-navigate',event=>{if(!event.isMainFrame||!isAppURL(event.url))event.preventDefault();});
+  current.webContents.on('will-frame-navigate',event=>{if(event.isMainFrame?!isAppURL(event.url):!(event.frame?.parent===current.webContents.mainFrame&&readDocument(event.url)!==undefined))event.preventDefault();});
   current.webContents.on('will-redirect',(event,url)=>{if(!isAppURL(url))event.preventDefault();});
   current.webContents.on('will-attach-webview',event=>event.preventDefault());
   current.on('closed',()=>{if(window===current){window=null;ready=false;}});
@@ -43,7 +46,7 @@ export async function startDesktop(){
  app.on('activate',()=>{void openWindow();});
  app.on('window-all-closed',()=>{});
  app.on('before-quit',event=>{
-  if(quitting)return;event.preventDefault();quitting=true;clearTimeout(timer);
+  if(quitting)return;event.preventDefault();quitting=true;clearTimeout(timer);documents.clear();
   for(const notice of notifications.values())notice.close();
   void drainDaemon(socket,origin).then(result=>{if(result.status==='unsettled')console.error('Daemon drain unsettled; inspect original state');},error=>{if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))console.error('Daemon drain could not be confirmed');}).finally(()=>app.quit());
  });
@@ -54,11 +57,19 @@ export async function startDesktop(){
  ses.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
  ses.setPermissionCheckHandler(()=>false);ses.setDevicePermissionHandler(()=>false);
  ses.on('will-download',event=>event.preventDefault());
- ses.webRequest.onBeforeRequest((details,callback)=>callback({cancel:!allowRequest(details.url)}));
+ ses.webRequest.onBeforeRequest((details,callback)=>{
+  const document=details.resourceType==='subFrame'&&window&&!window.isDestroyed()&&details.webContentsId===window.webContents.id&&details.frame?.parent===window.webContents.mainFrame&&readDocument(details.url)!==undefined;
+  const contents=window&&!window.isDestroyed()?window.webContents:undefined;
+  callback({cancel:!allowWorkbenchRequest(details,contents)&&!document});
+ });
+ await ses.protocol.handle('massion-app',request=>{
+  const html=request.method==='GET'?readDocument(request.url):undefined;
+  return new Response(html??null,{status:html===undefined?404:200,headers:appDocumentHeaders});
+ });
  const html=await readFile(join(import.meta.dirname,'index.html'),'utf8'),csp=contentPolicy(html);
  await ses.protocol.handle('massion',request=>{
   if(isAppURL(request.url)&&request.method==='GET')return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':csp,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-  return proxyProtocol(request,origin,credential).catch(()=>new Response(null,{status:503}));
+  return proxyProtocol(request,origin,credential,html=>'massion-app://document'+documents.publish(html)).catch(()=>new Response(null,{status:503}));
  });
  async function connectDaemon(){
   try{await credential();return;}catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))throw error;}

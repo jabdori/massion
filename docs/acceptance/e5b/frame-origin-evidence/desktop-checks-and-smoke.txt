@@ -1,0 +1,47 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+
+> massion-desktop@0.1.0-dev.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+✔ desktop build preserves iframe client strings and appends a separate focus bridge (1213.417328ms)
+✔ desktop permits only controlled document paths without weakening workbench script and style policy (11.784249ms)
+✔ authenticated app view is published by main; URLs and failed or unrelated replies cannot publish (131.772743ms)
+✔ untrusted URLs, subframes and renderer capabilities stay outside the host boundary (10.358286ms)
+✔ desktop uses existing version negotiation: ready (97.937544ms)
+✔ desktop uses existing version negotiation: update-needed (20.645154ms)
+✔ desktop uses existing version negotiation: restart-needed (10.185327ms)
+✔ proxy forwards one command, refuses redirects and never exposes non-protocol routes (21.592699ms)
+✔ only owner exceptions notify; progress, duplicate revisions and stale feeds stay quiet (1.593172ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2557.97369
+
+> massion-desktop@0.1.0-dev.0 build
+> node build.mjs
+
+(node:103) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> massion-desktop@0.1.0-dev.0 smoke
+> node tests/smoke.mjs
+
+[174:1109/153619.851843:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[174:1109/153619.859394:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[174:1109/153621.134408:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[174:1109/153621.135994:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[174:1109/153621.308764:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[174:1109/153621.309721:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[174:1109/153621.363642:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type:
+[174:1109/153621.845465:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[174:1109/153626.636426:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+{"electronSmoke":"passed","title":"Massion","accessibilityNodes":942,"security":"sandbox, isolation, CSP, navigation, permissions","theme":"dark/light","windowLifecycle":"close and reopen","notification":"existing Work pane and keyboard focus","artifacts":"/app/desktop/smoke-artifacts"}

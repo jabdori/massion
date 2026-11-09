@@ -59,6 +59,21 @@ test('started Work snapshots have assigned executors and consistent task, attemp
 
 const hostModule=()=>import('../scripts/ui-contracts/fixture-host.ts');
 
+test('B24 and B25 installation fixtures retain background Work, result replies and source identity',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B24','B24-done','B24-later','B25','B25-done','B25-later']){
+  const fixture=await loadFixture(screen),works=(fixture.routes['/assistant/works']!.body as any).works;
+  assert.ok(works.some((w:any)=>w.workId==='churn'&&w.execution==='active'),screen);
+  assert.ok(works.some((w:any)=>w.workId==='pricing'&&w.execution===(screen.startsWith('B24')?'active':'waiting')),screen);
+  const view=fixture.routes[screen.startsWith('B25')?'/assistant/conversation?member=member-juno':'/assistant/conversation']!.body as any;
+  if(screen.startsWith('B24')&&screen!=='B24')assert.ok(view.segment.messages.some((m:any)=>m.role==='representative'),screen);
+  if(screen==='B25'){
+   assert.deepEqual(view.decisions[0].source,{missionId:'intake',workId:'pr84',title:'PR #84 검토'});
+   assert.ok(view.decisions[0].at>view.turns[0].at,'the install proposal follows its source Work');
+  }
+ }
+});
+
 test('the host serves the real page and isolated deterministic screen responses on loopback',async t=>{
  const {startFixtureHost,loadFixture}=await hostModule();
  const a=await startFixtureHost('B17'),b=await startFixtureHost('B17-empty');

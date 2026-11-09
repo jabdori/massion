@@ -1,0 +1,147 @@
+[
+  {
+    "path": "/",
+    "type": "mainFrame",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": ""
+  },
+  {
+    "path": "/protocol/connect",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/events",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/events",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/protocol/request",
+    "type": "xhr",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": true,
+    "frameURL": "massion://app/"
+  },
+  {
+    "path": "/3691302af09501ef10cfa0ec9dbe3f004a577aa51350dc5e1a3a6546365cb438",
+    "type": "subFrame",
+    "id": 1,
+    "owner": 1,
+    "hasFrame": true,
+    "isMain": false,
+    "frameURL": "",
+    "parentURL": "massion://app/"
+  }
+]

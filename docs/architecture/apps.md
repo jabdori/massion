@@ -96,6 +96,10 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 - A Linux network sandbox on Node 24 (see the ponytail note).
 - A link from a self-made app's source Work (B23, B25 `PR #84 review ›`) to its Work room; the title is shown as text.
 
+## MCP and connection follow-up (E5b)
+
+[MCP apps and connection cards](mcp-apps.md) extends this aggregate with owner-admitted MCP descriptors, pinned tool lists, durable single-send calls, scoped secret entry and opaque-origin app frames. Legacy script packages retain their existing hashes and worker path. Concrete MCP wire transports remain host-injected. E5a supplies shared deadlines and the secret-slot interface; the normal host supplies its macOS keychain store. Fixture evidence is not a live-account claim.
+
 ## E5a deadline and diagnostic boundary
 
 Every network call receives an AbortSignal and shares the handler's 5-second

@@ -1,0 +1,83 @@
+{
+  "evidence": "Fixture commands only; no real credential, keychain or provider access.",
+  "rows": [
+    {
+      "theme": "dark",
+      "screen": "B24-connect",
+      "png": "dark-B24-connect.png",
+      "pair": "dark-B24-connect-pair.png",
+      "commands": 0
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-later",
+      "png": "dark-B24-connect-later.png",
+      "pair": "dark-B24-connect-later-pair.png",
+      "commands": 1
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-token",
+      "png": "dark-B24-connect-token.png",
+      "pair": "dark-B24-connect-token-pair.png",
+      "commands": 2
+    },
+    {
+      "theme": "dark",
+      "screen": "B24-connect-connected",
+      "png": "dark-B24-connect-connected.png",
+      "pair": "dark-B24-connect-connected-pair.png",
+      "commands": 3
+    },
+    {
+      "theme": "dark",
+      "frameProbe": {
+        "network": "TypeError",
+        "parentAccess": "SecurityError",
+        "referrer": "no-referrer",
+        "sandbox": "allow-scripts",
+        "type": "probe"
+      },
+      "bridge": "Only ready and bounded resize; unknown effects and invalid resize ignored."
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect",
+      "png": "light-B24-connect.png",
+      "pair": "light-B24-connect-pair.png",
+      "commands": 0
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-later",
+      "png": "light-B24-connect-later.png",
+      "pair": "light-B24-connect-later-pair.png",
+      "commands": 1
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-token",
+      "png": "light-B24-connect-token.png",
+      "pair": "light-B24-connect-token-pair.png",
+      "commands": 2
+    },
+    {
+      "theme": "light",
+      "screen": "B24-connect-connected",
+      "png": "light-B24-connect-connected.png",
+      "pair": "light-B24-connect-connected-pair.png",
+      "commands": 3
+    },
+    {
+      "theme": "light",
+      "frameProbe": {
+        "network": "TypeError",
+        "parentAccess": "SecurityError",
+        "referrer": "no-referrer",
+        "sandbox": "allow-scripts",
+        "type": "probe"
+      },
+      "bridge": "Only ready and bounded resize; unknown effects and invalid resize ignored."
+    }
+  ]
+}

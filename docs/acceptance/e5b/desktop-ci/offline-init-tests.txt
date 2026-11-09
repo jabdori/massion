@@ -1,0 +1,45 @@
+✔ desktop build preserves iframe client strings and appends a separate focus bridge (200.603083ms)
+✔ connection copy uses the approved app placeholder (0.581084ms)
+✔ connection asks use the existing card and open a separate host password panel without posting (45.38375ms)
+✔ submit clears synchronously, sends only the token command once, and reads the committed line and remove action (13.445333ms)
+✔ later and ask again use existing decision commands, including mail without a connection (7.617458ms)
+✔ unknown connection outcomes never resend after close, reopen, reread or repeated submit (6.799708ms)
+✔ a transport error clears the password and never authorizes another submission (6.787416ms)
+✔ a proven conflict reads current state and permits only a deliberate new entry (10.52675ms)
+✔ a changed secret slot invalidates the open panel on reread (8.817125ms)
+✔ thread switches and feed invalidation clear secrets before pending reads or writes finish (20.428625ms)
+✔ an old connection response cannot close or replace a newly opened panel (8.995042ms)
+✔ a conversation read from before a thread switch cannot restore a connection card (7.65625ms)
+✔ malformed connection metadata is refused without changing ordinary decision cards (6.489542ms)
+✔ a replayed command response completes the connection with no second submission (13.598791ms)
+✔ a connected card keeps Remove and links to its installed app page (6.041208ms)
+✔ connection fixtures carry the contract metadata, background Work and real panel actions (4.86025ms)
+✔ leaving the conversation clears the host token entry before another page opens (8.055917ms)
+✔ an unknown app outcome shows the existing warning and records one evidenced owner decision (30.449209ms)
+✔ unknown reconciliation response never resubmits and feed invalidation drops the old form (9.122875ms)
+✔ pending calls remain blocked without an owner reconciliation action (11.069959ms)
+✔ a definite refusal keeps its draft and identity; explicit resend targets only that message (29.459041ms)
+✔ disconnect is a name-side status and never destroys private drafts or unlocks writes (6.568458ms)
+✔ a failed-send action cannot submit a different draft after thread (9.917041ms)
+✔ a failed-send action cannot submit a different draft after edit (9.602375ms)
+✔ editing during a lost send cannot attach its resend action to a replacement command (10.023875ms)
+✔ uncertain lost-response stays unknown and cannot be resubmitted after reload (13.707ms)
+✔ uncertain http-500 stays unknown and cannot be resubmitted after reload (10.962208ms)
+✔ uncertain http-503 stays unknown and cannot be resubmitted after reload (10.919125ms)
+✔ uncertain explicit-unknown stays unknown and cannot be resubmitted after reload (14.17975ms)
+✔ offline before dispatch is definitely not delivered and retries only its original command ID (19.214709ms)
+✔ legacy saved command identity is conservatively unknown after reload (7.999708ms)
+✔ failure to persist uncertain dispatch intent prevents the message POST (7.26775ms)
+✔ a held conversation read cannot resend a command another tab has marked unknown (17.945209ms)
+✔ draft edits wait for the shared dispatch-intent lock (6.187834ms)
+✔ queued edits keep their original conversation and latest text across thread switches (6.171875ms)
+✔ a successfully persisted and sent pending edit is not restored as a fresh draft (6.401167ms)
+✔ a committed response preserves a newer unsaved edit even when its text matches the sent draft (5.98ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 488.127917

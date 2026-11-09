@@ -1,0 +1,22 @@
+- generic
+  - navigation "주 메뉴" [ref=e33]
+    - button "하나" [ref=e35]
+    - button "결과물" [ref=e36]
+    - button "예약" [ref=e37]
+    - group "앱"
+      - button "검증 앱" [ref=e38]
+    - generic
+      - button "내 계정" [expanded=false, ref=e39]
+  - complementary "구성원과 작업"
+    - navigation "앱" [ref=e53]
+      - strong
+        - StaticText "문서 검증"
+        - button "검색" [expanded=false, ref=e41]
+      - button "앱 설정" [ref=e54]
+        - StaticText "앱 설정"
+  - main "검증 앱" [ref=e34]
+    - generic
+      - heading "문서 검증" [level=2, ref=e55]
+      - Iframe "문서 검증" [ref=e56]
+        - heading "격리 문서" [level=1, ref=e57]
+        - button "크기 변경" [ref=e58]

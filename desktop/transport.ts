@@ -11,7 +11,7 @@ export function daemonTransport(origin:string,credential:()=>Promise<string>){
  const base=daemonOrigin(origin);
  return createHttpTransport(async(input,init)=>authenticatedFetch(new URL(String(input),base),{...init,headers:{...init?.headers,Origin:base}},await credential()));
 }
-export async function proxyProtocol(request:Request,origin:string,credential:()=>Promise<string>):Promise<Response>{
+export async function proxyProtocol(request:Request,origin:string,credential:()=>Promise<string>,publish?:(html:string)=>string):Promise<Response>{
  const url=new URL(request.url),base=daemonOrigin(origin);
  if(url.protocol!=='massion:'||url.host!=='app'||url.username||url.password||!['/protocol/connect','/protocol/request','/protocol/events'].includes(url.pathname)||request.method!==(url.pathname==='/protocol/events'?'GET':'POST'))return new Response(null,{status:403});
  const headers:Record<string,string>={Origin:base,'Content-Type':'application/json'};
@@ -23,5 +23,14 @@ export async function proxyProtocol(request:Request,origin:string,credential:()=
   body=Buffer.concat(chunks).toString('utf8');
  }
  const response=await authenticatedFetch(new URL(base+url.pathname+url.search),{method:request.method,headers,body,signal:request.signal},await credential());
- return new Response(response.body,{status:response.status,headers:{'Content-Type':response.headers.get('Content-Type')??'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':appOrigin}});
+ let output:BodyInit|null=response.body;
+ if(response.ok&&publish&&url.pathname==='/protocol/request'&&body&&JSON.parse(body).path==='/assistant/apps/view'){
+  const result=await response.json() as {status:number;payload?:{frame?:{html?:unknown;url?:string};[key:string]:unknown}};
+  if(result.status===200&&result.payload?.frame){
+   if(typeof result.payload.frame.html!=='string')return new Response(null,{status:502});
+   result.payload.frame={url:publish(result.payload.frame.html)};
+  }
+  output=JSON.stringify(result);
+ }
+ return new Response(output,{status:response.status,headers:{'Content-Type':response.headers.get('Content-Type')??'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Access-Control-Allow-Origin':appOrigin}});
 }
