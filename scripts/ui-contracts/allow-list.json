@@ -7739,66 +7739,6 @@
       "ledger": "docs/acceptance/r-d/README.md#remaining-sent-row-chronology"
     },
     {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role conversation link \"반올림 규칙\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "The exact rule-case producer and activity row now exist. The separate scheduled briefing Work link is still absent; its old region-match diagnostic is now the measured conversation link-role diagnostic. No unrelated Work is fabricated.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-briefing-links"
-    },
-    {
       "screen": "B6",
       "theme": "dark",
       "kind": "gap",

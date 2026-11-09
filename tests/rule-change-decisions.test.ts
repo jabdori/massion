@@ -1,7 +1,7 @@
 import {once} from 'node:events';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RuleChangesService} from '../src/rule-changes.ts';
+import {RuleChangesService,withRuleBriefings} from '../src/rule-changes.ts';
 import {proposalFixture} from './support/growth-proposal-fixture.ts';
 import {ProductService} from '../src/product.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
@@ -11,7 +11,7 @@ test('evaluated exact rounding evidence produces an owner decision; later/ask ne
  const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);const revision=(await f.store.load('mission'))!.revision;
  await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:revision});
  const service=new RuleChangesService(f.store,()=> 'mission'),cards=await service.decisions();assert.equal(cards.length,1);const card=cards[0]!;
- assert.equal(card.state,'open');assert.equal(card.ruleChange.growthId,'new-growth');assert.equal(card.ruleChange.cases.orders.length,2);
+ assert.equal(card.state,'open');assert.deepEqual(card.rows.map(r=>r[0]),['지금','변경 후','주의']);assert.match(card.rows[0]![1],/TOTAL 4 cents/);assert.match(card.rows[1]![1],/3 cents/);assert.equal(card.ruleChange.growthId,'new-growth');assert.equal(card.ruleChange.cases.orders.length,2);
  const before=(await f.store.load('mission'))!;assert.equal(before.value.memories.find(m=>m.version===2)!.effective,false);
  const later={commandId:'rule-later',decisionId:card.id,answer:'later'};assert.equal((await service.decide(later)).status,'committed');assert.equal((await service.decisions())[0]!.state,'later');assert.doesNotMatch((await service.decisions())[0]!.line,/바꿈/);
  await service.decide({commandId:'rule-ask',decisionId:card.id,answer:'ask'});const act={commandId:'rule-act',decisionId:card.id,answer:'act'};
@@ -45,4 +45,17 @@ test('HTTP rule refusal before commit is explicit and does not prevent later def
  const post=(answer:string)=>fetch('http://127.0.0.1:'+address.port+'/assistant/decisions',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':read.feedId},body:JSON.stringify({commandId:'http-rule-'+answer,decisionId:card.id,answer})});
  const before=(await f.store.load('mission'))!,rejected=await post('act'),body=await rejected.json();assert.equal(rejected.status,400);assert.equal(body.outcome,'rejected');assert.equal(body.phase,'admission');assert.equal(body.feedId,read.feedId);assert.deepEqual(await f.store.load('mission'),before);
  const later=await post('later');assert.equal(later.status,200);assert.equal((await later.json()).status,'committed');assert.equal((await new RuleChangesService(f.store,()=> 'mission').decisions())[0]!.state,'later');
+});
+
+test('briefing rule links include only exact open proposals already present when it ran',()=>{const briefings=[{id:'morning',at:20}],decisions=[{id:'open',at:10,state:'open',ruleChange:{}},{id:'later',at:10,state:'later',ruleChange:{}},{id:'future',at:30,state:'open',ruleChange:{}},{id:'other',at:10,state:'open'}];assert.deepEqual(withRuleBriefings(briefings,decisions),[{id:'morning',at:20,decisionIds:['open']}]);assert.deepEqual(briefings,[{id:'morning',at:20}]);});
+
+test('rule adoption records its own host time and exact replay keeps that time',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});let at=(await f.store.load('mission'))!.value.growth[0]!.ruleChange!.at+1000;const service=new RuleChangesService(f.store,()=> 'mission',()=>at),card=(await service.decisions())[0]!,answer={commandId:'timestamped-rule',decisionId:card.id,answer:'act'};
+ await service.decide(answer);const before=(await f.store.load('mission'))!;assert.equal(before.value.growth[0]!.adoptedAt,at);at++;assert.equal((await service.decide(answer)).status,'replayed');assert.deepEqual(await f.store.load('mission'),before);validateMissionJournalLineage(await f.journal());
+});
+
+test('legacy un-timestamped rule answers still reconcile without rewriting their journal',async t=>{
+ const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const snapshot=(await f.store.load('mission'))!,g=snapshot.value.growth[0]!,service=new RuleChangesService(f.store,()=> 'mission'),card=(await service.decisions())[0]!,actor={id:'local-owner',roles:['owner'] as ['owner']};
+ const {apply,hash}=await import('../src/domain.ts'),command={type:'answer-rule-change' as const,growthId:g.id,baseline:g.baseline,candidate:g.candidate,decisionId:card.id,answer:'act' as const},derived=apply(snapshot.value,command,actor);await f.store.commit({id:'mission',commandId:'legacy-rule-answer',fingerprint:hash({actorId:actor.id,command}),expectedRevision:snapshot.revision,...derived,outbox:[]});
+ const before=await f.journal();assert.equal((await service.decide({commandId:'legacy-rule-answer',decisionId:card.id,answer:'act'})).status,'replayed');assert.deepEqual(await f.journal(),before);assert.equal((await f.store.load('mission'))!.value.growth[0]!.adoptedAt,undefined);validateMissionJournalLineage(before);
 });

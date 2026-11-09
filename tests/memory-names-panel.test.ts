@@ -33,10 +33,42 @@ test('a slower source read cannot open after a newer source request has complete
 
 test('B12 translates only the two exact calculation policies while stored and arbitrary owner text stay exact',async()=>{
  const f=fixture();await f.open();runInContext("settingsMission.value.memories=[{id:'line',version:1,authority:'explicit',effective:true,name:'Line policy',content:'Round each line'},{id:'aggregate',version:1,authority:'explicit',effective:true,name:'Aggregate policy',content:'Round aggregate once'},{id:'owner',version:1,authority:'explicit',effective:true,content:'Round each line with my custom rule'}];renderSettings();",f.app.context);
- const text=f.app.node('settings-memory-body').textContent;assert.match(text,/줄마다 반올림/);assert.match(text,/합계에서 한 번 반올림/);assert.match(text,/Round each line with my custom rule/);assert.deepEqual(JSON.parse(runInContext('JSON.stringify(settingsMission.value.memories.map(m=>m.content))',f.app.context)),['Round each line','Round aggregate once','Round each line with my custom rule']);
+ const text=f.app.node('settings-memory-body').textContent;assert.match(text,/줄마다 반올림/);assert.match(text,/합계에서 한 번/);assert.match(text,/Round each line with my custom rule/);assert.deepEqual(JSON.parse(runInContext('JSON.stringify(settingsMission.value.memories.map(m=>m.content))',f.app.context)),['Round each line','Round aggregate once','Round each line with my custom rule']);
 });
 
 test('learned memory search includes the name and exact source Work title',async()=>{
  const f=fixture();await f.open();runInContext("const learned={...settingsMission.value.memories[0],id:'learned',version:2,authority:'learned',effective:false,name:'Learned display name'};settingsMission.value.memories.push(learned);settingsMission.value.growth=[{id:'growth',candidate:'learned@2',status:'evaluated',counterevidence:'Original caution'}];renderSettings();",f.app.context);
- for(const query of ['Learned display name','Exact source title']){const input=f.app.all().find(n=>n.id==='memory-query')!;input.value=query;await input.fire('input');assert.match(f.app.node('settings-memory-body').textContent,/Learned display name/);}
+ for(const query of ['Learned display name','Exact source title']){const input=f.app.all().find(n=>n.id==='settings-search')!;input.value=query;await input.fire('input');assert.match(f.app.node('settings-memory-body').textContent,/Learned display name/);}
+});
+
+
+test('B12 reuses the single Settings search and keeps the explicit detail and source inline',async()=>{
+ const f=fixture();await f.open();const nodes=f.app.all(),toggle=nodes.find(n=>n.id==='memory-switch-rounding')!,text=toggle.parentElement!.children[0]!;
+ assert.equal(nodes.some(n=>n.id==='memory-query'),false);
+ assert.equal(text.children.length,2);assert.equal(text.children[0]!.textContent,'Rounding rule');
+ assert.equal(text.children[1]!.textContent,'Instruction remains visible · '+copy('ui.panel.memory-version',{version:1})+' · '+copy('ui.panel.in-use')+' · '+f.source.title);
+ assert.equal(text.children[1]!.children[0]!.attributes.get('role'),'link');
+ const search=f.app.node('settings-search');search.value='unmatched instruction';await search.fire('input');assert.doesNotMatch(f.app.node('settings-memory-body').textContent,/Rounding rule/);
+ search.value='Instruction remains visible';await search.fire('input');assert.match(f.app.node('settings-memory-body').textContent,/Rounding rule/);assert.equal(f.app.node('settings-nav-memory').hidden,false);
+ assert.equal(f.app.calls.some(c=>c.options.method==='POST'),false);
+});
+
+test('B12 learned rows show one detail line with pending, active and inactive state',async()=>{
+ const f=fixture();await f.open();
+ for(const [status,effective,label] of [['evaluated',false,copy('sidebar.status.01')],['adopted',true,copy('ui.panel.in-use')],['adopted',false,copy('ui.panel.not-in-use')]] as const){
+  runInContext("settingsMission.value.memories.push({...settingsMission.value.memories[0],id:'learned',version:2,authority:'learned',name:'Learned name',content:'Learned instruction',effective:"+effective+"});settingsMission.value.growth=[{id:'growth',candidate:'learned@2',status:'"+status+"',counterevidence:'Caution'}];renderSettings();",f.app.context);
+  const title=f.app.all().find(n=>n.tagName==='STRONG'&&n.textContent==='Learned name')!,text=title.parentElement!;
+  assert.equal(text.children.length,2);assert.equal(text.children[1]!.textContent,'Learned instruction · '+copy('ui.panel.memory-version',{version:2})+' · '+label);
+  runInContext("settingsMission.value.memories.pop()",f.app.context);
+ }
+});
+
+test('B12 history separates actual adoption and reversion dates and never uses evaluation time',async()=>{
+ const f=fixture();await f.open();const adoptedAt=Date.UTC(2026,10,3,9),revertedAt=Date.UTC(2026,10,4,9),evaluatedAt=Date.UTC(2026,10,1,9);
+ runInContext("settingsMission.value.memories.push({...settingsMission.value.memories[0],version:2,authority:'learned',content:'Learned instruction',effective:false});settingsMission.value.growth=[{id:'growth',baseline:'rounding@1',candidate:'rounding@2',status:'reverted',adoptedAt:"+adoptedAt+",revertedAt:"+revertedAt+",ruleChange:{at:"+evaluatedAt+",state:'open'}}];renderSettings();",f.app.context);
+ const cards=f.app.node('settings-memory-body').children,history=cards[cards.length-1]!;assert.equal(history.children.length,2);
+ assert.match(history.children[0]!.textContent,/11월 4일/);assert.match(history.children[0]!.textContent,/Instruction remains visible/);
+ assert.match(history.children[1]!.textContent,/11월 3일/);assert.match(history.children[1]!.textContent,/Learned instruction/);assert.doesNotMatch(history.textContent,/11월 1일/);
+ runInContext("delete settingsMission.value.growth[0].adoptedAt;delete settingsMission.value.growth[0].revertedAt;renderSettings();",f.app.context);
+ const legacy=f.app.node('settings-memory-body').children.at(-1)!;assert.equal(legacy.children.length,1);assert.doesNotMatch(legacy.textContent,/11월|Invalid Date/);
 });

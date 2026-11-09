@@ -6,10 +6,11 @@ import {proposalFixture} from './support/growth-proposal-fixture.ts';
 import {RuleChangesService} from '../src/rule-changes.ts';
 
 async function setup(t:any){const f=await proposalFixture(t);await f.product.proposeGrowth('mission',f.proposal);await f.product.evaluateGrowth('mission',{...f.evaluation(),expectedRevision:(await f.store.load('mission'))!.revision});const decisions=await new RuleChangesService(f.store,()=> 'mission').decisions();return {decisions,view:{feedId:'feed:rules',cursor:1,head:1,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[],decisions}};}
-test('rule cases use exact stored evidence and leave the old pane unavailable after thread replacement',async t=>{
+test('approved case link opens exact Memory evidence without creating a pane or exposing version IDs',async t=>{
  const f=await setup(t),app=harness(async path=>path==='/assistant/conversation'?reply(structuredClone(f.view)):reply({feedId:'feed:rules',head:0,segment:null,turns:[]}));await settle();
- assert.match(app.node('chat-log').textContent,/사례 보기/);runInContext('chatRuleOpen(chatDecisionBinding(chatDecisions()[0]))',app.context);assert.match(app.all().find(n=>n.id==='pane-rule')!.textContent,/사례 1/);assert.match(app.all().find(n=>n.id==='pane-rule')!.textContent,/4/);assert.match(app.all().find(n=>n.id==='pane-rule')!.textContent,/3/);
- runInContext("chatOpenThread('member:other','다른 구성원')",app.context);await settle();assert.doesNotMatch(app.all().find(n=>n.id==='pane-rule')!.textContent,/사례 1/);
+ runInContext("globalThis.memoryOpened=[];shellShow=name=>memoryOpened.push(name);settingsOpen=name=>memoryOpened.push(name);",app.context);const binding=runInContext('chatDecisionBinding(chatDecisions()[0])',app.context);
+ runInContext('chatRuleOpen(chatDecisionBinding(chatDecisions()[0]))',app.context);assert.deepEqual(JSON.parse(runInContext('JSON.stringify(memoryOpened)',app.context)),['settings','memory']);assert.equal(runInContext('settingsEvidence.has(chatDecisions()[0].ruleChange.growthId)',app.context),true);assert.equal(runInContext('paneTabs.length',app.context),0);assert.ok(!app.all().some(n=>n.id==='pane-rule'));assert.doesNotMatch(app.node('chat-log').textContent,/rounding@/);
+ (app.context as any).oldRuleBinding=binding;runInContext("chatGeneration++;chatRuleOpen(oldRuleBinding)",app.context);assert.equal(runInContext('memoryOpened.length',app.context),2);
 });
 test('a late rule answer never repaints another thread and its unknown marker blocks another send',async t=>{
  const f=await setup(t);let release!:(v:any)=>void;const app=harness(async(path,options)=>path==='/assistant/conversation'?reply(structuredClone(f.view)):path==='/assistant/decisions'?new Promise(resolve=>release=resolve):reply({feedId:'feed:rules',head:0,segment:null,turns:[]}));await settle();
@@ -20,11 +21,16 @@ test('a late rule answer never repaints another thread and its unknown marker bl
 test('an unknown rule answer stays locked after an unrelated Mission revision and feed changes invalidate its inspector',async t=>{
  const f=await setup(t);let fail=false;const app=harness(async(path,options)=>{if(path==='/assistant/decisions'){fail=true;throw Error('Lost answer');}if(path==='/assistant/conversation')return reply(structuredClone(f.view));return reply({feedId:'feed:rules',head:0,segment:null,turns:[]});});await settle();
  await runInContext("chatDecide(chatDecisions()[0].id,'act')",app.context);await settle();assert.equal(fail,true);f.view.decisions[0]!.ruleChange.revision++;await app.node('chat-latest').fire('click');await settle();await runInContext("chatDecide(chatDecisions()[0].id,'act')",app.context);assert.equal(app.calls.filter(c=>c.path==='/assistant/decisions').length,1);
- runInContext('chatRuleOpen(chatDecisionBinding(chatDecisions()[0]))',app.context);assert.match(app.all().find(n=>n.id==='pane-rule')!.textContent,/사례 1/);f.view.feedId='feed:replacement';await app.node('chat-latest').fire('click');await settle();assert.doesNotMatch(app.all().find(n=>n.id==='pane-rule')!.textContent,/사례 1/);
+ f.view.feedId='feed:replacement';await app.node('chat-latest').fire('click');await settle();assert.equal(runInContext('paneTabs.length',app.context),0);
 });
 
 test('a definite rule refusal clears its receipt so the owner can defer the unchanged proposal',async t=>{
  const f=await setup(t);let posts=0;const app=harness(async(path,options)=>{if(path==='/assistant/conversation')return reply(structuredClone(f.view));if(path==='/assistant/decisions'){posts++;if(posts===1)return reply({error:'Baseline changed',outcome:'rejected',phase:'admission',feedId:f.view.feedId},400);f.view.decisions[0]!.state='later';return reply({status:'committed'});}return reply({feedId:f.view.feedId,head:0,segment:null,turns:[]});});await settle();
  await runInContext("chatDecide(chatDecisions()[0].id,'act')",app.context);await settle();assert.equal(posts,1);assert.equal([...app.storage.keys()].filter(k=>k.startsWith('massion.workbench.effect-decision:')).length,0);
  await runInContext("chatDecide(chatDecisions()[0].id,'later')",app.context);await settle();assert.equal(posts,2);assert.match(app.node('chat-log').textContent,/다시 묻기/);
+});
+
+test('a scheduled briefing links the exact pending decision without adding a Work entry',async t=>{
+ const f=await setup(t),id=f.decisions[0]!.id,view={...f.view,briefings:[{id:'morning',at:Date.now(),title:'아침 브리핑',turnIds:[],decisionIds:[id]}]},app=harness(async path=>path==='/assistant/conversation'?reply(structuredClone(view)):reply({feedId:'feed:rules',works:[]}));await settle();
+ const brief=app.all().find(n=>n.id==='chat-briefing-morning')!;assert.ok(brief);assert.match(brief.textContent,/반올림 규칙 결정 대기/);const link=brief.children.flatMap(n=>n.children).flatMap(n=>[n,...n.children]).find(n=>n.tagName==='BUTTON'&&n.textContent==='반올림 규칙');assert.ok(link);await link!.fire('click');await settle();assert.equal(runInContext('paneTabs.length',app.context),0);
 });

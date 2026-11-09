@@ -92,7 +92,8 @@ export class ProductService {
   return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revise-budget',workId:input.workId,limit:input.limit,reason:input.reason}});
  }
  async adoptGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string}) {
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'adopt-growth',growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}});
+  const envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'adopt-growth' as const,recordChangeTime:true as const,growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}},result=await this.app.dispatch(envelope);
+  if(result.status==='conflict'&&result.reason==='idempotency'){const {recordChangeTime,...command}=envelope.command;return this.app.dispatch({...envelope,command});}return result;
  }
  async proposeGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:Pick<import('./domain.ts').Memory,'id'|'version'|'content'|'source'|'name'|'sourceWork'>;counterevidence:string}) {
   input=structuredClone(input);keys(input,['commandId','expectedRevision','growthId','baseline','candidate','counterevidence']);keys(input.candidate,['id','version','content','source','name','sourceWork']);
@@ -109,7 +110,8 @@ export class ProductService {
   await verifyGrowthCalculation(baseline,candidate,cases);return service.dispatch(envelope);
  }
  async revertGrowth(missionId:string,input:{commandId:string;expectedRevision:number;growthId:string;baseline:string;candidate:string}) {
-  return this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revert-growth',growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}});
+  const envelope={missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'revert-growth' as const,recordChangeTime:true as const,growthId:input.growthId,baseline:input.baseline,candidate:input.candidate}},result=await this.app.dispatch(envelope);
+  if(result.status==='conflict'&&result.reason==='idempotency'){const {recordChangeTime,...command}=envelope.command;return this.app.dispatch({...envelope,command});}return result;
  }
  async readRunOwnership(missionId:string,workId:string,feedId?:string){return readRuntimeOwnership(this.app.store,missionId,workId,feedId,runId=>this.runtime?.owns?.(missionId,workId,runId)??false);}
  async readRejectedText(missionId:string,workId:string,input:RejectedTextInput){return readRejectedText(this.app.store,this.artifacts,missionId,workId,input);}

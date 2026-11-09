@@ -310,7 +310,9 @@ export function validateMissionLineage(value: unknown): asserts value is Mission
   unique(mission.works.flatMap(work => work.record ? [work.record.id] : []), 'Record ID');
   const growth = array(item.growth, 'Growth');
   for (const value of growth) {
-    const entry = object(value, 'Growth', ['id', 'proposer', 'target', 'baseline', 'candidate', 'counterevidence', 'status'], ['evaluator', 'scores', 'observation', 'previousEffective', 'ruleChange']);
+    const entry = object(value, 'Growth', ['id', 'proposer', 'target', 'baseline', 'candidate', 'counterevidence', 'status'], ['evaluator', 'scores', 'observation', 'previousEffective', 'ruleChange', 'adoptedAt', 'revertedAt']);
+    for(const key of ['adoptedAt','revertedAt'])if(Object.hasOwn(entry,key)){integer(entry[key],'Growth transition time',0);ensure(Number(entry[key])<=8640000000000000&&(key==='adoptedAt'?(entry.status==='adopted'||entry.status==='reverted'):entry.status==='reverted'),'Invalid Growth transition time/state');}
+    if(Object.hasOwn(entry,'adoptedAt')&&Object.hasOwn(entry,'revertedAt'))ensure(Number(entry.revertedAt)>=Number(entry.adoptedAt),'Invalid Growth transition time order');
     if(entry.ruleChange){const d=object(entry.ruleChange,'rule decision',['at','state']);integer(d.at,'rule decision time');oneOf(d.state,['open','later'],'rule decision state');ensure(entry.status!=='proposed'&&entry.evaluator==='host-rounding-oracle/v1','rule decision requires host evaluation');}
     for (const key of ['id', 'proposer', 'baseline', 'candidate', 'counterevidence']) text(entry[key], `Growth ${key}`);
     ensure(entry.target === 'memory' && memoryKeys.has(entry.baseline as string) && memoryKeys.has(entry.candidate as string), 'Growth has unsupported target or absent memory lineage');
@@ -393,10 +395,10 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'retire-memory': { required: ['memoryId', 'version', 'reason'] },
   'propose-growth': { required: ['proposal'], optional:['candidateMemory'] },
   'evaluate-growth': { required: ['growthId', 'baseline', 'candidate', 'heldOut'], optional:['binding','ownerDecision'] },
-  'answer-rule-change':{required:['growthId','baseline','candidate','decisionId','answer']},
-  'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
+  'answer-rule-change':{required:['growthId','baseline','candidate','decisionId','answer'],optional:['recordChangeTime']},
+  'adopt-growth': { required: ['growthId'], optional: ['baseline','candidate','recordChangeTime'] },
   'observe-growth': { required: ['growthId', 'workId', 'metric'] },
-  'revert-growth': { required: ['growthId'], optional: ['baseline','candidate'] },
+  'revert-growth': { required: ['growthId'], optional: ['baseline','candidate','recordChangeTime'] },
   'attach-work-source':{required:['workId','documentId','version','contentSha256','reason']},
   'capture-document':{required:['document']},
   'record-relation':{required:['relation']},

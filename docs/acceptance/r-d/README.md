@@ -1,48 +1,35 @@
-# R-D: evaluated rule decisions and member memory candidates
+# R-D: rule decisions, member memory and visual-gate corrections
 
 ## Implemented
 
-Stored host-rounding Growth evaluations now produce exact owner decision cards and activity rows. Case inspection reads the same immutable baseline/candidate hashes, input orders and host-observed results. Later and ask again never adopt; act reuses independently measured Growth adoption. The ownerStore drain fence, post-load operation lookup and idempotency-conflict readback remain in the write path. Unknown client answers stay locked across unrelated Mission revisions.
+Stored host-rounding Growth evaluations produce exact owner decision cards and activity rows. Owner act/later/ask use the existing decision path; act retains independent improvement and current-baseline checks. Unknown deliveries never resend. Both memory and rule endpoints identify definite pre-intent refusals so a fresh owner review remains possible.
 
-Member model output may propose one named memory instruction, separately from Work steering. The answered turn pins the member, owner message, segment, candidate ID/version/hash, Mission and optional exact source Work. Save first records a durable owner intent and then attempts the original Mission write once. Discard writes no memory. Unknown intent/save outcomes reconcile read-only, including after restart. Explicit and proposed Growth memories retain optional display names and exact source Work metadata. Settings links verify the original input/criteria hashes before opening.
+Member turns may propose one named memory instruction separately from Work steering. Candidates pin the member, owner message, segment, ID/version/hash, Mission and optional source Work. Save records a durable owner intent before one original Mission write; discard writes no memory. Restart reconciliation is read-only. Memories retain names and exact source input/criteria hashes.
 
-No provider, payment, credential, network effect or automatic memory adoption is part of this evidence. All adapters are fixtures, and case calculation uses the existing bounded local oracle.
+## Visual-gate corrections
+
+- **Case link:** B2's approved link targets B12. It opens existing Memory evidence. The unapproved case pane, version IDs, raw calculation layout and invented headings were removed. `case-memory.png` shows the approved destination.
+- **B2/B9:** the proposal is in the captured viewport with `지금 / 변경 후 / 주의`, the two actions and right-aligned case link. No phantom rounding Work appears in the sidebar. Production schedule transitions create the fixture briefing; exact pending decision links supply B9's `반올림 규칙` entry. `B9-briefing.png` verifies its navigation back to the proposal.
+- **B18-room-b:** the fresh isolated capture opens the exact `경쟁사 가격` Work pane. No stale rule-case tab exists.
+- **Member candidates:** B6, B7-fail and B18-room-b render the inline `기억 후보: {text} 남기기 지우기` line once, without a bordered card or repeated name/content.
+- **B12:** one Settings search field; one title and one inline detail/source line. The explicit baseline is genuinely effective and the learned candidate genuinely pending. Actual timestamped adoption and reversion commands produce dated history; evaluation time is never substituted. An already-reverted historical entry cannot be undone directly, so its history control is disabled; adoption remains an owner decision.
 
 ## Verification
 
-- `npm run typecheck`; approved-copy lint: zero findings.
-- Final changed-path tests: 74 passed, zero failed or skipped.
-- Related new/changed tests cover all four recurring bug classes: overlapping commands, drain during writes, stale feed/selection/deadline and late responses. Portable-backup roundtrip retains candidate decisions, names and source pins.
-- Existing assistant, member Work, protocol, explicit-memory, Growth and effect suites: 164 passed, 8 actual-DB cases skipped.
-- Browser contract captures: B2, B2-offline, B2-offline-failed, B9, B9-restart, B9-update, B12, B16, B16-later, B16-sent, B7-done, B7-unknown, B7-fail, B6, B7-churn, B18 and B18-room-b in both themes. These are affected-screen captures, not an all-screen local gate claim.
-- B12: 26/26 required elements in both themes, including name, switch name and exact source Work link. B16: 22/22; B16-later: 21/21; offline variants: 20/20 and 22/22.
-- Production loopback Workbench with fixture adapters, driven through agent-browser: case inspection, later, ask again, rule adoption, member memory save and discard. Readback shows the saved/discarded receipts and a stale case pane becomes unavailable after selection changes.
-- Captures: `B12-dark.png`, `B12-light.png`, `B18-room-b-dark.png`, `rule-cases.png`, `memory-save-discard.png`. Full measured snapshots/checks remain in `.runtime/ui-contracts/`; generated files are not hand-edited.
+Related tests cover the four recurring failure classes, strict candidate input, backup lineage, source navigation, dated and legacy history, native-hash completion, approved case navigation and briefing references. `npm run typecheck` and copy lint pass. The final related local run passed 163 tests with 16 actual-DB cases skipped (179 total). Real DB/provider/payment execution is not local visual evidence.
 
-## Resolved contracts
+Affected browser captures cover B2 and offline variants, B9 and variants, B12, B16 and variants, B7 detail variants, B6, B18 and B18-room-b in both themes. B12 passes 26/26 required elements; B16 passes 22/22; B16-later passes 21/21; offline variants pass 20/20 and 22/22. Every measured remaining diagnostic matches an existing scoped exception, with no new or stale entries. Six B9 briefing exceptions were removed in this correction, reducing the original 804-entry allow-list to 734.
 
-Remove 72 resolved diagnostic identities across both themes. Eight identity replacements retain the existing residuals described below; no extra capability is claimed. The net allow-list reduction is 64 entries. Growth and member-memory fixture modules use production reducers/readers, with journal-lineage validation; a missing typed candidate now fails fixture construction.
-
-## Remaining briefing links
-
-B9, B9-restart and B9-update still lack the separate morning-briefing Work link named “반올림 규칙”. The new decision activity title includes its action, so this existing absence is now diagnosed as a conversation link-role mismatch rather than a match in the sidebar. The case inspector is available through its own exact decision. No unrelated briefing Work is fabricated to hide the missing scheduled source. Each theme replaces the old diagnostic identity with its currently measured one.
+Committed fresh captures: `B2-dark.png`, `B2-light.png`, `B12-dark.png`, `B12-light.png`, `B18-room-b-dark.png`, `B18-room-b-light.png`, `B6-dark.png`, `B7-fail-dark.png`, `B9-briefing.png`, `case-memory.png`. Obsolete case-pane and stale-tab screenshots were removed. Full measured snapshots, checks and artboard pairs are under `.runtime/rd-visual-final/`.
 
 ## Remaining B6 detail
 
-B6 still lacks the recorded research/team and enterprise-steering detail from its older fixture. Its gap text removes the resolved memory-candidate claim; only the existing unsupported details remain. This replaces one gap identity per theme.
+The older B6 fixture still lacks recorded research/team and enterprise-steering detail. Its exception no longer claims member memory candidates are missing. Unrelated business summaries, step timestamps, layout drift and unavailable integrations keep their existing exceptions.
 
 ## Remaining sent-row chronology
 
-B16-sent now has a real rounding-rule activity row. Reading that row clears its own unread marker; the remaining PR unread marker follows the sent link, while the contract expects an unread marker before it. Retain the existing order diagnostic rather than reorder unrelated activities. The missing-producer gap and missing rule-row diagnostic are removed.
+B16-sent has a real rounding-rule activity row. Reading it clears its unread marker; the remaining PR unread marker follows the sent link while the contract expects one before it. Keep the existing ordering exception rather than reorder unrelated activities.
 
-Other unsupported business summaries, unrecorded step times, layout drift and unavailable integrations retain their existing exceptions. Full repository checks and all screen contracts run in CI; actual DB/provider/deployment validation is not claimed here.
+## Integration
 
-## Review fixes
-
-The first CI pass exposed a source-link test that asserted before native hashing completed. It now waits for the actual digest promises; no fixed sleep or implementation change was needed. Codex then identified a pre-intent stale-review HTTP rejection classified as unknown delivery. The route now labels only definite validation/admission failures as rejected, allowing a refreshed owner decision. HTTP and client regressions retain the unknown-intent/save no-resend locks.
-
-Rule-decision admission refusals now carry the same explicit rejected/admission envelope, with HTTP and client coverage proving that a stale adoption may still be deferred. Hidden case panes clear their cached contents when the database feed resets.
-
-## Integration with updated main
-
-Merged `origin/main` at `08b5f23` after PR #126 added the MCP/Electron journeys while R-D was running. On head `a5c6afd`, the new MCP journey failed twice in agent-browser 0.41.2 / runner Chrome 156 before an accessibility snapshot, with `Failed to install browser network controls: CDP error (Runtime.evaluate): Cannot find default execution context`. Existing upstream investigation is linked in `docs/architecture/e2e-decisions-apps-desktop.md`. This is an unresolved CI browser-infrastructure failure, not evidence that the journey passed. Domain restrictions and app sandboxing remain enabled.
+The main-branch MCP browser-context fix is integrated before final-head CI. Full repository, actual durable-store and all-screen checks run in CI under the local verification budget. This PR is never merged by this task.

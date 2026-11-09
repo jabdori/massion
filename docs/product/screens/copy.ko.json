@@ -17193,62 +17193,8 @@
    "R-D"
   ]
  },
- "ui.rule.baseline": {
-  "ko": "지금 규칙",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.candidate": {
-  "ko": "새 규칙",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.score": {
-  "ko": "사례 {count}/{total} 맞음",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
  "ui.rule.changed": {
   "ko": "반올림 규칙 바꿈",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.cases": {
-  "ko": "반올림 규칙 · 사례",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.case": {
-  "ko": "사례 {count}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-D"
-  ]
- },
- "ui.rule.expected": {
-  "ko": "기준",
   "roles": [
    "text"
   ],
@@ -17367,7 +17313,7 @@
   "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
  },
  "ui.memory-policy.aggregate": {
-  "ko": "합계에서 한 번 반올림",
+  "ko": "합계에서 한 번",
   "roles": [
    "text"
   ],
@@ -17376,22 +17322,63 @@
   ],
   "provenance": "R-D bounded rounding policy display; stored evaluator instructions unchanged"
  },
- "ui.rule.item": {
-  "ko": "{quantity}개 × {price}센트",
+ "ui.rule.after": {
+  "ko": "변경 후",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-D"
+   "B2:conversation",
+   "B9:conversation"
   ]
  },
- "ui.rule.discount": {
-  "ko": "할인 {discount}%",
+ "ui.rule.baseline-summary": {
+  "ko": "줄마다 반올림 · TOTAL {amount} cents · 사례 {count}/{total} 맞음",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-D"
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "ui.rule.candidate-summary": {
+  "ko": "합계에서 한 번 · {amount} cents · 사례 {count}/{total} 맞음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B2:conversation",
+   "B9:conversation"
+  ]
+ },
+ "ui.memory-candidate.line": {
+  "ko": "기억 후보: {content}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B6:conversation",
+   "B7-fail:conversation",
+   "B18-room-b:conversation"
+  ]
+ },
+ "ui.memory-history.line": {
+  "ko": "{name} · 줄마다로 되돌림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:page"
+  ]
+ },
+ "ui.memory-history.aggregate": {
+  "ko": "{name} · 합계에서 한 번으로 바꿈",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B12:page"
   ]
  }
 }

@@ -21,7 +21,7 @@ function fixture(initial:Record<string,string>={}){
 const find=(app:ReturnType<typeof harness>,label:string)=>app.all().find(n=>n.tagName==='BUTTON'&&n.textContent===label&&app.node('chat-log').contains(n));
 
 test('candidate card renders literal content, saves the reviewed identity once and displays the receipt',async()=>{
- const f=fixture();await f.open();assert.match(f.app.node('chat-log').textContent,/Preferred summary/);assert.match(f.app.node('chat-log').textContent,/<img src=x>/);assert.ok(!f.app.all().some(n=>n.tagName==='IMG'));
+ const f=fixture();await f.open();assert.match(f.app.node('chat-log').textContent,/기억 후보: Use a short summary/);assert.match(f.app.node('chat-log').textContent,/<img src=x>/);assert.ok(!f.app.all().some(n=>n.tagName==='IMG'));
  const save=find(f.app,copy('conversation.button.05'))!;assert.ok(save);let release!:(v:any)=>void;f.state.post=()=>new Promise(r=>release=r);const pending=save.fire('click');await settle();await save.fire('click');assert.equal(f.state.posts.length,1);
  assert.deepEqual(f.state.posts[0],{member:'quill',feedId:'feed:a',segment:1,expectedRevision:2,turnId,candidateId:candidate.id,version:1,hash:candidate.hash,missionRevision:1,action:'save'});
  f.state.candidate.status='saved';release(reply({status:'saved'}));await pending;await settle();assert.ok(!find(f.app,copy('conversation.button.05')));assert.match(f.app.node('chat-log').textContent,/남김/);
@@ -49,3 +49,5 @@ test('an explicit stale-review rejection unlocks a new review without resending 
  await find(f.app,copy('conversation.button.05'))!.fire('click');await settle();assert.equal(f.state.posts.length,1);assert.ok(find(f.app,copy('conversation.button.05')));assert.equal([...f.app.storage.keys()].filter(k=>k.startsWith('massion.workbench.memory-candidate:')).length,0);
  f.state.post=undefined;await find(f.app,copy('conversation.button.05'))!.fire('click');await settle();assert.equal(f.state.posts.length,2);assert.equal(f.state.posts[1].expectedRevision,f.state.revision);assert.equal(f.state.posts[1].missionRevision,f.state.candidate.missionRevision);
 });
+
+test('memory proposals are one inline line rather than a duplicate bordered card',async()=>{const f=fixture();await f.open();const line=f.app.all().find(n=>n.className==='chat-memory')!;assert.ok(line);assert.match(line.textContent,/^기억 후보: Use a short summary/);assert.equal(line.textContent.split(f.state.candidate.content).length,2);assert.doesNotMatch(line.textContent,/Preferred summary/);assert.ok(find(f.app,copy('conversation.button.05')));assert.ok(find(f.app,copy('conversation.button.14')));});

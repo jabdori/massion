@@ -16,6 +16,7 @@ export interface ScreenFixture {
  now:number;
  readySelector:string;
  steps:FixtureStep[];
+ captureScroll?:{selector:string;top:number};
  gaps:string[];
  reuse:string[];
  routes:Record<string,{status:number;body:unknown}>;
@@ -37,6 +38,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
   !Array.isArray(fixture.gaps)||!fixture.gaps.every(text)||!Array.isArray(fixture.reuse)||!fixture.reuse.every(text)||
   !Array.isArray(fixture.steps)||!fixture.steps.every((s:FixtureStep)=>s&&(s.action==='offline'?['true','false'].includes(s.value):text(s.selector)&&['click','fill'].includes(s.action)&&(s.action!=='fill'||typeof s.value==='string'))&&(s.readySelector===undefined||text(s.readySelector)))||
   !fixture.routes||typeof fixture.routes!=='object'||Array.isArray(fixture.routes))throw new Error('Invalid fixture: '+screen);
+ if(fixture.captureScroll&&(!text(fixture.captureScroll.selector)||!Number.isSafeInteger(fixture.captureScroll.top)||fixture.captureScroll.top<0))throw new Error('Invalid capture scroll: '+screen);
  for(const [path,response] of Object.entries(fixture.routes) as [string,{status:number;body:unknown}][]){
   if(!path.startsWith('/')||path.startsWith('//')||path.includes('#')||path.includes('\\')||new URL(path,'http://fixture').pathname.includes('..')||
    !response||!Number.isInteger(response.status)||response.status<200||response.status>599||!Object.hasOwn(response,'body'))throw new Error('Invalid fixture route: '+path);
