@@ -1,0 +1,113 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "passed": 35,
+      "failed": 0,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B4.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "passed": 19,
+      "failed": 2,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-sent.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "passed": 20,
+      "failed": 1,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B16-later.png"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "passed": 35,
+      "failed": 0,
+      "warnings": 0,
+      "required": 35,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B4.png"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "passed": 21,
+      "failed": 1,
+      "warnings": 0,
+      "required": 22,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16.png"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "passed": 19,
+      "failed": 2,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-sent.png"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "passed": 20,
+      "failed": 1,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [
+        "The separate rounding-rule decision has no producer in E6c; its activity row remains absent."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B16-later.png"
+    }
+  ]
+}

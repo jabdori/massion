@@ -1,0 +1,95 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - generic
+      - button "내 계정" [expanded=false, ref=e6]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기, 확인 필요" [checked=true, ref=e7]
+      - button "검색" [expanded=false, ref=e8]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나 작업 중" [ref=e17]
+            - StaticText "하나"
+            - status "작업 중"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e18]
+            - StaticText "퀼"
+        - listitem [level=1]
+          - button "주노" [ref=e19]
+            - StaticText "주노"
+            - status "읽지 않음"
+    - generic
+      - generic
+        - button "우선순위" [expanded=false, ref=e14]
+        - button "정렬" [expanded=false, ref=e15]
+      - list "활동 보기"
+        - listitem [level=1]
+          - link "깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?" [ref=e20]
+            - strong
+              - StaticText "깨지는 테스트 고치기"
+            - StaticText "노트북의 Claude Code에게 처음 맡길까요?"
+            - status
+              - StaticText "읽지 않음"
+        - listitem [level=1]
+          - button "깨지는 테스트 고치기 작업 중 읽지 않음 결정 대기" [ref=e21]
+            - strong
+              - StaticText "깨지는 테스트 고치기"
+            - status "작업 중"
+              - StaticText "하"
+            - StaticText "읽지 않음"
+            - StaticText "결정 대기"
+        - listitem [level=1]
+          - button "PR #84 검토 읽지 않음 완료" [ref=e22]
+            - strong
+              - StaticText "PR #84 검토"
+            - StaticText "읽지 않음"
+            - StaticText "완료"
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e9]
+      - heading "하나" [level=1, ref=e10]
+        - button "하나" [ref=e16]
+      - button "작업 공간" [ref=e11]
+      - button "더 보기" [expanded=false, ref=e12]
+    - region "대화" [ref=e13]
+      - generic
+        - log
+          - paragraph
+            - StaticText "massion 저장소에서 깨지는 테스트 하나 고쳐 줘."
+          - generic
+            - paragraph
+              - StaticText "저장소가 노트북에 있어요. 노트북의 Claude Code에게 맡기려고 해요."
+            - button "복사" [ref=e28]
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - region "노트북의 Claude Code에게 처음 맡길까요?" [ref=e23]
+            - strong
+              - StaticText "노트북의 Claude Code에게 처음 맡길까요?"
+            - StaticText "09:12"
+            - DescriptionList
+              - term "받는 곳"
+              - definition
+                - StaticText "Claude Code · 노트북"
+              - term "보낼 내용"
+              - definition
+                - StaticText "massion 저장소에서 깨지는 테스트 하나 고쳐 줘. · massion 저장소"
+              - term "보내지 않는 것"
+              - definition
+                - StaticText "기억 · 다른 일 · 연결 키"
+              - term "주의"
+              - definition
+                - StaticText "보낸 요청은 거둘 수 없어요."
+            - button "맡기기" [ref=e29]
+            - button "나중에" [ref=e30]
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e24]
+          - button "파일 추가" [disabled, ref=e25]
+          - button "기본 권한" [ref=e26]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e27]
