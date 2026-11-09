@@ -131,7 +131,7 @@ for(const separator of ['\u200b','\u200c','\u2060','\uFE0F','\u{E0100}'])test('c
  const s=await setup(async()=>({...raw,fields}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.ok(page.fields.every(f=>f.masked&&f.value==='••••'));assert.ok(!JSON.stringify(s.store.inspect()).includes('123456'));validateMissionJournalLineage(s.store.inspect());
 });
 
-for(const [secret,reflection] of [['123456','１２３４５６'],['１２３４５６','123456'],['café','cafe\u0301'],['officer','oﬃcer']])test('compatibility-equivalent reflections cannot reach the journal '+secret,async()=>{
+for(const [secret,reflection] of [['123456','１２３４５６'],['１２３４５６','123456'],['café','cafe\u0301'],['officer','oﬃcer']] as const)test('compatibility-equivalent reflections cannot reach the journal '+secret,async()=>{
  const s=await setup(async()=>({...raw,title:'😀 '+reflection+' end',blocks:['Before '+reflection+' after'],fields:[{label:'Security code',name:'csc',type:'text',autocomplete:'one-time-code',value:secret}]}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;
  assert.equal(page.title,'😀 •••• end');assert.deepEqual(page.blocks,['Before •••• after']);assert.ok(!JSON.stringify(s.store.inspect()).includes(reflection));validateMissionJournalLineage(s.store.inspect());
 });
