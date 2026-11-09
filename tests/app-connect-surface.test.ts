@@ -146,3 +146,12 @@ test('leaving the conversation clears the host token entry before another page o
  runInContext('shellShow("results")',app.context);
  assert.equal(app.node('app-connect-token').value,'');assert.equal(app.node('app-connect-panel').hidden,true);assert.equal(state.posts.length,0);
 });
+
+test('mail connection in an empty first conversation retains More and the real connection button',async()=>{
+ const {app,state}=fixture();state.decisions=[{...decision,id:'mail-connect',title:'Gmail',question:'Gmail을 연결할까요?',connection:{appId:'app-gmail',slot:'gmail-token',label:'Gmail token',connected:false}}];await settle();
+ runInContext("connectionCatalog={logins:[{status:'detected'}],connections:[]};shellWorks=[];renderChat()",app.context);
+ assert.equal(app.node('header-more').hidden,false);
+ const card=find(app,'chat-decision-mail-connect');assert.ok(card,'host connection remains an actual decision');
+ const connect=button(card,copy('conversation.button.12'));assert.ok(connect);assert.equal(connect.tagName,'BUTTON');
+ await connect.fire('click');await settle();assert.equal(app.node('app-connect-panel').hidden,false);assert.equal(app.node('page-settings').hidden,true);assert.equal(state.posts.length,0);
+});

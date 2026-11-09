@@ -59,3 +59,16 @@ origins; workbench script/style hashes remain unchanged. Focused combined checks
 passed **123 tests, one real-DB skip, zero failures**, with root typecheck passing
 ([logs](p2-checks/)). Browser panel and desktop smoke evidence includes actual
 script/style execution, ready/resize messages and parent/network/API denial.
+
+## Mail-card contract and gate handoff
+
+The empty first-experience mail state now keeps the header More control and uses
+a native Connect button. Host-backed mail decisions use the existing connection
+card/form instead of being replaced by the first-task settings link. Regression
+tests cover the empty first conversation and the placeholder picker button.
+Both themes pass B24-connect-mail 23/23; all 22 B24/B25 runs pass 542/542 required
+checks with zero contract/visual/gap/infrastructure failures ([report](p2-contracts/report.md)).
+The exact 154 resolved #118 allowances and conditional removal patch are in
+[allow-list-follow-up/](allow-list-follow-up/README.md); apply them when #114 lands.
+
+Main `3ffdf51` was integrated without rebasing. Post-integration related checks passed 193 tests with one opt-in skip; the final mail/scoped app check passed 133/133 and typecheck passed. Linux Node 24.19.0 passed 23 app/document tests, 15 desktop tests, desktop typecheck and the complete actual app-panel script/style/resize smoke ([logs](p2-checks/)).

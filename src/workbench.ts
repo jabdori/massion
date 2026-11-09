@@ -1,3 +1,4 @@
+import {firstStyle,firstPanel,firstClient} from './first-experience.ts';
 import {workRoomStyle,workRoomClient} from './work-room-panel.ts';
 import {uiTokensStyle} from './ui-tokens.ts';
 import {copy,uiCopyClient} from './ui-copy.ts';
@@ -48,6 +49,7 @@ ${uiTokensStyle}
 .expired-ack-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px}.expired-ack-row input{width:auto;flex:none;margin-top:3px}
 ${chatStyle}
 ${appConnectStyle}
+${firstStyle}
 ${memberStyle}
 ${resultsStyle}
 ${schedulesStyle}
@@ -57,6 +59,7 @@ ${shellStyle}
 ${workRoomStyle}</style>
 </head>
 <body>
+${firstPanel}
 <div id="app" class="app">
 ${shellRail}
 ${shellSidebar}
@@ -1617,7 +1620,7 @@ function connectionLocked(){return !connectionCatalog||reconnectRequired||busy||
 function connectionControls(){const locked=connectionBusy||connectionLocked();for(const button of connectionButtons)button.disabled=locked;$('connection-fields').disabled=connectionLocked()||connectionBusy&&!connectionReading||!connectionCatalog||!!connectionCatalog.host?.managed;}
 function installConnections(body){
  if(!body||!Array.isArray(body.providerTypes)||!Array.isArray(body.connections)||!body.runtime||!Array.isArray(body.runtime.connections)||!Array.isArray(body.runtime.authorizations))throw new Error(copy("legacy.invalid-connection-catalog"));
- connectionCatalog=body;runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();
+ connectionCatalog=body;runtimeConfiguration=body.runtime;executionDrafts.clear();providerNotice();if(snapshot)renderMission();renderConnections();if(chatView)renderChat();else firstRoute();
 }
 function connectionField(form,title,node){const lab=element('label',title);if(node.id)lab.htmlFor=node.id;form.append(lab,node);return node;}
 async function connectionWrite(path,body){
@@ -1705,6 +1708,7 @@ async function connect() {
   if (!selectedId && initialReference.present) report(copy("legacy.invalid-mission-link-enter-a-valid-mission"), 'error');
 }
 ${appConnectClient}
+${firstClient}
 ${chatClient}
 ${memberClient}
 ${resultsClient}

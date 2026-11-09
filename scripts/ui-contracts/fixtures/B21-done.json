@@ -9,9 +9,7 @@
       "readySelector": "#chat-log"
     }
   ],
-  "gaps": [
-    "The host creates no automatic greeting on member admission. The stored member link and empty member conversation are supported; no admission is performed by this read-only fixture."
-  ],
+  "gaps": [],
   "routes": {
     "/assistant/conversation": {
       "status": 200,
@@ -367,7 +365,7 @@
       "body": {
         "feedId": "fixture:B2",
         "cursor": 1,
-        "head": 1,
+        "head": 0,
         "members": [
           {
             "id": "member-quill",
@@ -398,17 +396,14 @@
           }
         ],
         "apps": [],
-        "segment": {
-          "number": 1,
-          "revision": 1,
-          "closed": false,
-          "full": false,
-          "previous": null,
-          "messages": []
-        },
+        "segment": null,
         "turns": [],
         "decisions": [],
-        "briefings": []
+        "briefings": [],
+        "greeting": {
+          "id": "greeting:member-sem",
+          "text": "안녕하세요, 셈이에요.\n표 계산과 합계 확인을 맡을게요.\n무엇부터 맡길까요?"
+        }
       }
     }
   }

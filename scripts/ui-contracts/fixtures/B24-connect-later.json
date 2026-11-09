@@ -1,10 +1,8 @@
 {
   "screen": "B24-connect-later",
   "extends": "B24-connect",
-  "description": "GitHub connector: later.",
-  "gaps": [
-    "The read-only contract host loads the deferred result directly. The E5b acceptance harness proves Later and Ask again through the decision endpoint."
-  ],
+  "description": "GitHub connector: later. The production transition is covered by the E5b action harness; this contract capture reads its resulting fixture state.",
+  "gaps": [],
   "routes": {
     "/assistant/conversation": {
       "status": 200,

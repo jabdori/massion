@@ -1,0 +1,77 @@
+
+> massion-desktop@0.1.0-dev.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+✔ documents are bounded, expire, and only exact unguessable paths resolve (16.307402ms)
+✔ browser documents have a separate loopback origin, own CSP, no credentials or publish endpoint (232.320337ms)
+✔ browser view publishes installed app HTML outside the workbench origin and closes with it (215.446775ms)
+✔ MCP manifests validate one local server, pinned tools and exact scope (25.34351ms)
+✔ MCP install waits for owner; simultaneous identical answers commit once (32.804385ms)
+✔ changed tools or endpoint require owner approval; removing tools narrows (19.33116ms)
+✔ only pinned tools reach transport; changed live list refuses before sending (19.713697ms)
+✔ write timeout is durable unknown and never resent across service restart (53.394949ms)
+✔ connect writes token once to its own slot; no token or token hash enters journal or readback (11.188084ms)
+✔ secret adapter failure is redacted, leaves uninstalled unknown, and never retries (7.306835ms)
+✔ HTTP connect uses owner drain/feed guards and returns metadata only (123.022176ms)
+✔ MCP app UI is admitted with the app and returned only as isolated frame data (6.088349ms)
+✔ a connection held across drain cannot write its secret or install (42.489362ms)
+✔ database replacement after a connection claim fences the secret write (2.350682ms)
+✔ an ambiguous committed tool claim never invokes, including after restart (9.925723ms)
+✔ MCP schemas, arguments and results preserve finite JSON fractions (7.95987ms)
+✔ connection cards localize permission labels and approved updates reuse the saved slot (5.537688ms)
+✔ only an evidenced owner reconciliation releases the exact unknown call without resending it (45.751783ms)
+✔ unknown app calls are projected without arguments and reconcile over the existing owner route (34.902613ms)
+✔ lost claim receipt persists unknown and permits owner reconciliation without dispatch (6.184681ms)
+✔ restart reads quarantine abandoned pending claims durably before owner reconciliation (11.277291ms)
+✔ replays and reads never quarantine a live in-process call or dispatch a duplicate (5.726437ms)
+✔ replay alone persists abandoned uncertainty once, while a stored receipt is never overwritten (12.430446ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3000.903138
+✔ a v1-speaking impostor cannot receive owner commands or the launch secret (159.110442ms)
+✔ owner payload is not sent if the authenticated socket closes before dispatch (28.44306ms)
+✔ a fresh proof relayed from another port does not authenticate the impostor (48.290798ms)
+✔ authenticated daemon gates commands and SSE while preserving owner negotiation and writes (131.115752ms)
+✔ desktop build preserves iframe client strings and appends a separate focus bridge (1550.984779ms)
+✔ desktop permits only controlled document paths without weakening workbench script and style policy (12.243197ms)
+✔ authenticated app view is published by main; URLs and failed or unrelated replies cannot publish (177.969441ms)
+✔ a malformed request retains the authenticated host rejection without local JSON parsing (37.282753ms)
+✔ workbench requests require the owned main frame and committed app URL (7.640374ms)
+✔ untrusted URLs, subframes and renderer capabilities stay outside the host boundary (13.221979ms)
+✔ desktop uses existing version negotiation: ready (129.29494ms)
+✔ desktop uses existing version negotiation: update-needed (30.694826ms)
+✔ desktop uses existing version negotiation: restart-needed (11.808535ms)
+✔ proxy forwards one command, refuses redirects and never exposes non-protocol routes (28.485475ms)
+✔ only owner exceptions notify; progress, duplicate revisions and stale feeds stay quiet (1.739564ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3539.490575
+
+> massion-desktop@0.1.0-dev.0 build
+> node build.mjs
+
+(node:149) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+> massion-desktop@0.1.0-dev.0 smoke
+> node tests/smoke.mjs
+
+[222:1109/162819.530225:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[222:1109/162821.370885:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[222:1109/162821.371513:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+{"electronSmoke":"passed","title":"Massion","accessibilityNodes":945,"security":"sandbox, isolation, CSP, navigation, permissions","theme":"dark/light","windowLifecycle":"close and reopen","notification":"existing Work pane and keyboard focus","artifacts":"/app/desktop/smoke-artifacts"}

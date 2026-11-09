@@ -1,0 +1,86 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B22-room",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "dark",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B22-room",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B22-room-steps",
+    "theme": "light",
+    "desktop": true,
+    "mobile": true,
+    "commands": 0
+  }
+]

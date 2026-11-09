@@ -65,7 +65,7 @@ test('the install card shows its detail line and rows; the done line offers Remo
 });
 
 test('an installed app adds a rail icon; its page lists the app view in the sidebar and opens an item; a matching Work gets the app tab',async()=>{
- const {app}=fixture();await settle();
+ const {app,posted}=fixture();await settle();
  const rail=app.node('rail-apps');assert.equal(rail.hidden,false);const icon=rail.children[0]!;assert.equal(icon.attributes.get('aria-label'),'GitHub');assert.equal(icon.children[0]!.className,'app-branch');assert.equal(icon.children[0]!.textContent,'');assert.equal(icon.children[0]!.attributes.get('aria-hidden'),'true');
  await icon.fire('click');await settle();
  assert.equal(app.node('page-app').hidden,false);assert.equal(app.node('page-chat').hidden,true);assert.equal(icon.attributes.get('aria-current'),'page');
@@ -78,6 +78,9 @@ test('an installed app adds a rail icon; its page lists the app view in the side
  const tabs=app.node('pane-tabs').children.map(t=>t.children[0]!.textContent);assert.deepEqual(tabs,['PR #84 review','PR #84']);
  await app.node('pane-tabs').children[1]!.children[0]!.fire('click');await settle();
  assert.equal(app.node('pane-app').hidden,false);assert.equal(app.node('pane-body').hidden,true);assert.match(app.node('pane-app').textContent,/Files 2/);
+ const source=button(app.node('pane-app'),'GitHub')[0];assert.ok(source,'the app item has a source navigation control before its heading');
+ assert.equal(app.node('pane-app').children[0],source);
+ await source.fire('click');await settle();assert.equal(app.node('page-app').hidden,false);assert.equal(posted.length,0);
  await button(side,copy('sidebar.link.12'))[0]!.fire('click');await settle();assert.equal(app.node('page-settings').hidden,false);assert.match(app.node('settings-apps-body').textContent,sequence(copy('sidebar.heading.01')));
 });
 
@@ -167,7 +170,7 @@ test('every app read draws only its newest request: an item selected A, B, A aga
  (app.context as any).paneOpen('mission:m','work:w','PR #84 review');await settle();
  const tabs=app.node('pane-tabs').children;await tabs[1]!.children[0]!.fire('click');await settle();await tabs[0]!.children[0]!.fire('click');await settle();await tabs[1]!.children[0]!.fire('click');await settle();
  pending[1]!.done();await settle();pending[0]!.done();await settle();
- assert.equal(app.node('pane-app').textContent,'item 84 #2');
+ assert.equal(app.node('pane-app').children.find(n=>n.tagName==='H2')?.textContent,'item 84 #2');assert.doesNotMatch(app.node('pane-app').textContent,/#1/);
 });
 
 test('a late Settings > Apps read never replaces a newer one',async()=>{
