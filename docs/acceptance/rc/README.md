@@ -331,3 +331,13 @@ new main screens in both themes pass their scoped gate as well (302/316 required
 retained room diagnostics remain listed). See `main-schedules-integration.json`.
 Schedules now have multiple Representative kinds, without member binding; member
 scheduleCount remains zero rather than attributing Representative schedules.
+
+## Aggregate shutdown follow-up
+
+A delayed review reproduced an unknown device causing host Promise.all to return
+before a held login runner finished cleanup. Await all drain promises with
+allSettled and preserve every rejection as unsettled. The real HTTP regression
+failed before this change; 38 relevant HTTP/login/device/CLI/lifecycle checks pass
+with one actual-DB case skipped locally. Typecheck passes. The global bounded
+shutdown deadline and device uncertainty remain unchanged; cleanup is never
+reported finished merely because another subsystem rejected.

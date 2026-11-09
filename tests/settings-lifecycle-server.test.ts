@@ -16,6 +16,7 @@ import {APPS_ID} from '../src/apps.ts';
 import {MEMBERS_ID,MembersService,applyMembers,PROPOSAL_PREFIX,proposalDecisionId,admittedMemberId} from '../src/members.ts';
 import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
 import {DEVICES_ID} from '../src/devices.ts';
+import {LoginConnections} from '../src/connection-logins.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -48,9 +49,10 @@ test('remote device HTTP commands retain the external-member decision and never 
  await app.create({id:'intake',purpose:'Remote fixture',scope:'fixture',constraints:[],criteria:{version:1,description:'Check independently',oracle:'fixture/v1'}},'local-owner','create-device-intake');
  await app.dispatch({missionId:'intake',commandId:'admit-device-work',expectedRevision:1,actorId:'local-owner',command:{type:'admit-work',workId:'remote',title:'Read repository',budget:8}});
  await app.dispatch({missionId:'intake',commandId:'assign-device-work',expectedRevision:2,actorId:'local-owner',command:{type:'assign',workId:'remote',assignment:{id:'remote:executor',taskId:'remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Device HTTP fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
- let deliveries=0,connects=0,connected=false,connectStarted:(()=>void)|undefined,heldConnect:Promise<void>|undefined;
+ let deliveries=0,connects=0,connected=false,connectStarted:(()=>void)|undefined,heldConnect:Promise<void>|undefined,releaseLogin!:()=>void,startLogin!:()=>void;
+ const loginStarted=new Promise<void>(resolve=>startLogin=resolve),loginHeld=new Promise<void>(resolve=>releaseLogin=resolve),logins=new LoginConnections(async()=>{startLogin();await loginHeld;return {spawned:true,exitCode:null,stdout:'',stderr:'',aborted:true,timedOut:false,overflow:false};});t.after(()=>releaseLogin());
  let intakeMissionId='intake';const connections={list:()=>({representative:{intakeMissionId}})} as unknown as ConnectionWorkbench;
- const server=createWorkbench(store,root,{connections,scheduleIntervalMs:0,effectAdapters:[{id:'remote-adapter',kind:'external-member',async send(input){deliveries++;return {idempotencyKey:input.idempotencyKey,remoteId:'arrival',outcome:'received',detail:'Arrival only'};}}],deviceAdapters:[{id:'remote-adapter',async inspect(){return {status:connected?'connected':'offline'};},async connect(){connects++;connectStarted?.();await heldConnect;connected=true;return {status:'connected'};},async disconnect(){connected=false;return {status:'offline'};}}]});
+ const server=createWorkbench(store,root,{connections,logins,scheduleIntervalMs:0,effectAdapters:[{id:'remote-adapter',kind:'external-member',async send(input){deliveries++;return {idempotencyKey:input.idempotencyKey,remoteId:'arrival',outcome:'received',detail:'Arrival only'};}}],deviceAdapters:[{id:'remote-adapter',async inspect(){return {status:connected?'connected':'offline'};},async connect(){connects++;connectStarted?.();await heldConnect;connected=true;return {status:'connected'};},async disconnect(){connected=false;return {status:'offline'};}}]});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  await server.effectDecisions.propose({missionId:'intake',workId:'remote',taskId:'remote:root',stepId:'handoff',request:{kind:'external-member',adapterId:'remote-adapter',deviceId:'laptop',deviceName:'Laptop',agentId:'codex',agentName:'Codex',instruction:'Read repository',scope:'fixture repository'}});
  const decisionId=(await server.effectDecisions.decisions())[0]!.id,post=(path:string,body:unknown)=>fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -75,7 +77,9 @@ test('remote device HTTP commands retain the external-member decision and never 
  assert.equal(deliveries,1);assert.equal((await store.load('intake'))!.value.works[0].effects[0].status,'unknown');validateMissionJournalLineage(store.inspect());
  let release!:()=>void;const started=new Promise<void>(resolve=>{connectStarted=resolve;});heldConnect=new Promise<void>(resolve=>{release=resolve;});t.after(()=>release());
  const pending=post('/assistant/devices',{commandId:'connect-during-drain',deviceId:'laptop',action:'connect'});await started;
- const draining=server.drain();release();assert.equal((await pending).status,200);assert.deepEqual(await draining,{status:'unsettled',timedOut:false});validateMissionJournalLineage(store.inspect());
+ const loginResponse=logins.recheck('codex-cli');await loginStarted;let drainFinished=false;const draining=server.drain().then(result=>{drainFinished=true;return result;});release();assert.equal((await pending).status,200);
+ await new Promise(resolve=>setTimeout(resolve,30));assert.equal(drainFinished,false,'a rejected device drain must still wait for the login runner');releaseLogin();await loginResponse;
+ assert.deepEqual(await draining,{status:'unsettled',timedOut:false});validateMissionJournalLineage(store.inspect());
 });
 
 test('shutdown reports an unconfirmed key write as unsettled instead of drained',{timeout:3000},async t=>{

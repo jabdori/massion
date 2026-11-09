@@ -87,3 +87,7 @@ writes for that connection, then clears the persisted cache before touching the
 credential. Discovery rechecks its generation after persistence too. Only device
 errors before a durable claim/effect become explicit admission refusals; errors
 after the claim retain uncertainty.
+
+Host drain awaits all cleanup promises even when one rejects. Record any rejection
+as unsettled only after the other cleanup tasks have completed; the existing
+bounded shutdown timer still governs a task that never finishes.
