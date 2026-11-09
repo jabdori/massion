@@ -15,6 +15,7 @@ import {DomainError,hash as valueHash} from '../src/domain.ts';
 import {APPS_ID} from '../src/apps.ts';
 import {MEMBERS_ID,MembersService,applyMembers,PROPOSAL_PREFIX,proposalDecisionId,admittedMemberId} from '../src/members.ts';
 import {ASSISTANT_ACTOR_ID} from '../src/assistant-conversation.ts';
+import {DEVICES_ID} from '../src/devices.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -56,6 +57,8 @@ test('remote device HTTP commands retain the external-member decision and never 
  assert.equal((await post('/assistant/devices',{commandId:'early-connect',deviceId:'laptop',action:'connect'})).status,403);
  assert.equal((await post('/assistant/decisions',{commandId:'approve-remote',decisionId,answer:'act'})).status,200);assert.equal(deliveries,1);
  const input={commandId:'connect-laptop',deviceId:'laptop',action:'connect'},responses=await Promise.all([post('/assistant/devices',input),post('/assistant/devices',input)]);assert.ok(responses.every(r=>r.status===200));assert.equal(connects,1);
+ const receipt=await fetch(origin+'/assistant/devices?'+new URLSearchParams(input));assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'settled');
+ const mismatch=await (await fetch(origin+'/assistant/devices?'+new URLSearchParams({...input,action:'disconnect'}))).json();assert.equal(mismatch.status,'conflict');assert.equal(connects,1);
  assert.equal((await (await fetch(origin+'/assistant/devices')).json()).devices[0].status,'connected');
  await app.dispatch({missionId:'intake',commandId:'admit-next-device-work',expectedRevision:(await store.load('intake'))!.revision,actorId:'local-owner',command:{type:'admit-work',workId:'next-remote',title:'Another remote request',budget:8}});
  await app.dispatch({missionId:'intake',commandId:'assign-next-device-work',expectedRevision:(await store.load('intake'))!.revision,actorId:'local-owner',command:{type:'assign',workId:'next-remote',assignment:{id:'next-remote:executor',taskId:'next-remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Pending device fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
@@ -82,8 +85,9 @@ test('shutdown reports an unconfirmed key write as unsettled instead of drained'
 });
 
 test('app and member receipt reads cannot label replacement-database state with their original HTTP feed',async t=>{
- const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false,flipLookup=false;
- const store=new Proxy(original,{get(_target,key){if(key==='lookupOperation')return async(input:any)=>{if(flipLookup){active=replacement;flipLookup=false;}return active.lookupOperation(input);};if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+ const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false,flipLookup=false,flipDevice=false;
+ const store=new Proxy(original,{get(_target,key){if(key==='load')return async(id:string)=>{if(flipDevice&&id===DEVICES_ID){active=replacement;flipDevice=false;}return active.load(id);};if(key==='lookupOperation')return async(input:any)=>{if(flipLookup){active=replacement;flipLookup=false;}return active.lookupOperation(input);};if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());armed=true;const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps'),body=await response.json();assert.equal(response.status,503);assert.equal(body.reason,'feed');assert.equal(body.apps,undefined);
  active=original;flipLookup=true;const receipt=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/members?commandId=lost-archive&action=archive&memberId=member-fixture');assert.equal(receipt.status,503);assert.equal((await receipt.json()).reason,'feed');
+ active=original;flipDevice=true;const device=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/devices?commandId=lost-connect&action=connect&deviceId=device-fixture');assert.equal(device.status,503);assert.equal((await device.json()).reason,'feed');
 });

@@ -21,6 +21,10 @@ type Admission={id:string;effect?:{kind:string;answer?:string;request:{kind:stri
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 function ensure(v:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts v {if(!v)throw new DomainError(message,code);}
+function deviceCommand(input:unknown):{commandId:string;deviceId:string;action:'connect'|'disconnect'}{
+ ensure(exact(input,['commandId','deviceId','action'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.deviceId)&&['connect','disconnect'].includes(input.action),'Exact device command required');
+ return {commandId:input.commandId,deviceId:input.deviceId,action:input.action};
+}
 export const isDevicesState=(v:unknown):v is DevicesState=>!!v&&typeof v==='object'&&(v as {kind?:unknown}).kind==='devices';
 function applyDevices(current:DevicesState|null,command:DevicesCommand,actor:Actor){
  ensure(['claim-device','settle-device'].includes(command?.type),'Unknown device command');
@@ -62,8 +66,11 @@ export class DevicesService {
   }));return {revision:state?.revision??0,devices};
  }
  async act(input:unknown,expectedFeed?:string):Promise<CommitResult<DevicesState>>{
-  ensure(exact(input,['commandId','deviceId','action'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.deviceId)&&['connect','disconnect'].includes(input.action),'Exact device command required');
-  const value=structuredClone(input),task=this.#act(value as {commandId:string;deviceId:string;action:'connect'|'disconnect'},expectedFeed);this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}
+  const value=deviceCommand(input),task=this.#act(value,expectedFeed);this.#active.add(task);try{return await task;}finally{this.#active.delete(task);}
+ }
+ async outcome(input:unknown){
+  const command=deviceCommand(input),state=await this.#store.load(DEVICES_ID) as Snapshot<DevicesState>|null,op=state?.value.operations.find(o=>o.id===command.commandId);
+  return {commandId:command.commandId,status:!op?'unknown':op.deviceId!==command.deviceId||op.action!==command.action?'conflict':op.status==='unknown'?'unknown':'settled'};
  }
  async #feed(expected:string){if((await this.#store.readState()).feedId!==expected)throw new FeedAdmissionError();}
  async #act(input:{commandId:string;deviceId:string;action:'connect'|'disconnect'},expectedFeed?:string):Promise<CommitResult<DevicesState>>{

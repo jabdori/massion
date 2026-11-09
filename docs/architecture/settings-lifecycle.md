@@ -72,3 +72,11 @@ handoff cannot erase the approved binding. This is connectivity authority only,
 never Work dispatch authority. Legacy claims without display metadata retain
 their replay shape. Definite member reducer refusals are explicit rejected HTTP
 outcomes; uncertain store commits remain unclassified and fenced.
+
+Superseded read-only rechecks are terminal stale observations, not uncertain
+writes. Device response recovery retains command/device/action identity and reads
+the exact durable operation's settlement before unlocking its inverse; an unknown
+claim stays fenced. Key replacement must invalidate persisted discovery as well
+as memory, so restart cannot restore the previous account's model metadata.
+CLI login/status drain must await the underlying runner's cleanup promise, even
+when the bounded response has already rejected on cancellation.

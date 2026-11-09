@@ -262,3 +262,37 @@ client and backup checks pass, including restart with no current admissions and
 original-journal validation. Typecheck passes. No UI contract or browser assertion
 is changed. The previous integrated head had e2e 14/14 and full-screen gate green;
 current-head CI and Codex checks supersede that prior result.
+
+## Superseded reads, device receipts and credential metadata
+
+The final review reproduced terminal stale rechecks being misclassified as unknown,
+and confirmed device commands remaining locked after lost HTTP replies. Settings
+now treats only read-only recheck `stale` as terminal; stale key writes remain
+fenced. Retain the exact device command/action/device identity, and use a read-only
+receipt query to unlock only a durable connected/offline settlement. Physical
+inspection alone, missing/unknown/mismatched receipts and replaced feeds never
+certify the command or resend its effect. The two client regressions and real
+HTTP receipt test failed first; 54 related checks and the nine-state actual-host
+browser flow pass afterward.
+
+Key replacement invalidates persisted model discovery before the secret write,
+using the existing settings method. Cache failure refuses the key write and
+preserves in-memory models; unknown key outcomes cannot restore old model lists
+on restart or trigger a resend. Four cache regressions failed before the fix;
+28 related cache/lifecycle checks pass. No secret is included in cache metadata.
+
+CLI cancellation now tracks the actual runner promise separately from its bounded
+response wrapper. The runner waits for its existing 100ms process-group SIGKILL
+escalation even if the direct child closes earlier. Real local helper regressions
+cover ignored SIGTERM, caller cancellation before drain, and a stdio-detached
+surviving descendant. All failed before their fixes, then passed; the existing
+one-second cleanup bound and caller timeout remain unchanged. No CLI action is
+retried and no provider executable is invoked by these tests.
+
+The combined final review subset passes 74/74 without skips; root typecheck and
+diff checks pass. The nine-state actual-host browser flow passes after these
+changes. PR #135's frame fix is present in the merge ancestry. The prior head's
+full verification and all-screen gate passed, but its three E2E attempts failed
+at different browser waits/clicks; the first two failure snapshots were empty.
+Those runs are retained as failure evidence, not counted as successful validation.
+Current-head CI and Codex checks remain authoritative.

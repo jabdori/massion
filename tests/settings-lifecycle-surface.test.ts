@@ -9,6 +9,7 @@ function fixture(){
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});return new Promise(resolve=>{state.pending=resolve;});}
   if(path.startsWith('/assistant/members?')){const commandId=new URL('http://fixture'+path).searchParams.get('commandId')!;return reply({feedId:'feed:a',commandId,status:state.receipts.has(commandId)?'replayed':'unknown'});}
+  if(path.startsWith('/assistant/devices?')){const commandId=new URL('http://fixture'+path).searchParams.get('commandId')!;return reply({feedId:'feed:a',commandId,status:state.receipts.has(commandId)?'settled':'unknown'});}
   if(path==='/assistant/members')return reply({feedId:'feed:a',revision:1,members:state.members,archived:state.archived});
   if(path==='/assistant/devices')return reply({feedId:'feed:a',revision:0,devices:state.devices});
   if(path==='/connections')return reply({connections:[],modelGroups:[],runtime:{connections:[],defaultRoutes:[]},configHash:'hash-a'});
@@ -25,6 +26,22 @@ test('device reconnect sends once while overlapping and remains locked after an 
  const {app,state}=fixture();await settle();await open(app,'devices');const button=byId(app,'settings-device-laptop');assert.ok(button);
  const first=button.fire('click');await settle();await button.fire('click');assert.equal(state.posted.length,1);assert.equal(state.posted[0]!.path,'/assistant/devices');assert.equal(state.posted[0]!.body.action,'connect');
  state.pending!(Promise.reject(Error('Lost response')));await first;await settle();await byId(app,'settings-device-laptop').fire('click');assert.equal(state.posted.length,1);
+});
+
+test('a lost device reply unlocks disconnect only after the exact operation has settled',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'devices');const first=byId(app,'settings-device-laptop').fire('click');await settle();
+ const commandId=state.posted[0]!.body.commandId;state.devices[0]!.status='connected';state.pending!(Promise.reject(Error('Lost connect reply')));await first;await settle();
+ assert.equal(byId(app,'settings-device-laptop').disabled,true,'Inspection cannot settle an uncertain command');
+ state.receipts.add(commandId);await runInContext('settingsLoad("devices")',app.context);assert.equal(byId(app,'settings-device-laptop').disabled,false);assert.equal(state.posted.length,1);
+ const inverse=byId(app,'settings-device-laptop').fire('click');await settle();assert.equal(state.posted[1]!.body.action,'disconnect');assert.notEqual(state.posted[1]!.body.commandId,commandId);state.pending!(reply({status:'committed',revision:4}));await inverse;
+});
+
+test('a superseded read-only recheck is settled while a stale key write stays fenced',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'devices');
+ for(const action of ['recheck','key']){
+  const first=runInContext(`settingsLifecyclePost('connection:${action}','/connections/${action}/${action}',{expectedConfigHash:'hash'})`,app.context);await settle();state.pending!(reply({status:'stale'}));await first;
+  assert.equal(runInContext(`settingsLifecycleLocked('connection:${action}')`,app.context),action==='key');
+ }
 });
 
 test('member archive uses the owner command and a stored response refreshes the member list',async()=>{
