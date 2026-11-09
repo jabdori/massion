@@ -8,10 +8,10 @@ const payment={kind:'payment',adapterId:'fixture-payment',checkoutId:'checkout:1
 const external={kind:'external-member',adapterId:'fixture-external',deviceId:'device:1',deviceName:'내 노트북',agentId:'agent:1',agentName:'Claude Code',instruction:'깨지는 테스트 고치기',scope:'massion'};
 function decision(request:any=payment){return {id:'decision:1',at,title:'토너 주문',question:'34,000원 결제할까요?',rows:[['상품',request.item||request.instruction]],action:request.kind==='payment'?'34,000원 결제':'맡기기',state:'open',effect:{kind:request.kind,missionId:'mission:1',workId:'work:1',effectId:'effect:1',status:'pending',request}};}
 function fixture(d:any=decision()){
- const state={decisions:[d],feed:'feed:a',hold:null as Promise<void>|null,deadline:undefined as number|undefined,memberDecisions:[] as any[],answer:reply({})};
+ const state={decisions:[d],feed:'feed:a',hold:null as Promise<void>|null,deadline:undefined as number|undefined,memberDecisions:[] as any[],answer:reply({}),head:1,readHold:null as Promise<void>|null};
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){if(state.hold)await state.hold;return state.answer;}
-  if(path.startsWith('/assistant/conversation'))return reply({feedId:state.feed,cursor:1,head:1,runDeadlineAt:state.deadline,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[],decisions:path.includes('member=')?state.memberDecisions:state.decisions,members:[{id:'member:1',name:'민수'}]});
+  if(path.startsWith('/assistant/conversation')){if(state.readHold)await state.readHold;const segment=Number(new URLSearchParams(path.split('?')[1]).get('segment')||state.head);return reply({feedId:state.feed,cursor:1,head:state.head,runDeadlineAt:state.deadline,segment:{number:segment,revision:1,closed:false,full:false,previous:segment>1?'assistant-conversation:'+String(segment-1):null,messages:[]},turns:[],decisions:path.includes('member=')?state.memberDecisions:state.decisions,members:[{id:'member:1',name:'민수'}]});}
   if(path==='/assistant/works')return reply({feedId:state.feed,works:[]});
   if(path.startsWith('/read-state'))return reply({feedId:state.feed,cursor:1,snapshot:null});
   if(path.startsWith('/events'))return reply({feedId:state.feed,cursor:1,events:[]});
@@ -113,7 +113,7 @@ test('external admission shows an agent icon and opens devices without answering
 test('expired payments stop scheduling while an overdue run still refreshes after one second',async()=>{
  const now=Date.now(),d=decision();d.effect.request={...payment,expiresAt:now+30000};const {app,state}=fixture(d);await settle();app.context.Date=class extends Date{static now(){return now;}};
  const timers=new Map<number,{delay:number}>();let next=0;app.context.setTimeout=(_run:()=>void,delay:number)=>{timers.set(++next,{delay});return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
- await refresh(app);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))!.delay,31000);
+ await refresh(app);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))!.delay,30000);
  state.deadline=now-1;await refresh(app);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))!.delay,1000);
  state.deadline=undefined;state.decisions=[{...d,effect:{...d.effect,request:{...payment,expiresAt:now-1}}}];await refresh(app);assert.equal(runInContext('chatPendingTimer',app.context),0);
 });
@@ -137,4 +137,25 @@ test('only a same-feed confirmed pre-admission rejection unlocks an effect decis
   if(kind==='rejected'){assert.ok(button(app.node('chat-log'),'34,000원 결제'));await button(app.node('chat-log'),'나중에').fire('click');await settle();assert.deepEqual(posts(app).map(p=>JSON.parse(p.options.body).answer),['act','later']);}
   else {assert.equal(button(app.node('chat-log'),'34,000원 결제'),undefined);assert.equal(posts(app).length,1);}
  }
+});
+
+
+test('deferred decisions rebind Ask again after earlier/latest segment navigation',async()=>{
+ const d={...decision(),state:'later',line:'34,000원 결제'}, {app,state}=fixture(d);state.head=2;await settle();
+ const old=button(app.node('chat-log'),'다시 묻기');assert.ok(old);
+ await app.node('chat-earlier').fire('click');await settle();assert.equal(runInContext('chatSegment',app.context),1);assert.equal(button(app.node('chat-log'),'다시 묻기'),undefined);
+ await app.node('chat-latest').fire('click');await settle();assert.equal(runInContext('chatSegment',app.context),null);
+ await old.fire('click');await settle();assert.equal(posts(app).length,0);
+ await button(app.node('chat-log'),'다시 묻기').fire('click');await settle();assert.equal(posts(app).length,1);assert.equal(JSON.parse(posts(app)[0]!.options.body).answer,'ask');
+});
+
+test('unchanged checkout expires locally while the scheduled read is held',async()=>{
+ let now=Date.now();const d=decision();d.effect.request={...payment,expiresAt:now+30000};const {app,state}=fixture(d);await settle();app.context.Date=class extends Date{static now(){return now;}};
+ const timers=new Map<number,{run:()=>void;delay:number}>();let next=0;app.context.setTimeout=(run:()=>void,delay:number)=>{timers.set(++next,{run,delay});return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ runInContext('chatScheduleRead()',app.context);const timer=timers.get(runInContext('chatPendingTimer',app.context))!;
+ const generation=runInContext('chatGeneration',app.context),before=JSON.stringify(state.decisions);assert.equal(button(app.node('chat-log'),'34,000원 결제').disabled,false);
+ let release!:()=>void;state.readHold=new Promise<void>(r=>{release=r;});now+=timer.delay;timer.run();
+ try{assert.equal(button(app.node('chat-log'),'34,000원 결제').disabled,true);assert.equal(button(app.node('chat-log'),'나중에').disabled,false);await button(app.node('chat-log'),'34,000원 결제').fire('click');assert.equal(posts(app).length,0);}
+ finally{state.readHold=null;release();await settle();}
+ assert.equal(timer.delay,30000);assert.equal(JSON.stringify(state.decisions),before);assert.equal(runInContext('chatGeneration',app.context),generation);assert.equal(button(app.node('chat-log'),'34,000원 결제').disabled,true);
 });

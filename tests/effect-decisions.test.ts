@@ -163,3 +163,14 @@ test('HTTP marks pre-admission refusal explicitly but not a failure after owner 
   const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/decisions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId:'act',decisionId,answer:'act'})}),body=await response.json();assert.equal(response.status,403);assert.equal(body.phase,afterApproval?undefined:'admission');assert.equal(body.outcome,afterApproval?undefined:'rejected');assert.equal(calls,0);assert.equal((await s.read()).effects[0]!.ownerDecision!.state,afterApproval?'approved':'open');
  }
 });
+
+
+for(const outcome of ['succeeded','failed'] as const)test(outcome+' receipt preserves an independent Work blocker recorded after dispatch',async()=>{
+ for(const blocked of [false,true]){
+  const blocker={code:'verification_failed' as const,detail:'Independent verification failed'};let calls=0;
+  const s=await setup({id:'fixture-payment',kind:'payment',async send(input){calls++;if(blocked){const snapshot=(await s.store.load('intake'))!;await s.app.dispatch({missionId:'intake',commandId:'independent-block',expectedRevision:snapshot.revision,actorId:'local-owner',command:{type:'block-work',workId:'work',blocker}});}return {idempotencyKey:input.idempotencyKey,remoteId:'order-reply',outcome,detail:'Fixture receipt'};}});
+  await s.propose();const id=(await s.read()).effects[0]!.id;await s.service.decide({commandId:'pay',decisionId:id,answer:'act'});
+  const w=await s.read();assert.equal(w.effects[0]!.status,outcome);assert.equal(w.execution,blocked?'blocked':'active');assert.deepEqual(w.blocker,blocked?blocker:undefined);assert.equal(w.acceptance,'pending');validateMissionJournalLineage(s.store.inspect());
+  await s.service.decide({commandId:'pay',decisionId:id,answer:'act'});assert.equal(calls,1);assert.equal((await s.read()).execution,w.execution);
+ }
+});

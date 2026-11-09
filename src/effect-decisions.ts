@@ -91,7 +91,7 @@ export function applyEffectDecision(mission:Mission,c:EffectDecisionCommand,acto
   case 'record-owner-effect':{
    exact(c,['type','workId','effectId','receipt']);ensure(!w.runtimeRecovery&&!w.runtimeInterruption&&d.dispatch&&d.settledAt===undefined&&e.status==='unknown','Only the original uncertain dispatch accepts its receipt','conflict');d.settledAt=at;
    if(c.receipt){validateReceipt(c.receipt,d);d.receipt=structuredClone(c.receipt);e.status=c.receipt.outcome==='received'?'unknown':c.receipt.outcome;e.receipt=c.receipt.detail;}
-   if(e.status!=='unknown'&&w.execution==='blocked'&&!w.runtimeRecovery&&!w.runtimeInterruption&&!w.effects.some(e=>e.status==='unknown'||e.status==='pending'))w.execution='active';break;
+   if(e.status!=='unknown'&&w.execution==='blocked'&&!w.blocker&&!w.runtimeRecovery&&!w.runtimeInterruption&&!w.effects.some(e=>e.status==='unknown'||e.status==='pending'))w.execution='active';break;
   }
  }
  validateOwnerEffect(e);
