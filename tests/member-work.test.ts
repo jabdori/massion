@@ -661,7 +661,7 @@ test('Q13 workers receive pinned constraints, memory and source contents after n
 
  test('Q14 member Work retains a challenge and concession before its separate checking seat',async t=>{
  const f=await setup(t);await f.admit();f.script.push(v2('On it.','Challenge evidence','Quill'));await f.say(f.assistant,'Challenge evidence');await f.assistant.idle();
- const w=(await f.intake()).works.at(-1)!;assert.ok(w.room,JSON.stringify({tasks:w.tasks,blocker:w.blocker,effects:w.effects.map(e=>({id:e.id,status:e.status}))}));assert.deepEqual(w.room.messages.map(m=>m.kind),['proposal','challenge','concede']);
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.runtimeRun?.roomVersion,1);assert.equal(w.runtimeRun?.toolTimeoutVersion,'tool-timeouts/v1');assert.ok(w.room,JSON.stringify({tasks:w.tasks,blocker:w.blocker,effects:w.effects.map(e=>({id:e.id,status:e.status}))}));assert.deepEqual(w.room.messages.map(m=>m.kind),['proposal','challenge','concede']);
  assert.equal(w.room.issue?.status,'escalated');assert.equal(w.room.sameModel,true);assert.equal(w.acceptance,'accepted');assert.deepEqual(w.record!.room,w.room);
  const checker=w.assignments.find(a=>a.role==='verifier')!.actorId;assert.ok(w.room.messages.every(m=>m.authorId!==checker&&m.inferred));
  validateMissionJournalLineage(f.store.inspect() as any);

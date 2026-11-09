@@ -95,3 +95,16 @@ Apps never send markup. A handler returns `{title, meta?, groups: [{title, rows:
 - Conversation cards contributed by apps; the `7 more ›` link in B24-done; per-app member lists (`주노, 퀼`).
 - A Linux network sandbox on Node 24 (see the ponytail note).
 - A link from a self-made app's source Work (B23, B25 `PR #84 review ›`) to its Work room; the title is shown as text.
+
+## E5a deadline and diagnostic boundary
+
+Every network call receives an AbortSignal and shares the handler's 5-second
+ceiling. Handler completion, timeout or failure aborts outstanding calls and
+terminates the worker. Adapter exceptions become `App request failed`; raw
+credential-bearing diagnostics never reach app code or the client.
+
+The current handler path has no durable Work effect claim, so it refuses all
+non-GET calls even when a manifest declares writes. Declaring a permission is
+not dispatch authority. A future Work tool path must journal the original intent
+and use the same unknown/no-resend semantics before enabling writes. MCP remains
+outside this increment; the shared tool boundary defaults to 180 seconds.

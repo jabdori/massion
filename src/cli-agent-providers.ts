@@ -1,5 +1,8 @@
+import {providerRequestHash} from './provider-dispatch.ts';
 /** Subscription CLIs (Claude Code, Codex) as bounded single-shot text providers. No tools, sessions or retries. */
-import {spawn} from 'node:child_process';
+export {spawnCliRunner} from './cli-process.ts';
+import type {CliLauncher} from './cli-launcher.ts';
+import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -7,7 +10,7 @@ import type {ProviderAdapter,ProviderDescriptor,ProviderOutcome,ProviderRequest}
 import type {ConnectionDiagnostic,ModelAdapterFactory,ModelConnectionProfile} from './provider-profiles.ts';
 
 export type CliProtocol='claude-code-cli/v1'|'codex-cli/v1';
-export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal}
+export interface CliInvocation {command:string;args:readonly string[];stdin:string;cwd:string;env:Readonly<Record<string,string>>;timeoutMs:number;maxOutputBytes:number;signal:AbortSignal;invocationId?:string}
 /** `spawned:false` means the process never started, so no remote request can have been made. */
 export interface CliResult {spawned:boolean;exitCode:number|null;stdout:string;stderr:string;timedOut:boolean;aborted:boolean;overflow:boolean}
 export type CliRunner=(invocation:CliInvocation)=>Promise<CliResult>;
@@ -18,31 +21,6 @@ const label=(v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=512&&v.trim(
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
 const unknownUsage={inputTokens:null,outputTokens:null};
 const CHILD_ENV=/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|LANG|LC_[A-Z]+|TZ|XDG_(CONFIG|DATA|CACHE|STATE)_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR|__CF_USER_TEXT_ENCODING)$/;
-
-/** Default runner: argv only (no shell), own process group, bounded raw bytes, group SIGKILL on timeout/abort/overflow. */
-export const spawnCliRunner:CliRunner=invocation=>new Promise(resolve=>{
- const empty={exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:true,overflow:false};
- if(invocation.signal.aborted){resolve({spawned:false,...empty});return;}
- const out:Buffer[]=[],err:Buffer[]=[];let outBytes=0,errBytes=0,overflow=false,timedOut=false,aborted=false,settled=false,grace:ReturnType<typeof setTimeout>|undefined;
- const child=spawn(invocation.command,[...invocation.args],{cwd:invocation.cwd,env:{...invocation.env},stdio:['pipe','pipe','pipe'],shell:false,detached:true});
- const decode=(chunks:Buffer[])=>{try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}catch{return null;}};
- const finish=(spawned:boolean,exitCode:number|null)=>{if(settled)return;settled=true;clearTimeout(timer);if(grace)clearTimeout(grace);invocation.signal.removeEventListener('abort',onAbort);
-  const stdout=decode(out),stderr=decode(err)??'';
-  // Invalid UTF-8 after a started process is reported as an overflow-class unknown, never as text.
-  resolve({spawned,exitCode,stdout:stdout??'',stderr:stderr.slice(0,8192),timedOut,aborted,overflow:overflow||stdout===null});};
- const kill=()=>{if(child.pid!==undefined){try{process.kill(-child.pid,'SIGKILL');}catch{try{child.kill('SIGKILL');}catch{}}}
-  // A descendant may still hold the pipes open; settle shortly after the kill instead of waiting for it.
-  if(!grace)grace=setTimeout(()=>{child.stdout.destroy();child.stderr.destroy();finish(true,null);},1000);};
- const onAbort=()=>{aborted=true;kill();};
- const timer=setTimeout(()=>{timedOut=true;kill();},invocation.timeoutMs);
- invocation.signal.addEventListener('abort',onAbort,{once:true});
- child.stdout.on('data',(chunk:Buffer)=>{if(overflow)return;outBytes+=chunk.length;if(outBytes>invocation.maxOutputBytes){overflow=true;kill();return;}out.push(chunk);});
- child.stderr.on('data',(chunk:Buffer)=>{if(errBytes<8192){err.push(chunk.subarray(0,8192-errBytes));errBytes+=chunk.length;}});
- // ENOENT/EACCES arrive here before any request could be sent.
- child.on('error',()=>finish(child.pid!==undefined,null));
- child.on('close',code=>finish(true,code));
- child.stdin.on('error',()=>{});child.stdin.end(invocation.stdin);
-});
 
 function claudeArgs(model:string){return ['-p','--output-format','json','--model',model,'--tools','','--no-session-persistence','--max-turns','1','--effort','low','--setting-sources','','--strict-mcp-config','--disable-slash-commands','--system-prompt',SYSTEM_PROMPT];}
 // Codex has no tool-free mode; disable every tool feature at invocation so attempts fail closed in its router
@@ -88,6 +66,7 @@ export function parseCodexEvents(stdout:string,cap:number):ProviderOutcome{
 
 class CliTextAdapter implements ProviderAdapter {
  readonly descriptor:ProviderDescriptor;readonly evidence:Readonly<CliEvidence>;
+ readonly #invocations=new Map<string,{identity:string;result:Promise<ProviderOutcome>}>();
  readonly #protocol:CliProtocol;readonly #profile:Readonly<ModelConnectionProfile>;readonly #runner:CliRunner;readonly #command:string;
  constructor(protocol:CliProtocol,profile:Readonly<ModelConnectionProfile>,runner:CliRunner,command:string,fixture:boolean){
   this.#protocol=protocol;this.#profile=Object.freeze(structuredClone(profile));this.#runner=runner;this.#command=command;
@@ -99,16 +78,24 @@ class CliTextAdapter implements ProviderAdapter {
   if(!request||!(request.signal instanceof AbortSignal))return {status:'failed',output:null,usage:unknownUsage,reason:'invalid_request'};
   if(request.signal.aborted)return {status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'};
   if(!this.#profile.enabled)return {status:'failed',output:null,usage:unknownUsage,reason:'provider_not_explicitly_authorized'};
-  if(!label(request.invocationId)||typeof request.instruction!=='string'||!request.instruction.trim()||!Number.isSafeInteger(cap)||cap<=0||cap>limits.maxOutputTokens)return {status:'failed',output:null,usage:unknownUsage,reason:'invalid_request_or_output_bound'};
+  if(!label(request.invocationId)||!label(request.workId)||typeof request.instruction!=='string'||!request.instruction.trim()||!Number.isSafeInteger(cap)||cap<=0||cap>limits.maxOutputTokens)return {status:'failed',output:null,usage:unknownUsage,reason:'invalid_request_or_output_bound'};
   const prompt=request.inputReferences.length===0?request.instruction:`${request.instruction}\n\nInput references (identifiers only; their contents have not been loaded):\n${JSON.stringify(request.inputReferences)}`;
   if(Buffer.byteLength(prompt,'utf8')>limits.maxInputBytes)return {status:'failed',output:null,usage:unknownUsage,reason:'input_byte_limit'};
+  const identity=providerRequestHash(request),key=JSON.stringify([request.workId,request.invocationId]),prior=this.#invocations.get(key);
+  if(prior)return prior.identity===identity?prior.result:{status:'failed',output:null,usage:unknownUsage,reason:'cli_invocation_identity_conflict'};
+  if(this.#invocations.size>=1024)return {status:'failed',output:null,usage:unknownUsage,reason:'cli_invocation_capacity'};
+  const snapshot={...request,inputReferences:[...request.inputReferences]},result=Promise.resolve().then(()=>this.#launch(snapshot,prompt,cap));
+  this.#invocations.set(key,{identity,result});return result;
+ }
+ async #launch(request:ProviderRequest,prompt:string,cap:number):Promise<ProviderOutcome>{
+  const limits=this.#profile.limits;
   // Allowlist: subscription login only. API keys, base-URL/provider overrides and unrelated host secrets never reach the CLI.
   const env:Record<string,string>={};for(const [k,v] of Object.entries(process.env))if(v!==undefined&&CHILD_ENV.test(k))env[k]=v;
   if(this.#protocol==='claude-code-cli/v1')env.CLAUDE_CODE_MAX_OUTPUT_TOKENS=String(cap);
   const cwd=await mkdtemp(join(tmpdir(),'massion-cli-'));
   try{
    if(request.signal.aborted)return {status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'};
-   const result=await this.#runner({command:this.#command,args:this.#protocol==='claude-code-cli/v1'?claudeArgs(this.#profile.model):codexArgs(this.#profile.model),stdin:prompt,cwd,env,timeoutMs:limits.timeoutMs,maxOutputBytes:limits.maxResponseBytes,signal:request.signal});
+   const result=await callTool(signal=>this.#runner({invocationId:request.invocationId,command:this.#command,args:this.#protocol==='claude-code-cli/v1'?claudeArgs(this.#profile.model):codexArgs(this.#profile.model),stdin:prompt,cwd,env,timeoutMs:limits.timeoutMs,maxOutputBytes:limits.maxResponseBytes,signal}),{signal:request.signal,timeoutMs:Math.min(limits.timeoutMs,TOOL_TIMEOUT_MS)});
    if(!result.spawned)return result.aborted?{status:'cancelled',output:null,usage:unknownUsage,reason:'cancelled_before_dispatch'}:{status:'failed',output:null,usage:unknownUsage,reason:'cli_unavailable_not_started'};
    if(result.aborted)return {status:'unknown',output:null,usage:unknownUsage,reason:'cancelled_after_dispatch'};
    if(result.timedOut)return {status:'unknown',output:null,usage:unknownUsage,reason:'timeout_after_dispatch'};
@@ -117,12 +104,12 @@ class CliTextAdapter implements ProviderAdapter {
    if(result.exitCode!==0){let terminal='';try{const body=JSON.parse(result.stdout);if(typeof body?.terminal_reason==='string'&&/^[a-z_]{1,64}$/.test(body.terminal_reason))terminal='_'+body.terminal_reason;}catch{}
     return {status:'unknown',output:null,usage:unknownUsage,reason:`cli_exit_${result.exitCode}${terminal}_remote_outcome_unknown`};}
    return this.#protocol==='claude-code-cli/v1'?parseClaudeResult(result.stdout,this.#profile.model,cap):parseCodexEvents(result.stdout,cap);
-  }finally{await rm(cwd,{recursive:true,force:true}).catch(()=>{});}
+  }catch(error){return {status:error instanceof ToolCallError&&error.outcome==='failed'?'failed':'unknown',output:null,usage:unknownUsage,reason:error instanceof ToolCallError&&error.timedOut?'timeout_after_dispatch':'cli_outcome_unknown'};}finally{await rm(cwd,{recursive:true,force:true}).catch(()=>{});}
  }
 }
 
-export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string}):ModelAdapterFactory{
- const fixture=options.mode==='local-http-mock',command=options.command??(protocol==='claude-code-cli/v1'?'claude':'codex');
+export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'local-http-mock';runner?:CliRunner;command?:string;launcher?:CliLauncher}):ModelAdapterFactory{
+ const fixture=options.mode==='local-http-mock',command=options.command??options.launcher?.command??(protocol==='claude-code-cli/v1'?'claude':'codex');
  return {
   protocol,authMethods:['cli-login'],capabilities:['text-output'],evidenceClass:fixture?'fixture':'real-provider',
   validate(p){const errors:ConnectionDiagnostic[]=[];
@@ -130,6 +117,6 @@ export function cliProfileFactory(protocol:CliProtocol,options:{mode:'https'|'lo
    if(p.auth.secretRef!==undefined)errors.push({code:'auth_invalid',message:'Subscription CLIs use their own login; no secret reference is accepted.'});
    if(!/^[a-zA-Z0-9._:/-]{1,128}$/.test(p.model))errors.push({code:'profile_invalid','message':'Exact model ID required.'});
    return errors;},
-  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??spawnCliRunner,command,fixture);},
+  create(p){if(fixture&&!options.runner)throw new Error('Fixture CLI runner required');return new CliTextAdapter(protocol,p,options.runner??(options.launcher?(call=>options.launcher!.launch(call.invocationId!,call)):async()=>({spawned:false,exitCode:null,stdout:'',stderr:'',timedOut:false,aborted:false,overflow:false})),command,fixture);},
  };
 }
