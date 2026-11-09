@@ -77,7 +77,7 @@ function appsRoomTabs(title){
  for(const a of appsList){if(!a.roomTab)continue;const at=String(title).indexOf(a.roomTab);if(at<0)continue;const ref=/^\d{1,9}/.exec(String(title).slice(at+a.roomTab.length));if(!ref)continue;
   const key='app:'+a.id+':'+ref[0];if(!paneTabs.some(t=>t.key===key))paneTabs.push({key,title:a.roomTab+ref[0],appTab:{id:a.id,ref:ref[0]}});}
 }
-async function appsTabLoad(tab){const gen=++appTabSeq;$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref,chatView&&chatView.feedId);if(gen===appTabSeq&&paneActive===tab.key)$('pane-app').replaceChildren(...appsViewNodes(v));}
+async function appsTabLoad(tab){const gen=++appTabSeq;$('pane-app').replaceChildren();const v=await appsRead(tab.appTab.id,'item',tab.appTab.ref,chatView&&chatView.feedId);if(gen===appTabSeq&&paneActive===tab.key){const app=appsList.find(a=>a.id===tab.appTab.id);$('pane-app').replaceChildren(...(app?.page?[chatButton(app.name,()=>appOpen(app.id),'app-repository')]:[]),...appsViewNodes(v));}}
 /** One owner command from the conversation; the next read shows the state. */
 async function appsPost(body){try{await request('/assistant/apps',{method:'POST',headers:{'Content-Type':'application/json',...(chatView&&chatView.feedId?{'X-Massion-Feed':chatView.feedId}:{})},body:JSON.stringify({commandId:crypto.randomUUID(),...body})});}catch{}finally{await readChat();}}
 const appsJoin=v=>Array.isArray(v)&&v.length?v.join(' · '):copy('settings.text.03');

@@ -106,3 +106,39 @@ test('conversation and procedure counts use the same child tasks and failed chec
  const card=active.app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(active.work.title))!;
  assert.ok(card);assert.equal(descendants(card).find(n=>hasClass(n,'chat-steps'))?.textContent,active.nodes().find(n=>hasClass(n,'room-progress'))!.textContent);
 });
+
+test('legacy procedures list exactly the child tasks counted by their progress',async()=>{
+ const {nodes,work}=await scene('B7-churn'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
+ assert.equal(steps.children.length,work.tasks.filter((task:any)=>task.parentId!==null).length);
+ assert.ok(!steps.children.some(n=>n.children[1]?.textContent===work.title));
+});
+
+for(const screen of ['B8-done','B8-fail'])test(screen+' keeps raw execution results behind deliberate flow disclosures',async()=>{
+ const {nodes,work}=await scene(screen),flow=nodes().find(n=>hasClass(n,'room-flow'))!;
+ for(const task of work.tasks.filter((task:any)=>task.result)){
+  const detail=descendants(flow).find(n=>n.tagName==='DETAILS'&&n.textContent.includes(task.result));
+  assert.ok(detail,'task result has a disclosure');assert.equal(detail.open,false);
+  assert.ok(detail.children.some(n=>n.tagName==='SUMMARY'&&n.textContent.length>0));
+  assert.equal(detail.children.find(n=>n.tagName==='PRE')?.textContent,task.result);
+ }
+});
+
+test('room participants expose member and independent Check as list items and use the exact current handoff turn',async()=>{
+ const {nodes,posted}=await scene('B22-room-steps'),people=nodes().find(n=>hasClass(n,'room-people'))!;
+ assert.equal(people.tagName,'UL');assert.ok(people.children.every(n=>n.tagName==='LI'));
+ assert.equal(people.children[0]!.children.at(-1)!.textContent,'주노');assert.equal(people.children.at(-1)!.textContent,'확인');
+ const check=nodes().find(n=>hasClass(n,'room-steps'))!.children.find(n=>n.children[1]?.textContent==='확인')!;
+ assert.equal(check.children.at(-1)!.textContent,'0/1');
+ const handoff=nodes().find(n=>hasClass(n,'room-handoff'))!;
+ assert.ok(handoff);assert.equal(handoff.hidden,false);assert.match(handoff.textContent,/^하나가 넘김 · \d{1,2}:\d{2}$/);
+ assert.equal(posted.length,0);
+});
+
+test('both room fixtures retain current sibling Work with matching Mission snapshots',async()=>{
+ for(const screen of ['B22-room','B22-room-steps']){
+  const fixture=await loadFixture(screen),mission=(fixture.routes['/missions/intake']!.body as any).value;
+  const rows=(fixture.routes['/assistant/works']!.body as any).works;
+  assert.deepEqual(rows.filter((w:any)=>w.memberId==='member-quill').map((w:any)=>[w.title,w.execution]),[['이탈 원인 조사','active'],['경쟁사 가격','active']]);
+  for(const row of rows){const work=mission.works.find((w:any)=>w.id===row.workId);assert.ok(work);assert.equal(row.execution,work.execution);}
+ }
+});
