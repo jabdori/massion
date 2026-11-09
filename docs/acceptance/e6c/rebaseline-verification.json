@@ -1,0 +1,55 @@
+{
+  "source": {
+    "commit": "ac99f1da04ca51007223edb566e36d3b29933cb6",
+    "run": "https://github.com/jabdori/massion/actions/runs/42657950604",
+    "artifact": 13692293967,
+    "rows": 150
+  },
+  "update": {
+    "before": 978,
+    "removed": 38,
+    "added": 18,
+    "after": 958,
+    "retainedMetadataUnchanged": true
+  },
+  "completeGate": {
+    "occurrences": 958,
+    "code": 0,
+    "added": [],
+    "resolved": [],
+    "errors": []
+  },
+  "localGate": {
+    "screens": [
+      "B4",
+      "B16",
+      "B16-later",
+      "B16-sent"
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "rows": 8,
+    "occurrences": 24,
+    "code": 0,
+    "added": [],
+    "resolved": [],
+    "errors": []
+  },
+  "checks": {
+    "node": "v24.21.0",
+    "gateUnitTests": {
+      "passed": 6,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "diffCheck": "passed"
+  },
+  "notRun": [
+    "Local full suite",
+    "Local all-screen capture",
+    "Real payment/device/provider",
+    "Merge or deployment"
+  ]
+}
