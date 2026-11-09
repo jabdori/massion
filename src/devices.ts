@@ -48,7 +48,7 @@ export function replayDevices(operation:Operation<DevicesState>,prior:Operation<
 export class DevicesService {
  readonly #store:Store<any>;readonly #owner:Store<any>;readonly #admissions:()=>Promise<Admission[]>;readonly #adapters:DeviceAdapter[];readonly #active=new Set<Promise<unknown>>();readonly #stop=new AbortController();
  constructor(store:Store<any>,owner:Store<any>,admissions:()=>Promise<Admission[]>,adapters:DeviceAdapter[]=[]){ensure(new Set(adapters.map(a=>a.id)).size===adapters.length,'Duplicate device adapter');this.#store=store;this.#owner=owner;this.#admissions=admissions;this.#adapters=adapters;}
- async #known(){const choices=new Map<string,Admission>();for(const d of await this.#admissions())if(d.effect?.kind==='external-member'&&d.effect.request.kind==='external-member'&&d.effect.request.deviceId)choices.set(d.effect.request.deviceId,d);return [...choices.values()];}
+ async #known(){const choices=new Map<string,Admission>();for(const d of await this.#admissions())if(d.effect?.kind==='external-member'&&d.effect.request.kind==='external-member'&&d.effect.request.deviceId){const previous=choices.get(d.effect.request.deviceId);if(!previous||d.effect.answer==='act'||previous.effect?.answer!=='act')choices.set(d.effect.request.deviceId,d);}return [...choices.values()];}
  async read(){
   const state=await this.#store.load(DEVICES_ID) as Snapshot<DevicesState>|null;
   const devices=await Promise.all((await this.#known()).map(async d=>{const r=d.effect!.request,adapter=this.#adapters.find(a=>a.id===r.adapterId),pending=state?.value.operations.find(o=>o.deviceId===r.deviceId&&o.status==='unknown');let status:DeviceStatus|'unavailable'=adapter?'unknown':'unavailable';

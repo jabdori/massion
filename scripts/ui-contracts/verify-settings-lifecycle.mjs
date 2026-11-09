@@ -11,7 +11,7 @@ import {createHostConnections,parseHostManifest} from '../../src/host-connection
 import {LoginConnections} from '../../src/connection-logins.ts';
 import {createWorkbench} from '../../src/server.ts';
 import {MembersService,MEMBERS_ID,applyMembers,PROPOSAL_PREFIX,proposalDecisionId} from '../../src/members.ts';
-import {AppsService} from '../../src/apps.ts';
+import {AppsService,APPS_ID} from '../../src/apps.ts';
 import {ASSISTANT_ACTOR_ID} from '../../src/assistant-conversation.ts';
 import {hash} from '../../src/domain.ts';
 
@@ -50,6 +50,7 @@ try{
  await browser('click','#settings-app-reconnect');await browser('wait','--fn',"document.querySelector('#page-chat').hidden===false");const pending=(await apps.decisions(null)).find(d=>d.state==='open'&&d.connection);assert.ok(pending);
  await browser('find','role','button','click','--name','연결');await wait('#app-connect-token');await browser('fill','#app-connect-token','ui-fixture-app-token');await browser('click','#app-connect-submit');
  await browser('wait','--fn',"document.querySelector('#app-connect-panel').hidden===true");assert.equal((await apps.read()).apps[0].credential.state,'saved');await capture('app-token-stored');
+ await slots.delete({owner:'app-github',slot:'github-token'});await browser('click','#rail-me');await browser('click','#me-settings');await browser('click','#settings-nav-apps');await wait('#settings-app-app-github');await browser('click','#settings-app-app-github');await wait('#settings-app-reconnect');assert.equal((await apps.read()).apps[0].credential.state,'missing');assert.equal((await store.load(APPS_ID)).value.apps.find(a=>a.id==='app-github').credential.state,'saved');await capture('app-token-missing');
  const serialized=JSON.stringify(store.inspect());assert.ok(!serialized.includes('ui-fixture-key')&&!serialized.includes('ui-fixture-app-token'));await writeFile(join(out,'report.json'),JSON.stringify({states:report,reconnectContrast:contrast,externalNetworkCalls:0,secretValuesInJournal:false},null,2)+'\n');
  console.log(JSON.stringify({states:report,reconnectContrast:contrast,externalNetworkCalls:0,secretValuesInJournal:false}));
 }finally{await browser('close').catch(()=>{});await server.drain();await rm(root,{recursive:true,force:true});}

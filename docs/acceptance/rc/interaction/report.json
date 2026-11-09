@@ -7,7 +7,8 @@
     "app-bindings-visible",
     "reconnect-dark",
     "reconnect-light",
-    "app-token-stored"
+    "app-token-stored",
+    "app-token-missing"
   ],
   "reconnectContrast": [
     {
@@ -18,9 +19,9 @@
     },
     {
       "theme": "light",
-      "background": "rgb(248, 248, 248)",
+      "background": "rgb(249, 249, 249)",
       "foreground": "rgb(19, 19, 19)",
-      "ratio": 17.4951185594331
+      "ratio": 17.647666592153232
     }
   ],
   "externalNetworkCalls": 0,

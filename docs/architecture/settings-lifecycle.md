@@ -46,3 +46,7 @@ versions. Remove the uncontracted app member-checkbox editor. Display member
 memory only with an explicit host binding and use its actual removal command;
 never reinterpret unrelated Mission memory as member memory. Keep capability
 residuals for unavailable producers/executors. Fixture member names are Korean.
+
+Connectivity retains an approved device binding when a later Work merely
+proposes another handoff. The complete approved request remains the target; a new
+pending request cannot substitute another adapter or grant itself Work authority.

@@ -125,3 +125,8 @@ Definite domain refusals escape as `ConnectionLifecycleRefusedError`; the HTTP
 adapter returns `outcome: 'rejected'`. Settings can then permit a fresh deliberate
 attempt after a read. Post-write/ambiguous failures stay `unknown` and are never
 classified by their HTTP status alone.
+
+The HTTP lifecycle route marks an unknown result as host-unsettled, matching the
+existing app-connect route. Shutdown cannot report a clean drain when a held
+secret write completes without its lifecycle settlement. A definite pre-write
+refusal still remains separate from an ambiguous write.

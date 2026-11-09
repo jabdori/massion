@@ -38,7 +38,7 @@ ADRs 0001–0005 and the existing owner decision path from PR #120.
   PNG pairs. These are fixture observations, not live-provider evidence.
 - [Browser interaction](interaction/report.json), against the actual local host:
   recheck, masked key storage, member archive/restore, bound app display and token
-  reconnect. Eight state/theme screenshots are retained in `interaction/`. No outside network
+  reconnect. Nine state/theme screenshots are retained in `interaction/`. No outside network
   adapter is installed and secret bytes are absent from the operation journal.
 - The HTTP regression exercises external admission, overlapping device connects
   and disconnect while preserving the original arrival-only unknown Work.
@@ -118,8 +118,8 @@ The real uninstalled catalog remains the only recommendation source.
 
 Recapture all 11 affected screens in both themes. Measurements have zero token/
 geometry or infrastructure failures. The actual-host interaction report now
-records eight states/theme checks. Reconnect foreground/background contrast is
-16.46:1 in dark and 17.50:1 in light, above 4.5:1. No secret bytes enter the journal.
+records nine states/theme checks. Reconnect foreground/background contrast is
+16.46:1 in dark and 17.65:1 in light, above 4.5:1. No secret bytes enter the journal.
 
 The existing B19 fixture Mission memory arrays are empty; MembersService.read()
 provides no member memory binding, and SkillsService.read() distinguishes owner
@@ -144,3 +144,26 @@ three E8 screens recaptured in both themes pass 176/176 required matches with
 zero geometry, gaps or infrastructure errors. Actual-host interaction assertions
 still pass, including both reconnect contrast measurements and secret redaction.
 See `main-budget-integration.json`; full-suite and all-screen checks remain CI-owned.
+
+## Late review follow-up
+
+Reproduce a held key write across shutdown: the old HTTP route returned unknown
+while the host still reported drained. Propagate that result into the existing
+host-unsettled flag. Reproduce a second pending Work for the same device with a
+different unapproved adapter: connectivity retains the entire approved binding,
+so disconnect still targets the admitted adapter and the new Work remains unsent.
+Both real HTTP tests failed before the fixes. Also fence the shared app read at
+the outer HTTP feed boundary, so a new-database view cannot carry the prior feed.
+
+App secret presence now uses the existing optional metadata-only slot probe.
+Deletion or restore to a host without that slot projects missing despite an old
+saved receipt; pending connections remain unknown regardless of physical presence.
+Feed/revision checks discard late metadata, and the bounded read wrapper aborts
+an uncooperative probe during drain without accepting its late answer. The old
+receipt and journal replay remain unchanged. All 91 affected app, lifecycle,
+HTTP and device tests pass; typecheck passes. No secret value reads are added.
+
+The actual-host browser flow additionally deletes a just-saved in-memory app
+slot: Settings shows reconnect again while the stored app receipt remains saved.
+Nine state/theme captures and the unchanged secret-redaction assertion are in
+`interaction/report.json`; this is controlled fixture evidence, not Keychain access.

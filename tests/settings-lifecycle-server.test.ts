@@ -12,6 +12,7 @@ import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import {Application} from '../src/application.ts';
 import type {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {DomainError} from '../src/domain.ts';
+import {APPS_ID} from '../src/apps.ts';
 
 test('lifecycle HTTP routes retain feed admission and never return secret bytes',async t=>{
  const root=await mkdtemp(join(tmpdir(),'settings-lifecycle-http-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -47,6 +48,27 @@ test('remote device HTTP commands retain the external-member decision and never 
  assert.equal((await post('/assistant/decisions',{commandId:'approve-remote',decisionId,answer:'act'})).status,200);assert.equal(deliveries,1);
  const input={commandId:'connect-laptop',deviceId:'laptop',action:'connect'},responses=await Promise.all([post('/assistant/devices',input),post('/assistant/devices',input)]);assert.ok(responses.every(r=>r.status===200));assert.equal(connects,1);
  assert.equal((await (await fetch(origin+'/assistant/devices')).json()).devices[0].status,'connected');
+ await app.dispatch({missionId:'intake',commandId:'admit-next-device-work',expectedRevision:(await store.load('intake'))!.revision,actorId:'local-owner',command:{type:'admit-work',workId:'next-remote',title:'Another remote request',budget:8}});
+ await app.dispatch({missionId:'intake',commandId:'assign-next-device-work',expectedRevision:(await store.load('intake'))!.revision,actorId:'local-owner',command:{type:'assign',workId:'next-remote',assignment:{id:'next-remote:executor',taskId:'next-remote:root',role:'executor',actorId:'executor',model:{provider:'fixture',model:'none',configVersion:'v1',reason:'Pending device fixture',evidenceClass:'fixture'},extensionVersion:'v1'}}});
+ await server.effectDecisions.propose({missionId:'intake',workId:'next-remote',taskId:'next-remote:root',stepId:'handoff',request:{kind:'external-member',adapterId:'unapproved-adapter',deviceId:'laptop',deviceName:'Pending target',agentId:'other-agent',agentName:'Other agent',instruction:'Another request',scope:'another repository'}});
+ const known=(await (await fetch(origin+'/assistant/devices')).json()).devices[0];assert.equal(known.admitted,true);assert.equal(known.decisionId,decisionId);assert.equal(known.agent,'Codex');
  assert.equal((await post('/assistant/devices',{commandId:'disconnect-laptop',deviceId:'laptop',action:'disconnect'})).status,200);assert.equal(connected,false);
  assert.equal(deliveries,1);assert.equal((await store.load('intake'))!.value.works[0].effects[0].status,'unknown');validateMissionJournalLineage(store.inspect());
+});
+
+test('shutdown reports an unconfirmed key write as unsettled instead of drained',{timeout:3000},async t=>{
+ const root=await mkdtemp(join(tmpdir(),'settings-key-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),set=secrets.set.bind(secrets);let start!:()=>void,release!:()=>void,writes=0;const started=new Promise<void>(resolve=>{start=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+ secrets.set=async(slot,key)=>{start();await held;writes++;await set(slot,key);};t.after(()=>release());
+ const manifest=parseHostManifest({version:1,revision:'drain-fixture',mode:'https',connections:[{id:'api',label:'API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]}),connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>undefined,transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port,target=connections.list().connections[0]!;
+ const pending=fetch(origin+'/connections/'+encodeURIComponent(target.id)+'/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:'write-before-drain',expectedConfigHash:target.configHash,apiKey:'drain-fixture-key'})});
+ await started;const draining=server.drain();release();assert.equal((await (await pending).json()).status,'unknown');assert.equal(writes,1);assert.deepEqual(await draining,{status:'unsettled',timedOut:false});
+ assert.ok(store.inspect().some(o=>o.value.kind==='connection-lifecycle'&&o.value.attempts.some((a:any)=>a.commandId==='write-before-drain'&&a.status==='pending')));assert.doesNotMatch(JSON.stringify(store.inspect()),/drain-fixture-key/);
+});
+
+test('an app read cannot label replacement-database state with its original HTTP feed',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'settings-app-feed-'));t.after(()=>rm(root,{recursive:true,force:true}));const original=new InMemoryStore<any>(),replacement=new InMemoryStore<any>();let active=original,armed=false;
+ const store=new Proxy(original,{get(_target,key){if(key==='readState')return async(id?:string)=>{if(armed&&id===APPS_ID){active=replacement;armed=false;}return active.readState(id);};const result=Reflect.get(active,key);return typeof result==='function'?result.bind(active):result;}}),server=createWorkbench(store,root,{scheduleIntervalMs:0});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());armed=true;const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/apps'),body=await response.json();assert.equal(response.status,503);assert.equal(body.reason,'feed');assert.equal(body.apps,undefined);
 });
