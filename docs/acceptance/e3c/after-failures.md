@@ -1,6 +1,6 @@
 # Final residual diagnostics
 
-Every required-check occurrence is retained below and in [remaining.json](remaining.json), with a producing-path boundary and source evidence. No UI, fixture, hard-budget, forbidden-copy, palette, geometry or infrastructure error is deferred. Strict-order cascades remain failures: no ordering, occurrence consumption, matching budget or infrastructure rule was relaxed.
+Remaining baseline required-check occurrences are retained below and in [remaining.json](remaining.json), with a producing-path boundary and source evidence. No UI, fixture, hard-budget, forbidden-copy, palette, geometry or infrastructure error is deferred. Strict-order cascades remain failures: no ordering, occurrence consumption, matching budget or infrastructure rule was relaxed.
 
 Expanded snapshots contain the generic Check and Record sections in their approved order. Missing criteria/fix/check/step timestamps cause the first `{time}` requirement to consume a later flow time; subsequent existing Check/Record/None/progress fields then correctly fail ordering. In narrow research rooms, missing named workers/business steps similarly cause later occurrence diagnostics. These are not additional unsupported generic Record or Copy capabilities.
 
@@ -8,12 +8,34 @@ Expanded snapshots contain the generic Check and Record sections in their approv
 | --- | ---: | --- |
 | payment | 24 | The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots. [src/domain.ts:28](../../../src/domain.ts#L28), [src/configured-runtime.ts:225](../../../src/configured-runtime.ts#L225), [src/server.ts:135](../../../src/server.ts#L135) |
 | business-activity | 26 | The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose. [src/configured-runtime.ts:225](../../../src/configured-runtime.ts#L225), [src/assistant-service.ts:300](../../../src/assistant-service.ts#L300) |
-| business-procedure | 80 | A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible. [src/domain.ts:25](../../../src/domain.ts#L25), [src/domain.ts:29](../../../src/domain.ts#L29), [src/configured-runtime.ts:222](../../../src/configured-runtime.ts#L222) |
+| business-procedure | 74 | Q13 supplies named worker steps, roles, dependencies and skips for new member Works. Six exact B7-churn occurrences are resolved below; retained baseline diagnostics cover business summaries, timestamps and other cases not reclassified by this scoped capture. Original E3c producing-path descriptions are retained as historical evidence. [src/domain.ts:25](../../../src/domain.ts#L25), [src/domain.ts:29](../../../src/domain.ts#L29), [src/configured-runtime.ts:222](../../../src/configured-runtime.ts#L222) |
 | steering-continuation | 4 | Confirmed steering sets the Work waiting; task progression then rejects it, and the existing failed-candidate reader rejects the unsettled/changed-input case. There is no producing resume path for the illustrated confirmed enterprise steering followed by active/settled churn. Plain discussion and its three Copy controls are supported and present; no pricing-format steering is substituted. [src/domain.ts:337](../../../src/domain.ts#L337), [src/domain.ts:310](../../../src/domain.ts#L310), [src/configured-runtime.ts:180](../../../src/configured-runtime.ts#L180), [src/rejected-text.ts:14](../../../src/rejected-text.ts#L14), [docs/acceptance/e3c/steering-continuation.mjs](../../../docs/acceptance/e3c/steering-continuation.mjs) |
 | memory-candidate | 8 | A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons. [src/assistant-service.ts:63](../../../src/assistant-service.ts#L63), [src/server.ts:135](../../../src/server.ts#L135), [src/assistant-conversation.ts:17](../../../src/assistant-conversation.ts#L17) |
 | work-room-messages | 56 | The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane. [src/domain.ts:68](../../../src/domain.ts#L68), [src/work-conversation.ts:10](../../../src/work-conversation.ts#L10), [src/assistant-service.ts:63](../../../src/assistant-service.ts#L63) |
 | rule-change-case | 6 | The conversation decision router has member/app/skill producers, not the illustrated rounding-rule-change case with old/new case counts and its original decision identity. Generic Growth or member decisions are not that case. [src/server.ts:135](../../../src/server.ts#L135), [src/server.ts:147](../../../src/server.ts#L147) |
 | check-time-and-predicates | 82 | Criteria have version/description/oracle and a verdict binds one overall artifact hash/version and criteria version. They have no criteria-fixed/check-start timestamp or individual business predicate/order-count/minimum-quota results. The original source turn time, runtime start, durable Work end, exact overall verdict and Record are shown without inventing those other events. [src/domain.ts:20](../../../src/domain.ts#L20), [src/domain.ts:30](../../../src/domain.ts#L30), [src/domain.ts:61](../../../src/domain.ts#L61) |
+
+## Q13 capability update (2026-11-09)
+
+Q13 now supplies pinned member procedures, named nested worker tasks, participant
+role chips, dependencies, skip reasons and results attributed to the member through
+the existing Work read. [Q13 evidence](../q13-ui/README.md) verifies the new data in
+both themes, with no new visible-budget or forbidden-copy failure.
+
+Six independently identified B7-churn occurrences are closed: R012/R013/R014 and
+R155/R156/R157 (participant `요약`, procedure heading and progress count).
+[Resolved records](q13-resolved.json) retain their original diagnostic and exact
+contract order; the retained baseline ledger shrinks from 286 to 280 occurrences.
+The historical E3c reports and pairs below remain unchanged. Later repeated
+member/role/time matches are not credited as Q14 messages, and other screens have
+not been reclassified from this scoped capture. The team fixture currently matches
+49/74 required elements per theme, with 25 retained contract failures and two
+inherited conversation warnings; this is not a full contract pass.
+
+Descriptions below document the original E3c producing-path gaps. The old claim
+that tasks cannot carry names, roles or skips is superseded by Q13. Per-step times,
+room-message/Copy sequences, exact business predicates, payment, memory candidates
+and steering continuation remain unsupported or awaiting their own producing path.
 
 ## B4 (dark)
 
@@ -51,12 +73,6 @@ Expanded snapshots contain the generic Check and Record sections in their approv
   A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.
 - **R011 — memory-candidate**: `FAIL  missing conversation button   "지우기"`
   A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.
-- **R012 — business-procedure**: `FAIL  missing pane         text     "요약"`
-  A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
-- **R013 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "절차" (occurrence already consumed or found earlier)`
-  Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
-- **R014 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "{progress}" (occurrence already consumed or found earlier)`
-  Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
 - **R015 — work-room-messages / strict-order cascade**: `FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)`
   Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.
 - **R016 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)`
@@ -387,12 +403,6 @@ Expanded snapshots contain the generic Check and Record sections in their approv
   A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.
 - **R154 — memory-candidate**: `FAIL  missing conversation button   "지우기"`
   A member turn produces a reply and an optional proposed steering, not an identity/version-bound memory candidate. The explicit memory APIs cannot authorize these unbound Save/Discard buttons.
-- **R155 — business-procedure**: `FAIL  missing pane         text     "요약"`
-  A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
-- **R156 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "절차" (occurrence already consumed or found earlier)`
-  Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
-- **R157 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "{progress}" (occurrence already consumed or found earlier)`
-  Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. A Task has only id, parent, status and optional result, and assignments have executor/verifier roles. There are no named investigation/classification/summary/record worker seats, business-step labels, skip reasons, per-step timestamps or named-step readiness predicates. Actual root/child tasks and assigned stages remain visible.
 - **R158 — work-room-messages / strict-order cascade**: `FAIL  order  pane         text     "{member}" (occurrence already consumed or found earlier)`
   Strict-order cascade from unavailable earlier named business/worker steps and their timestamps. Later generic fields really exist, but cannot be reused, consumed twice or moved before their required predecessors. The exact Work discussion is owner-only and carries no timestamps or agent recipient/role. Member 1:1 replies and original Representative Work provenance are shown where they belong; they cannot supply five identity-bound worker messages, worker-role chips, step times and their separate Copy controls in the Work pane.
 - **R159 — business-procedure / strict-order cascade**: `FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)`
@@ -689,7 +699,7 @@ Expanded snapshots contain the generic Check and Record sections in their approv
 
 ## Artboard-only data gaps
 
-Required-check counts do not measure every optional data example or pixel. Shopping item/price/shipping/approval/order facts, named research business steps and worker-room conversation/skip reasons remain visible artboard gaps for the producing-path reasons above, even where the generated contract marks them optional. Fixture model/provider identities and output-token budgets are shown as recorded; these captures do not prove subscribed-CLI execution, a purchase or a vendor receipt. The generic three-task/two-stage runtime is not the illustrated five/seven-business-step workflow.
+Required-check counts do not measure every optional data example or pixel. Shopping item/price/shipping/approval/order facts, worker-room conversation and exact business facts remain visible artboard gaps; named steps and skip reasons are now supplied by Q13 for the producing-path reasons above, even where the generated contract marks them optional. Fixture model/provider identities and output-token budgets are shown as recorded; these captures do not prove subscribed-CLI execution, a purchase or a vendor receipt. The generic three-task/two-stage runtime is not the illustrated five/seven-business-step workflow.
 
 The original Representative request time is read and displayed for the handoff line using the E3b convention; the fixture wording about a missing handoff field does not mean that line is deferred. There is no separate durable handoff-commit or criteria-fixed timestamp. The confirmed-steer/continued-execution blocker is independently reproducible with [the read-only probe](steering-continuation.mjs).
 

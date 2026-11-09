@@ -16477,5 +16477,27 @@
    "B14:settings"
   ],
   "provenance": "B14 approved artboard: CLI route how"
+ },
+ "ui.room.skipped": {
+  "ko": "건너뜀 · {reason}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7:pane",
+   "B8:pane"
+  ],
+  "provenance": "Q13 named worker steps and dependencies."
+ },
+ "ui.room.dependencies": {
+  "ko": "선행 단계 · {steps}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7:pane",
+   "B8:pane"
+  ],
+  "provenance": "Q13 named worker steps and dependencies."
  }
 }
