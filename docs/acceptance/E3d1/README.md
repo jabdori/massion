@@ -1,5 +1,7 @@
 # Settings fidelity (E3d1)
 
+Latest P2 round: merge main PR 110 (`9dc70dc`), fix current-view unlocking and the 16-model limit. Both regressions were observed RED then GREEN. Related tests: 82 passed; typecheck passed. Per owner direction, broad suites/contracts and pair captures below are retained historical evidence from the prior round, not rerun for this update.
+
 32 Settings captures: required matches 588 → 856 / 982; contract diagnostics 394 → 126; visual diagnostics 32 → 0; infrastructure errors 0 → 0.
 
 The complete CI command captured all 75 contracts in both system themes (150 unique runs), report-only exit 0 and no infrastructure errors. Contracts outside Settings retain their existing drift. This is fixture evidence, not real-provider, credential or device evidence.

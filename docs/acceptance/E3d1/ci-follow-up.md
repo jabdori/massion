@@ -90,3 +90,7 @@ Version, SurrealKV durability, restart flag, ownership checks, namespace,
 loopback isolation, and deny-net/deny-scripting flags match the CI launcher.
 No skips or timeouts are added to the suite. The ordinary conditional browser
 skips also occur in the original CI run (33).
+
+## P2 follow-up after PR 110
+
+Merge main `9dc70dc`, preserving its app-page styles/functions and additive copy/visual data, then regenerate tokens. After a group save settles, clear settingsBusy and rerender the currently selected Settings section, including a different group opened while saving. Enforce 1–16 profiles in the shared save path and disable spare picker choices at 16. Two regressions were observed failing before the fixes and passing afterward: A → pending save → B remains selected and becomes editable; 15 → 16 disables model 17 and even a synthetic click sends no second POST. Related Settings, reconciliation, apps and shell tests: 82 passed; typecheck passed. Per the owner process update, no full suite, contract runner or pair recapture was repeated for this round.

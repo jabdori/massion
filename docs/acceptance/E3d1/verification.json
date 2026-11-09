@@ -505,5 +505,22 @@
       "\uc9c1\uc811 \ub9cc\ub4e0 \uc5711 \u2192 \uc9c1\uc811 \ub9cc\ub4e0 \uc571 1"
     ],
     "reason": "Explicit owner feedback A2; no role/order/occurrence/budget/checker change"
+  },
+  "historicalBroadEvidenceHead": "4f02385",
+  "latestReviewRound": {
+    "mainCommit": "9dc70dcf4df04122e9c9d64c4ee1b29bc26bc5c2",
+    "fixes": [
+      "Rerender the current Settings section when a pending group save settles",
+      "Enforce maximum 16 profiles in the shared save path and disable remaining picker choices"
+    ],
+    "relatedTests": {
+      "command": "node --test tests/settings-surface.test.ts tests/settings-group-reconciliation.test.ts tests/apps-surface.test.ts tests/surface-shell.test.ts",
+      "tests": 82,
+      "passed": 82,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typecheck": "passed",
+    "process": "Related tests and typecheck only; previous broad runs and source fingerprints are historical evidence, not repeated on this candidate."
   }
 }

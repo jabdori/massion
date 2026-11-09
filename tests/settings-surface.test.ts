@@ -80,6 +80,29 @@ test('Group edits send the existing exact CAS payload once when changes overlap'
  assert.ok(!app.calls.some(c=>c.path==='/assistant/decisions'),'group changes never change checking routes');
 });
 
+test('A group save settling unlocks the group opened while that save was pending',async()=>{
+ const {app,state,catalog,group}=groupFixture(),other={...group,id:'coding',name:'Coding'};catalog.modelGroups.push(other);
+ await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');
+ const name=byId(app,'settings-group-name')!;name.value='Evidence';const save=name.fire('change');await settle();
+ await button(app.node('settings-groups'),'‹ '+copy('conversation.button.12'))!.fire('click');await byId(app,'settings-group-coding')!.fire('click');
+ assert.equal(byId(app,'settings-group-name')!.disabled,true);
+ state.pending!(reply({...catalog,configHash:'hash-b',modelGroups:[{...group,name:'Evidence'},other]}));await save;await settle();
+ assert.equal(byId(app,'settings-group-name')!.value,'Coding');assert.equal(byId(app,'settings-group-name')!.disabled,false);
+ assert.equal(runInContext('settingsGroup',app.context),'coding');assert.equal(state.posted.length,1);
+});
+
+test('Adding model sixteen disables remaining choices and the shared save path refuses model seventeen',async()=>{
+ const {app,state,catalog,group}=groupFixture(),template=group.models[0]!;
+ group.models=Array.from({length:15},(_,i)=>({...template,profileId:'profile-'+i,model:'model-'+i}));
+ const sixteenth={...template,profileId:'profile-15',model:'model-15'},seventeenth={...template,profileId:'profile-16',model:'model-16'};
+ catalog.runtime.connections=[...group.models,sixteenth,seventeenth].map(m=>({id:m.profileId,model:m.model,label:m.label,providerKind:m.provider,revision:m.configHash,diagnostics:[]}));
+ await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');await byId(app,'settings-group-add')!.fire('click');
+ await button(app.node('settings-groups'),sixteenth.model)!.fire('click');await settle();assert.equal(state.posted.length,1);assert.equal(state.posted[0].profileIds.length,16);
+ state.pending!(reply({...catalog,configHash:'hash-b',modelGroups:[{...group,models:[...group.models,sixteenth]}]}));await settle();
+ const choice=button(app.node('settings-groups'),seventeenth.model)!;assert.ok(choice);assert.equal(choice.disabled,true);
+ await choice.fire('click');await settle();assert.equal(state.posted.length,1,'queued or synthetic clicks cannot submit model seventeen');
+});
+
 test('A lost group-save response remains unknown and cannot be resent by another edit',async()=>{
  const {app,state}=groupFixture();await settle();await open(app,'connections');await byId(app,'settings-group-research')!.fire('click');
  const name=byId(app,'settings-group-name')!;name.value='Evidence';const first=name.fire('change');await settle();
@@ -148,6 +171,13 @@ test('Memory shows what you said, what was learned with its evidence, and the ch
  await button(body,copy('page.button.09'))!.fire('click');await settle();
  const revert=state.posted.at(-1)!;assert.equal(revert.path,'/missions/intake/growth');assert.deepEqual({...revert.body,commandId:''},{commandId:'',expectedRevision:9,growthId:'g-2',baseline:'tone@1',candidate:'tone@2',action:'revert'});
  assert.ok(!state.posted.some(p=>/adopt/.test(JSON.stringify(p.body))),'Settings adopts nothing');
+});
+
+test('Memory search filters loaded instructions and changes without writing or changing their identities',async()=>{
+ const {app,state}=fixture();await settle();await open(app,'memory');
+ const query=byId(app,'memory-query')!;query.value='Round';await query.fire('input');
+ const body=app.node('settings-memory-body');assert.match(body.textContent,/Round each line/);assert.doesNotMatch(body.textContent,/Plain tone|Short plain tone/);
+ assert.ok(byId(app,'memory-switch-rounding'));assert.equal(byId(app,'memory-switch-tone'),undefined);assert.deepEqual(state.posted,[]);
 });
 
 test('Members lists the Representative and each member with its model group; a row opens the member page and Message opens that conversation',async()=>{

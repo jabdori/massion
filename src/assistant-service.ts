@@ -292,7 +292,7 @@ export class AssistantService {
  // ponytail: `at` is the run start because Records keep no acceptance time; at most 200 rows, page when owners keep more.
  async results(){
   const intake=this.#connections?.list().representative?.intakeMissionId,state=intake?await this.#store.readState(intake):await this.#store.readState(),mission=(intake?state.snapshot?.value:undefined) as Mission|undefined;
-  const rows=(mission?.works??[]).filter(w=>w.acceptance==='accepted'&&w.record&&w.assistantSource).map(w=>({missionId:mission!.id,workId:w.id,recordId:w.record!.id,version:w.record!.artifact.version,sha256:w.record!.artifact.sha256,kind:w.record!.artifact.kind,title:w.title,at:w.runtimeRun?.ownership?.startedAt??null,segment:Number(w.assistantSource!.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),turnId:w.assistantSource!.turnId}));
+  const rows=(mission?.works??[]).filter(w=>w.acceptance==='accepted'&&w.record&&w.assistantSource).map(w=>({missionId:mission!.id,workId:w.id,recordId:w.record!.id,version:w.record!.artifact.version,sha256:w.record!.artifact.sha256,kind:w.record!.artifact.kind,title:w.title,memberId:w.assistantSource!.memberId??null,at:w.runtimeRun?.ownership?.startedAt??null,segment:Number(w.assistantSource!.segmentId.slice(ASSISTANT_CONVERSATION_PREFIX.length)),turnId:w.assistantSource!.turnId}));
   return {feedId:state.feedId,results:rows.sort((a,b)=>(b.at??0)-(a.at??0)).slice(0,200)};
  }
  /** The host Work list (member-work.md): every conversation Work of the intake Mission, newest admission first, with its member and end time. No writes and no calls. */
