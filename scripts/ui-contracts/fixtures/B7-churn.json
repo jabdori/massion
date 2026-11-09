@@ -1,6 +1,6 @@
 {
   "screen": "B7-churn",
-  "description": "Work room for B7-churn. Data-only domain commands and production readers; no provider calls, payment history or per-step timestamps.",
+  "description": "Work telemetry generated through versioned domain commands; fixture text only, no external business evidence.",
   "now": 1793855520000,
   "readySelector": "[id=\"chat-card-assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd\"]",
   "steps": [
@@ -16,9 +16,8 @@
     }
   ],
   "gaps": [
-    "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
+    "No browser/page-read telemetry is produced by these fixture text Works.",
     "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-    "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion.",
     "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
   ],
   "reuse": [
@@ -31,7 +30,8 @@
     "src/runtime-lifetime.ts (bounded ownership and no-replay unknown interruption)",
     "scripts/ui-contracts/fixtures/B18.json (existing member discussion copy and GitHub rail descriptor; read-only reuse)",
     "scripts/ui-contracts/fixtures/B16.json (existing accepted PR #84 text for idle unread Juno); B18.json (active PR #84 for B7-churn)",
-    "src/assistant-conversation.ts and src/assistant-service.ts (three actual plain-reply member reads, without steer/proposal/outcome; existing Work state and exact readers unchanged)"
+    "src/assistant-conversation.ts and src/assistant-service.ts (three actual plain-reply member reads, without steer/proposal/outcome; existing Work state and exact readers unchanged)",
+    "scripts/ui-contracts/regenerate-work-telemetry.ts: timed admission, task effects/settlement, independent check and owner discussion commands"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -238,8 +238,8 @@
                 "fact": null
               },
               "steps": {
-                "done": 0,
-                "total": 2
+                "done": 2,
+                "total": 4
               },
               "progress": {
                 "make": {
@@ -311,7 +311,11 @@
             "startedAt": 1793855280001,
             "endedAt": null,
             "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-            "segment": 1
+            "segment": 1,
+            "steps": {
+              "done": 2,
+              "total": 4
+            }
           },
           {
             "missionId": "intake",
@@ -331,7 +335,11 @@
             "startedAt": 1793855280000,
             "endedAt": 1793855520000,
             "turnId": "assistant-turn:m:17566e2a8155facdc82f844185d10cf6",
-            "segment": 1
+            "segment": 1,
+            "steps": {
+              "done": 0,
+              "total": 2
+            }
           },
           {
             "missionId": "intake",
@@ -430,6 +438,7 @@
                 "messages": [
                   {
                     "actorId": "local-owner",
+                    "at": 1793855280007,
                     "id": "e3c-churn-discussion",
                     "ordinal": 1,
                     "replyTo": null,
@@ -455,6 +464,7 @@
             "works": [
               {
                 "acceptance": "pending",
+                "admittedAt": 1793855280001,
                 "appliedMemoryVersions": [],
                 "assignments": [
                   {
@@ -498,6 +508,62 @@
                     },
                     "role": "verifier",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
+                  },
+                  {
+                    "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:0",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                  },
+                  {
+                    "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:1",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                  },
+                  {
+                    "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:2",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
+                  },
+                  {
+                    "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                   }
                 ],
                 "assistantSource": {
@@ -530,6 +596,10 @@
                     "modelVersions": [
                       "fixture-v1",
                       "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1",
+                      "fixture-v1",
                       "fixture-v1"
                     ],
                     "number": 1,
@@ -537,7 +607,7 @@
                   }
                 ],
                 "budget": {
-                  "limit": 8,
+                  "limit": 28,
                   "measured": 1,
                   "reserved": 4,
                   "unit": "output-tokens"
@@ -548,6 +618,22 @@
                   "version": 1
                 },
                 "effects": [
+                  {
+                    "authority": "data-only fixture",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:fixture",
+                    "receipt": "지난 90일 해지 41건을 정리했습니다.",
+                    "status": "succeeded",
+                    "target": "fixture text",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                  },
+                  {
+                    "authority": "data-only fixture",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:fixture",
+                    "receipt": "고객 분류",
+                    "status": "succeeded",
+                    "target": "fixture text",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                  },
                   {
                     "authority": "fixture-authorization",
                     "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor",
@@ -570,7 +656,7 @@
                   "authorizationId": "fixture-authorization",
                   "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                   "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-                  "inputHash": "2ecb6309f5a72b0dd3d8e2991677576aef60d4597821e99792cede8eadc47190",
+                  "inputHash": "fa73082ef048e7dfc7915bcda750f44d37e527972f80d568ecefb49131487d61",
                   "mode": "mock-http",
                   "outputTokenCap": 4,
                   "ownership": {
@@ -589,18 +675,92 @@
                   {
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                    "startedAt": 1793855280006,
                     "status": "active"
                   },
                   {
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "status": "queued"
+                  },
+                  {
+                    "endedAt": 1793855280003,
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "result": "지난 90일 해지 41건을 정리했습니다.",
+                    "startedAt": 1793855280002,
+                    "status": "settled",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "조사",
+                      "title": "해지 내역 수집"
+                    }
+                  },
+                  {
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "startedAt": 1793855280004,
+                    "status": "active",
+                    "step": {
+                      "dependsOn": [
+                        "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                      ],
+                      "role": "분류",
+                      "title": "고객 분류"
+                    }
+                  },
+                  {
+                    "endedAt": 1793855280005,
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "result": "Skipped · 기존 설문 활용",
+                    "status": "settled",
+                    "step": {
+                      "dependsOn": [],
+                      "role": "설문",
+                      "skipReason": "기존 설문 활용",
+                      "title": "설문 발송"
+                    }
+                  },
+                  {
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "status": "queued",
+                    "step": {
+                      "dependsOn": [
+                        "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                      ],
+                      "role": "요약",
+                      "title": "원인 요약"
+                    }
                   }
                 ],
+                "team": {
+                  "memberId": "member-quill",
+                  "procedures": [
+                    {
+                      "body": {
+                        "description": "해지 원인 조사",
+                        "steps": [
+                          "해지 내역 수집",
+                          "고객 분류",
+                          "설문 발송",
+                          "원인 요약"
+                        ],
+                        "verify": "근거와 해지 원인 대조"
+                      },
+                      "hash": "640153fda6b8efe4b82a6c99df8ad645907e8da664b21d3fcac4037e9739ff99",
+                      "id": "q13-churn",
+                      "version": 1
+                    }
+                  ],
+                  "skillsRevision": 1
+                },
                 "title": "이탈 원인 조사"
               },
               {
                 "acceptance": "pending",
+                "admittedAt": 1793855280000,
                 "appliedMemoryVersions": [],
                 "assignments": [
                   {
@@ -703,12 +863,13 @@
                     "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
                   }
                 ],
-                "endedAt": 1793855520000,
+                "endedAt": 1793855280002,
                 "execution": "waiting",
                 "id": "assistant-2840e7c8b74c0197c547ce73",
                 "instructions": [
                   {
                     "actorId": "local-owner",
+                    "at": 1793855280002,
                     "text": "앞으로 표 금액은 원 단위로 써 줘."
                   }
                 ],
@@ -742,6 +903,7 @@
                   {
                     "id": "assistant-2840e7c8b74c0197c547ce73:executor",
                     "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                    "startedAt": 1793855280001,
                     "status": "active"
                   },
                   {
@@ -917,6 +1079,7 @@
               "messages": [
                 {
                   "actorId": "local-owner",
+                  "at": 1793855280007,
                   "id": "e3c-churn-discussion",
                   "ordinal": 1,
                   "replyTo": null,
@@ -942,6 +1105,7 @@
           "works": [
             {
               "acceptance": "pending",
+              "admittedAt": 1793855280001,
               "appliedMemoryVersions": [],
               "assignments": [
                 {
@@ -985,6 +1149,62 @@
                   },
                   "role": "verifier",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
+                },
+                {
+                  "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:0",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                },
+                {
+                  "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:1",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                },
+                {
+                  "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:2",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
+                },
+                {
+                  "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                 }
               ],
               "assistantSource": {
@@ -1017,6 +1237,10 @@
                   "modelVersions": [
                     "fixture-v1",
                     "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1",
+                    "fixture-v1",
                     "fixture-v1"
                   ],
                   "number": 1,
@@ -1024,7 +1248,7 @@
                 }
               ],
               "budget": {
-                "limit": 8,
+                "limit": 28,
                 "measured": 1,
                 "reserved": 4,
                 "unit": "output-tokens"
@@ -1035,6 +1259,22 @@
                 "version": 1
               },
               "effects": [
+                {
+                  "authority": "data-only fixture",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:fixture",
+                  "receipt": "지난 90일 해지 41건을 정리했습니다.",
+                  "status": "succeeded",
+                  "target": "fixture text",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                },
+                {
+                  "authority": "data-only fixture",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:fixture",
+                  "receipt": "고객 분류",
+                  "status": "succeeded",
+                  "target": "fixture text",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                },
                 {
                   "authority": "fixture-authorization",
                   "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd:executor",
@@ -1057,7 +1297,7 @@
                 "authorizationId": "fixture-authorization",
                 "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                 "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-                "inputHash": "2ecb6309f5a72b0dd3d8e2991677576aef60d4597821e99792cede8eadc47190",
+                "inputHash": "fa73082ef048e7dfc7915bcda750f44d37e527972f80d568ecefb49131487d61",
                 "mode": "mock-http",
                 "outputTokenCap": 4,
                 "ownership": {
@@ -1076,18 +1316,92 @@
                 {
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
+                  "startedAt": 1793855280006,
                   "status": "active"
                 },
                 {
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "status": "queued"
+                },
+                {
+                  "endedAt": 1793855280003,
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "result": "지난 90일 해지 41건을 정리했습니다.",
+                  "startedAt": 1793855280002,
+                  "status": "settled",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "조사",
+                    "title": "해지 내역 수집"
+                  }
+                },
+                {
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "startedAt": 1793855280004,
+                  "status": "active",
+                  "step": {
+                    "dependsOn": [
+                      "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                    ],
+                    "role": "분류",
+                    "title": "고객 분류"
+                  }
+                },
+                {
+                  "endedAt": 1793855280005,
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "result": "Skipped · 기존 설문 활용",
+                  "status": "settled",
+                  "step": {
+                    "dependsOn": [],
+                    "role": "설문",
+                    "skipReason": "기존 설문 활용",
+                    "title": "설문 발송"
+                  }
+                },
+                {
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "status": "queued",
+                  "step": {
+                    "dependsOn": [
+                      "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                    ],
+                    "role": "요약",
+                    "title": "원인 요약"
+                  }
                 }
               ],
+              "team": {
+                "memberId": "member-quill",
+                "procedures": [
+                  {
+                    "body": {
+                      "description": "해지 원인 조사",
+                      "steps": [
+                        "해지 내역 수집",
+                        "고객 분류",
+                        "설문 발송",
+                        "원인 요약"
+                      ],
+                      "verify": "근거와 해지 원인 대조"
+                    },
+                    "hash": "640153fda6b8efe4b82a6c99df8ad645907e8da664b21d3fcac4037e9739ff99",
+                    "id": "q13-churn",
+                    "version": 1
+                  }
+                ],
+                "skillsRevision": 1
+              },
               "title": "이탈 원인 조사"
             },
             {
               "acceptance": "pending",
+              "admittedAt": 1793855280000,
               "appliedMemoryVersions": [],
               "assignments": [
                 {
@@ -1190,12 +1504,13 @@
                   "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
                 }
               ],
-              "endedAt": 1793855520000,
+              "endedAt": 1793855280002,
               "execution": "waiting",
               "id": "assistant-2840e7c8b74c0197c547ce73",
               "instructions": [
                 {
                   "actorId": "local-owner",
+                  "at": 1793855280002,
                   "text": "앞으로 표 금액은 원 단위로 써 줘."
                 }
               ],
@@ -1229,6 +1544,7 @@
                 {
                   "id": "assistant-2840e7c8b74c0197c547ce73:executor",
                   "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                  "startedAt": 1793855280001,
                   "status": "active"
                 },
                 {
@@ -1593,8 +1909,8 @@
                 "fact": null
               },
               "steps": {
-                "done": 0,
-                "total": 2
+                "done": 2,
+                "total": 4
               },
               "progress": {
                 "make": {
@@ -1988,17 +2304,18 @@
         "cursor": 6,
         "conversation": {
           "id": "conversation:93062916d6cd190500d87278a2d0c648bca8b0f8",
+          "workId": "assistant-236a368dfcf6f32eaeb68fb0",
           "messages": [
             {
-              "actorId": "local-owner",
               "id": "e3c-churn-discussion",
               "ordinal": 1,
-              "replyTo": null,
+              "actorId": "local-owner",
               "role": "owner",
-              "text": "기업 고객은 따로 봐 줘."
+              "replyTo": null,
+              "text": "기업 고객은 따로 봐 줘.",
+              "at": 1793855280007
             }
-          ],
-          "workId": "assistant-236a368dfcf6f32eaeb68fb0"
+          ]
         }
       }
     },

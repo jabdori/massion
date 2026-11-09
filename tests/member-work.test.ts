@@ -180,7 +180,7 @@ test('member 1:1 conversation: a remark about its open Work is recorded as that 
  const prompt=f.prompts.at(-1)!.prompt;assert.deepEqual(prompt.works,[{id:work.id,title:'Churn causes'}]);assert.deepEqual(prompt.member,{name:'Quill'});
  assert.equal(f.prompts.filter(p=>p.prompt.currentMessage===text).length,1,'one model call for the same command');
  assert.deepEqual([a.message.status,b.message.status].sort(),['committed','replayed']);
- await confirmLast(chat);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.deepEqual(after.instructions,[{actorId:'local-owner',text}]);assert.equal(after.execution,work.blocker?'blocked':'waiting','steering preserves an existing runtime blocker');
+ await confirmLast(chat);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.deepEqual(after.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text}]);assert.equal(after.execution,work.blocker?'blocked':'waiting','steering preserves an existing runtime blocker');
  const read=await chat.read();assert.deepEqual(read.turns[0]!.steer,{missionId:'intake',workId:work.id,status:'recorded',title:'Churn causes'});
  // A Work not in this member's list is never steered.
  f.script.push(steer('Sure.','assistant-000000000000000000000000'));const other=await f.say(chat,'And the other thing.');
@@ -260,7 +260,7 @@ test('an ambiguous steering commit is not resent even when the same owner messag
  const running=await runningWork(f,t),work=running.work;
  let commits=0;const ownerStore=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events[0].type==='steer'){commits++;throw new CommitOutcomeUnknownError(input,new Error('Lost reply'));}return result;};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  const chat=f.chatFor(quill,ownerStore);f.script.push(steer('Annual plans only.',work.id));await f.say(chat,'Annual plans only.','ambiguous-steer');await confirmLast(chat);await f.say(chat,'Annual plans only.','ambiguous-steer');await confirmLast(chat);
- assert.equal(commits,1);assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions,[{actorId:'local-owner',text:'Annual plans only.'}]);
+ assert.equal(commits,1);assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans only.'}]);
 });
 
 test('a duplicate message committed after its replay lookup returns the stored result',async t=>{
@@ -280,7 +280,7 @@ test('a member steering message interrupts the active provider call after record
  assert.equal(signal?.aborted,true,'the stored steer must interrupt the already running call');
  await f.assistant.idle();const server=createWorkbench(f.store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const listed=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/works').then(r=>r.json()) as any;const stopped=listed.works.find((w:any)=>w.workId===work.id);assert.equal(stopped.execution,'waiting');assert.ok(Number.isSafeInteger(stopped.endedAt));
- assert.deepEqual((await f.intake()).works.at(-1)!.instructions,[{actorId:'local-owner',text:'Annual plans only.'}]);
+ assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans only.'}]);
 });
 
 
@@ -417,7 +417,7 @@ test('a model-selected steering target is only proposed until the owner explicit
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const url='http://127.0.0.1:'+(server.address() as {port:number}).port,feed=(await chat.read()).feedId,body={member:quill.id,segment:1,turnId:sent.turn!.id};
  const post=(data:any,feedId=feed)=>fetch(url+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json','x-massion-feed':feedId},body:JSON.stringify(data)});
  assert.equal((await post({...body,text:'Injected text'})).status,400);assert.equal((await post({...body,workId:'other'})).status,400);assert.equal((await post(body,'old-feed')).status,409);assert.equal(running.signal().aborted,false);
- const replies=await Promise.all([post(body),post(body)]);assert.ok(replies.every(r=>r.status===200));assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions,[{actorId:'local-owner',text:'An unrelated greeting'}]);
+ const replies=await Promise.all([post(body),post(body)]);assert.ok(replies.every(r=>r.status===200));assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'An unrelated greeting'}]);
  assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -463,7 +463,7 @@ test('confirmation audit: a definite conversation revision conflict releases the
  const ownerStore=intercepted(f.store,{load:async(id:string)=>{if(race&&id===segmentId){race=false;await f.say(f.chatFor(quill),'Another message');}return f.store.load(id);}}),chat=f.chatFor(quill,ownerStore);
  f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans'),input={segment:1,turnId:sent.turn!.id};race=true;
  assert.equal((await chat.confirmSteer(input)).status,'not_recorded');assert.equal((await chat.read()).turns.find(t=>t.id===input.turnId)!.steer!.status,'proposed');assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions,undefined);
- assert.equal((await chat.confirmSteer(input)).status,'recorded');assert.deepEqual((await f.intake()).works.at(-1)!.instructions,[{actorId:'local-owner',text:'Annual plans'}]);
+ assert.equal((await chat.confirmSteer(input)).status,'recorded');assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans'}]);
 });
 
 test('confirmation audit: an idempotent intent replay never authorizes the Work write',async t=>{
@@ -548,7 +548,11 @@ test('Q13 member procedure becomes nested workers with retained skips and indepe
  assert.equal(steps.length,3,JSON.stringify({blocker:w.blocker,tasks:w.tasks}));
  assert.ok(steps.every(task=>task.parentId===w.id+':executor'));
  assert.equal(steps[1]!.result,'Skipped · No comparison requested');
+ assert.equal(steps[1]!.startedAt,undefined);assert.ok(Number.isSafeInteger(steps[1]!.endedAt));
+ for(const task of [steps[0]!,steps[2]!])assert.ok(Number.isSafeInteger(task.startedAt)&&task.endedAt!>=task.startedAt!);
  assert.ok(steps.every(task=>task.status==='settled'));
+ for(const task of steps.filter(t=>!t.step?.skipReason)){assert.equal(task.progress?.done,1);assert.equal(task.progress?.total,1);}
+ await f.product.appendWorkMessage('intake',{commandId:'procedure-note',expectedRevision:(await f.store.load('intake'))!.revision,workId:w.id,messageId:'procedure-note',replyTo:null,text:'Use tests first next time',stepNote:{taskId:steps[0]!.id,title:'Tests first'}});
  assert.equal(w.acceptance,'accepted',JSON.stringify({tasks:w.tasks,effects:w.effects.map(e=>({id:e.id,status:e.status})),blocker:w.blocker,turn:(await f.assistant.read()).turns.at(-1)}));assert.equal(w.verdict!.check!.producers.length,2);
  assert.ok(w.assignments.filter(a=>steps.some(s=>s.id===a.taskId)).every(a=>a.actorId!==w.assignments.find(a=>a.role==='verifier')!.actorId));
  validateMissionJournalLineage(f.store.inspect() as any);
@@ -664,6 +668,7 @@ test('Q13 workers receive pinned constraints, memory and source contents after n
  test('Q14 member Work retains a challenge and concession before its separate checking seat',async t=>{
  const f=await setup(t);await f.admit();f.script.push(v2('On it.','Challenge evidence','Quill'));await f.say(f.assistant,'Challenge evidence');await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.runtimeRun?.roomVersion,1);assert.equal(w.runtimeRun?.toolTimeoutVersion,'tool-timeouts/v1');assert.ok(w.room,JSON.stringify({tasks:w.tasks,blocker:w.blocker,effects:w.effects.map(e=>({id:e.id,status:e.status}))}));assert.deepEqual(w.room.messages.map(m=>m.kind),['proposal','challenge','concede']);
+ assert.ok(w.room.messages.every(m=>Number.isSafeInteger(m.at)));
  assert.equal(w.room.issue?.status,'escalated');assert.equal(w.room.sameModel,true);assert.equal(w.acceptance,'accepted');assert.deepEqual(w.record!.room,w.room);
  const checker=w.assignments.find(a=>a.role==='verifier')!.actorId;assert.ok(w.room.messages.every(m=>m.authorId!==checker&&m.inferred));
  validateMissionJournalLineage(f.store.inspect() as any);
@@ -680,7 +685,7 @@ test('Q13 workers receive pinned constraints, memory and source contents after n
  const f=await setup(t);await f.admit();let entered=()=>{},release=()=>{};const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
  t.after(async()=>{release();await f.assistant.idle();});f.setRoomTurn(async(_p,signal)=>{entered();signal.addEventListener('abort',release,{once:true});await gate;return JSON.stringify({kind:'challenge',text:'Late',quote:'Answer bounded'});});
  f.script.push(v2('On it.','Drain room','Quill'));await f.say(f.assistant,'Drain room');await started;f.m.beginDrain();release();await f.assistant.idle();
- const w=(await f.intake()).works.at(-1)!;assert.equal(w.room!.messages.length,1);assert.equal(w.verdict,undefined);assert.ok(w.runtimeInterruption);assert.ok(w.effects.some(e=>e.status==='unknown'));validateMissionJournalLineage(f.store.inspect() as any);
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.room!.messages.length,1);assert.ok(Number.isSafeInteger(w.room!.messages[0]!.at));assert.equal(w.tasks.find(t=>t.id===w.id+':challenge')!.endedAt,undefined);assert.equal(w.verdict,undefined);assert.ok(w.runtimeInterruption);assert.ok(w.effects.some(e=>e.status==='unknown'));validateMissionJournalLineage(f.store.inspect() as any);
  });
 
 for(const mode of ['shadow','same-model','tight-budget'])test('Q14 discriminator '+mode,async t=>{

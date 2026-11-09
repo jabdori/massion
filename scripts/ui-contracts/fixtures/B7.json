@@ -1,6 +1,6 @@
 {
   "screen": "B7",
-  "description": "Work room for B7. Data-only domain commands and production readers; no provider calls, payment history or per-step timestamps.",
+  "description": "Work telemetry generated through versioned domain commands; fixture text only, no external business evidence.",
   "now": 1793855520000,
   "readySelector": "[id=\"chat-card-assistant-turn:m:51a4f0e9e02a73b04646b598cd44b354\"]",
   "steps": [
@@ -11,9 +11,8 @@
     }
   ],
   "gaps": [
-    "No host producer supplies named business steps, per-step timestamps or browser/page-read telemetry; only the root/executor/verifier task statuses and results are retained.",
-    "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-    "AssistantSource and pinned criteria have no handoff or criteria-fix timestamp; member replies remain separate from owner-only Work discussion."
+    "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
   ],
   "reuse": [
     "tests/support/record-artifact-fixture.ts (application commands, independent assignments, effects, verdict and accepted record)",
@@ -25,7 +24,8 @@
     "src/runtime-lifetime.ts (bounded ownership and no-replay unknown interruption)",
     "scripts/ui-contracts/fixtures/B18.json (existing member discussion copy and GitHub rail descriptor; read-only reuse)",
     "src/assistant-service.ts:197-220 (actual owner-confirmed pricing format steering; three approved B18 member exchanges)",
-    "scripts/ui-contracts/fixtures/B16.json (existing accepted PR #84 text for idle unread Juno); B18.json (active PR #84 for B7-churn)"
+    "scripts/ui-contracts/fixtures/B16.json (existing accepted PR #84 text for idle unread Juno); B18.json (active PR #84 for B7-churn)",
+    "scripts/ui-contracts/regenerate-work-telemetry.ts: timed admission, task effects/settlement, independent check and owner discussion commands"
   ],
   "routes": {
     "/assistant/conversation": {
@@ -372,7 +372,11 @@
             "startedAt": 1793855280002,
             "endedAt": null,
             "turnId": "assistant-turn:m:51a4f0e9e02a73b04646b598cd44b354",
-            "segment": 1
+            "segment": 1,
+            "steps": {
+              "done": 0,
+              "total": 2
+            }
           },
           {
             "missionId": "intake",
@@ -536,6 +540,7 @@
             "works": [
               {
                 "acceptance": "pending",
+                "admittedAt": 1793855280002,
                 "appliedMemoryVersions": [],
                 "assignments": [
                   {
@@ -669,6 +674,7 @@
                   {
                     "id": "assistant-f649eeac3174103d975463a1:executor",
                     "parentId": "assistant-f649eeac3174103d975463a1:root",
+                    "startedAt": 1793855280003,
                     "status": "active"
                   },
                   {
@@ -1387,6 +1393,7 @@
           "works": [
             {
               "acceptance": "pending",
+              "admittedAt": 1793855280002,
               "appliedMemoryVersions": [],
               "assignments": [
                 {
@@ -1520,6 +1527,7 @@
                 {
                   "id": "assistant-f649eeac3174103d975463a1:executor",
                   "parentId": "assistant-f649eeac3174103d975463a1:root",
+                  "startedAt": 1793855280003,
                   "status": "active"
                 },
                 {
