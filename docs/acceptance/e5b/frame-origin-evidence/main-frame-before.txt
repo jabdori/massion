@@ -1,0 +1,32 @@
+✔ desktop permits only controlled document paths without weakening workbench script and style policy (1.100125ms)
+✔ authenticated app view is published by main; URLs and failed or unrelated replies cannot publish (20.185375ms)
+✔ a malformed request retains the authenticated host rejection without local JSON parsing (2.586416ms)
+✖ workbench requests require the owned main frame and committed app URL (0.757417ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 126.862417
+
+✖ failing tests:
+
+test at desktop/tests/frame-origin.test.ts:46:1
+✖ workbench requests require the owned main frame and committed app URL (0.757417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/desktop/tests/frame-origin.test.ts:52:122)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

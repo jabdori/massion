@@ -19,6 +19,59 @@ B16 now includes Devices navigation, an agent icon beside the recorded device la
 
 The B16 variants retain the missing Representative rounding/check-rule proposal. Its row and unread occurrence cannot be fabricated from the external-member decision; the sent-state order diagnostic follows from this absent preceding row. These failures remain in the report and in [E3e residuals](../E3e/residuals.md). No checker, contract, text budget or CI switch was relaxed.
 
+## Post-merge contract identities
+
+After E6c and the blocking baseline merged, main `ac99f1da04ca51007223edb566e36d3b29933cb6`
+reported 38 resolved exceptions and 18 new diagnostic identities in [CI run
+42657950604](https://github.com/jabdori/massion/actions/runs/42657950604).
+The [exact addition reasons](rebaseline-reasons.json) cover both themes and
+preserve duplicate amount occurrence ordinals. These are bounded exceptions,
+not successful screen contracts. Remove them when their producers land.
+
+- **B4 amount occurrences 1–3:** the contract requires item subtotal, shipping
+  and total inside the browser pane. `chatCheckoutRender` in
+  `src/assistant-conversation-panel.ts` renders only the shared unavailable
+  paragraph. Amounts in the conversation decision card cannot satisfy these
+  page slots. There is no page snapshot producer; copying the pinned checkout
+  fields into a mock page would misrepresent observed browser content.
+- **B4 member-chip order:** the contract requires the page member chip after
+  the page amounts. The unavailable pane has no page identity chip. The
+  checker's Korean-name placeholder also matches the earlier unavailable
+  text, producing an order diagnostic after the close control. Reordering the
+  tab/close controls would not supply the absent page identity. It needs the
+  same real page snapshot producer, not a fabricated chip.
+- **B4 gap:** the unavailable browser tab and lack of checkout-text fallback
+  explicitly record that same missing producer.
+- **B16, B16-later and B16-sent gaps:** the external-member handoff does not
+  produce the separate Representative rounding/check-rule proposal. Its
+  activity row and associated unread state remain absent.
+- **B16-sent sidebar-link order:** `src/surface-shell.ts` places open decisions
+  before sent external handoffs, then other Work rows. The snapshot contains
+  the correctly labeled sent link before the unrelated PR #84 unread row.
+  The contract expects a rounding-proposal row and its unread marker before
+  that link. With the proposal absent, the checker consumes the later PR #84
+  unread text, then reports the preceding sent link as out of order. Moving
+  unrelated activity or inventing unread state would conceal the missing
+  proposal. Remove this exception together with the rounding-proposal
+  residual after the real producer supplies that preceding row and marker.
+
+### Rebaseline verification
+
+[Machine-readable results](rebaseline-verification.json): 978 original entries
+minus 38 resolved plus 18 explicitly justified additions equals 958. Every
+retained entry and the original baseline source are unchanged. The gate against
+the complete 150-row CI capture passes with zero new, stale or infrastructure
+diagnostics. Node v24.21.0: all six gate unit tests and typecheck pass.
+
+A fresh headless capture of B4, B16, B16-later and B16-sent in both themes is
+stored locally in `.runtime/rebaseline-local/` (`report.json`, `checks/`,
+`snapshots/`, `screenshots/`, `visual/`, `pairs/`). The existing capture reader
+and gate evaluator pass against the exact eight-row subset: 24 allowed
+occurrences, zero new/stale/infrastructure diagnostics. Raw contracts still
+report 16 failures and eight producer gaps; there are no visual failures or
+warnings. This verifies classification, not completion of those capabilities.
+No UI, fixture, contract, checker or gate implementation changed.
+
 ## Not run / not claimed
 
 No real payment, remote device, provider model, credential delegation, deployment or merge. No live checkout screenshot or provider-confirmed order-history reconciliation. The default host has no effect adapter, and refuses approval when one is unavailable. Persistent trust of a device across different Work admissions is not added: each pinned handoff needs its own owner decision. Full-suite and full-contract runs belong to CI under the owner's verification budget; independent review belongs to the lead and the requested Codex PR review.

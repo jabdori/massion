@@ -74,3 +74,13 @@ lands with this PR. [Details and scoped gate evidence](allow-list-follow-up/READ
 Main `3ffdf51` was integrated without rebasing. Post-integration related checks passed 193 tests with one opt-in skip; the final mail/scoped app check passed 133/133 and typecheck passed. Linux Node 24.19.0 passed 23 app/document tests, 15 desktop tests, desktop typecheck and the complete actual app-panel script/style/resize smoke ([logs](p2-checks/)).
 
 After integrating the blocking gate at `ac99f1d`, the unchanged gate engine passes the fixed E5b screen/copy scope with zero new, stale or infrastructure diagnostics. Only the 154 resolved E5b exceptions were removed; no additions were justified or made.
+
+The final #125 rebaseline (`c045c97`) was integrated with only the same 154 E5b removals reapplied: 958 → 804 exceptions. All other entries and rebaseline metadata were preserved. The scoped production gate still reports zero new/stale/infrastructure diagnostics; no additions or justification flags were used.
+
+
+Final current-main checks: typecheck passed; 136 related tests passed with one
+real-DB skip. Rebuilt Linux desktop typecheck/unit/smoke checks passed with the
+actual app document's script, styles and resize message. The adjacent first-task
+picker screens also pass 78/78 required checks in six theme/state runs and their
+scoped gate, with no new or stale diagnostics. These are affected checks only;
+full-suite and full-screen CI remain separate.

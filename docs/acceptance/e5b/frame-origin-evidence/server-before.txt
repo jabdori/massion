@@ -1,0 +1,31 @@
+✖ browser view publishes installed app HTML outside the workbench origin and closes with it (27.678625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 268.22
+
+✖ failing tests:
+
+test at tests/app-frame-server.test.ts:10:1
+✖ browser view publishes installed app HTML outside the workbench origin and closes with it (27.678625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + '<style>body{color:red}</style><script>window.ran=true</script>'
+  - undefined
+
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/tests/app-frame-server.test.ts:21:9)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '<style>body{color:red}</style><script>window.ran=true</script>',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

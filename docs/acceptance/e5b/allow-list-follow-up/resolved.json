@@ -3,7 +3,7 @@
   "sourceHead": "85b7b2a064735b4ffd810b2327bb333ecf9690d9",
   "condition": "Applied to the actual allow-list after integrating #118; removal lands atomically with #114.",
   "removedCount": 154,
-  "remainingCount": 824,
+  "remainingCount": 804,
   "entries": [
     {
       "screen": "B24",
@@ -1545,5 +1545,7 @@
       "reason": "Lead-assigned existing residual owned by the open E5b PR #114 (feat/mcp-apps) slice. The owning slice must remove this entry when resolved on landing.",
       "ledger": "docs/acceptance/E3f/pending-slices.md#mail-connection-follow-up"
     }
-  ]
+  ],
+  "appliedAgainstMain": "c045c97",
+  "currentBaselineEntries": 958
 }

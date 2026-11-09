@@ -55,10 +55,10 @@ No production message channel or policy was changed for verification.
 
 ## Focused checks
 
-- [Root tests](frame-origin-evidence/root-tests.log): 45 passed, one existing
+- [Root tests](frame-origin-evidence/root-tests.txt): 45 passed, one existing
   opt-in SurrealDB restart test skipped; no full-repository test run.
-- [Root typecheck](frame-origin-evidence/typecheck-root.log): passed.
-- [Integrated desktop checks](frame-origin-evidence/linux-integrated.log): Linux
+- [Root typecheck](frame-origin-evidence/typecheck-root.txt): passed.
+- [Integrated desktop checks](frame-origin-evidence/linux-integrated.txt): Linux
   x86-64 Node 24.19.0 / Electron 45.2.3, desktop typecheck and ten focused tests
   passed, followed by the complete Docker/Xvfb smoke. The smoke now opens the
   real app panel through its rail icon before checking app script/style/resize,
@@ -81,7 +81,7 @@ object. API/subresource requests also require that frame's committed URL to be
 the workbench URL. Registered app documents retain the existing exact URL lookup
 and direct-child `subFrame` admission. No CSP changed in this follow-up.
 
-[Final Linux run](frame-origin-evidence/main-frame-final.log): desktop typecheck,
+[Final Linux run](frame-origin-evidence/main-frame-final.txt): desktop typecheck,
 11 focused tests and complete Xvfb smoke passed. The smoke explicitly performs a
 real main-frame protocol query and receives a real EventSource feed message.
 For each workbench root/connect/request/events target, it passes the actual
@@ -146,3 +146,7 @@ scripts/styles and URL-only transport. No fixture-host CSP override or raw HTML
 injection is needed in the connection-card verifier. A trial adaptation of that
 obsolete probe did not complete through agent-browser; it is not claimed as a
 passing test. The real panel and desktop checks are the replacement evidence.
+
+The development workbench CSP pins its host-lifetime document listener address;
+reload that workbench page after restarting the development host. Desktop uses
+the stable private document scheme. Neither path falls back to inline srcdoc.

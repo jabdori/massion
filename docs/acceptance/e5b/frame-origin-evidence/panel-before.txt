@@ -1,0 +1,27 @@
+✔ app HTML has an opaque sandbox origin and cannot turn messages into host commands (30.5345ms)
+✔ the frame client refuses raw HTML, arbitrary origins and decorated document URLs (7.937ms)
+✖ the app panel renders a hosted document URL instead of accepting inline HTML (7.395167ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 280.423375
+
+✖ failing tests:
+
+test at tests/app-frame.test.ts:32:1
+✖ the app panel renders a hosted document URL instead of accepting inline HTML (7.395167ms)
+  AssertionError [ERR_ASSERTION]: the panel creates the isolated document frame
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/tests/app-frame.test.ts:35:69)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

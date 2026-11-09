@@ -1,0 +1,182 @@
+[
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 3,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-later",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-sent",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-sent",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 2,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+    "occurrence": 3,
+    "category": "capability",
+    "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-later",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-sent",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  },
+  {
+    "screen": "B16-sent",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+    "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+  }
+]

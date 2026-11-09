@@ -1,6 +1,6 @@
 # Resolved B24/B25 exceptions removed in this PR
 
-After integrating main's blocking gate (#118, `ac99f1d`), this PR removes the
+After integrating main's blocking gate and rebaseline (#118/#125, through `c045c97`), this PR removes the
 154 resolved B24/B25 entries from the actual
 `scripts/ui-contracts/allow-list.json`. The removal therefore lands atomically
 with #114. The earlier prepared patch is superseded and has been removed.
@@ -12,8 +12,9 @@ conversation Connect button. Read-only fixture loading is documented as test
 scope, while the production connection transitions are checked separately.
 
 The removal covers 140 contract occurrences, four visual occurrences and ten
-obsolete gap annotations. At the removal checkpoint, the 824 other entries and
-original source metadata were preserved exactly. `resolved.json` retains the
+obsolete gap annotations. The first removal checkpoint preserved 824 other entries. After the E6c
+rebaseline, the current list is 958 → 804: exactly the same 154 E5b removals,
+with all 804 other entries and the new source metadata preserved exactly. `resolved.json` retains the
 precise identities and original #118 head used during preparation.
 
 The unchanged production gate exports are used by

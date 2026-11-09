@@ -45,86 +45,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b3-run-dark"
     },
     {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"결정 대기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-dark"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B5",
       "theme": "dark",
       "kind": "contract",
@@ -2708,61 +2628,11 @@
       "screen": "B16",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
       "occurrence": 1,
       "category": "capability",
       "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
       "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"맡기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-dark"
-    },
-    {
-      "screen": "B16",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B16-later",
@@ -2775,36 +2645,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b16-later-dark"
     },
     {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-dark"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-dark"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B16-sent",
       "theme": "dark",
       "kind": "contract",
@@ -2813,36 +2653,6 @@
       "category": "capability",
       "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
       "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-dark"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-dark"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-dark"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B17",
@@ -3863,86 +3673,6 @@
       "category": "dependency",
       "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
       "ledger": "docs/acceptance/E3e/residuals.md#b3-run-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"결정 대기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "Text execution produces no typed order amounts, browser page counts or payment history. Generic budget units/effects are not currency or browser telemetry.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b4-light"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no payment admission or browser/order-history telemetry producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B5",
@@ -6528,61 +6258,11 @@
       "screen": "B16",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar switch \"활동 보기, 확인 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"깨지는 테스트 고치기 노트북의 Claude Code에게 처음 맡길까요?\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
       "occurrence": 1,
       "category": "capability",
       "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
       "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"맡기기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"나중에\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-light"
-    },
-    {
-      "screen": "B16",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B16-later",
@@ -6595,36 +6275,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b16-later-light"
     },
     {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"다시 묻기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-light"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-later-light"
-    },
-    {
-      "screen": "B16-later",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B16-sent",
       "theme": "light",
       "kind": "contract",
@@ -6633,36 +6283,6 @@
       "category": "capability",
       "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
       "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-light"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-light"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No payment/external-device/budget producer supplies this decision, action, deferral or attention state. The unrelated rounding proposal has no corresponding producing owner-decision route either.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b16-sent-light"
-    },
-    {
-      "screen": "B16-sent",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host routes owner decisions only to members, apps and skills; no external-member admission, transmission receipt or deferred/reopen state producer exists. No corresponding decision or outcome is fabricated.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B17",
@@ -8657,6 +8277,186 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "capability",
+      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-later",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
+    },
+    {
+      "screen": "B16-sent",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "The separate rounding-rule decision has no producer in E6c; its activity row remains absent.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "The separate Representative rounding/check-rule proposal has no producer; its activity row and unread marker are absent.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     }
   ]
 }

@@ -1,0 +1,48 @@
+✖ documents are bounded, expire, and only exact unguessable paths resolve (0.728833ms)
+✖ browser documents have a separate loopback origin, own CSP, no credentials or publish endpoint (0.43225ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 83.702583
+
+✖ failing tests:
+
+test at tests/app-documents.test.ts:5:1
+✖ documents are bounded, expire, and only exact unguessable paths resolve (0.728833ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^\/[a-f0-9]{64}$/. Input:
+
+  ''
+
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/tests/app-documents.test.ts:8:9)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /^\/[a-f0-9]{64}$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/app-documents.test.ts:19:1
+✖ browser documents have a separate loopback origin, own CSP, no credentials or publish endpoint (0.43225ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^http:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/. Input:
+
+  ''
+
+      at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e5b-mcp-apps/tests/app-documents.test.ts:22:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /^http:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/,
+    operator: 'match',
+    diff: 'simple'
+  }
