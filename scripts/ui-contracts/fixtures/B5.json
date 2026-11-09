@@ -270,109 +270,105 @@
         "snapshot": {
           "revision": 13,
           "value": {
-            "id": "intake",
-            "purpose": "맡긴 일",
-            "scope": "local",
             "constraints": [],
             "criteria": {
-              "version": 1,
               "description": "요청한 결과와 근거 확인",
-              "oracle": "bounded-text-review/v1"
+              "oracle": "bounded-text-review/v1",
+              "version": 1
             },
+            "growth": [],
+            "id": "intake",
+            "memories": [],
+            "purpose": "맡긴 일",
+            "relations": [],
+            "scope": "local",
             "version": 1,
             "works": [
               {
-                "id": "toner",
-                "title": "프린터 토너 주문",
-                "missionVersion": 1,
-                "missionSnapshot": {
-                  "version": 1,
-                  "purpose": "맡긴 일",
-                  "scope": "local",
-                  "constraints": []
-                },
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "execution": "blocked",
                 "acceptance": "pending",
-                "tasks": [
+                "admittedAt": 1793855520000,
+                "appliedMemoryVersions": [],
+                "assignments": [
                   {
-                    "id": "toner:root",
-                    "parentId": null,
-                    "status": "active"
+                    "actorId": "executor",
+                    "extensionVersion": "fixture-v1",
+                    "id": "toner:executor",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "toner:root"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "fixture-v1",
+                    "id": "toner:verifier",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "toner:root"
                   }
                 ],
                 "attempts": [
                   {
-                    "id": "toner:attempt:1",
-                    "number": 1,
                     "criteria": {
-                      "version": 1,
                       "description": "요청한 결과와 근거 확인",
-                      "oracle": "bounded-text-review/v1"
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
                     },
-                    "status": "active",
+                    "id": "toner:attempt:1",
                     "modelVersions": [
                       "fixture-v1",
                       "fixture-v1"
-                    ]
+                    ],
+                    "number": 1,
+                    "status": "active"
                   }
                 ],
-                "assignments": [
-                  {
-                    "id": "toner:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "toner:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "toner:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "toner:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "effects": [
-                  {
-                    "id": "toner:effect",
-                    "taskId": "toner:root",
-                    "status": "unknown",
-                    "target": "결제 요청",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "응답 없음 · 다시 보내지 않음"
-                  }
-                ],
-                "appliedMemoryVersions": [],
-                "budget": {
-                  "limit": 8,
-                  "reserved": 1,
-                  "measured": null,
-                  "unit": "output-tokens"
-                },
                 "blocker": {
                   "code": "runtime_unavailable",
                   "detail": "Host run deadline elapsed. Original effects and reservations remain; no remote stop, success or replay is inferred."
                 },
+                "budget": {
+                  "limit": 8,
+                  "measured": null,
+                  "reserved": 1,
+                  "unit": "output-tokens"
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "소유자가 맡긴 일",
+                    "id": "toner:effect",
+                    "receipt": "응답 없음 · 다시 보내지 않음",
+                    "status": "unknown",
+                    "target": "결제 요청",
+                    "taskId": "toner:root"
+                  }
+                ],
                 "endedAt": 1793855520000,
+                "execution": "blocked",
+                "id": "toner",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
                 "runtimeInterruption": {
                   "dispatchId": "fixture-dispatch",
                   "observedAt": 1793855520000,
@@ -396,99 +392,107 @@
                     "hostSessionId": "fixture-host",
                     "startedAt": 1793855280000
                   }
-                }
-              },
-              {
-                "id": "churn",
-                "title": "이탈 원인 조사",
-                "missionVersion": 1,
-                "missionSnapshot": {
-                  "version": 1,
-                  "purpose": "맡긴 일",
-                  "scope": "local",
-                  "constraints": []
                 },
-                "criteria": {
-                  "version": 1,
-                  "description": "요청한 결과와 근거 확인",
-                  "oracle": "bounded-text-review/v1"
-                },
-                "execution": "active",
-                "acceptance": "pending",
                 "tasks": [
                   {
-                    "id": "churn:root",
+                    "id": "toner:root",
                     "parentId": null,
+                    "startedAt": 1793855520000,
                     "status": "active"
+                  }
+                ],
+                "title": "프린터 토너 주문"
+              },
+              {
+                "acceptance": "pending",
+                "admittedAt": 1793855520000,
+                "appliedMemoryVersions": [],
+                "assignments": [
+                  {
+                    "actorId": "executor",
+                    "extensionVersion": "fixture-v1",
+                    "id": "churn:executor",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "churn:root"
+                  },
+                  {
+                    "actorId": "verifier",
+                    "extensionVersion": "fixture-v1",
+                    "id": "churn:verifier",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "gpt-6.1-terra",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "verifier",
+                    "taskId": "churn:root"
                   }
                 ],
                 "attempts": [
                   {
-                    "id": "churn:attempt:1",
-                    "number": 1,
                     "criteria": {
-                      "version": 1,
                       "description": "요청한 결과와 근거 확인",
-                      "oracle": "bounded-text-review/v1"
+                      "oracle": "bounded-text-review/v1",
+                      "version": 1
                     },
-                    "status": "active",
+                    "id": "churn:attempt:1",
                     "modelVersions": [
                       "fixture-v1",
                       "fixture-v1"
-                    ]
+                    ],
+                    "number": 1,
+                    "status": "active"
                   }
                 ],
-                "assignments": [
-                  {
-                    "id": "churn:executor",
-                    "actorId": "executor",
-                    "role": "executor",
-                    "taskId": "churn:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "claude-sonnet-5-5",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  },
-                  {
-                    "id": "churn:verifier",
-                    "actorId": "verifier",
-                    "role": "verifier",
-                    "taskId": "churn:root",
-                    "model": {
-                      "provider": "fixture",
-                      "model": "gpt-6.1-terra",
-                      "configVersion": "fixture-v1",
-                      "reason": "Deterministic UI fixture; no model invocation",
-                      "evidenceClass": "fixture"
-                    },
-                    "extensionVersion": "fixture-v1"
-                  }
-                ],
-                "effects": [
-                  {
-                    "id": "churn:effect",
-                    "taskId": "churn:root",
-                    "status": "succeeded",
-                    "target": "이탈 원인 조사",
-                    "authority": "소유자가 맡긴 일",
-                    "receipt": "고정된 화면 검증 데이터"
-                  }
-                ],
-                "appliedMemoryVersions": [],
                 "budget": {
                   "limit": 8,
-                  "reserved": 1,
-                  "measured": 1
-                }
+                  "measured": 1,
+                  "reserved": 1
+                },
+                "criteria": {
+                  "description": "요청한 결과와 근거 확인",
+                  "oracle": "bounded-text-review/v1",
+                  "version": 1
+                },
+                "effects": [
+                  {
+                    "authority": "소유자가 맡긴 일",
+                    "id": "churn:effect",
+                    "receipt": "고정된 화면 검증 데이터",
+                    "status": "succeeded",
+                    "target": "이탈 원인 조사",
+                    "taskId": "churn:root"
+                  }
+                ],
+                "execution": "active",
+                "id": "churn",
+                "missionSnapshot": {
+                  "constraints": [],
+                  "purpose": "맡긴 일",
+                  "scope": "local",
+                  "version": 1
+                },
+                "missionVersion": 1,
+                "tasks": [
+                  {
+                    "id": "churn:root",
+                    "parentId": null,
+                    "startedAt": 1793855520000,
+                    "status": "active"
+                  }
+                ],
+                "title": "이탈 원인 조사"
               }
-            ],
-            "memories": [],
-            "growth": [],
-            "relations": []
+            ]
           }
         }
       }
@@ -498,109 +502,105 @@
       "body": {
         "revision": 13,
         "value": {
-          "id": "intake",
-          "purpose": "맡긴 일",
-          "scope": "local",
           "constraints": [],
           "criteria": {
-            "version": 1,
             "description": "요청한 결과와 근거 확인",
-            "oracle": "bounded-text-review/v1"
+            "oracle": "bounded-text-review/v1",
+            "version": 1
           },
+          "growth": [],
+          "id": "intake",
+          "memories": [],
+          "purpose": "맡긴 일",
+          "relations": [],
+          "scope": "local",
           "version": 1,
           "works": [
             {
-              "id": "toner",
-              "title": "프린터 토너 주문",
-              "missionVersion": 1,
-              "missionSnapshot": {
-                "version": 1,
-                "purpose": "맡긴 일",
-                "scope": "local",
-                "constraints": []
-              },
-              "criteria": {
-                "version": 1,
-                "description": "요청한 결과와 근거 확인",
-                "oracle": "bounded-text-review/v1"
-              },
-              "execution": "blocked",
               "acceptance": "pending",
-              "tasks": [
+              "admittedAt": 1793855520000,
+              "appliedMemoryVersions": [],
+              "assignments": [
                 {
-                  "id": "toner:root",
-                  "parentId": null,
-                  "status": "active"
+                  "actorId": "executor",
+                  "extensionVersion": "fixture-v1",
+                  "id": "toner:executor",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "toner:root"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "fixture-v1",
+                  "id": "toner:verifier",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "toner:root"
                 }
               ],
               "attempts": [
                 {
-                  "id": "toner:attempt:1",
-                  "number": 1,
                   "criteria": {
-                    "version": 1,
                     "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
                   },
-                  "status": "active",
+                  "id": "toner:attempt:1",
                   "modelVersions": [
                     "fixture-v1",
                     "fixture-v1"
-                  ]
+                  ],
+                  "number": 1,
+                  "status": "active"
                 }
               ],
-              "assignments": [
-                {
-                  "id": "toner:executor",
-                  "actorId": "executor",
-                  "role": "executor",
-                  "taskId": "toner:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "claude-sonnet-5-5",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                },
-                {
-                  "id": "toner:verifier",
-                  "actorId": "verifier",
-                  "role": "verifier",
-                  "taskId": "toner:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "gpt-6.1-terra",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                }
-              ],
-              "effects": [
-                {
-                  "id": "toner:effect",
-                  "taskId": "toner:root",
-                  "status": "unknown",
-                  "target": "결제 요청",
-                  "authority": "소유자가 맡긴 일",
-                  "receipt": "응답 없음 · 다시 보내지 않음"
-                }
-              ],
-              "appliedMemoryVersions": [],
-              "budget": {
-                "limit": 8,
-                "reserved": 1,
-                "measured": null,
-                "unit": "output-tokens"
-              },
               "blocker": {
                 "code": "runtime_unavailable",
                 "detail": "Host run deadline elapsed. Original effects and reservations remain; no remote stop, success or replay is inferred."
               },
+              "budget": {
+                "limit": 8,
+                "measured": null,
+                "reserved": 1,
+                "unit": "output-tokens"
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "소유자가 맡긴 일",
+                  "id": "toner:effect",
+                  "receipt": "응답 없음 · 다시 보내지 않음",
+                  "status": "unknown",
+                  "target": "결제 요청",
+                  "taskId": "toner:root"
+                }
+              ],
               "endedAt": 1793855520000,
+              "execution": "blocked",
+              "id": "toner",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
               "runtimeInterruption": {
                 "dispatchId": "fixture-dispatch",
                 "observedAt": 1793855520000,
@@ -624,99 +624,107 @@
                   "hostSessionId": "fixture-host",
                   "startedAt": 1793855280000
                 }
-              }
-            },
-            {
-              "id": "churn",
-              "title": "이탈 원인 조사",
-              "missionVersion": 1,
-              "missionSnapshot": {
-                "version": 1,
-                "purpose": "맡긴 일",
-                "scope": "local",
-                "constraints": []
               },
-              "criteria": {
-                "version": 1,
-                "description": "요청한 결과와 근거 확인",
-                "oracle": "bounded-text-review/v1"
-              },
-              "execution": "active",
-              "acceptance": "pending",
               "tasks": [
                 {
-                  "id": "churn:root",
+                  "id": "toner:root",
                   "parentId": null,
+                  "startedAt": 1793855520000,
                   "status": "active"
+                }
+              ],
+              "title": "프린터 토너 주문"
+            },
+            {
+              "acceptance": "pending",
+              "admittedAt": 1793855520000,
+              "appliedMemoryVersions": [],
+              "assignments": [
+                {
+                  "actorId": "executor",
+                  "extensionVersion": "fixture-v1",
+                  "id": "churn:executor",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "churn:root"
+                },
+                {
+                  "actorId": "verifier",
+                  "extensionVersion": "fixture-v1",
+                  "id": "churn:verifier",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "gpt-6.1-terra",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "verifier",
+                  "taskId": "churn:root"
                 }
               ],
               "attempts": [
                 {
-                  "id": "churn:attempt:1",
-                  "number": 1,
                   "criteria": {
-                    "version": 1,
                     "description": "요청한 결과와 근거 확인",
-                    "oracle": "bounded-text-review/v1"
+                    "oracle": "bounded-text-review/v1",
+                    "version": 1
                   },
-                  "status": "active",
+                  "id": "churn:attempt:1",
                   "modelVersions": [
                     "fixture-v1",
                     "fixture-v1"
-                  ]
+                  ],
+                  "number": 1,
+                  "status": "active"
                 }
               ],
-              "assignments": [
-                {
-                  "id": "churn:executor",
-                  "actorId": "executor",
-                  "role": "executor",
-                  "taskId": "churn:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "claude-sonnet-5-5",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                },
-                {
-                  "id": "churn:verifier",
-                  "actorId": "verifier",
-                  "role": "verifier",
-                  "taskId": "churn:root",
-                  "model": {
-                    "provider": "fixture",
-                    "model": "gpt-6.1-terra",
-                    "configVersion": "fixture-v1",
-                    "reason": "Deterministic UI fixture; no model invocation",
-                    "evidenceClass": "fixture"
-                  },
-                  "extensionVersion": "fixture-v1"
-                }
-              ],
-              "effects": [
-                {
-                  "id": "churn:effect",
-                  "taskId": "churn:root",
-                  "status": "succeeded",
-                  "target": "이탈 원인 조사",
-                  "authority": "소유자가 맡긴 일",
-                  "receipt": "고정된 화면 검증 데이터"
-                }
-              ],
-              "appliedMemoryVersions": [],
               "budget": {
                 "limit": 8,
-                "reserved": 1,
-                "measured": 1
-              }
+                "measured": 1,
+                "reserved": 1
+              },
+              "criteria": {
+                "description": "요청한 결과와 근거 확인",
+                "oracle": "bounded-text-review/v1",
+                "version": 1
+              },
+              "effects": [
+                {
+                  "authority": "소유자가 맡긴 일",
+                  "id": "churn:effect",
+                  "receipt": "고정된 화면 검증 데이터",
+                  "status": "succeeded",
+                  "target": "이탈 원인 조사",
+                  "taskId": "churn:root"
+                }
+              ],
+              "execution": "active",
+              "id": "churn",
+              "missionSnapshot": {
+                "constraints": [],
+                "purpose": "맡긴 일",
+                "scope": "local",
+                "version": 1
+              },
+              "missionVersion": 1,
+              "tasks": [
+                {
+                  "id": "churn:root",
+                  "parentId": null,
+                  "startedAt": 1793855520000,
+                  "status": "active"
+                }
+              ],
+              "title": "이탈 원인 조사"
             }
-          ],
-          "memories": [],
-          "growth": [],
-          "relations": []
+          ]
         }
       }
     },

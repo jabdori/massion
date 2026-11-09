@@ -79,3 +79,14 @@ npm run typecheck
 
 The screen command reports residuals without hiding them. The PR's full blocking
 CI gate checks the complete capture against the remaining allow-list.
+
+## CI integration follow-up
+
+The full CI unit suite exposed B5's fixed snapshot missing the newly observed
+admission/task times. `regenerateException()` now rebuilds that fixture through
+its original Application command sequence. The unchanged exact-snapshot test
+passes with explicit time assertions; B5's two-theme scoped gate has zero new,
+stale or infrastructure diagnostics. Main's E9a2 browser/desktop journey updates
+were merged without rewriting history. The first telemetry head passed the full
+screen gate and received clean Codex code/security receipts; the final head is
+verified again on the PR.
