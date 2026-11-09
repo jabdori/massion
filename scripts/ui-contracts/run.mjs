@@ -7,6 +7,7 @@ import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {startFixtureHost,loadFixture} from './fixture-host.ts';
 import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady,visualTokens,visibleTextBudgetExpression,visibleBudgets} from './report.ts';
+import {runGate} from './gate.ts';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../',import.meta.url));
 const specs=join(root,'docs/product/screens'),out=resolve(root,process.env.UI_CONTRACTS_OUTPUT||'.runtime/ui-contracts');
@@ -88,4 +89,4 @@ for(const theme of ['dark','light'])for(const screen of (requested.length?reques
  await writeFile(join(out,'report.md'),reportMarkdown(rows,blocking));
 }
 console.log(`Report: ${join(out,'report.md')}`);
-process.exitCode=exitCode(rows,blocking);
+process.exitCode=blocking?await runGate(out):exitCode(rows,false);

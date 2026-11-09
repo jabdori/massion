@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      UI_CONTRACTS_BLOCKING: '0'
+      UI_CONTRACTS_BLOCKING: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +36,9 @@ jobs:
         run: |
           if test -f .runtime/ui-contracts/report.md; then
             sed '/^## /,$d' .runtime/ui-contracts/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if test -f .runtime/ui-contracts/gate.md; then
+            cat .runtime/ui-contracts/gate.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload reports, snapshots and prototype / workbench PNG pairs
         if: always()

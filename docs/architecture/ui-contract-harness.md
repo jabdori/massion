@@ -10,7 +10,14 @@ Keep only the explicitly approved JSON inputs and artboards under `docs/product/
 
 A dependency-free checker consumes accessibility snapshots. The runner starts an isolated headless agent-browser session per state, captures snapshots and screenshots, creates ImageMagick side-by-side pairs, and writes JSON and Markdown reports. Contract failures are report-only initially; `UI_CONTRACTS_BLOCKING=1` enables the gate. Infrastructure failures remain visible and fail the run. Visual dimensions/tokens are checked where measurable; typography and composition still need pair review.
 
-Copy lint scans the requested panel/shell/workbench sources and reports visible literals outside the approved Korean table. It is advisory and does not rewrite source. Dynamic data and static extraction limits must be documented.
+Copy lint scans the requested panel/shell/workbench sources and reports visible literals outside the approved Korean table. It does not rewrite source. Dynamic data and static extraction limits must be documented.
+
+E3f supersedes the initial report-only CI policy: `UI_CONTRACTS_BLOCKING=1`
+now compares the complete capture and every copy finding with the committed
+occurrence allow-list. New diagnostics, resolved exceptions left in the list,
+incomplete captures and infrastructure errors fail. See
+[blocking gate and regeneration](ui-contract-blocking.md). For a partial local
+capture, explicitly use `UI_CONTRACTS_BLOCKING=0`; it cannot update the baseline.
 
 ## Implementation and verification plan
 
