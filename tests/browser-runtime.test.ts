@@ -77,3 +77,14 @@ test('restored browser pages reject unmasked payment fields and secret-shaped te
  const s=await setup();await s.service.capture(request);
  for(const tamper of [(p:any)=>p.fields.push({label:'Card',value:'4242424242424242',masked:false}),(p:any)=>p.blocks.push('token=restore-secret')]){const operations=structuredClone(s.store.inspect());tamper(operations.at(-1)!.value.works[0]!.browserSession!.pages[0]);assert.throws(()=>validateMissionLineage(operations.at(-1)!.value),/browser/i);}
 });
+test('one-time-code inputs are masked even when numeric and removed from page text',()=>{
+ const page=sanitizePage({...raw,blocks:['Your code is 123456'],fields:[{label:'Verification code',type:'number',value:'123456',autocomplete:'one-time-code'}]});assert.equal(page.fields[0]!.masked,true);assert.equal(page.fields[0]!.value,'••••');assert.doesNotMatch(JSON.stringify(page),/123456/);
+});
+test('a read superseded while application lookup is held cannot cross commit admission',async()=>{
+ let oldLookupEntered!:()=>void,releaseOld!:()=>void,newReadEntered!:()=>void,releaseNew!:()=>void;
+ const lookupEntered=new Promise<void>(r=>oldLookupEntered=r),oldGate=new Promise<void>(r=>releaseOld=r),readEntered=new Promise<void>(r=>newReadEntered=r),newGate=new Promise<void>(r=>releaseNew=r);let reads=0;
+ const s=await setup(async()=>{if(++reads===2){newReadEntered();await newGate;return {...raw,title:'New'};}return {...raw,title:'Old'};});const lookup=s.store.lookupOperation.bind(s.store);let lookups=0;
+ s.store.lookupOperation=async identity=>{if(++lookups===1){oldLookupEntered();await oldGate;}return lookup(identity);};
+ const old=s.service.capture(request);await lookupEntered;const next=s.service.capture({...request,readId:'page:2'});await readEntered;releaseOld();
+ const oldResult=await old.catch(error=>error);releaseNew();const nextResult=await next.catch(error=>error);assert.match(oldResult.message??'',/superseded/i);assert.equal(nextResult.status,'committed');assert.equal((await s.service.read('intake','work')).session?.page.title,'New');
+});

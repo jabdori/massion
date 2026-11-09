@@ -186,6 +186,13 @@ function browserCurrent(tab,binding){if(!tab||!binding||tab.browser!==binding||!
 function chatCheckoutOpen(binding){if(!chatDecisionCurrent(binding))return;const d=chatDecisions().find(d=>d.id===binding.id);if(!chatPayment(d))return;const key='checkout:'+binding.feed+':'+d.id;let tab=paneTabs.find(t=>t.key===key);if(!tab){tab={key,title:copy('ui.checkout.browser'),decisionId:d.id,feed:binding.feed,checkout:true};paneTabs.push(tab);}browserClear();tab.browser={...browserBinding(d.effect.missionId,d.effect.workId),decision:binding};paneActive=key;paneAway(false);renderPane();}
 function browserOpen(missionId,workId,revision,feed,epoch,thread,generation){if(selectedId!==missionId||snapshot?.value.id!==missionId||snapshot.revision!==revision||feed!==(chatView?.feedId||shellWorksFeed||feedId)||epoch!==connectionEpoch||thread!==chatThread||generation!==chatGeneration||!browserTelemetry(missionId,workId))return;
  const key='browser:'+missionId+'/'+workId;let tab=paneTabs.find(t=>t.key===key);if(!tab){tab={key,title:copy('ui.checkout.browser')};paneTabs.push(tab);}browserClear();tab.browser=browserBinding(missionId,workId);paneActive=key;paneAway(false);renderPane();}
+async function browserSelect(tab){
+ if(busy||loading)return;const prior=tab.browser,context=browserBinding(prior.missionId,prior.workId);if(prior.feed!==context.feed||prior.thread!==context.thread)return;
+ browserClear();const selecting={...prior};tab.browser=selecting;paneActive=tab.key;paneMission=prior.missionId;paneAway(false);renderPane();
+ const loaded=await loadMission(prior.missionId);if(!loaded||!paneTabs.includes(tab)||paneActive!==tab.key||tab.browser!==selecting||context.feed!==(chatView?.feedId||shellWorksFeed||feedId)||context.epoch!==connectionEpoch||context.generation!==chatGeneration||context.thread!==chatThread||context.segment!==chatSegment)return;
+ const decision=tab.checkout&&chatDecisions().find(d=>d.id===tab.decisionId&&chatPayment(d));if(tab.checkout&&!decision)return;
+ tab.browser={...browserBinding(prior.missionId,prior.workId),...(decision?{decision:chatDecisionBinding(decision)}:{})};renderPane();document.getElementById('pane-tab-'+tab.key)?.focus();
+}
 async function browserLoad(tab){const binding=tab.browser,generation=++browserGeneration;browserRead={tab,binding,generation,session:null};
  try{const {response,body}=await request('/missions/'+encodeURIComponent(binding.missionId)+'/works/'+encodeURIComponent(binding.workId)+'/browser',{scope:'browser-page',headers:{'X-Massion-Feed':binding.feed}});
   if(generation!==browserGeneration||!browserCurrent(tab,binding))return;

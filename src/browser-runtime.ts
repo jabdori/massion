@@ -19,7 +19,7 @@ const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/
 const text=(v:unknown,max=2000):v is string=>typeof v==='string'&&v.length<=max&&v.isWellFormed()&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v);
 function exact(v:unknown,keys:string[]):asserts v is Record<string,any>{ensure(!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k)),'Invalid browser fields');}
 export function browserAddress(value:string){let u:URL;try{u=new URL(value);}catch{throw new DomainError('Invalid browser address');}ensure(['https:','http:'].includes(u.protocol),'Invalid browser address');u.username='';u.password='';u.search='';u.hash='';ensure(u.href.length<=2000,'Browser address bound exceeded');return u.href;}
-const sensitive=/password|passwd|secret|token|auth|credential|api.?key|cc-|card|cvv|cvc|payment|pin|otp|카드|비밀|비번|인증|결제/i;
+const sensitive=/password|passwd|secret|token|one-time-code|auth|credential|api.?key|cc-|card|cvv|cvc|payment|pin|otp|카드|비밀|비번|인증|결제/i;
 const scrub=(s:string)=>s.replace(/\b(?:\d[ -]?){13,19}\b/g,'••••').replace(/\b(?:Bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi,'••••');
 export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'title'|'blocks'|'fields'>{
  exact(raw,['address','title','blocks','fields']);ensure(text(raw.address)&&text(raw.title)&&Array.isArray(raw.blocks)&&raw.blocks.length<=64&&raw.blocks.every(s=>text(s,4000))&&Array.isArray(raw.fields)&&raw.fields.length<=64,'Invalid browser page bound');
@@ -54,7 +54,8 @@ export class BrowserSessions {
  }
  async #capture(input:Capture,isCurrent:()=>boolean):Promise<CommitResult<Mission>>{
   if(this.#draining)throw new HostDrainError();const state=await this.#store.readState(input.missionId),snapshot=state.snapshot,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w,'Unknown browser Work');
-  const sessionId=w.browserSession?.id??'browser:'+hash([state.feedId,input.missionId,input.workId]).slice(0,32),existing=w.browserSession?.pages.find(p=>p.readId===input.readId),app=new Application(this.#owner,[{id:BROWSER_HOST,roles:['representative']}]);
+  const sessionId=w.browserSession?.id??'browser:'+hash([state.feedId,input.missionId,input.workId]).slice(0,32),existing=w.browserSession?.pages.find(p=>p.readId===input.readId);
+  const admitted=new Proxy(this.#owner,{get(target,key){if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{ensure(isCurrent(),'Browser read superseded');return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),app=new Application(admitted,[{id:BROWSER_HOST,roles:['representative']}]);
   const dispatch=(page:BrowserPage)=>withAdmissionFeed(state.feedId,()=>app.dispatch({missionId:input.missionId,commandId:'assistant-browser:'+hash([input.missionId,input.workId,input.readId]).slice(0,48),expectedRevision:page.expectedRevision,actorId:BROWSER_HOST,command:{type:'record-browser-page',workId:input.workId,sessionId,requestAddress:input.address,page}}));
   if(existing){ensure(existing.address===input.address,'Browser read identity conflict');return dispatch(existing);}
   current(w,this.#clock());ensure((w.browserSession?.pages.length??0)<32,'Browser session page bound exceeded');ensure(this.#adapter,'Browser adapter unavailable');const controller=new AbortController();this.#controllers.add(controller);

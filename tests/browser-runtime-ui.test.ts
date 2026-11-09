@@ -152,3 +152,10 @@ test('a historical browser fold precedes the unknown-result reply and its Copy b
  assert.ok(fold>=0);assert.ok(response>fold,'The recorded browser fold must precede the response and Copy action');assert.match(log.children[fold]!.textContent,/페이지 4개 읽음/);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
+
+for(const kind of ['generic','checkout'])for(const change of ['revision','mission'])test(kind+' browser tab rebinds on explicit selection after '+change+' changes',async()=>{
+ const {app,state}=fixture();await settle();await openWork(app);if(kind==='generic')await find(app,'work-browser-work:1').fire('click');else await checkout(app);await settle();
+ const key=runInContext('paneActive',app.context) as string;assert.match(pane(app).textContent,/Observed checkout/);
+ if(change==='revision'){state.revision++;runInContext('snapshot.revision++;renderShell()',app.context);}else runInContext("paneOpen('other','other-work','Other');selectedId='other';snapshot={revision:99,value:{id:'other',works:[]}};renderPane()",app.context);
+ await runInContext('paneSelect('+JSON.stringify(key)+')',app.context);await settle();assert.match(pane(app).textContent,/Observed checkout/);assert.equal(runInContext('selectedId',app.context),'mission:1');assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
