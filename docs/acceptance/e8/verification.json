@@ -160,5 +160,41 @@
     "allowancesAdded": 0,
     "scopedBlockingGateExit": 0,
     "notRun": "Full repository suite, actual DB, live providers; CI/environment-owned"
+  },
+  "selfDrivenLoop1": {
+    "head": "49ac8ea68145636698c39d4325aeb49c9470fd5c",
+    "ci": "passed after GitHub internal-server-error reruns",
+    "staticTests": {
+      "passed": 1951,
+      "skipped": 351,
+      "failed": 0
+    },
+    "actualDBTests": {
+      "passed": 2266,
+      "skipped": 36,
+      "failed": 0
+    },
+    "screenRows": 150,
+    "blockingGate": {
+      "occurrences": 784,
+      "new": 0,
+      "stale": 0,
+      "errors": 0
+    },
+    "codeReviewReceipt": "https://github.com/jabdori/massion/pull/117#issuecomment-6747916624",
+    "securityFinding": 4516387667,
+    "fix": "59481ed",
+    "regressionTests": [
+      "a read never combines an older reservation snapshot with a newer accounting cursor",
+      "a terminal receipt landing after accounting freezes its cursor cannot fund overlapping Work"
+    ],
+    "followUpLocal": {
+      "tests": 184,
+      "passed": 180,
+      "skipped": 4,
+      "failed": 0,
+      "typecheck": "passed"
+    },
+    "nextIntegratedMain": "08b5f23"
   }
 }
