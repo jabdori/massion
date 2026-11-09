@@ -8,6 +8,8 @@ authentication. Set-only adapters retain the existing receipt projection.
 Pending connection claims always project `unknown` and continue to block resend.
 No secret value is read, no receipt is rewritten, and historical completion
 commands keep their original replay output.
+Confirmed presence projects saved storage for legacy completions that lack the
+new credential receipt. Existing expired receipts and pending claims take priority.
 
 After pending-tool recovery, `readState(APPS_ID)` atomically captures the app
 snapshot and its database feed. After asynchronous member and presence reads,

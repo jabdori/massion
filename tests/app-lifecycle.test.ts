@@ -100,4 +100,11 @@ test('legacy connection completion replays without adding new credential metadat
  const claimed=applyApps(state,{type:'begin-app-connect',decisionId:decision.id,connectionId:'legacy-connect'},owner,time).value;
  const completed=applyApps(claimed,{type:'complete-app-connect',decisionId:decision.id,connectionId:'legacy-connect'},owner,time).value;
  assert.equal(completed.apps[0]!.credential,undefined);assert.equal(completed.decisions.find(d=>d.id===decision.id)!.state,'done');
+ const store=new InMemoryStore<any>(),slots=new InMemorySecretSlots(),ref={owner:'app-github',slot:'github-token'};
+ await store.commit({id:APPS_ID,expectedRevision:0,commandId:'legacy-snapshot',fingerprint:'legacy',value:completed,events:[],outbox:[]});
+ await slots.set(ref,'private-legacy-sentinel');
+ const service=new AppsService(store,{secrets:{set:async()=>assert.fail('Settings must not rewrite the token'),has:slots.has.bind(slots)}}),journal=store.inspect();
+ assert.deepEqual((await service.read()).apps[0]!.credential,{slot:ref.slot,state:'saved'});
+ await slots.delete(ref);assert.equal((await service.read()).apps[0]!.credential!.state,'missing');
+ assert.deepEqual(store.inspect(),journal);assert.equal((await store.load(APPS_ID))!.value.apps[0].credential,undefined);
 });

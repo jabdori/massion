@@ -182,3 +182,12 @@ all 22 R-C screen/theme pairs: 670/708 required matches, zero geometry/token or
 infrastructure errors, and no new/stale diagnostic exceptions. The 38 remaining
 contract diagnostics and four capability gaps retain their existing producer
 reasons. Full-suite/all-screen and e2e validation remain CI-owned.
+
+## Legacy app connection review
+
+A historical completion without `observeStorage` correctly retains no credential
+receipt during replay. Its Settings projection now uses confirmed metadata-only
+slot presence to show saved storage; deletion still shows missing. Expired
+receipts and unresolved claims keep priority. The regression failed with missing
+before the fix; 57 related app/MCP/fixture checks and typecheck pass afterward.
+No journal rewrite or token read/write is introduced by this projection.
