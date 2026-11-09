@@ -15,7 +15,7 @@ test at tests/cli-expired-run.test.ts:18:1
 ✖ normal CLI SIGKILL retains owned unknown dispatch; fresh owner closes only elapsed original without replay (5382.119945ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
     [
       '/usr/local/bin/node',
   +   '--no-opt',
@@ -25,7 +25,7 @@ test at tests/cli-expired-run.test.ts:18:1
       '--host-config',
       '/tmp/massion-owned-record-text-mi9DDg/host.json'
     ]
-  
+
       at verifyOwnedChild (file:///massion/tests/support/owned-process.ts:22:9)
       at async stopOwnedChild (file:///massion/tests/support/owned-process.ts:27:2)
       at async TestContext.<anonymous> (file:///massion/tests/cli-expired-run.test.ts:27:20)

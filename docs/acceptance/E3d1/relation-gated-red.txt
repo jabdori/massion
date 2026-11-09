@@ -14,9 +14,9 @@ Disposable SurrealDB ready: {"pid_in_this_exec_namespace": 22, "url": "http://12
 test at tests/owner-relations-panel.test.ts:48:35
 ✖ actual SurrealDB replacement feed clears relation confirmation and keeps original private source/CAS until explicit review (1719.869303ms)
   AssertionError [ERR_ASSERTION]: [{"path":"/assistant/works"}]
-  
+
   17 !== 16
-  
+
       at TestContext.<anonymous> (file:///massion/tests/owner-relations-panel.test.ts:54:388)
       at async Test.run (node:internal/test_runner/test:1389:7)
       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {

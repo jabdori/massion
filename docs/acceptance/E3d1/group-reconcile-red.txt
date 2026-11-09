@@ -14,9 +14,9 @@
 test at tests/settings-group-reconciliation.test.ts:7:1
 ✖ a lost group save stays readonly until a later fresh catalog read; reconciliation never resends (79.149167ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  
+
   true !== false
-  
+
       at TestContext.<anonymous> (file:///Users/code/orca/workspaces/massion/e3d1-settings/tests/settings-group-reconciliation.test.ts:26:9)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
