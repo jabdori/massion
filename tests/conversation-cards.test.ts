@@ -23,7 +23,7 @@ function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[
   if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.filter(t=>t.work).map(t=>({memberId:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:state.cursor,events:state.events});
-  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:{revision:state.revision,value:mission()}});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:path.includes('mission=')?{revision:state.revision,value:mission()}:null});
   if(path==='/missions/intake')return reply({revision:state.revision,value:mission()});
   return reply({error:'Not configured'},503);
  });

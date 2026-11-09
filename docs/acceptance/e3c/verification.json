@@ -1,0 +1,97 @@
+{
+  "node": "24.21.0",
+  "typecheck": {
+    "command": "npm run typecheck",
+    "exitCode": 0
+  },
+  "sourceCheck": {
+    "command": "node scripts/check.mjs",
+    "exitCode": 0,
+    "copyFindings": 0
+  },
+  "aggregate": {
+    "command": "TMPDIR=/private/tmp/e3c-tests node --test --test-concurrency=4 tests/*.test.ts",
+    "exitCode": 1,
+    "tests": 1919,
+    "pass": 1578,
+    "fail": 1,
+    "skipped": 340,
+    "failure": "portable inventory order is stable across English and Turkish process locales: Text artifact boundary: directory realpath mismatch",
+    "failureSource": "tests/portable-backup.test.ts:137",
+    "preparation": "mkdir -p /private/tmp/e3c-tests"
+  },
+  "ui": {
+    "command": "UI_CONTRACTS_BLOCKING=0 node scripts/ui-contracts/run.mjs",
+    "exitCode": 0,
+    "contracts": 75,
+    "states": 150,
+    "screenArguments": [],
+    "scopedStates": 18,
+    "scopedRequired": 848,
+    "scopedPassed": 572,
+    "scopedFailed": 276,
+    "scopedVisualFailures": 0,
+    "infrastructureErrors": 0
+  },
+  "interactions": {
+    "command": "node scripts/ui-contracts/verify-work-pane.mjs",
+    "exitCode": 0,
+    "cases": 20,
+    "productCommands": 0
+  },
+  "steeringProbe": {
+    "command": "node docs/acceptance/e3c/steering-continuation.mjs",
+    "exitCode": 0
+  },
+  "transientFailure": {
+    "command": "npm test (concurrent with browser/source checks)",
+    "failure": "deadline during final acceptance acknowledgment preserves committed Record: Lifetime fixture deadline",
+    "isolatedRerun": "node --test tests/runtime-lifetime.test.ts: 12 passed, 2 skipped, 0 failures",
+    "finalAggregate": "The complete final suite with four workers, run after browser capture, retains only the documented portable-inventory failure. No runtime test or timeout changed."
+  },
+  "regressions": {
+    "focusedCommand": "node --test tests/work-room-visual.test.ts tests/conversation-visual-gate.test.ts tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/ui-tokens.test.ts tests/ui-contract-fixtures.test.ts",
+    "passed": 111,
+    "failed": 0,
+    "projectedUnknownReviewAddedCases": 6,
+    "b22NativeSetupCases": 2,
+    "visualGate": "A-J implemented; computed card headers 38px, procedure header 34px/progress gap 8px, step height32px, no budget line, terminal Stop absent, failure/progress/current-connection labels checked.",
+    "commandFeedback": {
+      "actualStopRejection": "revision conflict, Work remains active, no automatic retry",
+      "nativeAssertions": 16,
+      "viewports": [
+        1440,
+        390
+      ],
+      "tones": [
+        "error",
+        "warning"
+      ],
+      "normalHelpersHidden": true
+    },
+    "start": {
+      "views": [
+        "Representative",
+        "projected member room"
+      ],
+      "overlapPostsPerView": 1,
+      "unknownCommandPersisted": true,
+      "viewSwitchResends": 0,
+      "endpoint": "/missions/:id/run",
+      "newApi": false,
+      "path": "existing durable long-run writer"
+    },
+    "revisionSubmissionIsolation": {
+      "targetedCommand": "node --test tests/surface-shell.test.ts tests/conversation-cards.test.ts tests/conversation-visual-gate.test.ts tests/work-room-visual.test.ts",
+      "passed": 94,
+      "failed": 0,
+      "views": [
+        "Representative",
+        "projected member"
+      ],
+      "assertions": "revisionSubmissions is unchanged during run admission and after unknown response/view switch",
+      "fix": "Remove the fifth boolean argument; write infers long-running behavior from the /run path.",
+      "visualChanges": false
+    }
+  }
+}

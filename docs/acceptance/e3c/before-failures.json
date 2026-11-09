@@ -1,0 +1,3602 @@
+[
+  {
+    "id": "B001",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B002",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B003",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B004",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B005",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B006",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B007",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B008",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B009",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"확인 대기 주문 내역 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B010",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B011",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B012",
+    "screen": "B7",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 653 > 202",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B013",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B014",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B015",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B016",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  sidebar      status   \"실행 중\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B017",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region header       status   \"작업 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B018",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B019",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B020",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B021",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B022",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B023",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B024",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B025",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B026",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B027",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B028",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"하나가 넘김 · {time}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B029",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B030",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B031",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B032",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B033",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B034",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B035",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B036",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B037",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B038",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B039",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B040",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B041",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B042",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B043",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B044",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B045",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B046",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B047",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B048",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B049",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B050",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B051",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B052",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B053",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B054",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"확인 대기 원인 정리 후 시작\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B055",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B056",
+    "screen": "B7-churn",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 650 > 453",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B057",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B058",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B059",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B060",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B061",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B062",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B063",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B064",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B065",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B066",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B067",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"완료\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B068",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B069",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B070",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B071",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B072",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B073",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Effect has no currency/payment amount/order-count field; budget is execution units."
+  },
+  {
+    "id": "B074",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B075",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Effect has no currency/payment amount/order-count field; budget is execution units."
+  },
+  {
+    "id": "B076",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B077",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"확인 완료 주문 내역 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B078",
+    "screen": "B7-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 630 > 417",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B079",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B080",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B081",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B082",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B083",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B084",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B085",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B086",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B087",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region header       status   \"작업 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B088",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B089",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B090",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B091",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B092",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B093",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B094",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B095",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"실패\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B096",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"하나가 넘김 · {time}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B097",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B098",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B099",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B100",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B101",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B102",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B103",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B104",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B105",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"확인\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B106",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B107",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B108",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B109",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B110",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B111",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B112",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B113",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B114",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B115",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B116",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B117",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B118",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B119",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B120",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B121",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B122",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B123",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B124",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B125",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"확인 실패 근거 {count} 이상\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B126",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B127",
+    "screen": "B7-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 670 > 530",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B128",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B129",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B130",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B131",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B132",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B133",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B134",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B135",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B136",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B137",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B138",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  region conversation button   \"닫기\" (found in pane)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B139",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B140",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B141",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B142",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B143",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B144",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B145",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B146",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B147",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"확인 안 함 결제 응답 없음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B148",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B149",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 47 > 33 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B150",
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 696 > 370",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B151",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B152",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"작업 중 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B153",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B154",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B155",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B156",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B157",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B158",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B159",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B160",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B161",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B162",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B163",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B164",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B165",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B166",
+    "screen": "B8",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 653 > 352",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B167",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B168",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B169",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B170",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B171",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"완료\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B172",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B173",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B174",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B175",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B176",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B177",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B178",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B179",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B180",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B181",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B182",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B183",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B184",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B185",
+    "screen": "B8-done",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 630 > 541",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B186",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B187",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing header       status   \"작업 중\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B188",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B189",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"실패\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B190",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"맡은 사람\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B191",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B192",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B193",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B194",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B195",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B196",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B197",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B198",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B199",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B200",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B201",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B202",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B203",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B204",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B205",
+    "screen": "B8-fail",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 670 > 487",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B206",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B207",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B208",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B209",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B210",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B211",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B212",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B213",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B214",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B215",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B216",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B217",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B218",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B219",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B220",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B221",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B222",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B223",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B224",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         longest string 47 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B225",
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "diagnostic": "FAIL  budget pane         chars 696 > 526",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B226",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B227",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B228",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B229",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B230",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B231",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B232",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B233",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B234",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 대기 주문 내역 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B235",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B236",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B237",
+    "screen": "B7",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 653 > 202",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B238",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B239",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"작업 중\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B240",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      link     \"{work_title}\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B241",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  sidebar      status   \"실행 중\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B242",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region header       status   \"작업 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B243",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B244",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B245",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B246",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B247",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B248",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B249",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B250",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B251",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B252",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B253",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"하나가 넘김 · {time}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B254",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B255",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B256",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B257",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B258",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B259",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B260",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B261",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B262",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B263",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B264",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B265",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B266",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B267",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B268",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B269",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B270",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B271",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B272",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B273",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B274",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B275",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B276",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B277",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B278",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B279",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 대기 원인 정리 후 시작\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B280",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B281",
+    "screen": "B7-churn",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 650 > 453",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B282",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B283",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B284",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B285",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B286",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B287",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B288",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B289",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B290",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B291",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B292",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"완료\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B293",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B294",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B295",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B296",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B297",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B298",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{amount}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Effect has no currency/payment amount/order-count field; budget is execution units."
+  },
+  {
+    "id": "B299",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B300",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Effect has no currency/payment amount/order-count field; budget is execution units."
+  },
+  {
+    "id": "B301",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B302",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 완료 주문 내역 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B303",
+    "screen": "B7-done",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 630 > 417",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B304",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B305",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B306",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B307",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B308",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B309",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B310",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B311",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B312",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region header       status   \"작업 중\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B313",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B314",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"방향 바꿈: {work_title} · {time}\"",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B315",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B316",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B317",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"남기기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B318",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"지우기\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B319",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B320",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"실패\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B321",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"하나가 넘김 · {time}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B322",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B323",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B324",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{progress}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B325",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B326",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B327",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B328",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B329",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         chip     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B330",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"확인\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B331",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B332",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B333",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B334",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B335",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B336",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B337",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B338",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B339",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         chip     \"조사\" (occurrence already consumed or found earlier)",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B340",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B341",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B342",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B343",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B344",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B345",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B346",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"{member}\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B347",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"요약\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B348",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B349",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         button   \"복사\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B350",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 실패 근거 {count} 이상\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B351",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B352",
+    "screen": "B7-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 670 > 530",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B353",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B354",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B355",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      button   \"우선순위\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B356",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B357",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      status   \"읽지 않음\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B358",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B359",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B360",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B361",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing sidebar      link     \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B362",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation button   \"주문 내역 확인\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B363",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  region conversation button   \"닫기\" (found in pane)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B364",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B365",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"절차\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B366",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B367",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B368",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B369",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B370",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in sidebar)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B371",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B372",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"확인 안 함 결제 응답 없음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B373",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B374",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 47 > 33 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B375",
+    "screen": "B7-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 696 > 370",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B376",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B377",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"작업 중 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B378",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B379",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"실행 중\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B380",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{duration}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B381",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         button   \"중지\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B382",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B383",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B384",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B385",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B386",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B387",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B388",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B389",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B390",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B391",
+    "screen": "B8",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 653 > 352",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B392",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B393",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B394",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  order  conversation button   \"복사\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B395",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B396",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"완료\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B397",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B398",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B399",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B400",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{progress}\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B401",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B402",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B403",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B404",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B405",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B406",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B407",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B408",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B409",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B410",
+    "screen": "B8-done",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 630 > 541",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B411",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B412",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing header       status   \"작업 중\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B413",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B414",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"실패\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B415",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"맡은 사람\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B416",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B417",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B418",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B419",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B420",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B421",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B422",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B423",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B424",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B425",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B426",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"{time}\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B427",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  missing composer     textbox  \"퀼에게 메시지 보내기\"",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B428",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B429",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 33 > 24 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B430",
+    "screen": "B8-fail",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 670 > 487",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B431",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  order  rail         button   \"내 계정\" (occurrence already consumed or found earlier)",
+    "cause": "fixture gap",
+    "evidence": "Existing navigation/member/read-state paths; fixture does not select the approved thread/activity state or install its app."
+  },
+  {
+    "id": "B432",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing conversation link     \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task/Assignment/Effect and src/assistant-conversation.ts: no browser/payment telemetry, named team roles or memory-candidate producer."
+  },
+  {
+    "id": "B433",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         link     \"좁히기\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B434",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B435",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B436",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B437",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  region pane         text     \"결과 모름\" (found in conversation)",
+    "cause": "fixture gap",
+    "evidence": "Supported conversation/steer/unknown closure renderers; inspect matching read-shape fixture before repair."
+  },
+  {
+    "id": "B438",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B439",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"기록\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B440",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  order  pane         text     \"없음\" (occurrence already consumed or found earlier)",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B441",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B442",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B443",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B444",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B445",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B446",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B447",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  missing pane         text     \"{time}\"",
+    "cause": "unsupported product capability",
+    "evidence": "src/domain.ts Task and Attempt have no per-step timestamps; only actual Work ownership/start/end timestamps can be displayed."
+  },
+  {
+    "id": "B448",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         sentences 1 > 0: \"기존 차단 유지 · 취소해도 외부 실행은 되돌려지지 않습니다\"",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B449",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         longest string 47 > 29 chars",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  },
+  {
+    "id": "B450",
+    "screen": "B8-unknown",
+    "theme": "light",
+    "diagnostic": "FAIL  budget pane         chars 696 > 526",
+    "cause": "UI",
+    "evidence": "src/workbench.ts renderWork and src/surface-shell.ts renderPane retain the legacy detail instead of the Work room."
+  }
+]

@@ -46,6 +46,7 @@ test('measured geometry, typography, spacing, radii, motion and focus are availa
   '--font-sans':'"Pretendard Variable",Pretendard,Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
   '--font-mono':'ui-monospace,SFMono-Regular,Menlo,monospace',
   '--type-pane-heading-size':'17px','--type-pane-heading-weight':'600','--type-pane-heading-line-height':'24px',
+  '--work-room-label-width':'96px','--work-room-row-line-height':'18px','--work-room-time-width':'44px','--work-room-dot-size':'5px','--work-room-step-mark-size':'13px','--work-room-stop-radius':'2px','--work-room-header-height':'38px','--work-room-procedure-header-height':'34px','--work-room-step-height':'32px',
   '--conversation-gap':'14px','--space-8':'8px','--composer-padding':'10px 10px 8px 14px','--composer-radius':'20px',
   '--card-pane-radius':'10px','--motion-fast':'.12s','--motion-slow':'.3s','--motion-ease':'cubic-bezier(.32,.72,0,1)',
   '--focus-width':'2px','--focus-ring':'var(--fg-4)','--focus-offset':'4px'

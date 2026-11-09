@@ -16165,5 +16165,147 @@
    "reference": "artboards/dark/B5.png",
    "contract": "contracts/B5.json"
   }
+ },
+ "ui.room.producer": {
+  "ko": "만든 쪽",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8/B8-done artboard, imported for E3c."
+ },
+ "ui.room.checker": {
+  "ko": "확인한 쪽",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8/B8-done artboard, imported for E3c."
+ },
+ "ui.room.flow": {
+  "ko": "흐름",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8/B8-done artboard, imported for E3c."
+ },
+ "ui.room.effects": {
+  "ko": "전송 1회 보장",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8/B8-done artboard, imported for E3c."
+ },
+ "ui.room.check-done": {
+  "ko": "확인 완료",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8/B8-done artboard, imported for E3c."
+ },
+ "ui.room.progress": {
+  "ko": "{done}/{total}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8-done:pane"
+  ],
+  "provenance": "Approved B8-done count slots."
+ },
+ "ui.room.effect.pending": {
+  "ko": "대기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Existing approved state labels; an effect status is not payment confirmation."
+ },
+ "ui.room.effect.succeeded": {
+  "ko": "완료",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Existing approved state labels; an effect status is not payment confirmation."
+ },
+ "ui.room.effect.failed": {
+  "ko": "실패",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Existing approved state labels; an effect status is not payment confirmation."
+ },
+ "ui.room.effect.unknown": {
+  "ko": "결과 모름",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Existing approved state labels; an effect status is not payment confirmation."
+ },
+ "ui.room.not-checked": {
+  "ko": "확인 안 함",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7-unknown:pane",
+   "B8-unknown:pane"
+  ],
+  "provenance": "Approved B7-unknown:pane, B8-unknown:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.criteria-content": {
+  "ko": "기준 내용",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.record-empty": {
+  "ko": "아직 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B8:pane"
+  ],
+  "provenance": "Approved B8:pane artboard wording for Work pane visual-gate correction."
+ },
+ "ui.room.evidence-count": {
+  "ko": "근거 {count}건",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B7-fail:conversation",
+   "B8-fail:pane"
+  ],
+  "provenance": "Approved B7-fail:conversation, B8-fail:pane artboard wording for Work pane visual-gate correction."
  }
 }
