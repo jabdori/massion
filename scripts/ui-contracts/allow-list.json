@@ -48,16 +48,6 @@
       "screen": "B6",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
@@ -148,16 +138,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "steering-continuation",
-      "reason": "Confirmed steering sets the Work waiting; task progression then rejects it, and the existing failed-candidate reader rejects the unsettled/changed-input case. There is no producing resume path for the illustrated confirmed enterprise steering followed by active/settled churn. Plain discussion and its three Copy controls are supported and present; no pricing-format steering is substituted.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "business-procedure",
@@ -182,16 +162,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -308,16 +278,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-dark"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -342,16 +302,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -532,16 +482,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -988,16 +928,6 @@
       "screen": "B18-room-b",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
@@ -1188,16 +1118,6 @@
       "screen": "B6",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
@@ -1288,16 +1208,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "steering-continuation",
-      "reason": "Confirmed steering sets the Work waiting; task progression then rejects it, and the existing failed-candidate reader rejects the unsettled/changed-input case. There is no producing resume path for the illustrated confirmed enterprise steering followed by active/settled churn. Plain discussion and its three Copy controls are supported and present; no pricing-format steering is substituted.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "business-procedure",
@@ -1322,16 +1232,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -1448,16 +1348,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-light"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -1482,16 +1372,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1672,16 +1552,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -2123,16 +1993,6 @@
       "category": "capability / composition",
       "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
       "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
     },
     {
       "screen": "B18-room-b",

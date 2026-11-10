@@ -169,6 +169,6 @@ export class ProductService {
   if(!['cancel','steer','quarantine-runtime','close-expired-runtime'].includes(input.command?.type))throw new Error('Only cancel, steer, quarantine-runtime and close-expired-runtime are exposed as owner interventions');
   if(input.command.type==='close-expired-runtime'&&(!Number.isSafeInteger(input.command.observedAt)||input.command.observedAt>Date.now()))throw new DomainError('Expired closure observation cannot be in the future');
   const result=await this.app.dispatch({missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:input.command});
-  if(result.status!=='conflict'&&'workId' in input.command)this.runtime?.interrupt(missionId,input.command.workId);return result;
+  if(result.status!=='conflict'&&'workId' in input.command){const workId=input.command.workId;if(input.command.type!=='steer'||result.value.works.find(w=>w.id===workId)?.execution!=='active')this.runtime?.interrupt(missionId,workId);}return result;
  }
 }
