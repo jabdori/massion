@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {hash} from './domain.ts';
 import {browserOriginRule} from './browser-network.ts';
-import {sanitizePage,maskBrowserField,sensitiveBrowserField} from './browser-runtime.ts';
+import {sanitizePage} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
 import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateObservation,validateAction} from './environment.ts';
 import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement} from './environment.ts';
@@ -26,18 +26,20 @@ export function validateBrowserEnvironment(c:BrowserEnvironmentConfig){
 // This function runs synchronously in the owned, script-disabled renderer.
 function browserOperation(request:any){
  const {config,key,operation}=request;
- if(location.origin!==config.origin||document.querySelector('iframe,frame,object,embed')||document.querySelectorAll('*').length>20000)throw Error('Unsupported browser surface');
+ if(location.origin!==config.origin||document.querySelector('iframe,frame,object,embed,[contenteditable]')||document.querySelectorAll('*').length>20000)throw Error('Unsupported browser surface');
  const root:any=globalThis,state=root[key]??(root[key]={document:crypto.randomUUID(),revision:0,fingerprint:'',targets:[],private:false});
  if(request.private)state.private=true;
  const controls=[...document.querySelectorAll<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>('input,select,textarea')];
  if(controls.length>256||document.documentElement.outerHTML.length>262144)throw Error('Browser document bound exceeded');
- const privateFields=controls.filter(e=>e.value&&maskBrowserField({label:[...[...(e.labels??[])].map(l=>l.textContent??''),e.getAttribute('aria-label')??''].join(' ').trim(),type:e.type,name:e.name,autocomplete:e.getAttribute('autocomplete')??''}));
- if(privateFields.length)state.private=true;
+ const privateFields=controls.filter(e=>e.value||e.getAttribute('value'));
+ // Form metadata is untrusted; every native form control makes this session private.
+ if(controls.length)state.private=true;
  const targets=config.elements.map((e:any)=>{const matches=document.querySelectorAll(e.selector);if(matches.length>1)throw Error('Ambiguous browser target');return matches[0]??null;});
  const fingerprint=JSON.stringify([location.href,document.documentElement.outerHTML,controls.map(e=>[e.value,'checked' in e?e.checked:null]),targets.map((e:Element|null)=>e?.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})??false)]);
  if(fingerprint!==state.fingerprint||targets.some((e:Element|null,i:number)=>e!==state.targets[i])){state.revision++;state.fingerprint=fingerprint;state.targets=targets;}
  const ownerTargets=targets.filter((_:Element|null,i:number)=>config.elements[i].ownerOnly);
- const available=config.elements.filter((e:any,i:number)=>{const node=targets[i];return node&&!e.ownerOnly&&!ownerTargets.some((owned:Element|null)=>owned&&(node===owned||node instanceof HTMLLabelElement&&(node.control===owned||node.contains(owned))))&&node.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})&&!node.matches(':disabled,[aria-disabled="true"],[inert]')&&!node.closest('[inert]');}).map((e:any)=>e.id);
+ const ownerActivation=(node:Element)=>{for(let current:Element|null=node;current;current=current.parentElement)if(ownerTargets.some((owned:Element|null)=>owned&&(owned===current||current instanceof HTMLLabelElement&&(current.control&&owned.contains(current.control)||current.contains(owned)))))return true;return false;};
+ const available=config.elements.filter((e:any,i:number)=>{const node=targets[i];return node&&!e.ownerOnly&&!ownerActivation(node)&&node.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})&&!node.matches(':disabled,[aria-disabled="true"],[inert]')&&!node.closest('[inert]');}).map((e:any)=>e.id);
  if(operation==='act'){
   const {expected,action}=request;
   if(state.document!==expected.document||state.revision!==expected.revision||!available.includes(action.element))throw Error('Browser target changed');
@@ -45,9 +47,9 @@ function browserOperation(request:any){
   if(!declaration.operations.includes(action.input.kind)||declaration.ownerOnly||action.gates.some((g:any)=>g.kind==='payment'))throw Error('Browser action denied');
   const input=action.input;
   const form=node instanceof HTMLFormElement?node:(node as HTMLInputElement).form;
-  const route=(url:string,target:string)=>{const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
+  const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
   if(node instanceof HTMLAnchorElement)route(node.href,node.target);
-  if(form){route(form.action,form.target);if(node instanceof HTMLInputElement||node instanceof HTMLButtonElement){if(node.hasAttribute('formaction'))route(node.formAction,node.formTarget);}
+  if(form){let address=form.action,target=form.target;if(node instanceof HTMLInputElement||node instanceof HTMLButtonElement){if(node.hasAttribute('formaction'))address=node.formAction;if(node.hasAttribute('formtarget'))target=node.formTarget;}route(address,target);
    if(state.private&&['click','submit','key'].includes(input.kind)&&(form.method.toLowerCase()!=='post'||node.hasAttribute('formmethod')&&node.getAttribute('formmethod')?.toLowerCase()!=='post'))throw Error('Private form requires POST');
   }
   switch(input.kind){
@@ -56,7 +58,7 @@ function browserOperation(request:any){
     state.private=true;node.value=request.secret;node.dispatchEvent(new Event('input',{bubbles:true}));node.dispatchEvent(new Event('change',{bubbles:true}));break;
    }
    case 'select':{
-    if(!(node instanceof HTMLSelectElement)||node.multiple)throw Error('Browser select unavailable');const option=[...node.options].filter(o=>o.value===input.option&&!o.disabled);if(option.length!==1)throw Error('Browser option unavailable');node.value=input.option;node.dispatchEvent(new Event('change',{bubbles:true}));break;
+    if(!(node instanceof HTMLSelectElement)||node.multiple)throw Error('Browser select unavailable');const option=[...node.options].filter(o=>o.value===input.option&&!o.matches(':disabled'));if(option.length!==1)throw Error('Browser option unavailable');node.value=input.option;node.dispatchEvent(new Event('change',{bubbles:true}));break;
    }
    case 'scroll':node.scrollBy({left:input.x,top:input.y,behavior:'instant'});break;
    case 'click':node.click();break;
@@ -66,7 +68,7 @@ function browserOperation(request:any){
   return {delivered:true};
  }
  const facts:Record<string,boolean>={};for(const fact of config.facts){const matches=document.querySelectorAll(fact.selector);if(matches.length>1)throw Error('Ambiguous browser fact');const node=matches[0];facts[fact.id]=fact.state==='present'?!!node:fact.state==='checked'?node instanceof HTMLInputElement&&['checkbox','radio'].includes(node.type)&&node.checked:(node instanceof HTMLInputElement||node instanceof HTMLTextAreaElement||node instanceof HTMLSelectElement)&&node.value.length>0;}
- const page:RawBrowserPage={address:location.href,title:state.private?'':document.title,blocks:state.private?[]:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText??'').trim().slice(0,4000)),fields:state.private?[]:controls.slice(0,64).map(e=>({label:[...(e.labels??[])].map(l=>l.textContent??'').join(' ').trim().slice(0,4000),type:e.type,name:e.name,value:e.value,autocomplete:e.getAttribute('autocomplete')??''})),privateFields:privateFields.length,...(state.private?{privateSession:true as const}:{})};
+ const page:RawBrowserPage={address:location.href,title:state.private?'':document.title,blocks:state.private?[]:[...document.querySelectorAll('h1,h2,h3,p,dt,dd,td,th,li')].filter(e=>e.checkVisibility({checkVisibilityCSS:true,checkOpacity:true})).slice(0,64).map(e=>((e as HTMLElement).innerText??'').trim().slice(0,4000)),fields:[],privateFields:privateFields.length,...(state.private?{privateSession:true as const}:{})};
  return {document:state.document,revision:state.revision,available,facts,page};
 }
 
@@ -77,14 +79,14 @@ export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
  constructor(control:BrowserControl,config:BrowserEnvironmentConfig){validateBrowserEnvironment(config);this.#control=control;this.#config=structuredClone(config);}
  async #call(request:object,signal:AbortSignal){
   ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();
-  try{const result=await this.#control.evaluate(`(()=>{const sensitiveBrowserField=${sensitiveBrowserField.toString()};const maskBrowserField=${maskBrowserField.toString()};return (${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})});})()`);signal.throwIfAborted();return result;}
-  catch{throw Error('Browser environment operation unavailable');}
+  try{const result=await this.#control.evaluate(`(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})})`);signal.throwIfAborted();return result;}
+  catch{this.#private=true;throw Error('Browser environment operation unavailable');}
  }
  async #inspect(signal:AbortSignal):Promise<Snapshot>{
-  const s=await this.#call({operation:'observe'},signal) as Snapshot;
+  try{const s=await this.#call({operation:'observe'},signal) as Snapshot;
   ensure(s&&typeof s.document==='string'&&s.document.length>0&&s.document.length<=128&&Number.isSafeInteger(s.revision)&&s.revision>0&&Array.isArray(s.available)&&s.available.every(v=>this.#config.elements.some(e=>e.id===v)),'Invalid browser observation');
   ensure(new URL(s.page.address).origin===this.#config.origin,'Browser origin changed');const page=sanitizePage(s.page,undefined,this.#private);this.#private||=page.tainted===true;
-  if(s.document!==this.#document){this.#document=s.document;this.#generation++;}return s;
+  if(s.document!==this.#document){this.#document=s.document;this.#generation++;}return s;}catch{this.#private=true;throw Error('Browser observation unavailable');}
  }
  #observation(s:Snapshot):EnvironmentObservation{
   const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>({...e,operations:e.operations,gates:e.gates.length?e.gates:e.operations.some(k=>['click','submit','select','key'].includes(k))?[{kind:'irreversible-submit' as const}]:[]})),facts:s.facts,image:null};

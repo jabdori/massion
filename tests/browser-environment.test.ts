@@ -54,3 +54,10 @@ test('current-page reads cannot pretend to navigate and expired secret delivery 
  const controller=new AbortController(),o=await s.adapter.observe(controller.signal),bytes=new TextEncoder().encode('private');
  await assert.rejects(s.adapter.act({binding:o.binding,element:'field',input:{kind:'type',secret:{owner:'local-owner',slot:'private'}},gates:[]},{signal:controller.signal,secret:async()=>{controller.abort();return bytes;}}));assert.ok(bytes.every(b=>b===0));assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);
 });
+
+test('an aborted private observation preserves taint after the renderer document changes',async()=>{
+ let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+ const control:BrowserControl={async evaluate(){if(first){first=false;entered();await gate;return {document:'private-document',revision:1,available:[],facts:{},page:{address:config.origin+'/',title:'',blocks:[],fields:[],privateSession:true}};}return {document:'next-document',revision:1,available:[],facts:{},page:{address:config.origin+'/',title:'Private receipt',blocks:['Private receipt content'],fields:[]}};},async close(){}};
+ const adapter=new BrowserEnvironment(control,config),controller=new AbortController(),reading=assert.rejects(adapter.observe(controller.signal));await ready;controller.abort();release();await reading;
+ const page=await adapter.read({address:config.origin+'/',sessionId:'unused',signal:new AbortController().signal});assert.equal(page.privateSession,true);assert.equal(page.title,'');assert.deepEqual(page.blocks,[]);
+});
