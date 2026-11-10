@@ -42,8 +42,9 @@ export const settingsClient=String.raw`
 const settingsLabels=${JSON.stringify(Object.fromEntries(sections.map(([id,label])=>[id,label])))};
 const settingsNames=['general','memory','members','devices','connections','usage','apps','improvements','permissions','advanced'],settingsAllow=['spend','send','delete','delegate'];
 const settingsStale={},settingsGen={},settingsPending=new Set(),settingsUnknown=new Set(),settingsMemberUnknown=new Map(),settingsDeviceUnknown=new Map(),settingsConnectionUnknown=new Map();
+let settingsDesktop=null,settingsDesktopGeneration=0,settingsDesktopBusy=false,settingsDesktopUnknown=false;
 let settingsConnectionLifecycle=null,settingsKeyConnection='',settingsMembers=null,settingsDevices=null,settingsDataEpoch=-1,settingsDataFeed='',settingsDevicePicker=false,settingsActionError='';
-function settingsInvalidate(){settingsDataEpoch=-1;settingsUsage=null;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
+function settingsInvalidate(){settingsDesktop=null;settingsDesktopGeneration++;settingsDataEpoch=-1;settingsUsage=null;settingsConnectionLifecycle=null;settingsKeyConnection='';settingsMembers=null;settingsDevices=null;settingsCatalog=null;settingsApps=null;settingsSkills=null;settingsMission=null;for(const name of settingsNames)settingsGen[name]=(settingsGen[name]||0)+1;if(!$('page-settings').hidden)renderSettings();}
 let settingsUsage=null,settingsBudgetDraft=null,settingsBudgetStatus='';
 let settingsShown='general',settingsCatalog=null,settingsMission=null,settingsRules=null,settingsHealth='',settingsAdding=false,settingsBusy=false,settingsEvidence=new Set(),settingsSkills=null,settingsMember='',settingsDetails=new Set(),settingsGroup='',settingsGroupUnknown=false,settingsGroupError='',settingsGroupAdding=false;
 const settingsRepName=()=>shellPages.chat[1];
@@ -60,6 +61,8 @@ async function settingsLoad(name){
  const gen=settingsGen[name]=(settingsGen[name]||0)+1,catalogGen=settingsGen.catalog||0,reconcileUnknown=settingsGroupUnknown,epoch=connectionEpoch,feed=chatView&&chatView.feedId,read=async path=>{const body=await settingsRead(path,'settings:'+name+':'+path);if(gen!==settingsGen[name]||epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)||path==='/connections'&&catalogGen!==(settingsGen.catalog||0))throw settingsStale;if(body?.feedId&&feed&&body.feedId!==feed){settingsInvalidate();throw settingsStale;}return body;};
  try{
  if(name==='usage'){settingsUsage=null;if(settingsShown===name)renderSettings();const usage=await read('/assistant/usage');settingsUsage=usage&&usage.feedId===(chatView||chatRep)?.feedId&&Number.isSafeInteger(usage.revision)&&usage.unit==='output-tokens'?usage:null;}
+ if(['general','devices','connections'].includes(name))await settingsDesktopLoad();
+ if(gen!==settingsGen[name]||epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId))return;
  if(name==='general')await schedulesLoad();
  if(name==='memory'||name==='members'||name==='connections'){
   settingsCatalog=await read('/connections');
@@ -105,6 +108,8 @@ function settingsDevicesView(){
  const deviceRow=(title,state,people,...controls)=>{const icon=element('span',undefined,'set-device-icon');icon.setAttribute('aria-hidden','true');icon.append(pageGlyph('device'));const row=settingsRow(title,'',...controls),line=element('span',undefined,'set-device-status'),dot=element('i',undefined,'set-device-dot');dot.setAttribute('aria-hidden','true');line.setAttribute('data-state',state);line.append(dot,element('span',people));row.children[0].append(line);row.insertBefore(icon,row.children[0]);return row;};
  const local=copy('ui.settings.device-state-members',{state:settingsHealth,members:[settingsRepName(),...chatMembers().map(m=>m.name)].join(', ')}),rows=[deviceRow(copy('ui.panel.this-mac'),settingsHealth===copy('ui.panel.ready')?'connected':'offline',local),...devices.map(d=>{const button=chatButton(copy(d.status==='connected'?'settings.button.12':'settings.button.06'),()=>action(d));button.id='settings-device-'+d.id;button.disabled=!d.available||d.status==='unknown'||settingsLifecycleLocked(key(d));const label=d.status==='connected'?copy('ui.panel.connected'):d.status==='offline'?copy('ui.settings.device-offline'):d.status==='unavailable'?copy('ui.panel.unavailable'):copy('ui.panel.unknown');return deviceRow(d.name,d.status,copy('ui.settings.device-state-members',{state:label,members:d.agent}),button);})];
  if(settingsDevicePicker){const available=devices.filter(d=>d.status!=='connected');for(const d of available){const button=chatButton(d.name,()=>action(d));button.disabled=!d.available||d.status==='unknown'||settingsLifecycleLocked(key(d));rows.push(button);}if(!available.length)rows.push(element('div',copy('ui.settings.devices-empty'),'set-empty'));}
+ if(settingsDesktop?.restartRequired)rows[0].append(settingsRestartButton('settings-device-restart'));
+ if(settingsDesktop?.installedVersion)rows[0].children[1].append(element('span',settingsDesktop.installedVersion));
  return settingsCard('',rows).slice(1);
 }
 function settingsGroupName(id){const g=(settingsCatalog&&settingsCatalog.modelGroups||[]).find(g=>g.id===id);return id==='default'?copy('settings.text.01'):g?g.name:id;}
@@ -128,11 +133,40 @@ function renderSettings(){
  settingsLifecycleStatus(view);
 }
 function settingsLifecycleStatus(view){if(settingsActionError||[...settingsUnknown].some(key=>key.startsWith(String(chatView&&chatView.feedId)+':'))){const status=element('p',settingsActionError||copy('ui.settings.command-unknown'),'set-line');status.setAttribute('role','status');view.append(status);}}
+async function settingsDesktopLoad(){
+ if(settingsDesktopBusy)return;
+ const generation=++settingsDesktopGeneration,epoch=connectionEpoch;
+ try{const value=await window.massionDesktop?.getSettings();if(generation!==settingsDesktopGeneration||epoch!==connectionEpoch)return;settingsDesktop=value||null;settingsDesktopUnknown=false;}
+ catch{if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop=null;}
+ if(!$('shell-profile').hidden)settingsDesktopProfile();
+}
+async function settingsDesktopSave(value){
+ if(settingsDesktopBusy||settingsDesktopUnknown||!settingsDesktop)return;
+ settingsDesktopBusy=true;const generation=++settingsDesktopGeneration,epoch=connectionEpoch;renderSettings();
+ try{const result=await window.massionDesktop.saveNotifications(value);if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop=result;}
+ catch{if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktopUnknown=true;}
+ finally{settingsDesktopBusy=false;if(epoch===connectionEpoch)renderSettings();}
+}
+function settingsRestartButton(id='settings-restart'){const button=chatButton(copy('settings.button.05'),settingsDesktopRestart);button.id=id;button.disabled=settingsDesktopBusy||!settingsDesktop||settingsDesktop.restartStatus!=='idle';return button;}
+async function settingsDesktopRestart(){
+ if(settingsDesktopBusy||!settingsDesktop||settingsDesktop.restartStatus!=='idle')return;
+ settingsDesktopBusy=true;const generation=++settingsDesktopGeneration,epoch=connectionEpoch;renderSettings();
+ try{const result=await window.massionDesktop.restart();if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop=result;}
+ catch{if(generation===settingsDesktopGeneration&&epoch===connectionEpoch)settingsDesktop={...settingsDesktop,restartStatus:'unknown'};}
+ finally{settingsDesktopBusy=false;if(epoch===connectionEpoch)renderSettings();}
+}
+function settingsDesktopProfile(){if(settingsDesktop?.restartRequired)$('profile-health').textContent=copy('settings.status.01');}
 function settingsGeneralView(){
  const name=element('input');name.id='settings-name';name.value=settingsRepName();name.readOnly=true;name.setAttribute('aria-label',copy('page.columnheader.02'));
- const rows=[settingsRow(copy('page.columnheader.02'),'',name)];
- for(const key of ['settings.combobox.01','settings.combobox.02']){const field=element('select'),option=element('option',copy('ui.settings.unknown-value'));option.value='';option.selected=true;field.setAttribute('aria-label',copy(key));field.disabled=true;field.append(option);rows.push(settingsRow(copy(key),'',field));}
- rows.push(settingsRow(copy('settings.heading.04'),'',element('span',copy('ui.settings.unknown-value'),'set-side')));
+ const rows=[settingsRow(copy('page.columnheader.02'),'',name)],briefing=element('select'),option=element('option',copy('ui.settings.unknown-value'));option.value='';option.selected=true;briefing.setAttribute('aria-label',copy('settings.combobox.01'));briefing.disabled=true;briefing.append(option);rows.push(settingsRow(copy('settings.combobox.01'),'',briefing));
+ const notifications=element('select');notifications.id='settings-notifications';notifications.setAttribute('aria-label',copy('settings.combobox.02'));
+ const choices=settingsDesktop?[['on',copy('ui.settings.notifications-on')],['off',copy('ui.settings.notifications-off')]]:[['',copy('ui.settings.unknown-value')]];
+ for(const [value,label] of choices){const o=element('option',label);o.value=value;o.selected=settingsDesktop?value===(settingsDesktop.notifications?'on':'off'):true;notifications.append(o);}
+ notifications.value=settingsDesktop?(settingsDesktop.notifications?'on':'off'):'';notifications.disabled=!settingsDesktop||settingsDesktopBusy||settingsDesktopUnknown||settingsDesktop.restartStatus!=='idle';notifications.addEventListener('change',()=>settingsDesktopSave(notifications.value==='on'));
+ rows.push(settingsRow(copy('settings.combobox.02'),'',notifications));
+ const version=settingsRow(copy('settings.heading.04'),'',element('span',settingsDesktop?.installedVersion||copy('ui.settings.unknown-value'),'set-side'));rows.push(version);
+ if(settingsDesktop?.restartRequired){const status=element('span',copy('settings.status.01'),'set-side');status.setAttribute('role','status');version.append(status,settingsRestartButton());}
+ if(settingsDesktopUnknown||settingsDesktop?.restartStatus==='unknown'){const status=element('span',copy('ui.panel.unknown'));status.setAttribute('role','status');rows.push(settingsRow('','',status));}
  return settingsCard('',rows).slice(1);
 }
 function settingsUsageView(){

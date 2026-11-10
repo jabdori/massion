@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 
 export const appOrigin='massion://app';
-export const channels={ready:'desktop:ready',focus:'desktop:focus'} as const;
+export const channels={ready:'desktop:ready',focus:'desktop:focus',settings:'desktop:settings',notifications:'desktop:notifications',restart:'desktop:restart'} as const;
 export function isAppURL(value:string){
  try{const url=new URL(value);return url.protocol==='massion:'&&url.host==='app'&&!url.username&&!url.password&&url.pathname==='/'&&!url.search;}catch{return false;}
 }

@@ -46,7 +46,7 @@ function shellShow(page){if(page!=='chat')appConnectClose();$('header-more').hid
 function paneVisible(){return !$('work-pane').hidden&&!(window.matchMedia?.('(max-width:900px)').matches&&$('work-pane').className.includes('away'));}
 function paneAway(on){if(!on)paneHidden=false;$('work-pane').className='pane'+(on?' away':'');$('header-workspace').setAttribute('aria-pressed',String(paneVisible()));}
 function shellMenu(button,menu,open){$(menu).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(menu==='activity-order-menu')for(const id of ['activity-order','activity-order-label'])$(id).setAttribute('aria-expanded',String(open));if(open){$(menu).shellButton=button;$(menu).children[0]?.focus?.();}}
-function shellProfile(on){$('shell-profile').hidden=!on;const profile=document.getElementById('header-profile');profile?.setAttribute('aria-expanded',String(on));if(on){$('profile-health').textContent=$('health').textContent===copy('legacy.host-ready')?copy('ui.panel.ready'):copy('ui.panel.unknown');$('profile-memory').focus();}}
+function shellProfile(on){$('shell-profile').hidden=!on;const profile=document.getElementById('header-profile');profile?.setAttribute('aria-expanded',String(on));if(on){$('profile-health').textContent=$('health').textContent===copy('legacy.host-ready')?copy('ui.panel.ready'):copy('ui.panel.unknown');$('profile-memory').focus();void settingsDesktopLoad();}}
 function shellSeen(){try{const value=JSON.parse(storage.get(seenKey)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}}
 const shellKey=work=>work.missionId+'/'+work.workId;
 // Exceptions first, then running, then closed; open decisions lead the list (conversation-cards.md).

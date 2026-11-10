@@ -1,3 +1,5 @@
+import {DEVICE_SCREENS,deviceLifecycleFixture} from './device-lifecycle-fixtures.ts';
+import type {DesktopSettings} from '../../desktop/lifecycle.ts';
 import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
 import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
 import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
@@ -17,6 +19,7 @@ import {binaryScreenFixture} from './binary-fixture.ts';
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
+ desktopSettings?:DesktopSettings;
  screen:string;
  description:string;
  now:number;
@@ -55,6 +58,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
  if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
  if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')produced=await settingsLifecycleFixture(produced);
+ if(DEVICE_SCREENS.includes(screen))produced=await deviceLifecycleFixture(produced);
  const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
  if(screen==='B17')return scheduleScreenFixture(memory);
@@ -66,10 +70,12 @@ const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"sty
 
 export async function startFixtureHost(screen:string|ScreenFixture,options:{daemonSecret?:string;port?:number}={}):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
  const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
+ const page=fixture.desktopSettings?workbenchPage.replace('<script>',`<script>window.massionDesktop=Object.freeze({getSettings:async()=>(${JSON.stringify(fixture.desktopSettings)})});\n`):workbenchPage;
+ const policy=page===workbenchPage?csp:csp.replace(scriptHashes.join(' '),[...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'").join(' '));
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);
  let origin='';
  const server=createServer(async(req,res)=>{
-  res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',csp);res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',policy);res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Content-Type','application/json; charset=utf-8');
   let envelope:ProtocolHeader|undefined,protocolPayload:Record<string,unknown>|undefined,method=req.method;
   const send=(status:number,payload:unknown)=>{res.statusCode=status;res.end(JSON.stringify(envelope?{...envelope,version:protocolSupport.max,kind:'reply',status,payload}:payload));};
@@ -121,7 +127,7 @@ export async function startFixtureHost(screen:string|ScreenFixture,options:{daem
    if(!view){fail(404,'No fixture response for this app view');return;}
    send(200,view.body);return;
   }
-  if(path==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(workbenchPage);return;}
+  if(path==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(page);return;}
   if(path==='/__fixture'){send(200,fixture);return;}
   const key=/^\/events\?after=(0|[1-9]\d*)$/.test(path)&&Number.isSafeInteger(Number(url.searchParams.get('after')))?'/events':path;
   if(!Object.hasOwn(fixture.routes,key)){fail(404,'No fixture response for '+path);return;}

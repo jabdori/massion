@@ -6,7 +6,7 @@ import {channels} from './security.ts';
 
 const directory=import.meta.dirname,out=join(directory,'dist');
 await mkdir(join(out,'core'),{recursive:true});
-for(const name of ['main','security','transport','notifications','daemon','auth']){
+for(const name of ['main','security','transport','notifications','daemon','auth','lifecycle']){
  const source=await readFile(join(directory,name+'.ts'),'utf8');
  await writeFile(join(out,name+'.js'),stripTypeScriptTypes(source).replaceAll('../src/','./core/').replaceAll(".ts'",".js'"));
 }
