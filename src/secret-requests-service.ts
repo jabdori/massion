@@ -43,7 +43,11 @@ export class SecretRequestsService {
     validateSecretSelections(request,selections);const own=selections.filter(s=>s.source.kind==='own');ensure(Object.keys(values).length===own.length&&own.every(s=>Object.hasOwn(values,s.slot)));for(const s of own)validateSecretValue(values[s.slot]);
    }else ensure(input.selections===undefined&&input.values===undefined);
    const claimed=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'answer-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,answer:input.answer,selections}}));
-   ensure(claimed.status!=='conflict');if(claimed.status!=='committed'||input.answer==='decline')return outcome((await this.#store.load(input.missionId))?.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));
+   ensure(claimed.status!=='conflict');
+   const current=await this.#store.readState(input.missionId),saved=current.snapshot?.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId);
+   ensure(current.feedId===read.feedId&&saved?.requestHash===input.requestHash&&saved.provisionId===input.commandId);
+   if(['provided','declined','unavailable'].includes(saved.state)){this.#provisions.delete(provisionKey);return outcome(saved);}
+   if(claimed.status!=='committed')return {status:'unavailable'};
    this.#provisions.add(provisionKey);
    let status:'provided'|'unavailable'='unavailable';
    try{await callTool(async signal=>{
@@ -56,7 +60,14 @@ export class SecretRequestsService {
     }
     await this.#pending(input,read.feedId);signal.throwIfAborted();
    },{signal:this.#stop.signal,timeoutMs:5000});status='provided';}catch{}
-   try{const snapshot=await this.#store.load(input.missionId);ensure(snapshot);this.#admit();const settled=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:'assistant-secret-settle-'+hash(input.commandId).slice(0,32),expectedRevision:snapshot.revision,actorId:SECRET_REQUEST_HOST,command:{type:'settle-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,status}}));if(settled.status==='conflict')return {status:'unavailable'};this.#provisions.delete(provisionKey);return outcome(settled.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));}catch{return {status:'unavailable'};}
+   let result:Outcome={status:'unavailable'},confirmed=false;
+   try{const snapshot=await this.#store.load(input.missionId);ensure(snapshot);this.#admit();const settled=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:'assistant-secret-settle-'+hash(input.commandId).slice(0,32),expectedRevision:snapshot.revision,actorId:SECRET_REQUEST_HOST,command:{type:'settle-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,status}}));if(settled.status!=='conflict'){confirmed=true;result=outcome(settled.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));}}catch{}
+   finally{
+    if(!confirmed)try{const latest=await this.#store.readState(input.missionId),saved=latest.snapshot?.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId);if(latest.feedId===read.feedId&&saved?.requestHash===input.requestHash&&saved.provisionId===input.commandId&&['provided','declined','unavailable'].includes(saved.state)){confirmed=true;result=outcome(saved);}}catch{}
+    // An unconfirmed durable claim must still make drain report unsettled.
+    if(confirmed)this.#provisions.delete(provisionKey);
+   }
+   return result;
   }finally{for(const key of Object.keys(values))delete values[key];}
  }
  async #pending(input:Record<string,any>,feedId:string){

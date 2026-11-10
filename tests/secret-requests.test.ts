@@ -52,6 +52,17 @@ test('decline, unknown provision and malformed requests remain closed across res
  for(const bad of [{...declaration,value:'secret'},{...declaration,fields:[{slot:'password',label:'Password',kind:'script'}]}])assert.throws(()=>secretRequestHash(bad));
 });
 
+test('retrying a completed provision returns its stored outcome without another write or a false unsettled drain',async()=>{
+ for(const mode of ['replayed','committed','lost-settlement-receipt']){
+  const f=await fixture();let writes=0;const set=f.own.set.bind(f.own);f.own.set=async(s,v)=>{writes++;await set(s,v);};
+  if(mode==='lost-settlement-receipt'){const commit=f.store.commit.bind(f.store);f.store.commit=async input=>{const result=await commit(input);if(input.events.some(e=>(e as {type?:string}).type==='settle-secret-request'))throw Error('Lost settlement receipt');return result;};}
+  assert.deepEqual(await f.service.answer(f.answer),{status:'provided'});const before=f.store.inspect().length;
+  if(mode==='committed'){const lookup=f.store.lookupOperation.bind(f.store);f.store.lookupOperation=async identity=>{const result=await lookup(identity);return identity.commandId===f.answer.commandId&&result.status==='replayed'?{...result,status:'committed'}:result;};}
+  assert.deepEqual(await f.service.answer(f.answer),{status:'provided'});assert.equal(writes,2);assert.equal(f.store.inspect().length,before);
+  await assert.doesNotReject(f.service.drain());
+ }
+});
+
 test('external request selections resolve at use; imports keep value-free provenance and use only the own store after provision',async()=>{
  for(const kind of ['external-ref','import'] as const){
   const f=await fixture();let reads=0;const service=new SecretRequestsService(f.store,f.own,{onepassword:{read:async()=>{reads++;return 'fixture-external';}}}),answer={...f.answer,selections:declaration.fields.map(field=>({slot:field.slot,source:{kind,vendor:'onepassword' as const,reference:'op://fixture/item/'+field.slot}})),values:{}};
