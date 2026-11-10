@@ -1,3 +1,4 @@
+import {credentialFailure} from './provider-credentials.ts';
 import {renderChatCompletionsBody,CHAT_DIALECTS} from './chat-request-renderer.ts';
 import type {ChatDialect} from './chat-request-renderer.ts';
 /** A deliberately narrow, opt-in OpenAI-compatible Chat Completions adapter. */
@@ -213,6 +214,10 @@ export class OpenAICompatibleChatAdapter implements ProviderAdapter {
         if (!(response instanceof Response)) throw new ProtocolFailure('invalid_http_response');
         if (response.redirected || (response.url && response.url !== this.#endpoint)) throw new ProtocolFailure('redirect_or_endpoint_mismatch');
         if (response.status !== 200) {
+          if(response.status===401&&/^application\/json(?:;|$)/i.test(response.headers.get('content-type')??'')){
+            const failure=credentialFailure(this.descriptor.provider,response.status,await readBoundedJson(response,this.#bounds.maxResponseBytes,controller.signal));
+            if(failure)return {...outcome('failed','credential_rejected'),credentialFailure:failure};
+          }
           // HTTP errors may be produced by a proxy after remote execution; they prove neither no effect nor zero usage.
           void response.body?.cancel().catch(() => {});
           throw new ProtocolFailure(`http_${response.status}_remote_outcome_unknown`);

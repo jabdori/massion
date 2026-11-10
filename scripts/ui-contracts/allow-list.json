@@ -61,8 +61,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -71,8 +71,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -81,8 +81,8 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -91,18 +91,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
-    },
-    {
-      "screen": "B6-token",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B7",
@@ -981,8 +971,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -991,8 +981,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -1001,8 +991,8 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -1011,18 +1001,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
-    },
-    {
-      "screen": "B6-token",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B7",

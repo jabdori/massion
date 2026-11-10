@@ -356,3 +356,24 @@ test('valid reported zero usage is preserved rather than confused with missing u
   assert.equal(result.status, 'failed');
   assert.deepEqual(result.usage, { inputTokens: 0, outputTokens: 0 });
 });
+
+test('structured credential rejection is typed and discards provider diagnostics',async()=>{
+ const body={error:{code:'invalid_api_key',message:'secret-sentinel-must-not-escape',type:'invalid_request_error'}};
+ const result=await new OpenAICompatibleChatAdapter({...config(),provider:'openai',authorization:{...config().authorization!,provider:'openai'},transport:async()=>Response.json(body,{status:401})}).invoke(request());
+ assert.equal(result.status,'failed');assert.deepEqual(result.credentialFailure,{kind:'invalid',code:'invalid_api_key'});
+ assert.doesNotMatch(JSON.stringify(result),/secret-sentinel/);
+});
+
+test('generic 401, permission denial and forged auth payloads remain unknown and cannot authorize repair retry',async()=>{
+ for(const [status,body] of [[401,{error:{message:'token expired'}}],[403,{error:{code:'invalid_api_key'}}],[502,{error:{code:'invalid_api_key'}}],[401,{error:{code:'invalid_api_key',extra:'untrusted'}}]] as const){
+  const result=await new OpenAICompatibleChatAdapter({...config(),transport:async()=>Response.json(body,{status})}).invoke(request());
+  assert.equal(result.status,'unknown');assert.equal(result.credentialFailure,undefined);
+ }
+});
+
+test('Z.ai 1003 identifies expiry while 1000 identifies invalid authentication',async()=>{
+ for(const [code,kind] of [['1003','expired'],['1000','invalid']] as const){
+  const result=await new OpenAICompatibleChatAdapter({...config(),provider:'zai',authorization:{...config().authorization!,provider:'zai'},transport:async()=>Response.json({error:{code,message:'sentinel-secret'}},{status:401})}).invoke(request());
+  assert.equal(result.status,'failed');assert.deepEqual(result.credentialFailure,{kind,code});assert.doesNotMatch(JSON.stringify(result),/sentinel/);
+ }
+});

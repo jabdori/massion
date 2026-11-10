@@ -1,3 +1,4 @@
+import {credentialRepairFixture} from './credential-repair-fixture.ts';
 import {DEVICE_SCREENS,deviceLifecycleFixture} from './device-lifecycle-fixtures.ts';
 import type {DesktopSettings} from '../../desktop/lifecycle.ts';
 import {STEERING_SCREENS,steeringFixture} from './steering-fixture.ts';
@@ -55,6 +56,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
  if(parents.length!==0)return fixture;
+ if(screen==='B6-token')return credentialRepairFixture(fixture);
  let produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;
  if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
  if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
