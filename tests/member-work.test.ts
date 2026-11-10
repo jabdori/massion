@@ -735,3 +735,21 @@ for(const kind of ['application/pdf','image/png'])test(`multi-step member Work c
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker}));assert.equal(w.artifact!.kind,kind);assert.equal(w.room!.artifact.sha256,w.artifact!.sha256);assert.equal(w.record!.room!.artifact.sha256,w.artifact!.sha256);
  const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.ok(w.room!.messages.every(m=>Number.isSafeInteger(m.at)));assert.equal(w.verdict!.status,'passed');assert.ok(w.verdict!.predicates?.length);
 });
+
+test('parallel credential rejections do not open competing repair continuations',async t=>{
+ const f=await setup(t);await f.admit();const {ConfiguredTextRuntime}=await import('../src/configured-runtime.ts');
+ let repairs=0,workers=0,release!:()=>void;const both=new Promise<void>(r=>release=r);
+ const descriptor={provider:'fixture',model:'worker',configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture' as const};
+ const executor={descriptor,async invoke(request:any){
+  if(request.invocationId.endsWith(':planning'))return {status:'completed' as const,output:JSON.stringify({steps:[{title:'Read inputs',role:'Read',dependsOn:[]},{title:'Draft result',role:'Draft',dependsOn:[]}]}),usage:{inputTokens:1,outputTokens:1},reason:'fixture-plan'};
+  workers++;if(workers===2)release();await both;return {status:'failed' as const,output:null,usage:{inputTokens:null,outputTokens:null},reason:'credential_rejected',credentialFailure:{kind:'invalid' as const,code:'invalid_api_key' as const},credentialBinding:{connectionId:'fixture-keychain',configHash:'a'.repeat(64),generation:1}};
+ }};
+ const runtime=new ConfiguredTextRuntime(f.store,{enabled:true,outputTokenCap:4,authorization:{id:'fixture-grant',scope:'local',mode:'mock-http',executor:descriptor,verifier:descriptor,maxOutputTokensPerCall:4},executor:{identity:'fixture-executor',adapter:executor},verifier:{identity:'fixture-verifier',adapter:{descriptor,async invoke(){assert.fail('Failed workers cannot reach checking');}}},artifacts:f.artifacts,repairCredential:async()=>{repairs++;throw Error('Concurrent failed stages cannot wait for repair');}});t.after(()=>runtime.beginDrain());
+ // Hold the post-receipt observation until both worker refusals are visible.
+ const current=(runtime as any).current.bind(runtime);(runtime as any).current=async(missionId:string,workId:string)=>{
+  const state=await current(missionId,workId);if(!state.work.blocker&&state.work.effects.some((e:any)=>e.id.includes(':step:')&&e.status==='failed')){const deadline=Date.now()+2000;while((await f.store.load(missionId))!.value.works.find((w:any)=>w.id===workId)!.effects.filter((e:any)=>e.id.includes(':step:')&&e.status==='failed').length<2){assert.ok(Date.now()<deadline);await new Promise(r=>setImmediate(r));}return current(missionId,workId);}return state;
+ };
+ f.m.run=(missionId,workId,runId,revision,_choice,actorId)=>runtime.run(missionId,workId,runId,revision,undefined,actorId);
+ f.script.push(v2('On it.','Parallel refused sources','Quill'));await f.say(f.assistant,'Compare sources');await f.assistant.idle();
+ assert.equal(workers,2);assert.equal(repairs,0);assert.equal((await f.intake()).works.at(-1)!.execution,'blocked');
+});

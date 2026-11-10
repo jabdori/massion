@@ -143,7 +143,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private writes:Promise<unknown>=Promise.resolve();
  private readonly shadows=new Map<string,{job:Promise<unknown>;controller:AbortController}>();
  private readonly runs=new Map<Promise<RuntimeResult>,{key:string;admitted:boolean}>();
- private readonly controllers=new Map<string,{runId:string;controller:AbortController}>();
+ private readonly controllers=new Map<string,{runId:string;controller:AbortController;repairing?:boolean}>();
  constructor(store:Store<Mission>,options:ConfiguredRuntimeOptions){
   if(options.executor.identity===options.verifier.identity)throw new Error('Executor and verifier identities must be distinct');
   if(!Number.isSafeInteger(options.outputTokenCap)||options.outputTokenCap<1)throw new Error('Invalid output-token cap');
@@ -236,12 +236,17 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const credential=validCredentialBlocker({...outcome.credentialBinding,effectId,failure:outcome.credentialFailure})?{...outcome.credentialBinding!,effectId,failure:outcome.credentialFailure!}:null;
   const receipt=JSON.stringify({stage,binding,...(validCredentialFailure(outcome.credentialFailure)?{credentialFailure:outcome.credentialFailure}:{}),...(credential?{credentialBinding:{connectionId:credential.connectionId,configHash:credential.configHash,generation:credential.generation}}:{}),...(claim?{providerDispatchId:claim.id,requestHash:claim.requestHash}:{}),provider:role.adapter.descriptor,status:outcome.status,usage:outcome.usage,reason:outcome.reason,output:outcome.output,outputSha256:outcome.output===null?null:digest(outcome.output)});
   await this.send(missionId,{type:'receipt',workId,effectId,...(claim?{providerDispatchId:claim.id}:{}),outcome:outcome.status==='completed'?'succeeded':outcome.status==='unknown'?'unknown':'failed',receipt,usage:outcome.usage.outputTokens},role.identity);
-  if(!repaired&&outcome.status==='failed'&&credential&&this.options.repairCredential&&!(await this.current(missionId,workId)).work.effects.some(e=>e.status==='pending'||e.status==='unknown')){
-   const blocker=credential;
-    await this.send(missionId,{type:'block-work',workId,blocker:{code:'provider_failed',detail:'credential_rejected',credential:blocker}},'runtime-representative');
-    await this.options.repairCredential({missionId,workId,blocker,signal:controller.signal});
+  const owned=this.controllers.get(`${missionId}\0${workId}`);
+  if(!repaired&&outcome.status==='failed'&&credential&&this.options.repairCredential&&owned&&!owned.repairing){
+   owned.repairing=true;
+   try{
+    const work=(await this.current(missionId,workId)).work;
+    if(work.effects.some(e=>e.status==='pending'||e.status==='unknown'||e.id!==effectId&&e.status==='failed'&&work.tasks.find(t=>t.id===e.taskId)?.status!=='settled'))return outcome;
+    await this.send(missionId,{type:'block-work',workId,blocker:{code:'provider_failed',detail:'credential_rejected',credential}},'runtime-representative');
+    await this.options.repairCredential({missionId,workId,blocker:credential,signal:controller.signal});
     await this.active(missionId,workId,controller);
-    return this.invoke(missionId,workId,runId,stage,instruction,binding,controller,slot,identity,true);
+    return await this.invoke(missionId,workId,runId,stage,instruction,binding,controller,slot,identity,true);
+   }finally{owned.repairing=false;}
   }
   return outcome;
  }

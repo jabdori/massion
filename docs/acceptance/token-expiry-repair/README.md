@@ -26,10 +26,16 @@ Local, controlled fixtures only; no real credential/provider/keychain access.
   sidebar Work statuses. Its typed expiry, repair, retry, Close and composer are
   present. PNG pairs: `.runtime/credential-contracts/pairs/{dark,light}/`.
 
-Local final focused run: 110 passed, 3 durable-store tests skipped, no failures;
+Earlier focused run: 110 passed, 3 durable-store tests skipped, no failures;
 additional adapter/lifecycle/app suites: 70 passed. Typecheck passes. Full suite,
 actual disposable database, complete contracts and desktop checks belong to CI.
 Local Node is 26.13.0; CI uses the repository's Node 24.19.0.
+
+Review regressions cover definite non-dispatch, rejected replies after navigation,
+superseded replacement receipts, non-editable environment credentials and parallel
+worker refusals. Latest runtime/repair/member regression run: **124 passed, 3
+skipped, 0 failed**. The parallel case reproduced two competing continuations
+before the fix and opens none afterward.
 
 ## Residuals
 
