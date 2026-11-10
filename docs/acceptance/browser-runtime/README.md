@@ -59,3 +59,11 @@ The owned read context explicitly denies automatic downloads before navigation. 
 Merged main through #139 and #141, preserving telemetry v2, typed result tables, command-produced named steps/messages and newer settings producers. Browser summaries and page-read activity remain additional observations; the browser-only actor restriction remains intact. Shared residual descriptions now refer to the newer producers, and both sides' measured exception removals are retained.
 
 All 372 related browser/privacy/procedure/member/telemetry/table/settings tests and typecheck pass. All 14 live browser interaction states pass. Sixteen affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](procedure-settings-merge-gate.json).
+
+## Origin-only persistence and latest main
+
+Observed addresses now retain only origins. Commands retain a navigation hash for idempotency, so another path cannot reuse a read identity after restart, while reset/magic-link tokens never enter observations, journal commands or portable backups. URL components are treated as private in reflected text/labels too; this can conservatively mask public route words. Fixed fixture source addresses are declared inputs, separate from observed origin-only metadata.
+
+Merged #137 steering continuation and #143 device lifecycle without removing either producer or exception-removal set. The 176 related browser/steering/device/desktop tests and typecheck pass. Twenty-two affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](steering-device-merge-gate.json).
+
+The origin probe now uses the workflow's explicitly selected Chrome and reports only fixed product failure stages plus bounded fixture-only CLI diagnostics. Native origin routing is the sole browser egress policy, consistent with the E2E network approach; iframe and alternate-host probes preserve denial coverage. The local 80-test privacy/origin suite passes. Linux CI remains the final verification.

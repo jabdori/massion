@@ -11,7 +11,7 @@ import {localBrowserAdapter} from '../../src/headless-browser.ts';
 
 const exec=promisify(execFile);
 test('production browser grants only one HTTPS origin before parser requests and redirects',{timeout:120000},async()=>{
- const root=await mkdtemp(join(tmpdir(),'massion-origin-')),originalPath=process.env.PATH,realBrowser=(await exec('which',['agent-browser'])).stdout.trim();
+ const root=await mkdtemp(join(tmpdir(),'massion-origin-')),originalPath=process.env.PATH,executableArgs=process.env.MASSION_E2E_BROWSER?['--executable-path',process.env.MASSION_E2E_BROWSER]:[],realBrowser=(await exec('which',['agent-browser'])).stdout.trim();
  const downloads=join(root,'downloads');await mkdir(downloads);const servers=[];let denied=0,wrongScheme=0;const allowed=[];
  const listen=async server=>{servers.push(server);await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});return server.address().port;};
  try{
@@ -24,15 +24,16 @@ test('production browser grants only one HTTPS origin before parser requests and
    if(req.url==='/redirect'){res.writeHead(302,{Location:'https://127.0.0.1:'+otherPort+'/redirect-target'});res.end();return;}
    if(req.url==='/scheme'){res.writeHead(302,{Location:'http://127.0.0.1:'+port+'/scheme-target'});res.end();return;}
    if(req.url==='/good.css'){res.setHeader('Content-Type','text/css');res.end('body{margin:12px}');return;}
-   res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Allowed page</title><link rel="stylesheet" href="/good.css"><p>Allowed read</p><img src="https://127.0.0.1:'+otherPort+'/parser-image"><img src="http://127.0.0.1:'+httpPort+'/parser-http">');
+   res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Allowed page</title><link rel="stylesheet" href="/good.css"><p>Allowed read</p><img src="https://127.0.0.1:'+otherPort+'/parser-image"><img src="http://127.0.0.1:'+httpPort+'/parser-http"><iframe src="https://127.0.0.1:'+otherPort+'/parser-frame"></iframe><img src="https://localhost:'+port+'/host-alias">');
   });source.on('tlsClientError',error=>{if(error.code==='ERR_SSL_HTTP_REQUEST'||/http request/i.test(error.message))wrongScheme++;});port=await listen(source);
   // The fixture certificate is trusted only by this test wrapper, never by product configuration.
-  await writeFile(join(root,'agent-browser'),'#!'+process.execPath+'\nconst {spawnSync}=require("node:child_process");const result=spawnSync('+JSON.stringify(realBrowser)+',[...process.argv.slice(2),"--ignore-https-errors","--download-path",'+JSON.stringify(downloads)+'],{stdio:"inherit"});process.exit(result.status??1);\n',{mode:0o700});process.env.PATH=root+':'+originalPath;
+  const diagnostics=join(root,'fixture-errors.jsonl');
+  await writeFile(join(root,'agent-browser'),'#!'+process.execPath+'\nconst {spawnSync}=require("node:child_process"),fs=require("node:fs");const args=process.argv.slice(2),result=spawnSync('+JSON.stringify(realBrowser)+',[...args,"--ignore-https-errors","--download-path",'+JSON.stringify(downloads)+',...'+JSON.stringify(executableArgs)+'],{encoding:"utf8"});if(result.status!==0){let detail;try{detail=JSON.parse(result.stdout).error;}catch{detail=result.stderr;}fs.appendFileSync('+JSON.stringify(diagnostics)+',JSON.stringify({command:args.find(a=>["open","get","eval","set","close"].includes(a)),error:String(detail||result.error||"command failed").slice(0,1200)})+"\\n");}process.stdout.write(result.stdout||"");process.stderr.write(result.stderr||"");process.exit(result.status??1);\n',{mode:0o700});process.env.PATH=root+':'+originalPath;
   const origin='https://127.0.0.1:'+port,adapter=localBrowserAdapter({MASSION_BROWSER_READS:'1',MASSION_BROWSER_ORIGINS:origin});
   const read=path=>adapter.read({address:origin+path,sessionId:'origin-fixture',signal:AbortSignal.timeout(30000)});
-  const page=await read('/page');assert.equal(page.title,'Allowed page');assert.ok(page.screenshot);assert.ok(allowed.includes('/good.css'));assert.equal(denied,0,'Parser resources must not connect to other ports');
+  const page=await read('/page');assert.equal(page.title,'Allowed ••••');assert.ok(page.screenshot);assert.ok(allowed.includes('/good.css'));assert.equal(denied,0,'Parser resources must not connect to other ports');assert.ok(!allowed.includes('/host-alias'),'Another hostname cannot borrow the origin grant');
   await read('/redirect').catch(()=>{});assert.ok(allowed.includes('/redirect'));assert.equal(denied,0,'A redirect must be blocked before the target sees a connection');
   await read('/scheme').catch(()=>{});assert.ok(allowed.includes('/scheme'));assert.equal(wrongScheme,0,'HTTP must not connect to the granted HTTPS port');assert.ok(!allowed.includes('/scheme-target'));
   await read('/download').catch(()=>{});assert.ok(allowed.includes('/download'));assert.deepEqual(await readdir(downloads),[],'Read-only navigation must never write an attachment');
- }finally{process.env.PATH=originalPath;for(const server of servers){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await rm(root,{recursive:true,force:true});}
+ }catch(error){const diagnostics=await readFile(join(root,'fixture-errors.jsonl'),'utf8').catch(()=>'No CLI error; inspect the safe product failure stage');throw Error('Origin fixture failure: '+diagnostics,{cause:error});}finally{process.env.PATH=originalPath;for(const server of servers){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await rm(root,{recursive:true,force:true});}
 });

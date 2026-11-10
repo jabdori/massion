@@ -173,3 +173,12 @@ test('a held observation commit cannot resurrect pixels after Work stops and rea
 });
 
 test('restart refuses legacy image-bearing state rather than reviving durable pixels',async t=>{const s=await fixture(t);await s.service.capture(request);const snapshot=(await s.store.load('mission'))!;Object.assign(snapshot.value.works[0]!.browserSession!.pages[0]!,{screenshot});await s.store.commit({id:'mission',expectedRevision:snapshot.revision,commandId:'legacy-fixture',fingerprint:'legacy-fixture',value:snapshot.value,events:[],outbox:[]});const restarted=new BrowserSessions(s.store,s.store);t.after(()=>restarted.drain());await assert.rejects(restarted.read('mission','work'),/browser/i);});
+
+test('capability paths never enter observations, commands or portable backups',async t=>{
+ const s=await fixture(t),token='M4G1CL1NK7e32Bearer',address='https://shop.example.com/reset/'+token;
+ const service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:'Reset '+token,blocks:['Capability '+token],fields:[]};}},clock:s.clock});t.after(()=>service.drain());
+ const input={...request,readId:'capability',address};await service.capture(input);const read=await service.read('mission','work');assert.equal(read.session!.page.address,'https://shop.example.com');assert.ok(!JSON.stringify(read).includes(token));
+ const restarted=new BrowserSessions(s.store,s.store,{clock:s.clock});t.after(()=>restarted.drain());assert.equal((await restarted.capture(input)).status,'replayed');await assert.rejects(restarted.capture({...input,address:'https://shop.example.com/reset/another-token'}),/identity|conflict/i);
+ await s.send({type:'receipt',workId:'work',effectId:'effect',outcome:'succeeded',receipt:'Read complete',usage:1},'executor');await s.send({type:'settle-task',workId:'work',taskId:'work:root',result:'Origin only'},'executor');
+ const backup=await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts);for(const serialized of [JSON.stringify(s.journal()),backup]){assert.ok(!serialized.includes(token));assert.ok(!serialized.includes('/reset/'));}validateMissionJournalLineage(s.journal().operations);
+});

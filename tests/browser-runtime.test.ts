@@ -19,7 +19,7 @@ async function setup(read:BrowserAdapter['read']=async()=>structuredClone(raw)){
 }
 test('sanitized observations omit credentials, query secrets, payment and password values everywhere',()=>{
  const page=sanitizePage({...raw,address:'https://user:password@shop.example.com/checkout?token=private#secret',title:'Receipt 4111 1111 1111 1111',blocks:['password hunter2','card 4111111111111111','token=abc123secret'],fields:[{label:'Password',type:'password',value:'hunter2',autocomplete:'current-password'},{label:'Card',type:'text',value:'4111111111111111',autocomplete:'cc-number'},{label:'CVV',type:'text',value:'123',autocomplete:''},{label:'수량',type:'number',value:'1',autocomplete:''}]});
- assert.equal(page.address,url);assert.equal(page.fields[3]!.value,'1');assert.ok(page.fields.slice(0,3).every(f=>f.masked&&f.value==='••••'));
+ assert.equal(page.address,new URL(url).origin);assert.equal(page.fields[3]!.value,'1');assert.ok(page.fields.slice(0,3).every(f=>f.masked&&f.value==='••••'));
  assert.doesNotMatch(JSON.stringify(page),/hunter2|4111|abc123secret|user:password|token=private/);
  assert.throws(()=>sanitizePage({...raw,blocks:['x'.repeat(20000)]}),/bound|Invalid/);
 });
