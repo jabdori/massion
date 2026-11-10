@@ -16,6 +16,18 @@ test('General shows installed version and persists a notification change before 
 test('browser General keeps native facts unknown and cannot save or restart',async()=>{
  const app=fixture();await settle();await open(app);assert.equal(node(app,'settings-notifications').disabled,true);assert.equal(node(app,'settings-restart'),undefined);assert.doesNotMatch(app.node('settings-general-body').textContent,/1.0.0/);
 });
+test('General preserves the approved briefing options and announces a pending notification save until settlement',async()=>{
+ const app=fixture();await settle();let finish!:(value:any)=>void;
+ (app.context.window as any).massionDesktop={getSettings:async()=>settings(),saveNotifications:()=>new Promise(resolve=>finish=resolve)};
+ await open(app);const body=app.node('settings-general-body'),briefing=app.all().find(n=>n.tagName==='SELECT'&&n.attributes.get('aria-label')===copy('settings.combobox.01'))!;
+ assert.deepEqual(briefing.children.map(n=>n.textContent),['—','끔','적게','많이']);assert.equal((briefing.children[0] as any).selected,true);assert.equal(briefing.disabled,true);
+ const field=node(app,'settings-notifications');field.value='off';const saving=field.fire('change');await settle();
+ const pending=node(app,'settings-notifications').parentElement!;
+ assert.equal(pending.attributes.get('aria-busy'),'true');assert.ok(pending.children[0]!.children.some(n=>n.attributes.get('role')==='status'&&n.textContent===copy('ui.reason-settings-pending')));
+ assert.equal(node(app,'settings-notifications').disabled,true);
+ finish(settings({notifications:false,restartRequired:true}));await saving;
+ assert.ok(!body.textContent.includes(copy('ui.reason-settings-pending')));assert.equal(node(app,'settings-notifications').disabled,false);
+});
 test('newer native reads and database replacement fence late settings replies',async()=>{
  const app=fixture();await settle();const releases:((s:any)=>void)[]=[];(app.context.window as any).massionDesktop={getSettings:()=>new Promise(resolve=>releases.push(resolve))};
  const first=runInContext("settingsLoad('general')",app.context),second=runInContext("settingsLoad('general')",app.context);await settle();assert.equal(releases.length,2);
