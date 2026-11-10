@@ -262,7 +262,7 @@ test('acknowledged step notes preserve the proposal and expose the member reply 
 test('expanded flow distinguishes an accepted Record from skipped recording after a failed check',async()=>{
  const {app,state,open}=fixture(),at=Date.UTC(2026,10,5,1,50);
  Object.assign(state.work,{execution:'settled',acceptance:'accepted',artifact:{sha256:'a',version:1,kind:'text'},verdict:{artifactSha256:'a',artifactVersion:1,criteriaVersion:1,status:'passed',checkedAt:at,evidence:[]},record:{id:'record',createdAt:at+1000,artifact:{sha256:'a',version:1,kind:'text'},criteria:state.work.criteria},endedAt:at+1000});
- await open();let flow=app.all().find(n=>n.className==='room-flow')!;assert.ok(flow.children.some(n=>n.textContent.includes('기록')&&n.children[0]?.textContent));
+ await open();let flow=app.all().find(n=>n.className==='room-flow')!;assert.ok(flow.children.some(n=>n.textContent.includes('기록 생성')&&n.children[0]?.textContent));
  Object.assign(state.work,{acceptance:'failed',record:undefined,verdict:{...((state.work as any).verdict),status:'failed'}});state.revision++;await runInContext('loadMission("intake",false)',app.context);await settle();flow=app.all().find(n=>n.className==='room-flow')!;assert.match(flow.textContent,/기록.*건너뜀/);
 });
 
@@ -273,4 +273,21 @@ test('an expired dispatch updates every delivered file row in the fallback pane'
  assert.deepEqual(statuses.map(n=>n.textContent),['읽는 중','읽는 중']);assert.equal(new Set(statuses.map(n=>n.id)).size,2);
  (app.context as any).fileDeadline=deadline;runInContext('Date=class extends Date{static now(){return fileDeadline+1}};workRoomClock()',app.context);
  assert.deepEqual(statuses.map(n=>n.textContent),['결과 모름','결과 모름']);
+});
+
+test('expanded file effects identify each delivered repository path instead of repeating a worker title',async()=>{
+ const {app,state,open}=fixture();
+ Object.assign(state.work,{effects:[{id:'files',taskId:'group',status:'succeeded',providerDispatch:{fileInputs:[{documentId:'source',path:'src/review/source.ts',sha256:'a'.repeat(64)},{documentId:'source',path:'tests/review/source.test.ts',sha256:'b'.repeat(64)}]}}]});
+ await open();const effects=app.all().filter(n=>n.className==='room-fields')[2]!;
+ assert.deepEqual(effects.children.map(n=>n.children[0]!.textContent),['src/review/source.ts','tests/review/source.test.ts']);
+ assert.ok(effects.children.every(n=>n.children[0]!.attributes.get('title')===n.children[0]!.textContent));
+ assert.ok(effects.children.every(n=>n.children[1]!.textContent==='완료'));
+});
+
+test('the step note line states its exact assigned member acknowledgement while other notes remain pending',async()=>{
+ const {app,state,open,progress}=fixture(),at=Date.UTC(2026,10,5,1,44);
+ state.conversations=[{workId:'w1',messages:[{id:'applied',role:'owner',text:'Use the next instruction',at,stepNote:{taskId:'summary',title:'Next instruction'}},{id:'pending',role:'owner',text:'Another proposal',at,stepNote:{taskId:'group',title:'Another instruction'}}]}];
+ Object.assign(state.work.tasks.find(t=>t.id==='summary')!,{procedureEdit:{messageId:'applied',actorId:'worker',title:'Next instruction',instruction:'Use the next instruction',at:at+1}});
+ await open();assert.match(progress()!.textContent,/절차 고침: Next instruction · 퀼 확인/);assert.match(progress()!.textContent,/절차 고침: Another instruction · 확인 대기/);
+ const transcript=app.all().find(n=>n.className==='chat-step-notes')!;assert.match(transcript.textContent,/절차 고침: Next instruction · 퀼 확인/);
 });

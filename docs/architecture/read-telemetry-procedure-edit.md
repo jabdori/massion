@@ -23,7 +23,7 @@ Implementation: write failing boundary/runtime/surface tests, extend existing
 commands and backup validation, then regenerate only owned fixtures. Verify
 related tests and typecheck locally, affected browser contracts in both themes,
 and all CI checks plus a current-head Codex receipt before handing back the PR.
-No merge, real model/provider calls, browser/payment changes, token repair,
+No real model/provider calls, browser/payment changes, token repair,
 business-result summary or steering/restart continuation are included.
 
 ## Evidence and bounds
@@ -43,3 +43,19 @@ source pins and receipts; feed replacement and deadline refresh keep cached
 facts from becoming another Work's status.
 
 See [acceptance evidence](../acceptance/read-telemetry-procedure-edit/README.md).
+
+## Lead visual corrections
+
+Identify file delivery effects by their retained repository-relative paths in the
+expanded effects card. Keep long paths to one ellipsized line, with their full
+value available on inspection. A step note displays pending state until the exact
+assigned-worker acknowledgement exists; then display the owning member's name
+and acknowledgement state on that same line. Capture both command-produced states.
+
+Capture the end of the expanded flow for accepted and failed-check Work at desktop
+and mobile widths in both themes. Check that the Record card and creation/skipping
+events can be scrolled fully above the sticky checking bar. Keep scenario names,
+example members and example step-title interpretation out of product code; fixtures
+remain the only source of example scenarios. Merge latest main after these fixes,
+then require all six CI jobs, clean current-head Codex and mergeability before the
+owner-authorized merge of PR #147.

@@ -1,5 +1,8 @@
 # R-N: file delivery, procedure notes and Record flow
 
+The [lead-review evidence](lead-review/README.md) supersedes the initial screenshots
+below for file effects, note state and expanded Record flow.
+
 ## Verified
 
 Related local tests: 233 total, 226 passed, seven environment-gated skips,

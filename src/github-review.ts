@@ -49,6 +49,6 @@ export function githubReviews(mission:Mission,target:GithubTarget,now:number):Gi
   let matches=false;try{matches=(pinnedWorkSources(mission,w)??[]).some(pin=>{const source=githubSource(pin.document.content);return source&&pin.document.source===target.url&&source.target.url===target.url&&source.target.headSha===target.headSha;});}catch{return [];}
   if(!matches)return [];
   const tasks=w.tasks.filter(t=>t.step&&!t.step.skipReason);
-  return [{missionId:mission.id,workId:w.id,title:w.title,memberId:w.assistantSource?.memberId??null,progress:{done:tasks.filter(t=>t.status==='settled').length,total:tasks.length},reading:tasks.length>0&&tasks.every(t=>t.step!.role==='읽기'),deadlineAt}];
+  return [{missionId:mission.id,workId:w.id,title:w.title,memberId:w.assistantSource?.memberId??null,progress:{done:tasks.filter(t=>t.status==='settled').length,total:tasks.length},reading:w.effects.some(e=>e.status==='pending'&&!!e.providerDispatch?.fileInputs?.length),deadlineAt}];
  });
 }

@@ -20,16 +20,19 @@ export async function githubScreenFixture(template:ScreenFixture){
  const body={description:'파일 읽기',steps:Array.from({length:11},(_,i)=>'파일 '+(i+1)+' 읽기'),verify:'변경 내용과 근거 확인'},team={memberId:'member-juno',skillsRevision:1,procedures:[{id:'review-files',version:1,hash:hash(body),body}]};
  const send=(command:Command,actor=owner)=>{m=apply(m,command,actor).value;};
  send({type:'admit-work',workId,title:'PR #84 검토',budget:1000,team,assistantSource:{segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'fixture',model:'deterministic'},memberId:'member-juno'}},{id:ASSISTANT_ACTOR_ID,roles:['assistant']});
- const document=githubReviewDocument(item.github!,'document:github-review');send({type:'capture-document',document});send({type:'attach-work-source',workId,documentId:document.id,version:1,contentSha256:documentContentHash(document.content),reason:'선택한 PR 커밋 검토'});
+ const document=githubReviewDocument(item.github!,'document:github-review',item.sourceFiles);send({type:'capture-document',document});send({type:'attach-work-source',workId,documentId:document.id,version:1,contentSha256:documentContentHash(document.content),reason:'선택한 PR 커밋 검토'});
  const w=m.works[0]!;send({type:'activate-runtime',workId,run:{id:'github-fixture-run',authorizationId:'fixture',criteriaHash:hash(w.criteria),inputHash:workInputHash(w),mode:'mock-http',outputTokenCap:10,ownership:{hostSessionId:'fixture',dispatchId:'fixture-dispatch',startedAt:fixture.now-60000,deadlineAt:fixture.now+60000}}});
  send({type:'delegate',workId,taskId:workId+':executor',parentId:workId+':root'},rep);
  for(let i=0;i<11;i++){
   const taskId=workId+':step:'+i,actorId='fixture-reader-'+i;
   send({type:'delegate',workId,taskId,parentId:workId+':executor',step:{role:'읽기',title:body.steps[i]!,dependsOn:[]}},rep);
   send({type:'assign',workId,assignment:{id:'read-'+i,actorId,role:'executor',taskId,model:{provider:'fixture',model:'deterministic',configVersion:'v1',reason:'Data-only screen fixture',evidenceClass:'fixture'},extensionVersion:'v1'}},rep);
-  if(i<4)send({type:'settle-task',workId,taskId,result:'모의 파일 읽기 완료'},{id:actorId,roles:['executor']});
+  if(i<5){const actor:Actor={id:actorId,roles:['executor']},file=item.sourceFiles![i]!,effectId='fixture-file-read-'+i,claimId='fixture-file-claim-'+i;
+   send({type:'admit-effect',workId,effect:{id:effectId,taskId,status:'pending',target:'fixture/deterministic',authority:'fixture'},reserve:1},actor);
+   send({type:'claim-provider-dispatch',workId,effectId,claim:{id:claimId,runId:'github-fixture-run',hostSessionId:'fixture',dispatchId:'fixture-dispatch',actorId,assignmentId:'read-'+i,provider:'fixture',model:'deterministic',configVersion:'v1',requestHash:hash({file,fixture:true}),claimedAt:fixture.now-60000+i,fileInputs:[{documentId:document.id,path:file.path,sha256:documentContentHash(file.content)}]}},actor);
+   if(i<4){send({type:'receipt',workId,effectId,providerDispatchId:claimId,outcome:'succeeded',receipt:'Controlled fixture received '+file.path,usage:0},actor);send({type:'settle-task',workId,taskId,result:'Controlled file delivery completed'},actor);}
+  }
  }
- send({type:'admit-effect',workId,effect:{id:'fixture-file-read',taskId:workId+':step:4',status:'pending',target:'모의 파일 읽기',authority:'fixture-only'},reserve:1},{id:'fixture-reader-4',roles:['executor']});
  item.reviews=fixture.screen==='B22'?githubReviews(m,item.github!,fixture.now):[];for(const group of page.groups)for(const row of group.rows)if(row.github)row.reviews=fixture.screen==='B22'?githubReviews(m,row.github,fixture.now):[];
  for(const v of fixture.appViews??[])if(v.request.app==='app-github'&&(v.request.handler==='page'||v.request.ref==='84'))v.body=v.request.handler==='page'?page:item;
  if(fixture.screen==='B22'){

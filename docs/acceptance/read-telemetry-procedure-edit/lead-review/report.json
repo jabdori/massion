@@ -1,0 +1,302 @@
+[
+  {
+    "theme": "dark",
+    "kind": "pending",
+    "note": {
+      "acknowledged": false,
+      "conversation": "이번에도 테스트부터 돌려 줘.절차 고침: 테스트 먼저 돌리기 · 확인 대기 · 14:12",
+      "member": "주노",
+      "text": "절차 고침: 테스트 먼저 돌리기 · 확인 대기14:12"
+    }
+  },
+  {
+    "theme": "dark",
+    "kind": "acknowledged",
+    "note": {
+      "acknowledged": true,
+      "conversation": "이번에도 테스트부터 돌려 줘.절차 고침: 테스트 먼저 돌리기 · 주노 확인 · 14:12주노14:12테스트 먼저 돌리기부터 할게요.",
+      "member": "주노",
+      "text": "절차 고침: 테스트 먼저 돌리기 · 주노 확인14:12"
+    },
+    "files": [
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/assistant-service.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "src/assistant-service.ts",
+        "truncated": false,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "tests/assistant-conversation.test.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "tests/assistant-conversation.test.ts",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/assistant-conversation-panel.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "src/assistant-conversation-panel.ts",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "docs/architecture/assistant-conversation.md",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "docs/architecture/assistant-conversation.md",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/connection-workbench.ts",
+        "rowWidth": 259,
+        "state": "대기",
+        "title": "src/connection-workbench.ts",
+        "truncated": false,
+        "width": 228
+      }
+    ],
+    "recordBounds": {
+      "barTop": 799.5,
+      "bottom": 666,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 586,
+      "visible": true
+    }
+  },
+  {
+    "theme": "dark",
+    "kind": "created",
+    "fact": {
+      "acceptance": "accepted",
+      "expectedTime": "14:08",
+      "record": true,
+      "text": "기록 생성",
+      "time": "14:08"
+    },
+    "desktop": {
+      "barTop": 855.5,
+      "bottom": 796,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 776,
+      "visible": true
+    },
+    "mobileCard": {
+      "barTop": 799,
+      "bottom": 523,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 443,
+      "visible": true
+    },
+    "mobileFlow": {
+      "barTop": 799,
+      "bottom": 753,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 733,
+      "visible": true
+    }
+  },
+  {
+    "theme": "dark",
+    "kind": "skipped",
+    "fact": {
+      "acceptance": "failed",
+      "expectedTime": "14:09",
+      "record": false,
+      "text": "기록 · 건너뜀",
+      "time": "14:09"
+    },
+    "desktop": {
+      "barTop": 855.5,
+      "bottom": 809.75,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 789.75,
+      "visible": true
+    },
+    "mobileCard": {
+      "barTop": 799.5,
+      "bottom": 506,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 426,
+      "visible": true
+    },
+    "mobileFlow": {
+      "barTop": 799.5,
+      "bottom": 753.75,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 733.75,
+      "visible": true
+    }
+  },
+  {
+    "theme": "light",
+    "kind": "pending",
+    "note": {
+      "acknowledged": false,
+      "conversation": "이번에도 테스트부터 돌려 줘.절차 고침: 테스트 먼저 돌리기 · 확인 대기 · 14:12",
+      "member": "주노",
+      "text": "절차 고침: 테스트 먼저 돌리기 · 확인 대기14:12"
+    }
+  },
+  {
+    "theme": "light",
+    "kind": "acknowledged",
+    "note": {
+      "acknowledged": true,
+      "conversation": "이번에도 테스트부터 돌려 줘.절차 고침: 테스트 먼저 돌리기 · 주노 확인 · 14:12주노14:12테스트 먼저 돌리기부터 할게요.",
+      "member": "주노",
+      "text": "절차 고침: 테스트 먼저 돌리기 · 주노 확인14:12"
+    },
+    "files": [
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/assistant-service.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "src/assistant-service.ts",
+        "truncated": false,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "tests/assistant-conversation.test.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "tests/assistant-conversation.test.ts",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/assistant-conversation-panel.ts",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "src/assistant-conversation-panel.ts",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "docs/architecture/assistant-conversation.md",
+        "rowWidth": 259,
+        "state": "완료",
+        "title": "docs/architecture/assistant-conversation.md",
+        "truncated": true,
+        "width": 228
+      },
+      {
+        "nowrap": "nowrap",
+        "overflow": "ellipsis",
+        "path": "src/connection-workbench.ts",
+        "rowWidth": 259,
+        "state": "대기",
+        "title": "src/connection-workbench.ts",
+        "truncated": false,
+        "width": 228
+      }
+    ],
+    "recordBounds": {
+      "barTop": 799.5,
+      "bottom": 666,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 586,
+      "visible": true
+    }
+  },
+  {
+    "theme": "light",
+    "kind": "created",
+    "fact": {
+      "acceptance": "accepted",
+      "expectedTime": "14:08",
+      "record": true,
+      "text": "기록 생성",
+      "time": "14:08"
+    },
+    "desktop": {
+      "barTop": 855.5,
+      "bottom": 796,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 776,
+      "visible": true
+    },
+    "mobileCard": {
+      "barTop": 799,
+      "bottom": 523,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 443,
+      "visible": true
+    },
+    "mobileFlow": {
+      "barTop": 799,
+      "bottom": 753,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 733,
+      "visible": true
+    }
+  },
+  {
+    "theme": "light",
+    "kind": "skipped",
+    "fact": {
+      "acceptance": "failed",
+      "expectedTime": "14:09",
+      "record": false,
+      "text": "기록 · 건너뜀",
+      "time": "14:09"
+    },
+    "desktop": {
+      "barTop": 855.5,
+      "bottom": 809.75,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 789.75,
+      "visible": true
+    },
+    "mobileCard": {
+      "barTop": 799.5,
+      "bottom": 506,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 426,
+      "visible": true
+    },
+    "mobileFlow": {
+      "barTop": 799.5,
+      "bottom": 753.75,
+      "overflow": false,
+      "paneTop": 88,
+      "top": 733.75,
+      "visible": true
+    }
+  }
+]

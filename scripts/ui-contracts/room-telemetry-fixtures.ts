@@ -65,8 +65,9 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding',now?:n
   }
   if(s.end)send({type:'settle-task',workId,taskId,result:s.result!},actor,s.end);
  }
- if(kind==='coding'){send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');send({type:'acknowledge-step-note',workId,messageId:'procedure-note'},{id:'worker-1',roles:['executor']},'10:44');}
- validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source,documents:state.documents};
+ let proposal:Mission|undefined;
+ if(kind==='coding'){send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');proposal=structuredClone(state);send({type:'acknowledge-step-note',workId,messageId:'procedure-note'},{id:'worker-1',roles:['executor']},'10:44');}
+ validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source,documents:state.documents,proposal};
 }
 
 export async function regenerateRoomScreens(only?:string[]){
