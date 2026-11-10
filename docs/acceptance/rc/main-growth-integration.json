@@ -1,0 +1,141 @@
+{
+  "main": "46011165577aa28f64613eff7624255bf57664d2",
+  "rows": [
+    {
+      "screen": "B12",
+      "theme": "dark",
+      "passed": 26,
+      "required": 26,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B2",
+      "theme": "dark",
+      "passed": 30,
+      "required": 31,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "passed": 31,
+      "required": 34,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ]
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 44,
+      "required": 78,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ]
+    },
+    {
+      "screen": "B9",
+      "theme": "dark",
+      "passed": 35,
+      "required": 37,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 58,
+      "required": 69,
+      "errors": [],
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text."
+      ]
+    },
+    {
+      "screen": "B12",
+      "theme": "light",
+      "passed": 26,
+      "required": 26,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B2",
+      "theme": "light",
+      "passed": 30,
+      "required": 31,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "passed": 31,
+      "required": 34,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": [
+        "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states."
+      ]
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 44,
+      "required": 78,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ]
+    },
+    {
+      "screen": "B9",
+      "theme": "light",
+      "passed": 35,
+      "required": 37,
+      "errors": [],
+      "visualFailures": [],
+      "gaps": []
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 58,
+      "required": 69,
+      "errors": [],
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text."
+      ]
+    }
+  ],
+  "diagnosticGate": {
+    "code": 0,
+    "added": [],
+    "resolved": [],
+    "errors": []
+  }
+}

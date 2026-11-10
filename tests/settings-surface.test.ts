@@ -135,7 +135,7 @@ test('A catalog read started before a group commit cannot restore the previous c
 test('A replaced feed or a newer section read discards earlier Settings data',async()=>{
  const {app}=fixture();await settle();await open(app,'connections');
  let resolveOld!:(value:any)=>void,resolveNew!:(value:any)=>void;
- runInContext('settingsRead=path=>new Promise(resolve=>{globalThis[globalThis.oldRead?"newResolve":"oldResolve"]=resolve;globalThis.oldRead=true;})',app.context);
+ runInContext('settingsRead=path=>path==="/connections"?new Promise(resolve=>{globalThis[globalThis.oldRead?"newResolve":"oldResolve"]=resolve;globalThis.oldRead=true;}):Promise.resolve({connections:[]})',app.context);
  const older=runInContext('settingsLoad("connections")',app.context);await settle();const newer=runInContext('settingsLoad("connections")',app.context);await settle();
  resolveOld=runInContext('oldResolve',app.context);resolveNew=runInContext('newResolve',app.context);
  resolveNew({modelGroups:[],connections:[],configHash:'new'});await newer;
@@ -193,7 +193,7 @@ test('Settings member identities preserve the admitted shape and recorded runnin
  const {app}=fixture();await settle();await open(app,'members');
  assert.equal(byId(app,'settings-member-member-a')!.children[0]!.attributes.get('data-shape'),'drop');
  runInContext('shellWorks=[{memberId:"member-a",started:true,execution:"active",acceptance:"pending",unknown:false}];renderSettings()',app.context);
- assert.equal(byId(app,'settings-member-member-a')!.children[0]!.attributes.get('aria-label'),copy('sidebar.status.05'));
+ assert.equal(byId(app,'settings-member-member-a')!.children[0]!.attributes.get('data-busy'),'true');assert.ok(byId(app,'settings-member-member-a')!.attributes.get('aria-label')!.includes(copy('sidebar.status.05')));
  runInContext('shellWorks=[];renderSettings()',app.context);
  assert.equal(byId(app,'settings-member-member-a')!.children[0]!.attributes.get('aria-hidden'),'true');
 });

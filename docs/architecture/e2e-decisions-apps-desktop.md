@@ -45,10 +45,26 @@ PR #117 was still open and unmerged after journeys 1–4 passed, so monthly budg
 is deliberately excluded. The run retains AX snapshots, PNGs, separate desktop
 call records and daemon logs under `.runtime/e2e/`. No production source changed.
 
-The first CI run exposed agent-browser's paused opaque-iframe network-control
-setup with its automatically downloaded Chrome for Testing 157: `Runtime.evaluate`
-timed out and the tool closed the tab. CI selects the runner-provided stable
-Chrome (156.0.8078.79 on the inspected runner image), matching the locally tested
-browser version, and logs it. Domain restrictions, app CSP, sandbox and assertions
-remain enabled. Related upstream investigation:
+The first CI run exposed agent-browser's opaque-iframe network-control setup
+with automatically downloaded Chrome for Testing 157. The initial workaround
+selected runner-provided Chrome 156.0.8078.79; R-C reproduced the same missing
+execution-context failure on that build in two CI attempts. In a narrow local
+reproduction a separate CDP inspection found the application root healthy until
+the tool replaced its target with about:blank. Basic iframe content without a
+script reproduced the tool failure too.
+
+Agent-browser 0.41.2 plus Playwright 1.64.0's Chromium build 1248 (156.0.8078.4)
+passed that narrow local check twice with the domain filter, opaque sandbox and
+credentialless unchanged. The same browser pin did not fix the complete Linux
+CI journey: eight subtests passed before the MCP phase failed during a snapshot
+with `Cannot find default execution context`. The ineffective browser-installer
+change was reverted. CI keeps its original browser selection and all security
+controls; this E2E failure remains unresolved. Local fixture success is not Linux
+E2E success. Related upstream investigation:
 https://github.com/vercel-labs/agent-browser/pull/2193.
+
+PR #132's [bounded context-race handling](e2e-context-race.md) is now merged into
+R-C from main at `156305d`. It waits for the existing resize signal before the
+MCP capture and retries only the named context-installation error once. Screenshot
+timeouts, frame-readiness timeouts and repeated failures remain fatal. The original
+browser configuration and all isolation/network assertions are retained.
