@@ -1,3 +1,4 @@
+import {browserOriginRule,createBrowserDenyProxy} from './browser-network.ts';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -64,16 +65,15 @@ export function localBrowserAdapter(env:Record<string,string|undefined>):Browser
  if(env.MASSION_BROWSER_READS===undefined||env.MASSION_BROWSER_READS==='0')return undefined;
  if(env.MASSION_BROWSER_READS!=='1')throw Error('Invalid local browser setting');
  const origins=(env.MASSION_BROWSER_ORIGINS??'').split(',');
- for(const origin of origins){let url:URL;try{url=new URL(origin);}catch{throw Error('Explicit HTTPS browser origins required');}if(url.protocol!=='https:'||url.origin!==origin||url.username||url.password)throw Error('Exact HTTPS browser origin required');}
+ for(const origin of origins)browserOriginRule(origin);
  return {async read({address,signal}):Promise<RawBrowserPage>{
   if(address!==browserAddress(address)||!origins.includes(new URL(address).origin))throw Error('Browser address is outside the local origin setting');signal.throwIfAborted();
   const dir=await mkdtemp(join(tmpdir(),'massion-browser-')),config=join(dir,'config.json'),session='massion-read-'+randomUUID();
-  await writeFile(config,'{}\n',{mode:0o600});
   const childEnv={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_IDLE_TIMEOUT_MS:'60000'};
   const run=async(args:string[],cancel:AbortSignal|undefined=signal)=>{const {stdout}=await exec('agent-browser',['--config',config,'--session',session,'--headed','false','--hide-scrollbars','false','--allowed-domains',new URL(address).hostname,'--json',...args],{cwd:dir,env:childEnv,timeout:30000,maxBuffer:262144,signal:cancel});const result=JSON.parse(stdout);if(!result.success)throw Error('Browser read failed');return result.data;};
-  let control:Awaited<ReturnType<typeof disableBrowserScripts>>|undefined;
-  try{await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,control);}
+  let control:Awaited<ReturnType<typeof disableBrowserScripts>>|undefined,network:Awaited<ReturnType<typeof createBrowserDenyProxy>>|undefined;
+  try{network=await createBrowserDenyProxy();await writeFile(config,JSON.stringify({proxy:network.url,proxyBypass:'<-loopback>;'+browserOriginRule(new URL(address).origin),args:'--force-webrtc-ip-handling-policy=disable_non_proxied_udp'}),{mode:0o600});await run(['open']);control=await disableBrowserScripts(run,signal);await run(['open',address]);return await captureBrowserPage(run,control);}
   catch{throw Error('Local browser read failed');}
-  finally{try{await run(['close'],AbortSignal.timeout(5000));}catch{}await control?.close();await rm(dir,{recursive:true,force:true});}
+  finally{try{try{if(network)await run(['close'],AbortSignal.timeout(5000));}catch{}await control?.close();await network?.close();}finally{await rm(dir,{recursive:true,force:true});}}
  }};
 }

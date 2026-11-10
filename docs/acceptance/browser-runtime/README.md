@@ -43,3 +43,9 @@ Merged main through PR #130 (member/app/connection/device lifecycle and settings
 All 249 related browser, privacy, settings, connection, device, member and Work-room tests pass, as does typecheck. Fourteen affected screen/theme captures have no new/stale/infrastructure diagnostics: [merged gate](lifecycle-polish-merge-gate.json).
 
 Merged PR #138's E2E network/send stabilization after main advanced again. The harness reuses main's native Chrome proxy configuration and removes the duplicate browser-egress helper; HTTP, CONNECT and upgraded connections remain denied, including reset-socket handling. Evidence image exclusion and diagnostic scrubbing are preserved. The 12 affected helper/network tests (including the real headless isolated-frame test) and typecheck pass. Product browser/persistence code is unchanged.
+
+## Exact-origin network correction
+
+A production-adapter HTTPS regression reproduced same-host cross-port requests before the fix. The adapter now installs native scheme/host/effective-port routing before navigation, with an owned deny-only proxy for every other request and implicit loopback bypass disabled. Parser resources, redirects and protocol changes are checked before the target receives a connection. Wildcard/bypass-pattern origins are rejected. TLS verification is unchanged in product code; the generated fixture certificate bypass exists only in the test wrapper.
+
+All 25 affected tests, including the real production-adapter origin test and isolated-frame network test, and typecheck pass. The allowed page and same-origin stylesheet load, and denied target connection counters stay zero. The shared denial server preserves E2E HTTP/CONNECT/Upgrade and reset-socket coverage; browser image persistence code is unchanged.

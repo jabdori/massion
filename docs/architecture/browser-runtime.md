@@ -17,3 +17,9 @@ The page pane keeps one tab strip and a domain-only pill, and B7 keeps page coun
 Exercise capture, active read, settle, acceptance/Record, artifact, portable backup and restart. Search serialized journal/backup/Record/artifact bytes for the image bytes/base64 and a CSS-drawn sentinel: none may persist, only the hash. Assert inactive/deadline/drain/feed-change paths cannot return images and reactivation cannot revive them. Verify live rendering headlessly without saving page pixels, then run related tests/typecheck and the extra authorized CI/Codex loop. No real site, payment, submission, tag or PR merge.
 
 The optional real adapter still requires exact HTTPS origins and a fresh script-disabled headless session. Existing DOM masking and paint suppression are defense in depth, not a confidentiality proof. The live owner-visible image can contain CSS-drawn secrets; non-persistence is the enforced boundary.
+
+## Exact network origin
+
+Each local read starts an owned deny-only proxy before Chrome. Only the selected HTTPS scheme, hostname and effective port bypass it; implicit loopback bypass is removed. All other HTTP/CONNECT/Upgrade traffic is refused without forwarding, including parser-driven resources and redirects before DOM inspection. Wildcard/subdomain/bypass-list host patterns are rejected. The existing hostname guard remains defense in depth, and TLS certificate verification stays enabled. E2E reuses the same denial server with its separate, explicit loopback-only policy. The browser uses [Chromium's scheme/host/port proxy rules](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md).
+
+The production-adapter regression uses local HTTPS fixtures and a test-only certificate wrapper: allowed page/CSS reads succeed, while other-port parser requests, redirects and HTTP on the HTTPS port reach no target connection. No page image is written by this probe.
