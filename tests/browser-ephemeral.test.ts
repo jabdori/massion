@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {Application} from '../src/application.ts';
 import {canonical,hash,workInputHash} from '../src/domain.ts';
 import type {Command,Mission} from '../src/domain.ts';
-import {BrowserSessions} from '../src/browser-runtime.ts';
+import {BrowserSessions,browserPrivateRanges} from '../src/browser-runtime.ts';
 import type {RawBrowserPage} from '../src/browser-runtime.ts';
 import {InMemoryStore,journalChecksum,validateJournal} from '../src/storage.ts';
 import type {PortableJournal} from '../src/storage.ts';
@@ -209,8 +209,8 @@ for(const [secret,display] of [['ABCD1234','ABCD-1234'],['123456','１２３４�
  for(const value of [JSON.stringify(observed),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(encoded),'Encoded display preimage must not persist');validateMissionJournalLineage(s.journal().operations);
 });
 
-test('excessively nested encoded display values fail before committing an observation',async t=>{
- const s=await fixture(t);let encoded='ABCD1234';for(let i=0;i<10;i++)encoded=Buffer.from(encoded).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'ABCD1234'}]};}},clock:s.clock});t.after(()=>service.drain());await assert.rejects(service.capture(request),/encoding bound/i);assert.equal(s.journal().head,before);
+test('known nested values are masked while unrecognized decoding stays bounded',async t=>{
+ const s=await fixture(t);let encoded='ABCD1234';for(let i=0;i<10;i++)encoded=Buffer.from(encoded).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'ABCD1234'}]};}},clock:s.clock});t.after(()=>service.drain());assert.throws(()=>browserPrivateRanges(encoded),/encoding bound/i);await service.capture(request);assert.equal((await service.read('mission','work')).session!.page.title,'••••');assert.equal(s.journal().head,before+1);assert.ok(!JSON.stringify(s.journal()).includes(encoded));
 });
 
 for(const variant of ['spaces','wrapped','invisible','compatibility'])test('formatted encoded display candidates remain private: '+variant,async t=>{
@@ -237,4 +237,21 @@ for(const separator of [':','%253A','%EF%BC%9A'])test('reserved capability path 
 for(const [plain,separator] of [['WXYZ9876',''],['WXYZ-9876',''],['ＷＸＹＺ９８７６',':'],['WXYZ-9876',' ']] as const)test('hex display candidates cannot retain private values: '+separator+plain,async t=>{
  const s=await fixture(t),display=Buffer.from(plain).toString('hex').match(/.{1,4}/g)!.join(separator),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'앞😀'+display+'뒤',blocks:[display],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'WXYZ9876'}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);const observed=await service.read('mission','work');assert.equal(observed.session!.page.title,'앞😀••••뒤');assert.deepEqual(observed.session!.page.blocks,['••••']);
  for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(display),'Hex private value must not persist');validateMissionJournalLineage(s.journal().operations);
+});
+
+for(const format of ['base64','base64url','hex'] as const)test('decoded capability seeds remain private: '+format,async t=>{
+ const s=await fixture(t),secret='ABCD1234',token=Buffer.from(secret).toString(format),address='https://shop.example.com/recover/'+token,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:secret,blocks:[secret],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
+ for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(secret),'Decoded capability must not persist');validateMissionJournalLineage(s.journal().operations);
+});
+
+test('a decoded private field seed is masked just like its original encoding',async t=>{
+ const s=await fixture(t),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'ABCD1234',blocks:['ABCD1234'],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:Buffer.from('ABCD1234').toString('base64')}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);assert.ok(!JSON.stringify(s.journal()).includes('ABCD1234'));assert.equal((await service.read('mission','work')).session!.page.title,'••••');
+});
+
+test('a percent separator inside a hex candidate cannot bypass masking or refusal',async t=>{
+ const s=await fixture(t),display='5758595a3938373%6',service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:display,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'WXYZ9876'}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);assert.equal((await service.read('mission','work')).session!.page.title,'••••');for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(display));
+});
+
+test('excessively encoded private seeds fail before an observation is committed',async t=>{
+ const s=await fixture(t);let secret='ABCD1234';for(let i=0;i<12;i++)secret=Buffer.from(secret).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'ABCD1234',blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret}]};}},clock:s.clock});t.after(()=>service.drain());await assert.rejects(service.capture(request),/private normalization bound/i);assert.equal(s.journal().head,before);
 });

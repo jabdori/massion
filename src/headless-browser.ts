@@ -5,7 +5,7 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {browserAddress,browserUrlSecrets,sensitiveBrowserField,maskBrowserField,browserText,browserPrivateRanges,validateBrowserScreenshot} from './browser-runtime.ts';
+import {browserAddress,browserUrlSecrets,browserPrivateSeeds,sensitiveBrowserField,maskBrowserField,browserText,browserPrivateRanges,validateBrowserScreenshot} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
 const exec=promisify(execFile);
 /** Runs in a fresh script-disabled browser before any screenshot is taken. */
@@ -42,7 +42,7 @@ function preparePage(){
 }
 export async function captureBrowserPage(run:(args:string[])=>Promise<any>,control:{assertDocument:(expected?:number)=>Promise<number>;screenshot:()=>Promise<string>}):Promise<RawBrowserPage>{
  const documentId=await control.assertDocument();await run(['set','viewport','584','764']);
- const script=`const browserUrlSecrets=${browserUrlSecrets.toString()};const browserPrivateRanges=${browserPrivateRanges.toString()};const sensitiveBrowserField=${sensitiveBrowserField.toString()};const maskBrowserField=${maskBrowserField.toString()};const browserText=${browserText.toString()};(${preparePage.toString()})()`;
+ const script=`const browserPrivateSeeds=${browserPrivateSeeds.toString()};const browserUrlSecrets=${browserUrlSecrets.toString()};const browserPrivateRanges=${browserPrivateRanges.toString()};const sensitiveBrowserField=${sensitiveBrowserField.toString()};const maskBrowserField=${maskBrowserField.toString()};const browserText=${browserText.toString()};(${preparePage.toString()})()`;
  const page=(await run(['eval','-b',Buffer.from(script).toString('base64')])).result as RawBrowserPage;
  await control.assertDocument(documentId);const data=await control.screenshot();if(typeof data!=='string'||data.length>262144)throw Error('Browser screenshot byte bound exceeded');const bytes=Buffer.from(data,'base64');if(bytes.length<24)throw Error('Invalid browser screenshot');
  const screenshot={mimeType:'image/png' as const,data,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};validateBrowserScreenshot(screenshot);return {...page,screenshot};

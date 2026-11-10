@@ -148,8 +148,8 @@ test('excessive or malformed nested URL encodings fail closed',()=>{
  for(const value of [path,'code%FF','code%41%zz'])assert.throws(()=>sanitizePage({...raw,address:'https://shop.example.com/'+value}),/encoding/i);
 });
 
-for(const encoded of ['%41%42%43%44%31%32%33%34','%2541%2542%2543%2544%2531%2532%2533%2534','％４１％４２％４３％４４％３１％３２％３３％３４'])test('encoded sensitive-field reflections are refused before dispatch: '+encoded.slice(0,5),async()=>{
- const s=await setup(async()=>({...raw,title:encoded,blocks:[encoded],fields:[{label:'Recovery code',type:'text',value:'ABCD1234',autocomplete:''}]})),before=s.store.inspect().length;await assert.rejects(s.service.capture(request),/encoded browser text/i);assert.equal(s.store.inspect().length,before);assert.equal((await s.service.read('intake','work')).session,null);await s.service.drain();
+for(const encoded of ['%41%42%43%44%31%32%33%34','%2541%2542%2543%2544%2531%2532%2533%2534','％４１％４２％４３％４４％３１％３２％３３％３４'])test('encoded sensitive-field reflections never enter committed observations: '+encoded.slice(0,5),async()=>{
+ const s=await setup(async()=>({...raw,title:encoded,blocks:[encoded],fields:[{label:'Recovery code',type:'text',value:'ABCD1234',autocomplete:''}]})),before=s.store.inspect().length;let refused=false;try{assert.equal((await s.service.capture(request)).status,'committed');}catch(error){assert.match((error as Error).message,/encoded browser text/i);refused=true;}assert.equal(s.store.inspect().length,before+(refused?0:1));const page=(await s.service.read('intake','work')).session?.page;if(!refused)assert.equal(page!.fields[0]!.value,'••••');const journal=JSON.stringify(s.store.inspect());assert.ok(!journal.includes(encoded));assert.ok(!journal.includes('ABCD1234'));await s.service.drain();
 });
 
 test('Base64 cannot hide structural percent encodings from the fail-closed boundary',()=>{assert.throws(()=>sanitizePage({...raw,title:Buffer.from('%41%42%43%44').toString('base64')}),/encoded browser text/i);});

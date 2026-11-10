@@ -30,6 +30,18 @@ export function browserUrlSecrets(value:string){
  }
  return [...secrets];
 }
+export function browserPrivateSeeds(values:string[]){
+ const seeds=new Set(values.filter(Boolean)),queue=[...seeds].map(value=>({value,depth:0}));if(seeds.size>1024)throw Error('Browser private normalization bound exceeded');
+ for(const {value,depth} of queue){
+  if(value.length>4000)throw Error('Browser private normalization bound exceeded');
+  const encoded=value.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}\s]/gu,''),next:string[]=[];
+  if(/%[a-f0-9]{2}/i.test(encoded))try{next.push(decodeURIComponent(encoded));}catch{}
+  if(/^[A-Za-z0-9+/_-]+={0,2}$/.test(encoded))try{const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,''));next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));}catch{}
+  if(/^(?:[a-f0-9]{2})+$/i.test(encoded))try{next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(encoded.match(/../g)!,pair=>parseInt(pair,16))));}catch{}
+  for(const decoded of next){if(!decoded||seeds.has(decoded))continue;if(depth>=8||seeds.size>=1024)throw Error('Browser private normalization bound exceeded');seeds.add(decoded);queue.push({value:decoded,depth:depth+1});}
+ }
+ return [...seeds];
+}
 export function sensitiveBrowserField(f:{label:string;name?:string;autocomplete?:string}){return /password|passwd|secret|token|one-time-code|auth|credential|api.?key|cc-|card|cvv|csc|cvc|payment|security|secure|code|otp|\bpin\b|보안|코드|카드|비밀|비번|인증|결제/i.test([f.label,f.name??'',f.autocomplete??''].join(' ').normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));}
 export function maskBrowserField(f:{label:string;type:string;autocomplete:string;name?:string}){
  if(f.type==='hidden'||f.type==='password'||sensitiveBrowserField(f))return true;
@@ -38,22 +50,28 @@ export function maskBrowserField(f:{label:string;type:string;autocomplete:string
  return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||!meanings[0]||!meanings.filter(Boolean).every(v=>benign.test(v));
 }
 export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDepth=0,decode=true):Array<[number,number]>{
+ if(decode&&encodingDepth===0)secrets=browserPrivateSeeds(secrets);
  const digits=(s:string)=>s.replace(/\p{Decimal_Number}/gu,d=>{if(d>='0'&&d<='9')return d;const code=d.codePointAt(0)!;let zero=code;while(zero>0&&/\p{Decimal_Number}/u.test(String.fromCodePoint(zero-1))){if(code-zero>=100)throw Error('Browser digit normalization bound exceeded');zero--;}return String((code-zero)%10);});
  const canonical=(s:string)=>digits(s.normalize('NFKC').toLowerCase().toUpperCase().normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
  if(value.length>262144)throw Error('Browser text bound exceeded');
  const combine=(items:Array<[number,number]>)=>{const merged:Array<[number,number]>=[];for(const range of items.sort((a,b)=>a[0]-b[0]||b[1]-a[1])){const last=merged.at(-1);if(last&&range[0]<last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range);}return merged;};
  const mapBack=(normalize:(text:string)=>string,nextDecode:boolean)=>{const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=normalize(segment);visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets,encodingDepth,nextDecode).map(([start,end]):[number,number]=>[starts[start]!,ends[end-1]!]);};
  const display=(text:string)=>digits(text.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
- if(decode&&display(value)!==value)return combine(mapBack(display,true));
- const encodedPrivate=(decoded:string)=>{if(!decoded)return false;if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');if(/%[a-f0-9]{2}/i.test(display(decoded).replace(/\s/g,'')))throw Error('Encoded browser text cannot be retained');return secrets.some(secret=>secret&&decoded.includes(secret))||browserPrivateRanges(decoded,secrets,encodingDepth+1).length>0;};
- const ranges:Array<[number,number]>=[];
+ const exact:Array<[number,number]>=[];for(const secret of secrets){if(!secret)continue;let start=0;while((start=value.indexOf(secret,start))!==-1){exact.push([start,start+secret.length]);start+=secret.length;}}
+ if(decode&&display(value)!==value)return combine([...exact,...mapBack(display,true)]);
+ const encodedRanges=(decoded:string)=>{if(!decoded)return [];if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');if(/%[a-f0-9]{2}/i.test(display(decoded).replace(/\s/g,'')))throw Error('Encoded browser text cannot be retained');return browserPrivateRanges(decoded,secrets,encodingDepth+1);};
+ const ranges=decode?browserPrivateRanges(value,secrets,encodingDepth,false):exact;
  if(decode)for(const match of value.matchAll(/[A-Fa-f0-9](?:[A-Fa-f0-9\s\p{P}\p{S}]*[A-Fa-f0-9])?/gu)){
-  if(value[match.index-1]==='%'||match[0].includes('%'))continue;
-  const token=match[0].replace(/[^A-Fa-f0-9]/g,'');for(let offset=0;offset<2&&offset<token.length-1;offset++){
-   const pairs=token.slice(offset).match(/../g)!;const decoded=new TextDecoder('utf-8',{ignoreBOM:true}).decode(Uint8Array.from(pairs,pair=>parseInt(pair,16)));if(encodedPrivate(decoded)){ranges.push([match.index,match.index+match[0].length]);break;}
+  if(ranges.some(([start,end])=>start<=match.index&&end>=match.index+match[0].length))continue;
+  const digits=[...match[0].matchAll(/[A-Fa-f0-9]/g)],token=digits.map(d=>d[0]).join('');for(let offset=0;offset<2&&offset<token.length-1;offset++){
+   const pairs=token.slice(offset).match(/../g)!,bytes=Uint8Array.from(pairs,pair=>parseInt(pair,16)),decoder=new TextDecoder('utf-8',{ignoreBOM:true}),starts:number[]=[],ends:number[]=[];let decoded='',pending=0;
+   const append=(part:string,end:number)=>{decoded+=part;for(let i=0;i<part.length;i++){starts.push(pending);ends.push(end);}if(part)pending=end;};
+   for(let i=0;i<bytes.length;i++)append(decoder.decode(bytes.subarray(i,i+1),{stream:true}),i+1);append(decoder.decode(),bytes.length);
+   const found=encodedRanges(decoded);if(found.length){for(const [start,end] of found)ranges.push([match.index+digits[offset+starts[start]!*2]!.index,match.index+digits[offset+ends[end-1]!*2-1]!.index+1]);break;}
   }
  }
  if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-](?:[A-Za-z0-9\s\p{P}\p{S}]*[A-Za-z0-9+/_-])?={0,2}/gu)){
+  if(ranges.some(([start,end])=>start<=match.index&&end>=match.index+match[0].length))continue;
   const base=match[0].replace(/[^A-Za-z0-9+/_-]/g,''),symbols:number[]=[];for(const symbol of base.matchAll(/[+/_-]/g)){symbols.push(symbol.index);if(symbols.length>6)break;}
   if(symbols.length>6){ranges.push([match.index,match.index+match[0].length]);continue;}
   candidates: for(let bits=0;bits<2**symbols.length;bits++){
@@ -62,10 +80,11 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
   for(let offset=0;offset<4&&offset<token.length-1;offset++){
    let candidate=token.slice(offset);if(candidate.length%4===1)candidate=candidate.slice(0,-1);
    let decoded:string;try{const binary=atob(candidate);decoded=new TextDecoder('utf-8',{ignoreBOM:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0)));}catch{continue;}
-   if(encodedPrivate(decoded)){ranges.push([match.index,match.index+match[0].length]);break candidates;}
+   if(encodedRanges(decoded).length){ranges.push([match.index,match.index+match[0].length]);break candidates;}
   }
   }
  }
+ if(decode)return combine(ranges);
  // Base64 원문은 대소문자를 바꾸기 전에만 디코딩합니다.
  const normalized=canonical(value);
  if(normalized!==value)return combine([...ranges,...mapBack(canonical,false)]);

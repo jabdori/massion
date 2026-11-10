@@ -54,5 +54,5 @@ test('durable validation refuses reversibly encoded structural text',()=>{
 });
 
 test('decoding retains an invisible private value for exact matching before normalization',()=>{
- for(const encoding of ['hex','base64'] as const){const secret='\uFEFF',encoded=Buffer.from(secret).toString(encoding),page=sanitizePage({address:raw.address,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret}]});assert.equal(page.title,'••••');}
+ for(const encoding of ['plain','hex','base64'] as const){const secret='\uFEFF',encoded=encoding==='plain'?secret:Buffer.from(secret).toString(encoding),page=sanitizePage({address:raw.address,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret}]});assert.equal(page.title,'••••');}
 });
