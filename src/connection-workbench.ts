@@ -145,7 +145,7 @@ export class ConnectionWorkbench implements WorkRuntime {
    const c=connectionId?this.#connections.get(connectionId):undefined,generation=connectionId?this.#credentialVersions.get(connectionId)??0:undefined;
    if(this.#pending||this.#draining)return {status:'failed' as const,output:null,usage:{inputTokens:null,outputTokens:null},reason:'connection_change_before_dispatch'};
    this.#providerCalls++;let outcome;try{outcome=await adapter.invoke(request);}finally{this.#providerCalls--;}
-   if(outcome.credentialFailure&&connectionId&&c&&generation!==undefined){if(this.#connections.get(connectionId)===c&&(this.#credentialVersions.get(connectionId)??0)===generation)this.#credentialFaults.set(connectionId,{failure:outcome.credentialFailure,generation,observedAt:Date.now()});return {...outcome,credentialBinding:{connectionId,configHash:c.configHash,generation}};}
+   if(outcome.credentialFailure&&connectionId&&c&&generation!==undefined){if(this.#connections.get(connectionId)===c&&(this.#credentialVersions.get(connectionId)??0)===generation)this.#credentialFaults.set(connectionId,{failure:outcome.credentialFailure,generation,observedAt:Date.now()});return this.canReplaceKey(connectionId)?{...outcome,credentialBinding:{connectionId,configHash:c.configHash,generation}}:outcome;}
    return outcome;
   }};
  }}));}

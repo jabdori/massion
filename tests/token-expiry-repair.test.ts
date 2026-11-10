@@ -14,13 +14,13 @@ import {TEXT_REVIEW_ORACLE} from '../src/configured-runtime.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 import type {Mission} from '../src/domain.ts';
 
-async function setup(t:test.TestContext,unknown=false){
+async function setup(t:test.TestContext,unknown=false,environment=false){
  const root=await mkdtemp(join(tmpdir(),'credential-repair-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const store=new InMemoryStore<Mission>(),secrets=new InMemorySecretSlots();let calls=0,checks=0,writes=0;
  await secrets.set({owner:'producer',slot:'api-key'},'sentinel-old-key');await secrets.set({owner:'checker',slot:'api-key'},'sentinel-check-key');
  const set=secrets.set.bind(secrets);secrets.set=async(slot,value)=>{writes++;await set(slot,value);};
- const manifest=parseHostManifest({version:1,revision:'repair-v1',mode:'https',connections:[{id:'producer',label:'OpenAI',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['gpt-test'],credential:{ref:'producer-ref',slot:'api-key'}},{id:'checker',label:'Anthropic',providerType:'anthropic',baseUrl:'https://api.anthropic.com/v1/',models:['claude-test'],credential:{ref:'checker-ref',slot:'api-key'}}]});
- const manager=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:true},{secrets,readEnvironment:()=>assert.fail('No environment credentials'),transport:async(url,init)=>{
+ const manifest=parseHostManifest({version:1,revision:'repair-v1',mode:'https',connections:[{id:'producer',label:'OpenAI',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['gpt-test'],credential:environment?{ref:'producer-ref',environment:'FIXTURE_API_KEY'}:{ref:'producer-ref',slot:'api-key'}},{id:'checker',label:'Anthropic',providerType:'anthropic',baseUrl:'https://api.anthropic.com/v1/',models:['claude-test'],credential:{ref:'checker-ref',slot:'api-key'}}]});
+ const manager=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:true},{secrets,readEnvironment:()=>environment?'sentinel-old-key':assert.fail('No environment credentials'),transport:async(url,init)=>{
   if(url.includes('openai.com')){calls++;if(calls===1){if(unknown)throw Error('sentinel-transport-error');return Response.json({error:{code:'invalid_api_key',message:'sentinel-provider-diagnostic'}},{status:401});}
    assert.equal(new Headers(init.headers).get('authorization'),'Bearer sentinel-new-key');return Response.json({id:'chatcmpl-test',object:'chat.completion',created:1,model:'gpt-test',choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content:'A checked result.'}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}});
   }
@@ -88,4 +88,12 @@ test('a newer unknown replacement racing retry admission invalidates the older c
  const input={commandId:'retry-race',missionId:'mission',workId:'work',expectedRevision:(await f.store.load('mission'))!.revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'first-replacement'},attempt=f.service.retry(input);void attempt.catch(()=>{});await entered;
  f.manager.replaceKey=async()=>{throw Error('sentinel-unknown-second-write');};assert.equal((await f.service.replaceKey({commandId:'second-replacement',connectionId:f.target.id,expectedConfigHash:f.target.configHash,apiKey:'sentinel-another-key'})).status,'unknown');
  release();await assert.rejects(attempt,/completed credential|completed replacement/);f.manager.beginDrain();await running.catch(()=>{});assert.equal(f.calls(),1);
+});
+
+
+test('environment credentials fail promptly without opening an impossible live repair wait',async t=>{
+ const f=await setup(t,false,true),running=f.product.run('mission','work','run',2,f.choice);void running.catch(()=>{});
+ const result=await Promise.race([running,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('Non-editable credential entered a repair wait')),500))]);
+ assert.equal(result.status,'blocked');assert.equal(f.manager.hasActiveAdmission(),false);assert.equal(f.manager.canRetryCredential('mission','work','run:executor'),false);assert.equal(f.calls(),1);assert.equal(f.checks(),0);assert.equal((await f.service.read()).connections[0]!.observation!.status,'invalid');
+ assert.deepEqual(JSON.parse(result.snapshot.value.works[0]!.effects[0]!.receipt!).credentialFailure,{kind:'invalid',code:'invalid_api_key'});
 });

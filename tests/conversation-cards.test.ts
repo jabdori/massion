@@ -19,7 +19,7 @@ function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[
    ...(w?{outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,startedAt:w.startedAt??null,unknown:!!w.unknown,...(w.credentialRepair?{credentialRepair:w.credentialRepair}:{}),steps:w.steps??{done:0,total:2},...(w.progress?{progress:w.progress}:{})}}:e.outcome?{outcome:{work:{status:e.outcome,diagnostics:[]},run:{status:'off',diagnostics:[]}}}:{})});});
   return {feedId:'feed:a',cursor:state.cursor,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns,...state.extra};};
  const app=harness(async(path,options)=>{
-  if(options?.method==='POST'){if(state.postFailure){const error=state.postFailure;state.postFailure=null;throw error;}state.posted.push({path,body:JSON.parse(options.body)});if(state.sendHold)await state.sendHold;return reply(path.endsWith('/retry')?{status:'completed'}:{},state.answer);}
+  if(options?.method==='POST'){if(state.postFailure){const error=state.postFailure;state.postFailure=null;throw error;}state.posted.push({path,body:JSON.parse(options.body)});if(state.sendHold)await state.sendHold;return reply(path.endsWith('/retry')?state.answer===409?{outcome:'rejected'}:{status:'completed'}:{},state.answer);}
   if(path==='/connections/lifecycle'){if(state.lifecycleWait)await state.lifecycleWait;return reply(state.lifecycle??{});}
   if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.filter(t=>t.work).map(t=>({memberId:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
@@ -291,4 +291,12 @@ for(const commandNotSent of [true,false])test('credential retry '+(commandNotSen
  state.lifecycle={feedId:'feed:a',connections:[{connectionId:'owner-api',configHash:'a'.repeat(64),credentialWriteStatus:'stored',replacementCommandId:'replacement'}]};state.postFailure=Object.assign(Error('Fixture transport failure'),commandNotSent?{commandNotSent:true}:{});
  await byId(app,'chat-credential-retry-'+turnId(1))!.fire('click');await settle();assert.equal(byId(app,'chat-credential-retry-'+turnId(1))!.disabled,!commandNotSent);
  await byId(app,'chat-credential-retry-'+turnId(1))!.fire('click');await settle();assert.equal(state.posted.length,commandNotSent?1:0);
+});
+
+
+test('a definite retry rejection after navigation unlocks the original conversation',async()=>{
+ const credentialRepair={connectionId:'owner-api',configHash:'a'.repeat(64),generation:1,effectId:'run:executor',failure:{kind:'expired',code:'1003'},canRetry:true};
+ const {app,state}=fixture([{text:'Check repair',work:{workId:'work',title:'Check repair',execution:'blocked',acceptance:'pending',started:true,credentialRepair}}]);await settle();
+ state.lifecycle={feedId:'feed:a',connections:[{connectionId:'owner-api',configHash:'a'.repeat(64),credentialWriteStatus:'stored',replacementCommandId:'replacement'}]};let release!:()=>void;state.sendHold=new Promise(r=>release=r);
+ await byId(app,'chat-credential-retry-'+turnId(1))!.fire('click');await settle();assert.equal(state.posted.length,1);await app.node('me-settings').fire('click');state.answer=409;release();await settle();await app.node('rail-chat').fire('click');await settle();assert.equal(byId(app,'chat-credential-retry-'+turnId(1))!.disabled,false);
 });

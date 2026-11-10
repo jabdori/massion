@@ -157,15 +157,15 @@ function chatException(turn,kind){
 async function chatCredentialRetry(turn,button){
  const work=turn.work,c=work?.credentialRepair,feed=chatView?.feedId,generation=chatGeneration,thread=chatThread,segment=chatSegment,epoch=connectionEpoch,key='credential-retry:'+feed+':'+c?.effectId;
  const current=()=>!$('page-chat').hidden&&(chatView?.turns.find(t=>t.id===turn.id)??chatRoomTurns().find(t=>t.id===turn.id))?.work?.credentialRepair?.effectId===c?.effectId&&feed===chatView?.feedId&&generation===chatGeneration&&thread===chatThread&&segment===chatSegment&&epoch===connectionEpoch&&!reconnectRequired;
- if(!c?.canRetry||button.disabled||storage.get(key)!==null||!current())return;button.disabled=true;
+ if(!c?.canRetry||button.disabled||storage.get(key)!==null||!current())return;button.disabled=true;let commandId=null;
  try{
   const {response,body}=await request('/connections/lifecycle',{scope:'credential-retry'});if(!current()||!response.ok||body?.feedId!==feed)return;
   const state=body.connections?.find(x=>x.connectionId===c.connectionId&&x.configHash===c.configHash);
   if(!state?.replacementCommandId||state.credentialWriteStatus!=='stored')return;
-  const commandId=crypto.randomUUID();if(!storage.set(key,commandId))return;
+  commandId=crypto.randomUUID();if(!storage.set(key,commandId))return;renderChat();
   const result=await request('/connections/'+encodeURIComponent(c.connectionId)+'/retry',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify({commandId,missionId:work.missionId,workId:work.workId,expectedRevision:work.missionRevision,expectedConfigHash:c.configHash,effectId:c.effectId,replacementCommandId:state.replacementCommandId})});
-  if(current()&&(result.body?.status==='completed'||result.body?.outcome==='rejected'))storage.remove(key);
- }catch(error){if(error?.commandNotSent===true)storage.remove(key);}finally{if(current()){await readChat();button.disabled=storage.get(key)!==null;}}
+  if((result.body?.status==='completed'||result.body?.outcome==='rejected')&&storage.get(key)===commandId)storage.remove(key);
+ }catch(error){if(error?.commandNotSent===true&&commandId!==null&&storage.get(key)===commandId)storage.remove(key);}finally{if(current()){await readChat();button.disabled=storage.get(key)!==null;}}
 }
 /** Open the existing owner review form. The card itself never cancels, quarantines or acknowledges an uncertain effect. */
 async function chatReviewUnknown(turnId){
@@ -195,7 +195,7 @@ function chatOpenThread(id,name=''){
  if([...document.querySelectorAll('[aria-modal="true"]')].some(dialog=>dialog.checkVisibility({checkVisibilityCSS:true})))return false;
  if(id!==chatThread){if(chatSending)return false;appConnectClose();chatClearFailed();protocol.invalidate('chat-view');++chatGeneration;chatThread=id;chatThreadName=name;chatDraftKey='massion.workbench.chat-draft'+(id?':'+id:'');chatView=null;chatSegment=null;chatCards.clear();chatNodes.clear();$('chat-log').replaceChildren();$('chat-scroll').scrollTop=0;chatNewReply=false;chatRestoreDraft();void readChat();}
  else if(chatSegment!==null){appConnectClose();protocol.invalidate('chat-view');++chatGeneration;chatSegment=null;void readChat();}
- shellShow('chat');$('chat-input').setAttribute('placeholder',copy('ui.message',{member:chatName()}));$('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));$('chat-input').focus();renderShell();return true;}
+ shellShow('chat');$('chat-input').setAttribute('placeholder',copy('ui.message',{member:chatName()}));$('chat-input').setAttribute('aria-label',copy('ui.message',{member:chatName()}));$('chat-input').focus();renderChat();renderShell();return true;}
 function chatBriefings(){return (Array.isArray(chatView&&chatView.briefings)?chatView.briefings:[]).filter(b=>b&&chatText(b.id)&&Number.isSafeInteger(b.at)&&chatText(b.title)&&Array.isArray(b.turnIds)&&b.turnIds.every(chatText)&&(b.decisionIds===undefined||Array.isArray(b.decisionIds)&&b.decisionIds.every(chatText)));}
 /** Schedule runs that failed or whose result is unknown (results-and-schedules.md), drawn like a Work's exception card. Unknown offers Check and Close, never Retry. */
 function chatRunExceptions(){return (Array.isArray(chatView&&chatView.exceptions)?chatView.exceptions:[]).filter(e=>e&&chatText(e.id)&&Number.isSafeInteger(e.at)&&chatText(e.title)&&(e.state==='failed'||e.state==='unknown')&&chatText(e.fact)&&chatText(e.scheduleId)&&chatText(e.runId)&&Array.isArray(e.actions)&&e.actions.every(a=>['check','retry','close'].includes(a))&&!(e.state==='unknown'&&e.actions.includes('retry')));}
