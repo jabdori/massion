@@ -34,10 +34,16 @@ export async function steeringFixture(template:ScreenFixture){
  const actor=(taskId:string)=>assignments.find(a=>a.taskId===taskId)!;
  const first=steps.find(t=>!t.step!.skipReason)!,firstActor=actor(first.id),firstEffect={id:run.id+':step:0',taskId:first.id,status:'pending' as const,target:firstActor.model.provider+'/'+firstActor.model.model,authority:run.authorizationId};
  await send({type:'admit-effect',workId:original.id,effect:firstEffect,reserve:0,inputHash:workInputHash(await work())},firstActor.actorId);
- now+=30000;
- const thread='member:member-quill',messageId=ownerMessageId('rf-direction'),turnId=assistantTurnId(messageId),conversation=new AssistantConversation(store,actors,()=>now,thread);
- await conversation.dispatch({segment:1,commandId:'rf-direction',expectedRevision:0,actorId:'local-owner',command:{type:'open-assistant-segment',recordMessageTime:true,segment:1,previous:null,messageId,text:owner.text,turn:{id:turnId,status:'pending',route:{profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http',outputTokenCap:64},ownership:{...run.ownership,startedAt:now},requestHash:'b'.repeat(64),contextMessageIds:[]}}});
- await conversation.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:1,actorId:ASSISTANT_ACTOR_ID,command:{type:'settle-assistant-turn',recordMessageTime:true,turnId,status:'answered',usage:{inputTokens:1,outputTokens:1},receipt:'Data-only fixture response',reply:reply.text,proposal:null,steer:{missionId:mission.id,workId:original.id,status:'proposed'}}});
+ const thread='member:member-quill',conversation=new AssistantConversation(store,actors,()=>now,thread);
+ const exchange=async(key:string,text:string,answer:string,target=false)=>{
+  const messageId=ownerMessageId(key),turnId=assistantTurnId(messageId),stored=await store.load(segmentId(1,thread));
+  await conversation.dispatch({segment:1,commandId:key,expectedRevision:stored?.revision??0,actorId:'local-owner',command:{...(stored?{type:'append-assistant-message' as const}:{type:'open-assistant-segment' as const,segment:1,previous:null}),recordMessageTime:true,messageId,text,turn:{id:turnId,status:'pending',route:{profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http',outputTokenCap:64},ownership:{...run.ownership,startedAt:now},requestHash:hash(key),contextMessageIds:[]}}});
+  await conversation.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:(await store.load(segmentId(1,thread)))!.revision,actorId:ASSISTANT_ACTOR_ID,command:{type:'settle-assistant-turn',recordMessageTime:true,turnId,status:'answered',usage:{inputTokens:1,outputTokens:1},receipt:'Data-only fixture response',reply:answer,proposal:null,...(target?{steer:{missionId:mission.id,workId:original.id,status:'proposed' as const}}:{})}});
+  return turnId;
+ };
+ const firstMessage=view.segment.messages[0],firstReply=view.segment.messages[1];
+ await exchange('rf-first',firstMessage.text,firstReply.text);now+=30000;
+ const turnId=await exchange('rf-direction',owner.text,reply.text,true);
  const chat=new AssistantService(store,new ProductService(store),undefined,{member:{id:'member-quill',name:'퀼',modelGroup:'default'},clock:()=>now});
  assert.equal((await chat.confirmSteer({segment:1,turnId})).status,'recorded');assert.equal((await work()).execution,'active');
  for(const task of steps){
@@ -61,9 +67,11 @@ export async function steeringFixture(template:ScreenFixture){
   const body=response.body as any;
   for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===final.id){row.startedAt=final.runtimeRun!.ownership!.startedAt;row.endedAt=final.endedAt??null;row.execution=final.execution;row.acceptance=final.acceptance;row.steps={done:final.tasks.filter(t=>t.step&&t.status==='settled').length,total:final.tasks.filter(t=>t.step).length};}
   for(const value of [body?.value,body?.snapshot?.value])if(value?.id===mission.id){const index=value.works.findIndex((w:Work)=>w.id===final.id);if(index>=0)value.works[index]=structuredClone(final);}
-  if(path.startsWith(memberPath)&&body.segment){const index=body.segment.messages.findIndex((m:any)=>m.id===owner.id);if(index>=0){const oldTurn=body.turns.find((t:any)=>t.messageId===owner.id);body.segment.messages.splice(index,2,...structuredClone(generated.segment!.messages));body.turns=body.turns.filter((t:any)=>t.id!==oldTurn?.id);body.turns.push(structuredClone(generated.turns[0]));}}
+  if(path.startsWith(memberPath)&&body.segment){const index=body.segment.messages.findIndex((m:any)=>m.id===firstMessage.id);if(index>=0){body.segment.messages.splice(index,4,...structuredClone(generated.segment!.messages));body.turns=body.turns.filter((t:any)=>![firstMessage.id,owner.id].includes(t.messageId));body.turns.push(...structuredClone(generated.turns));}}
   if(path.includes('/rejected-artifact?')&&body.workId===final.id){const value=await readRejectedText(store,{read:async()=>body.content},mission.id,final.id,{binding:hash(final),artifactVersion:final.artifact!.version,artifactSha256:final.artifact!.sha256});delete fixture.routes[path];const url=new URL(path,'http://fixture');url.searchParams.set('binding',hash(final));fixture.routes[url.pathname+url.search]={status:200,body:{...body,...value}};}
  }
+ for(const step of fixture.steps)if(step.readySelector)step.readySelector=step.readySelector.replace(firstMessage.id,generated.segment!.messages[0]!.id);
+ fixture.readySelector=fixture.readySelector.replace(firstMessage.id,generated.segment!.messages[0]!.id);
  fixture.gaps=fixture.gaps.filter(g=>!g.startsWith('Confirmed enterprise steering followed'));
  fixture.reuse.push('scripts/ui-contracts/steering-fixture.ts: owner confirmation and continued procedure commands and rejected artifact read');
  return fixture;

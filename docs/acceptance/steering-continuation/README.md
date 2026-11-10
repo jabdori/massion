@@ -4,6 +4,7 @@ The owner-confirmed enterprise direction now reaches continued active/settled
 Work through real commands. `steering-fixture.ts` supplies data-only model text,
 uses AssistantConversation/AssistantService for confirmation, and produces Work
 steps, effects, telemetry and failed-result reads through the application boundary.
+The first exchange and confirmation are produced in chronological order.
 It reuses the existing fixture's source pointers; full portable-journal evidence
 comes from the runtime tests, which also produce the original admissions.
 
@@ -22,7 +23,7 @@ capability allowance is added. Other business/telemetry/layout gaps remain.
   overflow. [Interaction assertions](interactions.json).
 - [Active dark](B7-churn-dark.png), [active mobile](B7-churn-dark-mobile.png),
   [failed light](B7-fail-light.png), [failed mobile](B7-fail-light-mobile.png).
-- Local capture reports/snapshots: `.runtime/rf-ui-corrected/`; reproducible driver
+- Local capture reports/snapshots: `.runtime/rf-ui-publish/`; reproducible driver
   `scripts/ui-contracts/run.mjs` with the five screen arguments above.
 - Compare with `docs/product/screens` contracts and rendered prototype artboards.
   This proves the requested steering flow, not full artboard parity. In
