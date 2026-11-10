@@ -44,3 +44,11 @@ test('long commit subjects stay within the view boundary without losing the PR d
   assert.ok(subject.length<=512);assert.ok(subject.isWellFormed());assert.ok(subject.endsWith('…'));assert.equal(view.github!.number,84);assert.ok(view.groups.some(g=>g.title.startsWith('Files ')));
  }
 });
+
+test('reading state uses pending file delivery facts independently of worker labels',()=>{
+ let m=mission();const document=githubReviewDocument(target,'document:files',[{path:'src/a.ts',content:'const a = 1;'}]);
+ m=apply(m,{type:'capture-document',document},owner).value;m=apply(m,{type:'attach-work-source',workId:'review',documentId:document.id,version:1,contentSha256:documentContentHash(document.content),reason:'Read exact bytes'},owner).value;
+ const w=m.works[0]!;w.execution='active';w.runtimeRun={id:'run',authorizationId:'auth',criteriaHash:'a',inputHash:'b',mode:'mock-http',outputTokenCap:10,ownership:{hostSessionId:'host',dispatchId:'dispatch',startedAt:1,deadlineAt:100}};w.tasks.push({id:'reader',parentId:'review:root',status:'active',step:{role:'Inspect',title:'Review input',dependsOn:[]}});
+ w.effects.push({id:'delivery',taskId:'reader',status:'pending',target:'fixture',authority:'fixture',providerDispatch:{fileInputs:[{documentId:document.id,path:'src/a.ts',sha256:documentContentHash('const a = 1;')}]}} as any);
+ assert.equal(githubReviews(m,target,2)[0]!.reading,true);w.effects[0]!.status='succeeded';w.tasks[1]!.step!.role='읽기';assert.equal(githubReviews(m,target,2)[0]!.reading,false);
+});

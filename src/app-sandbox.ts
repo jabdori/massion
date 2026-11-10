@@ -5,7 +5,7 @@ import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {DomainError} from './domain.ts';
 import type {AppPackage,AppNetwork,AppView} from './apps.ts';
-import {validGithubTarget} from './github-review.ts';
+import {validGithubTarget,validateGithubFiles} from './github-review.ts';
 
 const RUNNER=fileURLToPath(new URL('./app-runner.mjs',import.meta.url)),TIMEOUT_MS=APP_TIMEOUT_MS,MAX_CALLS=16,MAX_LINE=256*1024,MAX_BODY=192*1024,MAX_WORKERS=4,SANDBOX_EXEC='/usr/bin/sandbox-exec';
 const NODE_ARGS=['--permission','--allow-fs-read='+RUNNER,'--max-old-space-size=64',RUNNER];
@@ -18,8 +18,9 @@ const text=(v:unknown,max=512)=>typeof v==='string'&&v.length<=max&&v.isWellForm
 const exactKeys=(v:unknown,required:string[],optional:string[]=[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&required.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>required.includes(k)||optional.includes(k));
 /** Apps send data, never markup: the host draws this shape with its own components. */
 export function checkView(v:unknown):AppView {
+ if(v&&typeof v==='object'&&Object.hasOwn(v,'sourceFiles')){validateGithubFiles((v as AppView).sourceFiles);if(!validGithubTarget((v as AppView).github))fail('File sources need a GitHub identity');}
  const row=(r:unknown)=>exactKeys(r,['id','title'],['meta','state','github'])&&text(r.id,128)&&text(r.title)&&(r.meta===undefined||text(r.meta))&&(r.state===undefined||text(r.state,32))&&(r.github===undefined||validGithubTarget(r.github)&&r.id===String(r.github.number));
- const ok=exactKeys(v,['title','groups'],['meta','fields','github'])&&text(v.title)&&(v.meta===undefined||text(v.meta))&&(v.github===undefined||validGithubTarget(v.github))&&Array.isArray(v.groups)&&v.groups.length<=8&&v.groups.every(g=>exactKeys(g,['title','rows'])&&text(g.title,128)&&Array.isArray(g.rows)&&g.rows.length<=200&&g.rows.every(row))
+ const ok=exactKeys(v,['title','groups'],['meta','fields','github','sourceFiles'])&&text(v.title)&&(v.meta===undefined||text(v.meta))&&(v.github===undefined||validGithubTarget(v.github))&&Array.isArray(v.groups)&&v.groups.length<=8&&v.groups.every(g=>exactKeys(g,['title','rows'])&&text(g.title,128)&&Array.isArray(g.rows)&&g.rows.length<=200&&g.rows.every(row))
   &&(v.fields===undefined||Array.isArray(v.fields)&&v.fields.length<=16&&v.fields.every(f=>Array.isArray(f)&&f.length===2&&text(f[0],64)&&text(f[1])));
  if(!ok)fail('App returned no valid view');return structuredClone(v) as AppView;
 }

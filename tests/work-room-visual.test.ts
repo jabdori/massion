@@ -48,7 +48,7 @@ test('expanded cards keep labelled value rows, distinct effects and real flow en
  assert.equal(groups.length,4);
  for(const group of groups)for(const row of group.children){assert.equal(row.children[0]?.tagName,'DT');assert.equal(row.children[1]?.tagName,'DD');}
  const effects=groups[2]!.children.map(n=>n.children[0]!.textContent);assert.equal(new Set(effects).size,effects.length);
- assert.ok(!groups[3]!.children.some(n=>n.children[0]!.textContent==='기록'));
+ assert.deepEqual(groups[3]!.children.map(n=>n.children.map(c=>c.textContent)),[['기록','없음']]);
  const flow=descendants(detail).find(n=>hasClass(n,'room-flow'))!;assert.ok(flow.children.length>0);
  for(const row of flow.children){assert.ok(row.children.some(n=>hasClass(n,'room-flow-dot')));assert.notEqual(row.textContent,'대화');}
 });
@@ -88,9 +88,10 @@ test('a rejected Stop reports the revision conflict while the Work stays running
 
  test('B22 room steps use the B7 pane and never embed the legacy Work inspector',async()=>{
  const {nodes,card,work}=await scene('B22-room-steps');
- assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 돌리기','확인','기록']);
+ assert.deepEqual(nodes().find(n=>hasClass(n,'room-steps'))!.children.map(n=>n.children[1]!.textContent),['읽기','테스트 먼저 돌리기','확인','기록']);
+ assert.equal(work.tasks.find((t:any)=>t.procedureEdit).step.title,'테스트 돌리기');
  assert.ok(nodes().some(n=>n.id==='work-room-stop-'+work.id));
- assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
+ const source=nodes().find(n=>n.id==='work-evidence-summary-'+work.id);assert.ok(source);assert.equal(source.parentElement?.className,'room-inspection-content');assert.equal(source.parentElement?.open,false);
  assert.doesNotMatch(card().textContent,/실행: active|검증: pending|시도 \/ 예산|측정 사용량|기준·기억·근거|선택한 원문 문서|원래 조직 역할/);
  });
 

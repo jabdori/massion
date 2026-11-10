@@ -341,6 +341,17 @@
               "oracle": "bounded-text-review/v1",
               "version": 1
             },
+            "documents": [
+              {
+                "actorId": "local-owner",
+                "content": "{\"format\":\"github-review/v2\",\"repository\":\"jabdori/massion\",\"number\":84,\"headSha\":\"cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66\",\"url\":\"https://github.com/jabdori/massion/pull/84\",\"files\":[{\"path\":\"src/assistant-service.ts\",\"content\":\"// Controlled fixture source: src/assistant-service.ts\\n\"},{\"path\":\"tests/assistant-conversation.test.ts\",\"content\":\"// Controlled fixture source: tests/assistant-conversation.test.ts\\n\"},{\"path\":\"src/assistant-conversation-panel.ts\",\"content\":\"// Controlled fixture source: src/assistant-conversation-panel.ts\\n\"},{\"path\":\"docs/architecture/assistant-conversation.md\",\"content\":\"// Controlled fixture source: docs/architecture/assistant-conversation.md\\n\"},{\"path\":\"src/connection-workbench.ts\",\"content\":\"// Controlled fixture source: src/connection-workbench.ts\\n\"},{\"path\":\"src/configured-runtime.ts\",\"content\":\"// Controlled fixture source: src/configured-runtime.ts\\n\"},{\"path\":\"src/product.ts\",\"content\":\"// Controlled fixture source: src/product.ts\\n\"},{\"path\":\"src/server.ts\",\"content\":\"// Controlled fixture source: src/server.ts\\n\"},{\"path\":\"src/workbench.ts\",\"content\":\"// Controlled fixture source: src/workbench.ts\\n\"},{\"path\":\"src/selectable-runtime.ts\",\"content\":\"// Controlled fixture source: src/selectable-runtime.ts\\n\"},{\"path\":\"docs/architecture/default-route-and-persistent-connections.md\",\"content\":\"// Controlled fixture source: docs/architecture/default-route-and-persistent-connections.md\\n\"}]}",
+                "contentSha256": "3750481185f3f57f9da5166e237ad602b663f6a46580cdf728df54edceeb41b8",
+                "id": "document:github-files",
+                "source": "https://github.com/jabdori/massion/pull/84",
+                "title": "jabdori/massion #84",
+                "version": 1
+              }
+            ],
             "growth": [],
             "id": "intake",
             "memories": [],
@@ -463,9 +474,141 @@
                 "effects": [
                   {
                     "authority": "fixture-only",
-                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:effect",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:0",
+                    "providerDispatch": {
+                      "actorId": "worker-0",
+                      "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                      "claimedAt": 1793842800000,
+                      "configVersion": "v1",
+                      "dispatchId": "fixture-coding",
+                      "fileInputs": [
+                        {
+                          "documentId": "document:github-files",
+                          "path": "src/assistant-service.ts",
+                          "sha256": "bdbcb9de75c29741267945e85a45e8fb450f25a0e6cc6d57395feddb2a437f40"
+                        }
+                      ],
+                      "hostSessionId": "fixture-room",
+                      "id": "file-claim-0",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "requestHash": "8dca719cc8ed8d999954286a228e9d096723f06fb756dba2ad71597f1b05449d",
+                      "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                    },
+                    "receipt": "Controlled fixture worker received src/assistant-service.ts",
+                    "status": "succeeded",
+                    "target": "fixture/bounded-fixture",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  },
+                  {
+                    "authority": "fixture-only",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:1",
+                    "providerDispatch": {
+                      "actorId": "worker-0",
+                      "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                      "claimedAt": 1793842800001,
+                      "configVersion": "v1",
+                      "dispatchId": "fixture-coding",
+                      "fileInputs": [
+                        {
+                          "documentId": "document:github-files",
+                          "path": "tests/assistant-conversation.test.ts",
+                          "sha256": "2b5f7fd19b98fc6ac5127c7ff2bd17686f2f137b1cc1df3f9c325da360e0b3b2"
+                        }
+                      ],
+                      "hostSessionId": "fixture-room",
+                      "id": "file-claim-1",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "requestHash": "720d51c5c62a3d0385fec5f07247cd8de7ddb1442b5d28cd15ed26477c9ea321",
+                      "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                    },
+                    "receipt": "Controlled fixture worker received tests/assistant-conversation.test.ts",
+                    "status": "succeeded",
+                    "target": "fixture/bounded-fixture",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  },
+                  {
+                    "authority": "fixture-only",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:2",
+                    "providerDispatch": {
+                      "actorId": "worker-0",
+                      "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                      "claimedAt": 1793842800002,
+                      "configVersion": "v1",
+                      "dispatchId": "fixture-coding",
+                      "fileInputs": [
+                        {
+                          "documentId": "document:github-files",
+                          "path": "src/assistant-conversation-panel.ts",
+                          "sha256": "28d9e3eca2a62dfe62a89f43f7f4a5478653da6c39033411f83f8ff6dd6f3543"
+                        }
+                      ],
+                      "hostSessionId": "fixture-room",
+                      "id": "file-claim-2",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "requestHash": "b7bc36b78d25b9cc29f776982a44ae83a437d31adc057626c30c2d6a537b7d7b",
+                      "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                    },
+                    "receipt": "Controlled fixture worker received src/assistant-conversation-panel.ts",
+                    "status": "succeeded",
+                    "target": "fixture/bounded-fixture",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  },
+                  {
+                    "authority": "fixture-only",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:3",
+                    "providerDispatch": {
+                      "actorId": "worker-0",
+                      "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                      "claimedAt": 1793842800003,
+                      "configVersion": "v1",
+                      "dispatchId": "fixture-coding",
+                      "fileInputs": [
+                        {
+                          "documentId": "document:github-files",
+                          "path": "docs/architecture/assistant-conversation.md",
+                          "sha256": "2eead2222f12a405354d658ca530389c2920faedd70d06672460796fa1aa2816"
+                        }
+                      ],
+                      "hostSessionId": "fixture-room",
+                      "id": "file-claim-3",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "requestHash": "1ae06349e57e41321bc7cd446c3c0c295412e2adeb5d3d7f67409addd893f7e3",
+                      "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                    },
+                    "receipt": "Controlled fixture worker received docs/architecture/assistant-conversation.md",
+                    "status": "succeeded",
+                    "target": "fixture/bounded-fixture",
+                    "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                  },
+                  {
+                    "authority": "fixture-only",
+                    "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:4",
+                    "providerDispatch": {
+                      "actorId": "worker-0",
+                      "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                      "claimedAt": 1793842800004,
+                      "configVersion": "v1",
+                      "dispatchId": "fixture-coding",
+                      "fileInputs": [
+                        {
+                          "documentId": "document:github-files",
+                          "path": "src/connection-workbench.ts",
+                          "sha256": "3d6cf56b1de18046865a5aa35ceebf5454f73a4e676ea7d260b389295816402d"
+                        }
+                      ],
+                      "hostSessionId": "fixture-room",
+                      "id": "file-claim-4",
+                      "model": "bounded-fixture",
+                      "provider": "fixture",
+                      "requestHash": "adaa1af76ae8c69183038f25117b550ec75b2d219618f90103005dfa50103267",
+                      "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                    },
                     "status": "pending",
-                    "target": "controlled fixture units",
+                    "target": "fixture/bounded-fixture",
                     "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
                   }
                 ],
@@ -482,7 +625,7 @@
                   "authorizationId": "fixture-only",
                   "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                   "id": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
-                  "inputHash": "cfbf8e011ffab97a3ca0a89cfb684e1979bcb40901afc62ad64272917261829a",
+                  "inputHash": "baea55173d0d55ddbc124f3a6d8612caf148942fa6fe0d69c792787e0d4f3e79",
                   "mode": "mock-http",
                   "outputTokenCap": 1,
                   "ownership": {
@@ -492,6 +635,21 @@
                     "startedAt": 1793842800000
                   }
                 },
+                "sourceDocuments": [
+                  {
+                    "actorId": "local-owner",
+                    "document": {
+                      "actorId": "local-owner",
+                      "content": "{\"format\":\"github-review/v2\",\"repository\":\"jabdori/massion\",\"number\":84,\"headSha\":\"cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66\",\"url\":\"https://github.com/jabdori/massion/pull/84\",\"files\":[{\"path\":\"src/assistant-service.ts\",\"content\":\"// Controlled fixture source: src/assistant-service.ts\\n\"},{\"path\":\"tests/assistant-conversation.test.ts\",\"content\":\"// Controlled fixture source: tests/assistant-conversation.test.ts\\n\"},{\"path\":\"src/assistant-conversation-panel.ts\",\"content\":\"// Controlled fixture source: src/assistant-conversation-panel.ts\\n\"},{\"path\":\"docs/architecture/assistant-conversation.md\",\"content\":\"// Controlled fixture source: docs/architecture/assistant-conversation.md\\n\"},{\"path\":\"src/connection-workbench.ts\",\"content\":\"// Controlled fixture source: src/connection-workbench.ts\\n\"},{\"path\":\"src/configured-runtime.ts\",\"content\":\"// Controlled fixture source: src/configured-runtime.ts\\n\"},{\"path\":\"src/product.ts\",\"content\":\"// Controlled fixture source: src/product.ts\\n\"},{\"path\":\"src/server.ts\",\"content\":\"// Controlled fixture source: src/server.ts\\n\"},{\"path\":\"src/workbench.ts\",\"content\":\"// Controlled fixture source: src/workbench.ts\\n\"},{\"path\":\"src/selectable-runtime.ts\",\"content\":\"// Controlled fixture source: src/selectable-runtime.ts\\n\"},{\"path\":\"docs/architecture/default-route-and-persistent-connections.md\",\"content\":\"// Controlled fixture source: docs/architecture/default-route-and-persistent-connections.md\\n\"}]}",
+                      "contentSha256": "3750481185f3f57f9da5166e237ad602b663f6a46580cdf728df54edceeb41b8",
+                      "id": "document:github-files",
+                      "source": "https://github.com/jabdori/massion/pull/84",
+                      "title": "jabdori/massion #84",
+                      "version": 1
+                    },
+                    "reason": "Controlled exact file inputs"
+                  }
+                ],
                 "tasks": [
                   {
                     "id": "assistant-cac79b1a06e9356c6fcd4aad:root",
@@ -527,6 +685,13 @@
                   {
                     "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
                     "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                    "procedureEdit": {
+                      "actorId": "worker-1",
+                      "at": 1793843040000,
+                      "instruction": "이번에도 테스트부터 돌려 줘.",
+                      "messageId": "procedure-note",
+                      "title": "테스트 먼저 돌리기"
+                    },
                     "status": "queued",
                     "step": {
                       "dependsOn": [
@@ -809,6 +974,17 @@
             "oracle": "bounded-text-review/v1",
             "version": 1
           },
+          "documents": [
+            {
+              "actorId": "local-owner",
+              "content": "{\"format\":\"github-review/v2\",\"repository\":\"jabdori/massion\",\"number\":84,\"headSha\":\"cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66\",\"url\":\"https://github.com/jabdori/massion/pull/84\",\"files\":[{\"path\":\"src/assistant-service.ts\",\"content\":\"// Controlled fixture source: src/assistant-service.ts\\n\"},{\"path\":\"tests/assistant-conversation.test.ts\",\"content\":\"// Controlled fixture source: tests/assistant-conversation.test.ts\\n\"},{\"path\":\"src/assistant-conversation-panel.ts\",\"content\":\"// Controlled fixture source: src/assistant-conversation-panel.ts\\n\"},{\"path\":\"docs/architecture/assistant-conversation.md\",\"content\":\"// Controlled fixture source: docs/architecture/assistant-conversation.md\\n\"},{\"path\":\"src/connection-workbench.ts\",\"content\":\"// Controlled fixture source: src/connection-workbench.ts\\n\"},{\"path\":\"src/configured-runtime.ts\",\"content\":\"// Controlled fixture source: src/configured-runtime.ts\\n\"},{\"path\":\"src/product.ts\",\"content\":\"// Controlled fixture source: src/product.ts\\n\"},{\"path\":\"src/server.ts\",\"content\":\"// Controlled fixture source: src/server.ts\\n\"},{\"path\":\"src/workbench.ts\",\"content\":\"// Controlled fixture source: src/workbench.ts\\n\"},{\"path\":\"src/selectable-runtime.ts\",\"content\":\"// Controlled fixture source: src/selectable-runtime.ts\\n\"},{\"path\":\"docs/architecture/default-route-and-persistent-connections.md\",\"content\":\"// Controlled fixture source: docs/architecture/default-route-and-persistent-connections.md\\n\"}]}",
+              "contentSha256": "3750481185f3f57f9da5166e237ad602b663f6a46580cdf728df54edceeb41b8",
+              "id": "document:github-files",
+              "source": "https://github.com/jabdori/massion/pull/84",
+              "title": "jabdori/massion #84",
+              "version": 1
+            }
+          ],
           "growth": [],
           "id": "intake",
           "memories": [],
@@ -931,9 +1107,141 @@
               "effects": [
                 {
                   "authority": "fixture-only",
-                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:effect",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:0",
+                  "providerDispatch": {
+                    "actorId": "worker-0",
+                    "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "claimedAt": 1793842800000,
+                    "configVersion": "v1",
+                    "dispatchId": "fixture-coding",
+                    "fileInputs": [
+                      {
+                        "documentId": "document:github-files",
+                        "path": "src/assistant-service.ts",
+                        "sha256": "bdbcb9de75c29741267945e85a45e8fb450f25a0e6cc6d57395feddb2a437f40"
+                      }
+                    ],
+                    "hostSessionId": "fixture-room",
+                    "id": "file-claim-0",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "requestHash": "8dca719cc8ed8d999954286a228e9d096723f06fb756dba2ad71597f1b05449d",
+                    "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                  },
+                  "receipt": "Controlled fixture worker received src/assistant-service.ts",
+                  "status": "succeeded",
+                  "target": "fixture/bounded-fixture",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                },
+                {
+                  "authority": "fixture-only",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:1",
+                  "providerDispatch": {
+                    "actorId": "worker-0",
+                    "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "claimedAt": 1793842800001,
+                    "configVersion": "v1",
+                    "dispatchId": "fixture-coding",
+                    "fileInputs": [
+                      {
+                        "documentId": "document:github-files",
+                        "path": "tests/assistant-conversation.test.ts",
+                        "sha256": "2b5f7fd19b98fc6ac5127c7ff2bd17686f2f137b1cc1df3f9c325da360e0b3b2"
+                      }
+                    ],
+                    "hostSessionId": "fixture-room",
+                    "id": "file-claim-1",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "requestHash": "720d51c5c62a3d0385fec5f07247cd8de7ddb1442b5d28cd15ed26477c9ea321",
+                    "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                  },
+                  "receipt": "Controlled fixture worker received tests/assistant-conversation.test.ts",
+                  "status": "succeeded",
+                  "target": "fixture/bounded-fixture",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                },
+                {
+                  "authority": "fixture-only",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:2",
+                  "providerDispatch": {
+                    "actorId": "worker-0",
+                    "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "claimedAt": 1793842800002,
+                    "configVersion": "v1",
+                    "dispatchId": "fixture-coding",
+                    "fileInputs": [
+                      {
+                        "documentId": "document:github-files",
+                        "path": "src/assistant-conversation-panel.ts",
+                        "sha256": "28d9e3eca2a62dfe62a89f43f7f4a5478653da6c39033411f83f8ff6dd6f3543"
+                      }
+                    ],
+                    "hostSessionId": "fixture-room",
+                    "id": "file-claim-2",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "requestHash": "b7bc36b78d25b9cc29f776982a44ae83a437d31adc057626c30c2d6a537b7d7b",
+                    "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                  },
+                  "receipt": "Controlled fixture worker received src/assistant-conversation-panel.ts",
+                  "status": "succeeded",
+                  "target": "fixture/bounded-fixture",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                },
+                {
+                  "authority": "fixture-only",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:3",
+                  "providerDispatch": {
+                    "actorId": "worker-0",
+                    "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "claimedAt": 1793842800003,
+                    "configVersion": "v1",
+                    "dispatchId": "fixture-coding",
+                    "fileInputs": [
+                      {
+                        "documentId": "document:github-files",
+                        "path": "docs/architecture/assistant-conversation.md",
+                        "sha256": "2eead2222f12a405354d658ca530389c2920faedd70d06672460796fa1aa2816"
+                      }
+                    ],
+                    "hostSessionId": "fixture-room",
+                    "id": "file-claim-3",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "requestHash": "1ae06349e57e41321bc7cd446c3c0c295412e2adeb5d3d7f67409addd893f7e3",
+                    "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                  },
+                  "receipt": "Controlled fixture worker received docs/architecture/assistant-conversation.md",
+                  "status": "succeeded",
+                  "target": "fixture/bounded-fixture",
+                  "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
+                },
+                {
+                  "authority": "fixture-only",
+                  "id": "assistant-cac79b1a06e9356c6fcd4aad:step:0:file:4",
+                  "providerDispatch": {
+                    "actorId": "worker-0",
+                    "assignmentId": "assistant-cac79b1a06e9356c6fcd4aad:step:0",
+                    "claimedAt": 1793842800004,
+                    "configVersion": "v1",
+                    "dispatchId": "fixture-coding",
+                    "fileInputs": [
+                      {
+                        "documentId": "document:github-files",
+                        "path": "src/connection-workbench.ts",
+                        "sha256": "3d6cf56b1de18046865a5aa35ceebf5454f73a4e676ea7d260b389295816402d"
+                      }
+                    ],
+                    "hostSessionId": "fixture-room",
+                    "id": "file-claim-4",
+                    "model": "bounded-fixture",
+                    "provider": "fixture",
+                    "requestHash": "adaa1af76ae8c69183038f25117b550ec75b2d219618f90103005dfa50103267",
+                    "runId": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32"
+                  },
                   "status": "pending",
-                  "target": "controlled fixture units",
+                  "target": "fixture/bounded-fixture",
                   "taskId": "assistant-cac79b1a06e9356c6fcd4aad:step:0"
                 }
               ],
@@ -950,7 +1258,7 @@
                 "authorizationId": "fixture-only",
                 "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                 "id": "assistant-run:assistant-turn:m:f5b8baf3484bc4ffb17fa5ab4ad9ec32",
-                "inputHash": "cfbf8e011ffab97a3ca0a89cfb684e1979bcb40901afc62ad64272917261829a",
+                "inputHash": "baea55173d0d55ddbc124f3a6d8612caf148942fa6fe0d69c792787e0d4f3e79",
                 "mode": "mock-http",
                 "outputTokenCap": 1,
                 "ownership": {
@@ -960,6 +1268,21 @@
                   "startedAt": 1793842800000
                 }
               },
+              "sourceDocuments": [
+                {
+                  "actorId": "local-owner",
+                  "document": {
+                    "actorId": "local-owner",
+                    "content": "{\"format\":\"github-review/v2\",\"repository\":\"jabdori/massion\",\"number\":84,\"headSha\":\"cf2a4b325b3954e04ba4a4e3ddfa58ded8b6de66\",\"url\":\"https://github.com/jabdori/massion/pull/84\",\"files\":[{\"path\":\"src/assistant-service.ts\",\"content\":\"// Controlled fixture source: src/assistant-service.ts\\n\"},{\"path\":\"tests/assistant-conversation.test.ts\",\"content\":\"// Controlled fixture source: tests/assistant-conversation.test.ts\\n\"},{\"path\":\"src/assistant-conversation-panel.ts\",\"content\":\"// Controlled fixture source: src/assistant-conversation-panel.ts\\n\"},{\"path\":\"docs/architecture/assistant-conversation.md\",\"content\":\"// Controlled fixture source: docs/architecture/assistant-conversation.md\\n\"},{\"path\":\"src/connection-workbench.ts\",\"content\":\"// Controlled fixture source: src/connection-workbench.ts\\n\"},{\"path\":\"src/configured-runtime.ts\",\"content\":\"// Controlled fixture source: src/configured-runtime.ts\\n\"},{\"path\":\"src/product.ts\",\"content\":\"// Controlled fixture source: src/product.ts\\n\"},{\"path\":\"src/server.ts\",\"content\":\"// Controlled fixture source: src/server.ts\\n\"},{\"path\":\"src/workbench.ts\",\"content\":\"// Controlled fixture source: src/workbench.ts\\n\"},{\"path\":\"src/selectable-runtime.ts\",\"content\":\"// Controlled fixture source: src/selectable-runtime.ts\\n\"},{\"path\":\"docs/architecture/default-route-and-persistent-connections.md\",\"content\":\"// Controlled fixture source: docs/architecture/default-route-and-persistent-connections.md\\n\"}]}",
+                    "contentSha256": "3750481185f3f57f9da5166e237ad602b663f6a46580cdf728df54edceeb41b8",
+                    "id": "document:github-files",
+                    "source": "https://github.com/jabdori/massion/pull/84",
+                    "title": "jabdori/massion #84",
+                    "version": 1
+                  },
+                  "reason": "Controlled exact file inputs"
+                }
+              ],
               "tasks": [
                 {
                   "id": "assistant-cac79b1a06e9356c6fcd4aad:root",
@@ -995,6 +1318,13 @@
                 {
                   "id": "assistant-cac79b1a06e9356c6fcd4aad:step:1",
                   "parentId": "assistant-cac79b1a06e9356c6fcd4aad:executor",
+                  "procedureEdit": {
+                    "actorId": "worker-1",
+                    "at": 1793843040000,
+                    "instruction": "이번에도 테스트부터 돌려 줘.",
+                    "messageId": "procedure-note",
+                    "title": "테스트 먼저 돌리기"
+                  },
                   "status": "queued",
                   "step": {
                     "dependsOn": [
