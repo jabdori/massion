@@ -23,7 +23,7 @@ without a feed event. After expiry the pending file is unknown; completed receip
 remain read. The Impeccable mechanical detector reported no findings.
 
 Screen captures were compared with the committed B22 and B8 artboards. The
-five-screen/two-theme scoped gate removes 22 resolved occurrences and reports
+six-screen/two-theme scoped gate removes 24 resolved occurrences and reports
 zero new, stale or infrastructure diagnostics. Existing composer geometry drift
 and unrelated scenario residuals remain in the allow-list. Required element
 results are 40/40 for B22-room, 49/49 for B22-room-steps and 36/36 for B8-fail,
@@ -75,3 +75,11 @@ The first CI harness run caught an inconsistent shared fixture clock in B22-room
 Keep that screen's original frozen time and align only its command-produced coding
 observations to it. All 141 UI harness/copy-lint tests then passed locally; both
 theme interaction flows passed again and their captures were refreshed.
+
+
+The complete CI unit run also identified app upgrade/rollback fixtures still using
+the previous catalog version and visual assertions for the former unapplied note
+and empty Record layout. Updated those expectations while retaining original-pin,
+permission widening, replay and collapsed-source checks. All 80 affected app and
+Work visual tests passed locally. The B8 baseline capture also resolves its two
+Record-heading exceptions; no new/stale diagnostics remain in that scoped gate.
