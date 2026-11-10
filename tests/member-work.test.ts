@@ -849,3 +849,27 @@ test('steering racing the failure blocker retains the failed worker outcome with
  assert.equal(w.effects.find(e=>e.id.endsWith(':step:0'))!.status,'failed');assert.equal(w.instructions!.length,1);assert.equal(w.record,undefined);assert.equal(w.artifact,undefined);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
+
+test('file workers receive exact selected bytes and acknowledge future-step notes without changing pinned procedures',async t=>{
+ const f=await setup(t);await f.admit();
+ const preflight=f.product.preflight.bind(f.product);f.product.preflight=async(...args)=>({... (await preflight(...args))!,ready:false});
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review the two files');await f.assistant.idle();f.product.preflight=preflight;
+ const initial=(await f.intake()).works.at(-1)!,workId=initial.id,{githubReviewDocument}=await import('../src/github-review.ts');
+ const document=githubReviewDocument({repository:'jabdori/massion',number:84,headSha:'a'.repeat(40),url:'https://github.com/jabdori/massion/pull/84'},'document:files',[{path:'src/a.ts',content:'const a = 1;'},{path:'src/b.ts',content:'const b = 2;'}]);
+ let revision=(await f.store.load('intake'))!.revision;
+ await f.product.captureDocument('intake',{commandId:'file-source',expectedRevision:revision,document});
+ revision=(await f.store.load('intake'))!.revision;
+ await f.product.attachWorkSource('intake',{commandId:'file-pin',expectedRevision:revision,workId,documentId:document.id,version:1,contentSha256:documentContentHash(document.content),reason:'Read exact files'});
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({role:'Read',title,dependsOn:i?[0]:[],sourceFiles:[i?'src/b.ts':'src/a.ts']}))}));
+ const prompts:any[]=[];
+ f.setWorker(async prompt=>{prompts.push(prompt);if(prompts.length===1){const snapshot=(await f.store.load('intake'))!;await f.product.appendWorkMessage('intake',{commandId:'future-step-note',expectedRevision:snapshot.revision,workId,messageId:'future-step-note',replyTo:null,text:'Check tests before writing',stepNote:{taskId:workId+':step:1',title:'Tests first'}});}return 'Answer bounded file evidence';});
+ const result=await f.product.run('intake',workId,'file-workers',(await f.store.load('intake'))!.revision),w=result.snapshot.value.works.at(-1)!;
+ assert.equal(result.status,'settled',JSON.stringify({status:result.status,reason:result.reason,blocker:w.blocker,effects:w.effects.map(e=>({id:e.id,status:e.status,receipt:e.status==='unknown'?e.receipt:undefined}))}));assert.equal(w.acceptance,'accepted');assert.equal(prompts.length,2);
+ assert.equal(prompts[0].work.sourceDocuments[0].files[0].content,'const a = 1;');assert.doesNotMatch(JSON.stringify(prompts[0]),/const b = 2/);
+ assert.equal(prompts[1].step.title,'Tests first');assert.equal(prompts[1].step.instruction,'Check tests before writing');assert.equal(prompts[1].work.sourceDocuments[0].files[0].content,'const b = 2;');
+ assert.deepEqual(w.team,initial.team);assert.equal(w.tasks.find(t=>t.id===workId+':step:1')!.step!.title,initial.team!.procedures[0]!.body.steps[1]);
+ assert.ok(w.record!.createdAt!>=w.verdict!.checkedAt!);assert.equal(w.record!.procedureEdits![0]!.edit.messageId,'future-step-note');
+ const inputs=w.effects.filter(e=>e.providerDispatch?.fileInputs).flatMap(e=>e.providerDispatch!.fileInputs!);assert.deepEqual(inputs.map(i=>i.path),['src/a.ts','src/b.ts']);assert.deepEqual(inputs.map(i=>i.sha256),[documentContentHash('const a = 1;'),documentContentHash('const b = 2;')]);
+ validateMissionJournalLineage(f.store.inspect());
+ const {readRecordArtifact}=await import('../src/record-artifact.ts');assert.ok(await readRecordArtifact(f.store,f.artifacts,'intake',w.id,{recordId:w.record!.id,artifactVersion:w.artifact!.version,artifactSha256:w.artifact!.sha256}));
+});

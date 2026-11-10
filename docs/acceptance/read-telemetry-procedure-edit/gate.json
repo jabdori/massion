@@ -1,0 +1,14 @@
+{
+  "screens": [
+    "B8-done",
+    "B8-fail",
+    "B8-unknown",
+    "B22-room",
+    "B22-room-steps"
+  ],
+  "removed": 22,
+  "code": 0,
+  "added": [],
+  "resolved": [],
+  "errors": []
+}

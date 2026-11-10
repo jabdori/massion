@@ -1,5 +1,7 @@
+import {githubReviewDocument} from '../../src/github-review.ts';
+import {githubFixture} from '../../src/app-catalog.ts';
 import {readFile,writeFile} from 'node:fs/promises';
-import {apply,createMission,hash,canonical,workInputHash,observesWork,endsWork} from '../../src/domain.ts';
+import {apply,createMission,hash,canonical,workInputHash,observesWork,endsWork,documentContentHash} from '../../src/domain.ts';
 import type {Actor,Command,Mission,Work} from '../../src/domain.ts';
 import {ownerMessageId,assistantTurnId,assistantWorkId,assistantRunId} from '../../src/assistant-conversation.ts';
 import {applySkills} from '../../src/skills.ts';
@@ -36,6 +38,11 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'){
  const send=(command:Command,actor:Actor=host,clock?:string)=>{if(clock)at=stamp(clock);state=apply(state,command,actor,observesWork(command.type)?{observedAt:at,telemetryVersion:1,...(endsWork(command.type)?{workEndVersion:2 as const}:{})}:undefined).value;};
  send({type:'admit-work',workId,title,budget:64,assistantSource:source,team},{id:'fixture-assistant',roles:['assistant']});
  const current=()=>state.works[0]!;
+ if(kind==='coding'){
+  const pull=JSON.parse(githubFixture('https://api.github.com/repos/jabdori/massion/pulls/84').body),listed=JSON.parse(githubFixture('https://api.github.com/repos/jabdori/massion/pulls/84/files').body),files=listed.map((f:{filename:string})=>{const d=JSON.parse(githubFixture('https://api.github.com/repos/jabdori/massion/contents/'+f.filename+'?ref='+pull.head.sha).body);return {path:f.filename,content:Buffer.from(d.content,'base64').toString('utf8')};});
+  const document=githubReviewDocument({repository:'jabdori/massion',number:84,headSha:pull.head.sha,url:pull.html_url},'document:github-files',files);
+  send({type:'capture-document',document},owner);send({type:'attach-work-source',workId,documentId:document.id,version:1,contentSha256:documentContentHash(document.content),reason:'Controlled exact file inputs'},owner);
+ }
  send({type:'activate-runtime',workId,run:{id:runId,authorizationId:'fixture-only',criteriaHash:hash(current().criteria),inputHash:workInputHash(current()),mode:'mock-http',outputTokenCap:1,...(kind==='coding'?{ownership:{hostSessionId:'fixture-room',dispatchId:'fixture-'+kind,startedAt:at,deadlineAt:at+300000}}:{})}},owner);
  const model={provider:'fixture',model:'bounded-fixture',reason:'Controlled fixture, no provider invocation',configVersion:'v1',evidenceClass:'fixture' as const};
  for(const role of ['executor','verifier'] as const){send({type:'delegate',workId,taskId:workId+':'+role,parentId:workId+':root'});send({type:'assign',workId,assignment:{id:role,actorId:role,role,taskId:workId+':'+role,model,extensionVersion:'fixture-v1'}});}
@@ -43,19 +50,30 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'){
  for(const [index,step] of plan.entries()){const taskId=workId+':step:'+index;send({type:'delegate',workId,taskId,parentId:workId+':executor',step});send({type:'assign',workId,assignment:{id:taskId,actorId:'worker-'+index,role:'executor',taskId,model,extensionVersion:'fixture-v1'}});}
  for(const [index,raw] of spec.entries()){
   const s=raw as typeof pricing[number]&{start?:string;end?:string},taskId=workId+':step:'+index,actor:Actor={id:'worker-'+index,roles:['executor']};
-  if(s.start){send({type:'admit-effect',workId,effect:{id:taskId+':effect',taskId,status:'pending',target:'controlled fixture units',authority:'fixture-only'},reserve:0},actor,s.start);
+  if(s.start&&kind==='coding'){
+   const doc=current().sourceDocuments![0]!.document,files=JSON.parse(doc.content).files;
+   for(let i=0;i<5;i++){
+    const file=files[i],id=taskId+':file:'+i,claimId='file-claim-'+i,claimedAt=stamp(s.start)+i;
+    send({type:'admit-effect',workId,effect:{id,taskId,status:'pending',target:'fixture/bounded-fixture',authority:'fixture-only'},reserve:0},actor,s.start);
+    send({type:'claim-provider-dispatch',workId,effectId:id,claim:{id:claimId,runId,hostSessionId:'fixture-room',dispatchId:'fixture-coding',actorId:actor.id,assignmentId:taskId,provider:'fixture',model:'bounded-fixture',configVersion:'v1',requestHash:hash({file,fixture:true}),claimedAt,fileInputs:[{documentId:doc.id,path:file.path,sha256:documentContentHash(file.content)}]}},actor);
+    if(i<4)send({type:'receipt',workId,effectId:id,providerDispatchId:claimId,outcome:'succeeded',receipt:'Controlled fixture worker received '+file.path,usage:0},actor);
+   }
+   send({type:'record-step-progress',workId,taskId,progress:{done:4,total:11}},actor,s.start);
+  }else if(s.start){send({type:'admit-effect',workId,effect:{id:taskId+':effect',taskId,status:'pending',target:'controlled fixture units',authority:'fixture-only'},reserve:0},actor,s.start);
    send({type:'record-step-progress',workId,taskId,progress:{done:s.done!,total:s.total!,...(s.note?{note:s.note}:{})}},actor,s.end??s.start);
    if(s.end)send({type:'receipt',workId,effectId:taskId+':effect',outcome:'succeeded',receipt:s.result!,usage:0},actor,s.end);
   }
   if(s.end)send({type:'settle-task',workId,taskId,result:s.result!},actor,s.end);
  }
- if(kind==='coding')send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');
- validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source};
+ if(kind==='coding'){send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');send({type:'acknowledge-step-note',workId,messageId:'procedure-note'},{id:'worker-1',roles:['executor']},'10:44');}
+ validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source,documents:state.documents};
 }
 
-export async function regenerateRoomScreens(){
+export async function regenerateRoomScreens(only?:string[]){
  for(const [screen,base,kind,legacyId] of [['B18-room-b','B7-churn','pricing','pricing'],['B22-room-steps','B22-room','coding','pr84']] as const){
-  const fixture=await loadFixture(base,['regeneration-source']),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
+  if(only&&!only.includes(screen))continue;
+  const fixture=await loadFixture(base,['regeneration-source']),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source,documents}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
+  if(documents)mission.documents=[...(mission.documents??[]).filter(d=>!documents.some(n=>n.id===d.id)),...documents];
   mission.works=mission.works.map(w=>w.id===previousId?work:w);if(conversation)mission.conversations=[...(mission.conversations??[]).filter(c=>c.workId!==previousId),conversation];
   const previousTurn=previous.assistantSource?.turnId??'assistant-turn:m:'+previousId,previousMessage=previous.assistantSource?.messageId??'m:'+previousId;
   for(const route of Object.values(fixture.routes) as any[]){const body=route.body;

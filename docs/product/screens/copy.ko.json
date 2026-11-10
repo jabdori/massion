@@ -1,4 +1,19 @@
 {
+ "ui.room.step-applied": {
+  "ko": "절차 고침: {title}",
+  "roles": ["text"],
+  "used_in": ["B22-room:pane", "B22-room-steps:conversation"]
+ },
+ "ui.room.step-ack": {
+  "ko": "{title}부터 할게요.",
+  "roles": ["text"],
+  "used_in": ["B22-room:pane", "B22-room-steps:conversation"]
+ },
+ "ui.room.record-skipped": {
+  "ko": "기록 · 건너뜀",
+  "roles": ["text"],
+  "used_in": ["B22-room:pane", "B22-room-steps:conversation"]
+ },
  "ui.table-label": {
   "ko": "표",
   "roles": ["text"],

@@ -1,0 +1,52 @@
+[
+  {
+    "theme": "dark",
+    "statuses": [
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽는 중"
+    ],
+    "expired": [
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽음",
+      "결과 모름"
+    ],
+    "pinned": [
+      "읽기",
+      "테스트 돌리기"
+    ],
+    "original": "테스트 돌리기",
+    "applied": "테스트 먼저 돌리기",
+    "noteNavigation": true,
+    "mobileOverflow": false
+  },
+  {
+    "theme": "light",
+    "statuses": [
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽는 중"
+    ],
+    "expired": [
+      "읽음",
+      "읽음",
+      "읽음",
+      "읽음",
+      "결과 모름"
+    ],
+    "pinned": [
+      "읽기",
+      "테스트 돌리기"
+    ],
+    "original": "테스트 돌리기",
+    "applied": "테스트 먼저 돌리기",
+    "noteNavigation": true,
+    "mobileOverflow": false
+  }
+]
