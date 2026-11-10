@@ -165,7 +165,7 @@ async function chatCredentialRetry(turn,button){
   const commandId=crypto.randomUUID();if(!storage.set(key,commandId))return;
   const result=await request('/connections/'+encodeURIComponent(c.connectionId)+'/retry',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':feed},body:JSON.stringify({commandId,missionId:work.missionId,workId:work.workId,expectedRevision:work.missionRevision,expectedConfigHash:c.configHash,effectId:c.effectId,replacementCommandId:state.replacementCommandId})});
   if(current()&&(result.body?.status==='completed'||result.body?.outcome==='rejected'))storage.remove(key);
- }catch{}finally{if(current()){await readChat();button.disabled=storage.get(key)!==null;}}
+ }catch(error){if(error?.commandNotSent===true)storage.remove(key);}finally{if(current()){await readChat();button.disabled=storage.get(key)!==null;}}
 }
 /** Open the existing owner review form. The card itself never cancels, quarantines or acknowledges an uncertain effect. */
 async function chatReviewUnknown(turnId){

@@ -87,10 +87,11 @@ export class ConnectionLifecycle {
   return {feedId:read.feedId,commandId:input.commandId,status:!attempt?'unknown':attempt.connectionId!==input.connectionId||attempt.configHash!==input.expectedConfigHash||attempt.kind!==input.kind?'conflict':attempt.status==='pending'||attempt.kind==='replace-key'&&attempt.status==='unknown'?'unknown':'settled'};
  }
  async retry(input:unknown){
-  try{exact(input,['commandId','missionId','workId','expectedRevision','connectionId','expectedConfigHash','effectId','replacementCommandId']);
-  const current=await this.#state(),key=current.value.attempts.findLast(a=>a.connectionId===input.connectionId&&a.kind==='replace-key'&&a.status!=='rejected');
-  ensure(key&&key.commandId===input.replacementCommandId&&key.configHash===input.expectedConfigHash&&key.status==='completed','Exact completed credential replacement required');
-  await this.#admit();return await this.#connections.retryCredential(input,this.#store);
+  try{exact(input,['commandId','missionId','workId','expectedRevision','connectionId','expectedConfigHash','effectId','replacementCommandId']);const request=structuredClone(input);
+   await this.#admit();return await this.#connections.retryCredential(request,this.#store,async()=>{
+    const current=await this.#state(),key=current.value.attempts.findLast(a=>a.connectionId===request.connectionId&&a.kind==='replace-key'&&a.status!=='rejected');
+    ensure(key&&key.commandId===request.replacementCommandId&&key.configHash===request.expectedConfigHash&&key.status==='completed','Exact completed credential replacement required');await this.#admit();
+   });
   }catch(error){if(error instanceof DomainError)throw new ConnectionLifecycleRefusedError(error.message,error.code);throw error;}
  }
  async read(){

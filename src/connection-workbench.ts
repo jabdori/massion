@@ -104,13 +104,13 @@ export class ConnectionWorkbench implements WorkRuntime {
   const feedId=(await this.#store.readState()).feedId;input.signal.throwIfAborted();
   await new Promise<void>((resolve,reject)=>{const key=JSON.stringify([input.missionId,input.workId,input.blocker.effectId]),abort=()=>{this.#repairs.delete(key);reject(input.signal.reason);},resume=()=>{input.signal.removeEventListener('abort',abort);this.#repairs.delete(key);resolve();};this.#repairs.set(key,{...input,feedId,resume});input.signal.addEventListener('abort',abort,{once:true});});
  };
- async retryCredential(input:unknown,ownerStore:Store<any>){
+ async retryCredential(input:unknown,ownerStore:Store<any>,verifyReplacement:()=>Promise<void>){
   exact(input,['commandId','missionId','workId','expectedRevision','connectionId','expectedConfigHash','effectId','replacementCommandId']);input=structuredClone(input);
   const key=JSON.stringify([(await ownerStore.readState()).feedId,(input as any).missionId,(input as any).commandId]),fingerprint=hash(input),existing=this.#retryFlights.get(key);
   if(existing){ensure(existing.fingerprint===fingerprint,'Retry command identity reused');return existing.promise;}
-  const promise=this.#retryCredential(input,ownerStore);this.#retryFlights.set(key,{fingerprint,promise});try{return await promise;}finally{this.#retryFlights.delete(key);}
+  const promise=this.#retryCredential(input,ownerStore,verifyReplacement);this.#retryFlights.set(key,{fingerprint,promise});try{return await promise;}finally{this.#retryFlights.delete(key);}
  }
- async #retryCredential(input:unknown,ownerStore:Store<any>){
+ async #retryCredential(input:unknown,ownerStore:Store<any>,verifyReplacement:()=>Promise<void>){
   exact(input,['commandId','missionId','workId','expectedRevision','connectionId','expectedConfigHash','effectId','replacementCommandId']);
   for(const field of ['commandId','missionId','workId','connectionId','replacementCommandId'])id(input[field]);ensure(!input.commandId.startsWith('assistant-')&&Number.isSafeInteger(input.expectedRevision)&&input.expectedRevision>0&&typeof input.effectId==='string'&&input.effectId.length<=512&&typeof input.expectedConfigHash==='string'&&/^[a-f0-9]{64}$/.test(input.expectedConfigHash),'Invalid credential retry');
   const command={type:'retry-credential' as const,workId:input.workId,effectId:input.effectId,connectionId:input.connectionId,configHash:input.expectedConfigHash,replacementCommandId:input.replacementCommandId},envelope={missionId:input.missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command};
@@ -118,7 +118,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   if(prior.status!=='unknown'){ensure(prior.status!=='conflict','Retry command identity reused');return {status:'completed' as const};}
   const waiting=this.#repairs.get(JSON.stringify([input.missionId,input.workId,input.effectId])),c=this.#connections.get(input.connectionId);
   ensure(waiting&&!waiting.signal.aborted&&!this.#draining&&!this.#pending&&waiting.blocker.connectionId===input.connectionId&&waiting.blocker.configHash===input.expectedConfigHash&&c?.configHash===input.expectedConfigHash&&(this.#credentialVersions.get(input.connectionId)??0)>waiting.blocker.generation,'Original live credential continuation or completed replacement unavailable');
-  this.#pending=true;try{ensure((await ownerStore.readState()).feedId===waiting.feedId,'Database changed during credential repair');waiting.signal.throwIfAborted();
+  this.#pending=true;try{await verifyReplacement();ensure((await ownerStore.readState()).feedId===waiting.feedId,'Database changed during credential repair');waiting.signal.throwIfAborted();
   let result;try{result=await new Application(ownerStore,[{id:'local-owner',roles:['owner']}]).dispatch(envelope);}catch(error){if(error instanceof DomainError||error instanceof HostDrainError)throw error;return {status:'unknown' as const};}
   ensure(result.status!=='conflict','Work changed before retry');
   if(result.status==='committed'){try{if(waiting.signal.aborted||(await ownerStore.readState()).feedId!==waiting.feedId)return {status:'unknown' as const};waiting.resume();}catch{return {status:'unknown' as const};}}

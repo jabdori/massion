@@ -40,7 +40,7 @@ test('exact slot replacement and overlapping retry execute the rejected stage on
  await until(()=>f.manager.canRetryCredential('mission','work','run:executor'));
  const revision=(await f.store.load('mission'))!.revision,input={commandId:'retry',missionId:'mission',workId:'work',expectedRevision:revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'replace'};
  assert.equal((await f.service.read()).connections[0]!.observation!.status,'invalid');
- await assert.rejects(f.service.retry(input),/completed credential/);assert.equal(f.calls(),1);
+ await assert.rejects(f.service.retry(input),/completed credential|completed replacement/);assert.equal(f.calls(),1);
  assert.equal((await f.service.replaceKey({commandId:'replace',connectionId:f.target.id,expectedConfigHash:f.target.configHash,apiKey:'sentinel-new-key'})).status,'completed');assert.equal(f.writes(),1);
  const replies=await Promise.all([f.service.retry(input),f.service.retry(input)]);assert.ok(replies.every(r=>r.status==='completed'));
  const result=await running;assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');assert.equal(f.calls(),2);assert.equal(f.checks(),1);
@@ -68,7 +68,7 @@ test('an unknown key write cannot unlock a continuation and is not resent',async
  const original=f.manager.replaceKey.bind(f.manager);f.manager.replaceKey=async()=>{throw Error('sentinel-unresolved-key-write');};
  const replacement={commandId:'unknown-key',connectionId:f.target.id,expectedConfigHash:f.target.configHash,apiKey:'sentinel-new-key'};
  assert.equal((await f.service.replaceKey(replacement)).status,'unknown');assert.equal((await f.service.replaceKey(replacement)).status,'unknown');f.manager.replaceKey=original;
- await assert.rejects(f.service.retry({commandId:'retry-unknown',missionId:'mission',workId:'work',expectedRevision:(await f.store.load('mission'))!.revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'unknown-key'}),/completed credential/);
+ await assert.rejects(f.service.retry({commandId:'retry-unknown',missionId:'mission',workId:'work',expectedRevision:(await f.store.load('mission'))!.revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'unknown-key'}),/completed credential|completed replacement/);
  f.manager.beginDrain();await running.catch(()=>{});assert.equal(f.calls(),1);assert.doesNotMatch(JSON.stringify(f.store.inspect()),/sentinel-/);
 });
 
@@ -78,4 +78,14 @@ test('a drain-aware owner store can reject retry before any second provider disp
  const {DomainError}=await import('../src/domain.ts'),guarded=new Proxy(f.store,{get(target,key){if(key==='commit')return async()=>{throw new DomainError('Owner store rejected during drain');};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  await assert.rejects(new ConnectionLifecycle(guarded,f.manager).retry({commandId:'retry',missionId:'mission',workId:'work',expectedRevision:(await f.store.load('mission'))!.revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'replacement'}),/Owner store rejected/);
  f.manager.beginDrain();await running.catch(()=>{});assert.equal(f.calls(),1);
+});
+
+test('a newer unknown replacement racing retry admission invalidates the older completed receipt',async t=>{
+ const f=await setup(t),running=f.product.run('mission','work','run',2,f.choice);void running.catch(()=>{});await until(()=>f.manager.canRetryCredential('mission','work','run:executor'));
+ await f.service.replaceKey({commandId:'first-replacement',connectionId:f.target.id,expectedConfigHash:f.target.configHash,apiKey:'sentinel-new-key'});
+ let started!:()=>void,release!:()=>void;const held=new Promise<void>(r=>release=r),entered=new Promise<void>(r=>started=r),retry=f.manager.retryCredential.bind(f.manager);
+ f.manager.retryCredential=async(...args)=>{started();await held;return retry(...args);};
+ const input={commandId:'retry-race',missionId:'mission',workId:'work',expectedRevision:(await f.store.load('mission'))!.revision,connectionId:f.target.id,expectedConfigHash:f.target.configHash,effectId:'run:executor',replacementCommandId:'first-replacement'},attempt=f.service.retry(input);void attempt.catch(()=>{});await entered;
+ f.manager.replaceKey=async()=>{throw Error('sentinel-unknown-second-write');};assert.equal((await f.service.replaceKey({commandId:'second-replacement',connectionId:f.target.id,expectedConfigHash:f.target.configHash,apiKey:'sentinel-another-key'})).status,'unknown');
+ release();await assert.rejects(attempt,/completed credential|completed replacement/);f.manager.beginDrain();await running.catch(()=>{});assert.equal(f.calls(),1);
 });
