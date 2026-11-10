@@ -30,13 +30,14 @@ export function maskBrowserField(f:{label:string;type:string;autocomplete:string
 }
 export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[number,number]>{
  const digits=(s:string)=>s.replace(/\p{Decimal_Number}/gu,d=>{if(d>='0'&&d<='9')return d;const code=d.codePointAt(0)!;let zero=code;while(zero>0&&/\p{Decimal_Number}/u.test(String.fromCodePoint(zero-1))){if(code-zero>=100)throw Error('Browser digit normalization bound exceeded');zero--;}return String((code-zero)%10);});
- const normalized=digits(value.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
- if(normalized!==value){const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=digits(segment.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets).map(([start,end])=>[starts[start]!,ends[end-1]!]);}
+ const canonical=(s:string)=>digits(s.normalize('NFKC').toLowerCase().toUpperCase().normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
+ const normalized=canonical(value);
+ if(normalized!==value){const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=canonical(segment);visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets).map(([start,end])=>[starts[start]!,ends[end-1]!]);}
  const ranges:Array<[number,number]>=[];
  if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
   const grouping=/(?<=[\p{L}0-9])[\p{P}\p{S}]{1,3}(?=[\p{L}0-9])/gu,gaps=[...compact.matchAll(grouping)],groupedPositions:number[]=[];let grouped='',gap=0;
   for(let i=0;i<compact.length;i++){if(gaps[gap]?.index===i){i+=gaps[gap++]![0].length-1;continue;}grouped+=compact[i];groupedPositions.push(positions[i]!);}
-  for(const secret of secrets){const literal=digits(secret.normalize('NFKC').replace(/[\s\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
+  for(const secret of secrets){const literal=canonical(secret).replace(/\s/g,'');
    const code=/^[+−(\p{Dash_Punctuation}]{0,2}[\p{L}0-9]+(?:[\p{P}\p{S}]{1,3}[\p{L}0-9]+)*\)?$/u.test(literal),folded=code?literal.replace(/[^\p{L}0-9]/gu,''):literal.replace(grouping,'');
    for(const [haystack,needle,offsets] of [[compact,literal,positions],[grouped,folded,groupedPositions]] as const){if(!needle)continue;let start=0;while((start=haystack.indexOf(needle,start))!==-1){ranges.push([offsets[start]!,offsets[start+needle.length-1]!+1]);start+=needle.length;}}
   }
