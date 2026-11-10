@@ -132,3 +132,28 @@ test('a superseded private observation taints subsequent reads even without a co
  const old=s.service.capture(request).catch(error=>error);await started;await s.service.capture({...request,readId:'public:1'});release();assert.match((await old).message,/superseded/);
  await s.service.capture({...request,readId:'public:2'});const pages=(await s.service.read('intake','work')).session!.pages;assert.equal(pages[0]!.tainted,undefined);assert.equal(pages[1]!.tainted,true);assert.equal(Object.hasOwn(pages[1]!,'title'),false);
 });
+
+test('origin taint is rechecked when the native storage commit queue admits a waiting read',async t=>{
+ const {SurrealStore,COMMIT_QUERY}=await import('../src/storage.ts');const s=await setup();let queueEntered!:()=>void,queueRelease!:()=>void,privateEntered!:()=>void,privateRelease!:()=>void,publicQueued!:()=>void,taintQueued!:()=>void;
+ const blocking=new Promise<void>(r=>queueEntered=r),queueGate=new Promise<void>(r=>queueRelease=r),reading=new Promise<void>(r=>privateEntered=r),privateGate=new Promise<void>(r=>privateRelease=r),queued=new Promise<void>(r=>publicQueued=r),remembering=new Promise<void>(r=>taintQueued=r);t.after(()=>{queueRelease();privateRelease();});
+ let submitted=0;const native=new SurrealStore<Mission>({async query(sql,vars){assert.equal(sql,COMMIT_QUERY);if(vars.commandId==='hold'){queueEntered();await queueGate;return [{status:'committed',revision:1,value:vars.value}];}submitted++;return [await s.store.commit({id:String(vars.aggregateId),expectedRevision:Number(vars.expectedRevision),commandId:String(vars.commandId),fingerprint:String(vars.fingerprint),value:vars.value as Mission,events:vars.events as unknown[],outbox:vars.outbox as unknown[]})];}});
+ const held=native.commit({id:'held',expectedRevision:0,commandId:'hold',fingerprint:'hold',value:(await s.store.load('intake'))!.value,events:[],outbox:[]});await blocking;
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return (input:any)=>{const result=native.commit(input);if(input.commandId.startsWith('assistant-browser-private:'))taintQueued();else publicQueued();return result;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});let reads=0;
+ const service=new BrowserSessions(s.store,owner,{clock:()=>now,adapter:{async read(){if(++reads===1){privateEntered();await privateGate;return {...raw,fields:[{label:'Password',type:'password',value:'private-sentinel',autocomplete:''}]};}return {...raw,title:'private-sentinel',blocks:['private-sentinel']};}}});t.after(()=>service.drain());
+ const older=service.capture(request).catch(error=>error);await reading;const newer=service.capture({...request,readId:'queued-public'}).catch(error=>error);await queued;privateRelease();await remembering;queueRelease();await held;assert.match((await older).message,/superseded/);
+ assert.match((await newer).message??'',/privacy/);assert.equal(submitted,1);assert.equal((await service.read('intake','work')).session,null);assert.doesNotMatch(JSON.stringify(s.store.inspect()),/private-sentinel/);
+ await service.capture({...request,readId:'after-queue'});assert.equal(submitted,2);assert.equal((await service.read('intake','work')).session!.page.tainted,true);assert.doesNotMatch(JSON.stringify(s.store.inspect()),/private-sentinel/);
+});
+
+test('superseded private origin survives restart without retaining its stale page',async t=>{
+ let entered!:()=>void,release!:()=>void,reads=0;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);t.after(()=>release());
+ const s=await setup(async()=>{if(++reads===1){entered();await held;return {...raw,fields:[{label:'Password',type:'password',value:'123456',autocomplete:''}]};}return {...raw,address:'https://public.example/view',fields:[]};});t.after(()=>s.service.drain());
+ const older=s.service.capture(request).catch(error=>error);await started;await s.service.capture({...request,readId:'other-origin',address:'https://public.example/view'});release();assert.match((await older).message,/superseded/);await s.service.drain();
+ const restarted=new BrowserSessions(s.store,s.store,{clock:()=>now,adapter:{async read(){return {...raw,title:'123456',blocks:['123456'],fields:[]};}}});t.after(()=>restarted.drain());await restarted.capture({...request,readId:'after-restart'});const pages=(await restarted.read('intake','work')).session!.pages;assert.equal(pages.length,2);assert.equal(pages[1]!.tainted,true);assert.doesNotMatch(JSON.stringify(s.store.inspect()),/123456/);validateMissionJournalLineage(s.store.inspect());
+});
+
+test('a private capture rejected by revision conflict still records only its origin for restart',async t=>{
+ const s=await setup(async()=>({...raw,fields:[{label:'Password',type:'password',value:'private-conflict-sentinel',autocomplete:''}]})),commit=s.store.commit.bind(s.store);let reject=true;
+ s.store.commit=async input=>{if(reject&&input.commandId.startsWith('assistant-browser:')){reject=false;return {status:'conflict',revision:input.expectedRevision,reason:'revision'};}return commit(input);};t.after(()=>s.service.drain());assert.equal((await s.service.capture(request)).status,'conflict');assert.equal((await s.service.read('intake','work')).session,null);await s.service.drain();
+ const restarted=new BrowserSessions(s.store,s.store,{clock:()=>now,adapter:{async read(){return {...raw,title:'private-conflict-sentinel',fields:[]};}}});t.after(()=>restarted.drain());await restarted.capture({...request,readId:'after-conflict'});assert.equal((await restarted.read('intake','work')).session!.page.tainted,true);assert.doesNotMatch(JSON.stringify(s.store.inspect()),/private-conflict-sentinel/);validateMissionJournalLineage(s.store.inspect());
+});

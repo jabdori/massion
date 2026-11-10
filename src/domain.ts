@@ -248,7 +248,7 @@ export function freshSourceWork(w:Work):boolean {
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
 export const observesWork=(type:string)=>['receipt','resume-runtime','begin-runtime-assembly','admit-work','admit-effect','accept','acknowledge-step-note','record-step-progress','settle-task','verify','steer','append-work-message','append-mission-message','open-room','record-room-turn'].includes(type);
 export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2;telemetryVersion?:1|2}): { value: Mission; events: unknown[] } {
-  if(actor.id===BROWSER_HOST)ensure(command.type==='record-browser-page','Browser host has browser-only authority');
+  if(actor.id===BROWSER_HOST)ensure(command.type==='record-browser-page'||command.type==='record-browser-private-origin','Browser host has browser-only authority');
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
   text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||(command.type==='adopt-growth'||command.type==='revert-growth')&&command.recordChangeTime===true||command.type==='answer-rule-change'&&command.recordChangeTime===true||(time?.telemetryVersion===1||time?.telemetryVersion===2)&&observesWork(command.type)||time===undefined,'Unexpected expiry clock context');
@@ -271,7 +271,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
   if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','record-step-progress','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
   if(work&&['assign','delegate','record-step-progress','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
   switch (command.type) {
-    case 'record-browser-page': {applyBrowserPage(needWork(),command,actor);break;}
+    case 'record-browser-page': case 'record-browser-private-origin': {applyBrowserPage(needWork(),command,actor);break;}
     case 'propose-owner-effect': case 'answer-owner-effect': case 'dispatch-owner-effect': case 'record-owner-effect': {applyEffectDecision(state,command,actor,time);break;}
     case 'open-room': case 'record-room-turn': {applyRoom(needWork(),command,actor,at);break;}
     case 'reserve-moderation': case 'record-moderation': {applyModeration(needWork(),command,actor);break;}

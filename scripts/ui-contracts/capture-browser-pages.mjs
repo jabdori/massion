@@ -17,7 +17,7 @@ export async function captureReferencePages(verify=false){
   'private.html':'<title>PAGE-TITLE-CANARY</title><p>ARBITRARY-ENCODED-REFLECTION</p><label for="secret">Security code</label><input id="secret" name="csc" type="number" value="456">',
   'frame.html':'<title>FRAME-PARENT-CANARY</title><p>FRAME-REFLECTION-CANARY</p><iframe src="/private.html"></iframe>',
   'empty.html':'<title>Public empty form</title><label for="empty">Password</label><input id="empty" type="password" value="">',
-  'invalid-number.html':'<title>INVALID-NUMBER-CANARY</title><input type="number" name="csc" value="PRIVATE-DEFAULT-CANARY">',
+  'invalid-number.html':'<title>INVALID-NUMBER-CANARY</title><input type="number" name="csc" value="PRIVATE-DEFAULT-CANARY"><p>PRIVATE-DEFAULT-CANARY</p>',
   'many.html':'<title>TRUNCATED-FIELD-CANARY</title>'+Array.from({length:65},(_,i)=>'<label for="name-'+i+'">이름</label><input id="name-'+i+'" value="Demo">').join('')+'<input type="password" value="LATE-PRIVATE-CANARY">'
  };
  const server=createServer(async(req,res)=>{const name=(req.url||'/').slice(1);res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'text/html; charset=utf-8');if(Object.hasOwn(probes,name)){res.end('<!doctype html><html><body>'+probes[name]+'</body></html>');return;}if(!files.includes(name)){res.writeHead(404);res.end();return;}res.end(await readFile(join(root,name)));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -35,7 +35,7 @@ export async function captureReferencePages(verify=false){
    if(page.tainted){assert.equal('title' in page,false);assert.equal('blocks' in page,false);assert.equal('fields' in page,false);assert.equal('imageHash' in page,false);assert.ok(!JSON.stringify(page).includes('CANARY'));}
    if(name==='frame.html')assert.equal(page.summary.frames,1);
    if(name==='many.html'){assert.equal(page.summary.privateFields,1);assert.equal(page.summary.fields.length,64);assert.ok(page.summary.fields.every(f=>!f.private));}
-   if(name==='invalid-number.html')assert.equal(page.summary.fields[0].length,'PRIVATE-DEFAULT-CANARY'.length);
+   if(name==='invalid-number.html'){assert.equal(page.summary.fields[0].length,'PRIVATE-DEFAULT-CANARY'.length);assert.ok(!(await run(['eval','document.body.innerText'])).result.includes('PRIVATE-DEFAULT-CANARY'));}
    if(name==='private.html')assert.equal((await run(['eval','document.getElementById("secret").value'])).result,'••••');
    rows.push({name,tainted:page.tainted===true,liveImage:true});
   }

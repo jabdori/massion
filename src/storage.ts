@@ -2,6 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 const admissionFeed = new AsyncLocalStorage<string>();
+const commitAdmission = new AsyncLocalStorage<() => void>();
+// 대기열이 끝난 시점에 요청의 변경 가능한 승인 조건을 다시 확인합니다.
+export function withCommitAdmission<R>(check: () => void, action: () => R): R {
+  return commitAdmission.run(check, action);
+}
 /** Bind every application/runtime/fixture commit in this request to its admitted database. */
 export function withAdmissionFeed<R>(feedId: string, action: () => R): R {
   identifier(feedId,'feedId'); return admissionFeed.run(feedId,action);
@@ -247,6 +252,7 @@ export class InMemoryStore<T> implements Store<T> {
   }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest } = prepare(command);
+    commitAdmission.getStore()?.();
     for(const listener of this.writeListeners)listener(input.id,input.value);
     const expectedFeed=admissionFeed.getStore();
     if(expectedFeed!==undefined && expectedFeed!==this.feedId)throw new FeedAdmissionError();
@@ -775,8 +781,9 @@ export class SurrealStore<T> implements Store<T> {
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     // Capture/validate before waiting: callers cannot mutate queued submissions.
     const { input } = prepare(command);
-    const expectedFeed=admissionFeed.getStore() ?? '';
+    const expectedFeed=admissionFeed.getStore() ?? '',admit=commitAdmission.getStore();
     const result = this.commitQueue.then(async()=>{
+      admit?.();
       for(const listener of this.writeListeners)listener(input.id,input.value);
       try{const committed=await this.commitOnce(input,expectedFeed);for(const listener of this.writeListeners)listener(input.id,committed.status==='conflict'?undefined:committed.value);return committed;}
       catch(error){for(const listener of this.writeListeners)listener(input.id);throw error;}

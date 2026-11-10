@@ -375,6 +375,7 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'record-browser-private-origin':{required:['workId','sessionId','origin']},
   'record-browser-page':{required:['workId','sessionId','navigationId','page']},
   'propose-owner-effect':{required:['workId','taskId','stepId','effectId','request']},
   'answer-owner-effect':{required:['workId','effectId','answer'],optional:['requestHash']},
