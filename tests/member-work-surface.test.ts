@@ -24,6 +24,28 @@ function fixture(initial:{works?:Row[];turns?:any[];messages?:any[];memberThread
 const kids=(node:Node)=>node.children.filter(child=>!child.hidden);
 const memberLines=(app:ReturnType<typeof harness>)=>{const li=app.all().find(n=>n.id==='side-member-member-q')?.parentElement;const ul=li?.children.find(c=>c.tagName==='UL');return ul?kids(ul).map(n=>n.textContent):[];};
 
+test('cards use host worker facts before opening a pane and replace them with a newer list revision',async()=>{
+ const work={...row({workId:'w1',title:'Churn causes',memberId:quill.id,execution:'active',acceptance:'pending',started:true}),steps:{done:1,total:2},progress:{make:{done:1,total:2},check:{done:0,total:1}},workerSteps:[{step:{title:'Read sources',role:'조사'},status:'settled'},{step:{title:'Write findings',role:'요약'},status:'active'}]};
+ const turn={id:work.turnId,messageId:'owner',status:'answered',displayStatus:'answered',at:T0,proposal:{title:work.title},work},f=fixture({works:[work],turns:[turn],messages:[{id:'owner',role:'owner',text:'Find causes'}]});await settle();
+ const card=()=>f.app.all().find(n=>n.id==='chat-card-'+turn.id)!;
+ assert.deepEqual(card().children[0]!.children[1]!.children[1]!.children.map(n=>n.textContent),['조사','요약','확인']);
+ assert.equal(f.app.calls.filter(c=>c.path==='/missions/intake').length,0);
+ await f.app.all().find(n=>n.id==='side-member-member-q')!.fire('click');await settle();
+ Object.assign(f.state.works[0]!,{missionRevision:4,steps:{done:2,total:2},progress:{make:{done:2,total:2},check:{done:0,total:1}},workerSteps:work.workerSteps.map(t=>({...t,status:'settled'}))});
+ await runInContext('shellWorksLoad()',f.app.context);await settle();
+ assert.match(card().textContent,/2\/2/);assert.match(card().textContent,/조사/);assert.doesNotMatch(card().textContent,/작성/);
+});
+
+test('settled worker summaries cannot replace unknown, stopped or budget-waiting status with check progress',async()=>{
+ const {app}=fixture();await settle();
+ const base={...row({workId:'w1',title:'Churn causes',memberId:quill.id,execution:'active',acceptance:'pending',started:true}),workerSteps:[{step:{title:'Read sources',role:'조사'},status:'settled'}]};
+ for(const [state,label] of [[{unknown:true},'결과 모름'],[{execution:'blocked'},'실패'],[{execution:'cancelled'},'취소'],[{execution:'budget-waiting'},'예산 대기']] as const){
+  const turn={id:'status-card',proposal:{title:base.title},work:{...base,...state}};
+  const card=runInContext('chatCard('+JSON.stringify(turn)+')',app.context);
+  assert.ok(card.textContent.includes(label),card.textContent);assert.ok(!card.textContent.includes('확인 대기'));
+ }
+});
+
 test('Work lines come from the host Work list: the Representative\'s and each member\'s running Work, also Work outside the shown segment; activity lists them all',async()=>{
  const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
  await settle();

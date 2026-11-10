@@ -1,3 +1,4 @@
+import {STEERING_SCREENS,steeringFixture} from './steering-fixture.ts';
 import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
 import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
 import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
@@ -55,7 +56,9 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
  if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
  if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')produced=await settingsLifecycleFixture(produced);
- const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
+ const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;
+ const steered=STEERING_SCREENS.includes(screen)?await steeringFixture(growth):growth;
+ const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(steered):steered;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
  if(screen==='B17')return scheduleScreenFixture(memory);
  return screen==='B10'?binaryScreenFixture(memory):memory;

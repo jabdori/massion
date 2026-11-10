@@ -1,18 +1,31 @@
 import assert from 'node:assert/strict';
-import {readFile,readdir,writeFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {apply,hash,canonical,workInputHash,observesWork,endsWork} from '../../src/domain.ts';
 import type {Actor,Command,Mission,Work,Task} from '../../src/domain.ts';
-import {regenerateRoomScreens} from './room-telemetry-fixtures.ts';
-import {Application} from '../../src/application.ts';
-import {InMemoryStore} from '../../src/storage.ts';
+import {regenerateRoomScreens,roomTelemetryWork} from './room-telemetry-fixtures.ts';
 import {parseTeamPlan,teamCallCount} from '../../src/internal-teams.ts';
 import {loadFixture} from './fixture-host.ts';
+import {applySkills} from '../../src/skills.ts';
+import {memberProcedures} from '../../src/internal-teams.ts';
+import {workCardFacts} from '../../src/assistant-service.ts';
 
 const owner:Actor={id:'local-owner',roles:['owner']},host:Actor={id:'runtime-representative',roles:['representative']},assistant:Actor={id:'fixture-assistant',roles:['assistant']};
 const directory=new URL('./fixtures/',import.meta.url);
 const json=async(path:URL)=>JSON.parse(await readFile(path,'utf8'));
+
+function churnSource(original:Work){
+ const settled=original.acceptance==='failed',memberId=original.assistantSource!.memberId!,spec=[
+  {title:'범위 정하기',role:'조사',dependsOn:[],status:'settled',result:'지난 90일 해지'},
+  {title:'자료 모으기',role:'조사',dependsOn:[0],status:'settled',instruction:'지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘.',result:'해지 사유 41건 모았어요.'},
+  {title:'나누기',role:'분류',dependsOn:[0],status:'settled',instruction:'모은 건은 기업 고객과 그 외로 나눠 줘.',result:'기업 9건, 그 외 32건이에요.'},
+  {title:'설문 다시 보내기',role:'설문',dependsOn:[],status:'settled',skipReason:'지난달 설문 있음',result:'Skipped · 지난달 설문 있음'},
+  {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?'기업 고객 원인 1개 · 근거 2건':undefined}
+ ];
+ const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:original.title,body:{description:original.title,steps:spec.map(s=>s.title),verify:original.criteria.description}},owner,{observedAt:original.admittedAt??0}).value;
+ return {...original,team:memberProcedures(skills,memberId,1),tasks:spec.map((s,index)=>({id:original.id+':step:'+index,parentId:original.id+':executor',status:s.status as Task['status'],...(s.result?{result:s.result}:{}),step:{title:s.title,role:s.role,dependsOn:s.dependsOn.map(i=>original.id+':step:'+i),...(s.instruction?{instruction:s.instruction}:{}),...(s.skipReason?{skipReason:s.skipReason}:{})}}))};
+}
 
 /** Existing fixture text is input; every added observation comes from a domain command. */
 export function produceWork(original:Work,mission:Mission,now:number,teamSource?:Work){
@@ -36,18 +49,26 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
  for(const task of tasks)if(!assignments.some(a=>a.taskId===task.id))assignments.push({...model,id:task.id+':assignment',taskId:task.id,actorId:task.step?'fixture-worker-'+task.id: model.actorId});
  for(const assignment of assignments)send({type:'assign',workId:original.id,assignment});
  const actorFor=(taskId:string)=>{const assignment=assignments.find(a=>a.taskId===taskId)!;return {id:assignment.actorId,roles:[assignment.role]} as Actor;};
- // Workers run before their lead so dependency and child-settlement guards are exercised.
- const ordered=[...tasks.filter(t=>t.step),...tasks.filter(t=>!t.step&&t.parentId!==null),...tasks.filter(t=>t.parentId===null)];
- for(const task of ordered){
-  const actor=actorFor(task.id),effects=original.effects.filter(e=>e.taskId===task.id);
+ const effectsFor=(task:Task)=>{
+  const effects=original.effects.filter(e=>e.taskId===task.id);
   if(task.step&&!task.step.skipReason&&task.status!=='queued'&&!effects.length)effects.push({id:task.id+':fixture',taskId:task.id,status:'succeeded',target:'fixture text',authority:'data-only fixture',receipt:task.result||task.step.title});
-  for(const effect of effects){
-   assert.equal(effect.ownerDecision,undefined,'Owner effects are outside this generator');assert.equal(effect.providerDispatch,undefined,'Provider dispatch is outside this generator');
-   send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:0},actor);
-   if(effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0},actor);
-  }
-  if(task.status==='settled')send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},actor);
+  return effects;
+ };
+ const admit=(task:Task)=>{for(const effect of effectsFor(task)){
+  assert.equal(effect.ownerDecision,undefined,'Owner effects are outside this generator');assert.equal(effect.providerDispatch,undefined,'Provider dispatch is outside this generator');
+  send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:0},actorFor(task.id));
+  if(!task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0},actorFor(task.id));
+ }};
+ const settle=(task:Task)=>{for(const effect of effectsFor(task))if(task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0},actorFor(task.id));
+  if(task.status==='settled')send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},actorFor(task.id));
+ };
+ // Ready workers start together; their host observations preserve the message order.
+ const pending=tasks.filter(t=>t.step&&t.status!=='queued');
+ while(pending.length){const ready=pending.filter(t=>t.step!.dependsOn.every(id=>work().tasks.find(x=>x.id===id)?.status==='settled'));assert.ok(ready.length,'Unresolved fixture dependencies');
+  for(const task of ready)admit(task);for(const task of ready){settle(task);pending.splice(pending.indexOf(task),1);}
  }
+ for(const task of [...tasks.filter(t=>!t.step&&t.parentId!==null),...tasks.filter(t=>t.parentId===null)]){admit(task);settle(task);}
+
  if(original.artifact)send({type:'publish-artifact',workId:original.id,artifact:original.artifact},actorFor(original.assignments.find(a=>a.role==='executor')!.taskId));
  if(original.verdict){const {checkedAt,...verdict}=original.verdict;send({type:'verify',workId:original.id,verdict}, {id:assignments.find(a=>a.id===verdict.verifierAssignmentId)!.actorId,roles:['verifier']});}
  if(original.record)send({type:'accept',workId:original.id,recordId:original.record.id,...(original.record.artifactSnapshot?{artifactSnapshot:original.record.artifactSnapshot}:{})},owner);
@@ -58,18 +79,19 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
  return {work:work(),conversation:(state as Mission).conversations?.find(c=>c.workId===original.id)};
 }
 
+// Persist inherited sources; read-time overlays must not be serialized back into them.
 export async function regenerate(screen:string){
- const fixture=await loadFixture(screen),inputs=await json(new URL('./work-telemetry-inputs.json',import.meta.url)),input=inputs[screen];
+ const fixture=await loadFixture(screen,['regeneration-source']),inputs=await json(new URL('./work-telemetry-inputs.json',import.meta.url)),input=inputs[screen];
  for(const selected of [input,...(screen==='B7-churn'?[inputs['B18-room-b']]:[])]){
  const snapshot=fixture.routes['/missions/intake']!.body as any,original:Work=selected.work;
  const index=snapshot.value.works.findIndex((w:Work)=>w.id===original.id);assert.ok(index>=0);snapshot.value.works[index]=structuredClone(original);snapshot.value.conversations=[...(snapshot.value.conversations??[]).filter((c:any)=>c.workId!==original.id),...selected.conversations];
- const team=screen==='B7-churn'&&original.id===input.work.id?(await json(new URL('../../tests/fixtures/internal-teams/B7-teams.json',import.meta.url))).routes['/missions/intake'].body.value.works[0]:undefined;
+ const team=['B7-churn','B7-fail'].includes(screen)&&original.id===input.work.id?churnSource(original):screen==='B7-churn'&&original.title==='경쟁사 가격'?roomTelemetryWork(snapshot.value,'pricing').work:undefined;
  const result=produceWork(original,snapshot.value,fixture.now,team),mission=structuredClone(snapshot.value) as Mission;mission.works[index]=result.work;
  if(result.conversation){mission.conversations=mission.conversations?.filter(c=>c.workId!==original.id)??[];mission.conversations.push(result.conversation);}
  for(const route of Object.values(fixture.routes) as any[]){
   if(route.body?.value?.id===mission.id)route.body.value=JSON.parse(canonical(mission));
   if(route.body?.snapshot?.value?.id===mission.id)route.body.snapshot.value=JSON.parse(canonical(mission));
-  for(const row of [...(route.body?.works??[]),...(route.body?.turns??[]).flatMap((turn:any)=>turn.work?[turn.work]:[])])if(row.workId===original.id){row.steps={done:result.work.tasks.filter(t=>(t.step||!result.work.tasks.some(x=>x.step)&&t.parentId!==null)&&t.status==='settled'&&!(t.id===result.work.assignments.find(a=>a.id===result.work.verdict?.verifierAssignmentId)?.taskId&&result.work.acceptance==='failed')).length,total:result.work.tasks.filter(t=>t.step||!result.work.tasks.some(x=>x.step)&&t.parentId!==null).length};}
+  for(const row of [...(route.body?.works??[]),...(route.body?.turns??[]).flatMap((turn:any)=>turn.work?[turn.work]:[])]){const work=mission.works.find(w=>w.id===row.workId);if(work)Object.assign(row,workCardFacts(work));}
   if(route.body?.artifact&&route.body?.recordChecksum){const record=mission.works.find(w=>w.record?.id===route.body.recordId||w.id===route.body.workId)?.record;if(record)route.body.recordChecksum=record.checksum;}
   if(route.body?.conversation?.workId===original.id&&result.conversation)route.body.conversation=structuredClone(result.conversation);
  }
@@ -78,35 +100,10 @@ export async function regenerate(screen:string){
  fixture.description='Work telemetry generated through versioned domain commands; fixture text only, no external business evidence.';
 
  fixture.reuse=fixture.reuse.filter(text=>!text.startsWith('scripts/ui-contracts/regenerate-work-telemetry.ts:'));fixture.reuse.push('scripts/ui-contracts/regenerate-work-telemetry.ts: timed admission, task effects/settlement, independent check and owner discussion commands');
- if(input.extends){const parent=await loadFixture(input.extends);(fixture as any).extends=input.extends;fixture.routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,route])=>JSON.stringify(route)!==JSON.stringify(parent.routes[key])));}
+ if(input.extends){const parent=await loadFixture(input.extends,['regeneration-source']);(fixture as any).extends=input.extends;fixture.routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,route])=>JSON.stringify(route)!==JSON.stringify(parent.routes[key])));}
  await writeFile(new URL(screen+'.json',directory),JSON.stringify(fixture,null,2)+'\n');
 }
-export async function regenerateException(){
- const fixture=await json(new URL('B5.json',directory)),snapshot=fixture.routes['/missions/intake'].body;
- const store=new InMemoryStore<Mission>(),app=new Application(store,[owner,{id:'executor',roles:['executor']},{id:'representative',roles:['representative']}],()=>fixture.now);
- const {id,purpose,scope,constraints,criteria}=snapshot.value;await app.create({id,purpose,scope,constraints,criteria},owner.id,'b5-create');let n=0;
- const send=async(command:Command,actorId=owner.id)=>{const result=await app.dispatch({missionId:id,commandId:'b5-'+(++n),expectedRevision:(await store.load(id))!.revision,actorId,command});assert.equal(result.status,'committed');};
- for(const original of snapshot.value.works as Work[]){
-  await send({type:'admit-work',workId:original.id,title:original.title,budget:original.budget.limit});
-  if(original.runtimeRun){const work=(await store.load(id))!.value.works.find(w=>w.id===original.id)!;await send({type:'activate-runtime',workId:work.id,run:{...original.runtimeRun,inputHash:workInputHash(work)}});}
-  for(const assignment of original.assignments)await send({type:'assign',workId:original.id,assignment});
-  for(const effect of original.effects){await send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:original.budget.reserved},'executor');await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status as 'unknown'|'succeeded',receipt:effect.receipt!,usage:original.budget.measured},'executor');}
-  if(original.runtimeInterruption)await send({type:'expire-runtime',workId:original.id,runId:original.runtimeRun!.id,dispatchId:original.runtimeInterruption.dispatchId,observedAt:original.runtimeInterruption.observedAt},'representative');
- }
- const committed=(await store.load(id))!;
- for(const route of Object.values(fixture.routes) as any[]){if(route.body?.value?.id===id)route.body=committed;if(route.body?.snapshot?.value?.id===id)route.body.snapshot=committed;}
- await writeFile(new URL('B5.json',directory),JSON.stringify(fixture,null,2)+'\n');
-}
-
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
- await regenerateException();
- for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown'])await regenerate(screen);
- const alias=(await json(new URL('./work-telemetry-inputs.json',import.meta.url)))['B18-room-b'].template;alias.gaps=alias.gaps.map((gap:string)=>gap.replace('business procedure steps, per-step timestamps, typed pricing table','business procedure steps, typed pricing table'));await writeFile(new URL('B18-room-b.json',directory),JSON.stringify(alias,null,2)+'\n');
+ for(const screen of ['B7-churn','B7-fail'])await regenerate(screen);
  await regenerateRoomScreens();
- // Inherited readers must still name each descendant's own retained Record.
- for(const file of await readdir(directory))if(file.endsWith('.json')){
-  const path=new URL(file,directory),raw=await json(path),fixture=await loadFixture(raw.screen),mission=(fixture.routes['/missions/intake']?.body as any)?.value;let changed=false;
-  for(const [key,route] of Object.entries(fixture.routes) as [string,any][]){const record=mission?.works.find((w:Work)=>w.id===route.body?.workId)?.record;if(key.includes('/record-artifact?')&&record&&route.body.recordChecksum!==record.checksum){(raw.routes??={})[key]={...route,body:{...route.body,recordChecksum:record.checksum}};changed=true;}}
-  if(changed)await writeFile(path,JSON.stringify(raw,null,2)+'\n');
- }
 }
