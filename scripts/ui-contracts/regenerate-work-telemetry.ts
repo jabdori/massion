@@ -58,11 +58,12 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
   return effects;
  };
  const admit=(task:Task)=>{for(const effect of effectsFor(task)){
-  assert.equal(effect.ownerDecision,undefined,'Owner effects are outside this generator');assert.equal(effect.providerDispatch,undefined,'Provider dispatch is outside this generator');
+  assert.equal(effect.ownerDecision,undefined,'Owner effects are outside this generator');
   send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:0},actorFor(task.id));
-  if(!task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0},actorFor(task.id));
+  if(effect.providerDispatch)send({type:'claim-provider-dispatch',workId:original.id,effectId:effect.id,claim:effect.providerDispatch},actorFor(task.id));
+  if(!task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0,...(effect.providerDispatch?{providerDispatchId:effect.providerDispatch.id}:{})},actorFor(task.id));
  }};
- const settle=(task:Task)=>{for(const effect of effectsFor(task))if(task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0},actorFor(task.id));
+ const settle=(task:Task)=>{for(const effect of effectsFor(task))if(task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0,...(effect.providerDispatch?{providerDispatchId:effect.providerDispatch.id}:{})},actorFor(task.id));
   if(task.status==='settled')send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},actorFor(task.id));
  };
  // Ready workers start together; their host observations preserve the message order.

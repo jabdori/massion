@@ -1,5 +1,19 @@
 import {DomainError} from './domain.ts';
 import type {CheckPredicate,Criteria,Verdict,StepProgress} from './domain.ts';
+import {workFileInputs} from './github-review.ts';
+
+export function fileReadCompletions(work:import('./domain.ts').Work):{taskId:string;count:number;completedAt:number}[] {
+ const known=workFileInputs(work);
+ return work.tasks.flatMap(task=>{
+  if(!task.step||task.step.skipReason)return [];
+  const files=known.filter(f=>!task.step!.sourceFiles||task.step!.sourceFiles.includes(f.path));if(!files.length)return [];
+  const times=files.map(file=>{
+   const marks=work.effects.filter(e=>e.taskId===task.id&&e.status==='succeeded'&&Number.isSafeInteger(e.deliveredAt)&&e.deliveredAt!>=0&&e.providerDispatch?.fileInputs?.some(f=>f.documentId===file.documentId&&f.path===file.path&&f.sha256===file.sha256));
+   return marks.length?Math.min(...marks.map(e=>e.deliveredAt!)):null;
+  });
+  return times.some(at=>at===null)?[]:[{taskId:task.id,count:files.length,completedAt:Math.max(...times as number[])}];
+ });
+}
 
 export function validatePredicates(value:unknown,criteria:Criteria,status:Verdict['status'],checkedAt?:number):asserts value is CheckPredicate[]|undefined {
  if(value===undefined)return;
