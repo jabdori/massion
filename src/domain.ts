@@ -368,7 +368,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
       ensure(w.acceptance==='pending'&&!w.blocker&&!w.runtimeRecovery&&!w.runtimeInterruption&&!w.effects.some(e=>e.status==='unknown'),'Unresolved Work cannot change procedure');
       const notes=state.conversations!.find(c=>c.workId===w.id)!.messages.filter(m=>m.stepNote?.taskId===task.id);
       ensure(notes.at(-1)?.id===message.id&&task.procedureEdit?.messageId!==message.id,'Only the latest unapplied proposal may be acknowledged');
-      task.procedureEdit={messageId:message.id,actorId:actor.id,title:message.stepNote.title,instruction:message.text,at};validateProcedureEdit(state,w,task);
+      task.procedureEdit={messageId:message.id,actorId:actor.id,title:message.stepNote.title,instruction:message.text,at};validateProcedureEdit(state,w,task);if(task.progress)delete task.progress.wording;
       if(w.runtimeRun)w.runtimeRun.inputHash=workInputHash(w);break;
     }
     case 'record-step-progress': {

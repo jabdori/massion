@@ -984,3 +984,29 @@ test('invalid marked member wording blocks without another call or an independen
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.execution,'blocked');assert.equal(calls,1);assert.equal(w.verdict,undefined);assert.equal(w.record,undefined);assert.ok(w.tasks.filter(t=>t.step).every(t=>!t.progress?.wording));
  validateMissionJournalLineage(f.store.inspect());
 });
+
+test('acknowledging an owner step edit clears the old planned action before invoking the changed step',async t=>{
+ const f=await setup(t);await f.admit();
+ f.setPlan(steps=>({steps:steps.map((title,i)=>({title,role:'Read',dependsOn:i?[0]:[],progressNote:{summary:i?'Writing the draft.':'Reading files.'}}))}));
+ let calls=0;
+ f.setWorker(async prompt=>{calls++;const snapshot=(await f.store.load('intake'))!,work=snapshot.value.works.at(-1)! as import('../src/domain.ts').Work;
+  if(calls===1)await f.product.appendWorkMessage('intake',{commandId:'changed-step',expectedRevision:snapshot.revision,workId:work.id,messageId:'changed-step',replyTo:null,text:'Run the supplied tests',stepNote:{taskId:work.id+':step:1',title:'Run tests'}});
+  else{assert.equal(prompt.step.title,'Run tests');assert.equal(prompt.step.progressNote,undefined);assert.equal(work.tasks.find(t=>t.id===work.id+':step:1')!.progress?.wording,undefined);}
+  return 'Answer bounded worker evidence';
+ });
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review supplied files');await f.assistant.idle();const w=(await f.intake()).works.at(-1)!;assert.equal(calls,2);assert.equal(w.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect());
+});
+
+test('a bounded worker result near the existing limit fits inside the progress envelope',async t=>{
+ const f=await setup(t);await f.admit();let calls=0;const result='x'.repeat(15950);
+ f.setWorker(async()=>JSON.stringify({format:'massion-step/v1',result:++calls===1?result:'Answer bounded worker evidence',progressNote:{summary:'Read the supplied files.'}}));
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review supplied files');await f.assistant.idle();const w=(await f.intake()).works.at(-1)!;
+ assert.equal(w.tasks.find(t=>t.id===w.id+':step:0')!.result?.length,result.length);assert.equal(calls,2);assert.equal(w.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect());
+});
+
+test('the artifact byte bound applies to unwrapped results and rejects oversized content',async t=>{
+ const f=await setup(t);await f.admit();let calls=0;
+ f.setWorker(async()=>{calls++;Object.defineProperty(f.artifacts,'maxBytes',{value:128});return JSON.stringify({format:'massion-step/v1',result:'x'.repeat(calls===1?100:129),progressNote:{summary:'A bounded observation '.repeat(8).trim()}});});
+ f.script.push(v2('On it.','Review files','Quill'));await f.say(f.assistant,'Review supplied files');await f.assistant.idle();const w=(await f.intake()).works.at(-1)!;
+ assert.equal(w.tasks.find(t=>t.id===w.id+':step:0')!.result?.length,100);assert.equal(calls,2);assert.equal(w.effects.find(e=>e.taskId===w.id+':step:1')!.status,'failed');assert.equal(w.record,undefined);
+});

@@ -27,3 +27,8 @@ test('a later boundary without wording clears an older narrative rather than rev
  const m=createMission({id:'intake',purpose:'Read',scope:'local',constraints:[],criteria:{version:1,description:'Read',oracle:'fixture'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(m,'pricing'),previous=work.tasks.find(t=>t.progress?.wording)!,next=work.tasks.find(t=>t.step&&t!==previous&&!t.step.skipReason)!;
  next.status='active';next.progress={done:0,total:1,at:previous.progress!.at+1};assert.equal(workProgressNote(work),null);
 });
+
+test('compact captions use one bounded line while summaries allow the longer sidebar sentence',()=>{
+ validateProgressNote({summary:'x'.repeat(200),caption:'x'.repeat(50),checkCaption:'x'.repeat(50)});
+ for(const key of ['caption','checkCaption'])assert.throws(()=>validateProgressNote({summary:'Observed work',[key]:'x'.repeat(51)}),/wording/);
+});

@@ -308,3 +308,9 @@ test('representative progress cards keep the host step counter beside member-aut
  const {app}=await scene('B2'),card=app.all().find(n=>n.className==='chat-card'&&n.textContent.includes('나누기 완료 · 원인 정리 중'))!;
  assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/^\d+\/\d+ · 나누기 완료 · 원인 정리 중$/);
 });
+
+test('activity summaries retain the independent failed-check label beside pre-check member wording',async()=>{
+ const {app,work}=await scene('B7-fail');
+ const label=runInContext(`shellResultSummary({...shellWorks.find(w=>w.workId===${JSON.stringify(work.id)}),progressNote:{summary:'Prepared the draft. Waiting for checking.'}})`,app.context);
+ assert.match(label,/확인 실패/);assert.match(label,/Prepared the draft/);
+});

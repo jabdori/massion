@@ -9,7 +9,7 @@ checking receipt. No business-specific wording belongs in product source.
 
 Extend the existing step progress observation with optional `wording`:
 `{summary, caption?, checkCaption?}`. Summary is one short sentence (at most 200
-UTF-16 units); the two captions are at most 100 units each. Strings must be
+UTF-16 units); the two captions are at most 50 units each. Strings must be
 trimmed, well-formed single lines without control/format characters. Exact keys,
 no markup interpretation. These are product bounds, not claimed vendor limits.
 
@@ -20,7 +20,10 @@ keys `format`, `result` (the original result string), and `progressNote`. The ho
 validates and unwraps it before existing payment/result validation and stores the
 note through `record-step-progress` at the completed boundary. Legacy unwrapped
 results stay supported. No extra model invocation, command or endpoint is needed.
-Continuation preserves a settled step's wording. Revised attempts clear progress
+Continuation preserves a settled step's wording. Owner procedure edits clear
+stale planned wording atomically and omit it from the edited worker input.
+The envelope has a 32,768-byte transport cap; the unwrapped result retains its
+16,000-unit and configured artifact-byte bounds. Revised attempts clear progress
 through the existing reducer. Existing assignment, host clock, CAS, command
 identity, unknown-effect, drain and journal replay boundaries apply unchanged.
 
@@ -41,7 +44,7 @@ Use the latest host-timed, assigned, unskipped step observation. Sidebar/activit
 uses its summary; conversation uses its caption; the pane uses its check caption
 beside the real check state. Render as inert text. Unknown, cancelled, stale or
 blocked work cannot show a normal-progress note. An independently failed check
-always keeps the host's failed label. Accepted work uses its final host state.
+always prefixes the host's failed label before the member activity summary. Accepted work uses its final host state.
 Feed replacement, revision changes and late responses discard old wording with
 the other card facts. A note is never an executable action.
 
