@@ -9,7 +9,7 @@ import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
 
 export const BROWSER_HOST='browser-read-host';
 export interface BrowserScreenshot {mimeType:'image/png';data:string;width:number;height:number}
-export interface RawBrowserPage {screenshot?:BrowserScreenshot;privateFields?:number;frames?:number;address:string;title:string;blocks:string[];fields:{label:string;type:string;value:string;autocomplete:string;name?:string;valueLength?:number}[]}
+export interface RawBrowserPage {privateSession?:true;screenshot?:BrowserScreenshot;privateFields?:number;frames?:number;address:string;title:string;blocks:string[];fields:{label:string;type:string;value:string;autocomplete:string;name?:string;valueLength?:number}[]}
 export interface BrowserStructure {title:string;blocks:string[];fields:{label:string;value:string;masked:boolean}[]}
 const fieldKinds=['text','password','number','tel','email','date','time','select','checkbox','radio','textarea','hidden','other'] as const;
 type FieldKind=typeof fieldKinds[number];
@@ -47,7 +47,7 @@ export function validateBrowserScreenshot(image:unknown):asserts image is Browse
  ensure(Number.isSafeInteger(image.width)&&Number.isSafeInteger(image.height)&&image.width>0&&image.height>0&&image.width<=2048&&image.height<=2048&&bytes.readUInt32BE(16)===image.width&&bytes.readUInt32BE(20)===image.height,'Invalid browser screenshot dimensions');
 }
 function inspectPage(raw:RawBrowserPage){
- exact(raw,['address','title','blocks','fields',...['screenshot','privateFields','frames'].filter(k=>Object.hasOwn(raw,k))]);if(Object.hasOwn(raw,'screenshot'))validateBrowserScreenshot(raw.screenshot);ensure(text(raw.address)&&text(raw.title)&&Array.isArray(raw.blocks)&&raw.blocks.length<=64&&raw.blocks.every(s=>text(s,4000))&&Array.isArray(raw.fields)&&raw.fields.length<=64,'Invalid browser page bound');
+ exact(raw,['address','title','blocks','fields',...['screenshot','privateFields','frames','privateSession'].filter(k=>Object.hasOwn(raw,k))]);if(Object.hasOwn(raw,'privateSession'))ensure(raw.privateSession===true,'Invalid browser privacy state');if(Object.hasOwn(raw,'screenshot'))validateBrowserScreenshot(raw.screenshot);ensure(text(raw.address)&&text(raw.title)&&Array.isArray(raw.blocks)&&raw.blocks.length<=64&&raw.blocks.every(s=>text(s,4000))&&Array.isArray(raw.fields)&&raw.fields.length<=64,'Invalid browser page bound');
  for(const f of raw.fields){exact(f,['label','type','value','autocomplete',...['name','valueLength'].filter(k=>Object.hasOwn(f,k))]);ensure([f.label,f.type,f.value,f.autocomplete,...(Object.hasOwn(f,'name')?[f.name]:[])].every(s=>text(s,4000)),'Invalid browser form bound');if(f.valueLength!==undefined)ensure(Number.isSafeInteger(f.valueLength)&&f.valueLength>=0&&f.valueLength<=4000&&(f.valueLength>0||!f.value),'Invalid browser field length');}
  for(const key of ['privateFields','frames'] as const)if(raw[key]!==undefined)ensure(Number.isSafeInteger(raw[key])&&raw[key]!>=0&&raw[key]!<=(key==='frames'?20000:256),'Invalid browser measurement');
  const fields=raw.fields.map(f=>({kind:(f.type.startsWith('select-')?'select':fieldKinds.includes(f.type as FieldKind)?f.type:'other') as FieldKind,length:f.valueLength??f.value.length,private:maskBrowserField(f)}));
@@ -55,7 +55,7 @@ function inspectPage(raw:RawBrowserPage){
 }
 export function sanitizePage(raw:RawBrowserPage,imageKey?:Uint8Array,privateOrigin=false):BrowserContent{
  const summary=inspectPage(raw);browserAddress(raw.address);const address=new URL(raw.address).origin;
- if(privateOrigin||summary.privateFields>0||summary.frames>0)return {address,tainted:true,summary};
+ if(privateOrigin||raw.privateSession||summary.privateFields>0||summary.frames>0)return {address,tainted:true,summary};
  const urlSecrets=browserUrlSecrets(raw.address),clean=(value:string)=>browserText(value,urlSecrets),result={address,title:clean(raw.title),blocks:raw.blocks.map(clean),fields:raw.fields.filter(f=>f.type!=='hidden').map(f=>({label:clean(f.label||f.name||f.autocomplete),value:maskBrowserField(f)?'':clean(f.value),masked:maskBrowserField(f)}))};
  ensure(JSON.stringify(result).length<=24000,'Browser page bound exceeded');if(raw.screenshot)ensure(imageKey?.byteLength===32,'Browser image key required');return {...result,...(raw.screenshot?{imageHash:'hmac-sha256:'+createHmac('sha256',imageKey!).update(Buffer.from(raw.screenshot.data,'base64')).digest('hex')}:{})};
 }
