@@ -14,6 +14,8 @@ concurrent saves; reopening settings reconciles a lost response without resendin
 
 Restart is single-flight and drains the authenticated local daemon first. Only a
 confirmed drained daemon (or an absent socket) permits app.relaunch and app.quit.
+A refused connection uses prepareControl to recheck daemon absence, validate the
+stale socket type and current-user ownership, and unlink it before relaunch.
 An unsettled/unknown drain blocks repeated restart and leaves the shell open for
 inspection. It never retries Work or external effects. Installed version comes
 from the packaged app metadata (root package metadata in development).

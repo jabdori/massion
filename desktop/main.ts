@@ -59,7 +59,7 @@ export async function startDesktop(){
  const lifecycle=await DesktopLifecycle.open(join(directory,'notifications.json'),version,async()=>{
   await connecting?.catch(()=>{});
   try{await credential();const result=await drainDaemon(socket,origin);if(result.status==='drained')daemonDrained=true;return result;}
-  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT'){daemonDrained=true;return {status:'drained'};}throw error;}
+  catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ECONNREFUSED')await prepareControl(socket);else if(code!=='ENOENT')throw error;daemonDrained=true;return {status:'drained'};}
  },()=>{setImmediate(()=>{app.relaunch();app.quit();});});
  for(const [channel,handle] of [[channels.settings,()=>lifecycle.read()],[channels.notifications,(value:boolean)=>lifecycle.saveNotifications(value)],[channels.restart,()=>lifecycle.restart()]] as const){
   ipcMain.handle(channel,(event,...args)=>{if(!window||!validSender(event,window.webContents))throw Error('Refused desktop sender');return handle(args[0]);});

@@ -19,7 +19,7 @@ try{
  assert.equal((await browser('eval',"document.querySelector('#settings-general-body').textContent.includes('1.0.0-rc.1')")).result,true);await capture('general');
  await browser('select','#settings-notifications','off');await browser('wait','--fn','window.nativeSave===false');await capture('saving');
  const saved=await native.saveNotifications(false);await browser('eval',`window.finishNative(${JSON.stringify(saved)});true`);await browser('wait','#settings-restart');await capture('restart-required');await install(saved);
- await browser('click','#settings-nav-devices');await browser('wait','#settings-device-restart');await capture('devices-pending');
+ await browser('click','#settings-nav-devices');await browser('wait','#settings-device-restart');assert.equal((await browser('eval',"(()=>{const text=document.querySelector('#settings-devices-body .set-row').textContent;return text.includes('다시 시작 필요')&&!text.includes('준비됨');})()")).result,true);for(const theme of ['dark','light']){await browser('set','media',theme);await capture('devices-pending-'+theme);}
  await browser('click','#settings-nav-general');await install(saved);await browser('eval',"void settingsLoad('general');true");await browser('wait','#settings-restart');
  for(const theme of ['dark','light']){await browser('set','media',theme);await capture('general-pending-'+theme);}
  await browser('click','#settings-restart');await browser('wait','--fn','window.nativeRestart===true');const restarted=await native.restart();await browser('eval',`window.finishNative(${JSON.stringify(restarted)});true`);await browser('wait','--fn',"document.querySelector('#settings-restart').disabled");assert.deepEqual(calls,['drain','relaunch']);await capture('restarting');

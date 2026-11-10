@@ -27,3 +27,10 @@ test('a lost notification save is read back on reopen without resending',async()
  await open(app);node(app,'settings-notifications').value='off';await node(app,'settings-notifications').fire('change');await settle();assert.equal(saves,1);assert.equal(node(app,'settings-notifications').disabled,true);
  await open(app);assert.equal(saves,1);assert.equal(node(app,'settings-notifications').value,'off');assert.equal(node(app,'settings-notifications').disabled,false);
 });
+
+test('Devices replaces ready with the pending-restart status on the local row',async()=>{
+ const app=fixture();await settle();let state=settings({restartRequired:true});(app.context.window as any).massionDesktop={getSettings:async()=>state};
+ await open(app,'devices');const local=()=>app.node('settings-devices-body').children[0]!.children[0]!.textContent;
+ assert.ok(local().includes(copy('settings.status.01')));assert.ok(!local().includes(copy('ui.panel.ready')));assert.equal(node(app,'settings-device-restart').disabled,false);
+ state=settings();await open(app,'devices');assert.ok(local().includes(copy('ui.panel.ready')));assert.ok(!local().includes(copy('settings.status.01')));
+});

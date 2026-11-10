@@ -6,10 +6,14 @@ owned daemon before relaunch. Root and desktop typechecks, the desktop build,
 related native/client/fixture tests and scripts/check.mjs passed locally.
 
 Headless interaction evidence (`node scripts/ui-contracts/verify-device-lifecycle.mjs`):
-`.runtime/device-lifecycle-interactions/{general,saving,restart-required,devices-pending,general-pending-dark,general-pending-light,restarting,reopened}.png`
+`.runtime/device-lifecycle-interactions/{general,saving,restart-required,devices-pending-dark,devices-pending-light,general-pending-dark,general-pending-light,restarting,reopened}.png`
 and matching `.snapshot.json` files. The production persistence and coordinator
 were exercised; the IPC boundary and relaunch callback were fixtures. This is not
 evidence of an actual OS relaunch, notification permission or signed release.
+The stale-socket regression kills a disposable Unix socket listener, invokes the
+real desktop restart handler and coordinator, and verifies removal before relaunch.
+The device row shows restart-required instead of readiness while the saved setting
+is pending; dark and light interaction captures cover that state.
 
 The seven R-L screens were captured in dark and light under
 `.runtime/device-lifecycle-contracts/screenshots/{dark,light}/`, with accessibility
