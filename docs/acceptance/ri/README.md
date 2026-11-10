@@ -30,6 +30,9 @@ shrink-only gate cannot hide the missing packages.
   decision state, and GitHub's real install decision.
 - Node 24 focused app runtime/surface/visual tests passed (58 tests); the final
   surface, fixture and copy run passed 43 tests. Static typecheck passed.
+- CI exposed one older app-lifecycle fixture assertion that still expected a
+  one-entry catalog. Reproduced locally, then updated it to require one installed
+  executable package and six unavailable, uninstalled recommendations.
 - Copy lint: zero findings. Impeccable detector: zero findings on `apps-panel.ts`.
 - Headless B23 capture: **29/29** required elements in each theme, zero contract,
   visual or infrastructure failures. The intentionally retained package gap is
