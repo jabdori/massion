@@ -595,26 +595,6 @@
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing dialog:하나 text \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "Device lifecycle",
-      "reason": "No recorded pending-restart/device-updater producer. Existing host readiness is not a restart fact.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host has no device restart command or pending restart state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device restart command or pending restart state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
       "screen": "B9-update",
       "theme": "dark",
       "kind": "contract",
@@ -638,11 +618,11 @@
       "screen": "B9-update",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "The host has no device updater or update version state.",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The host has no device updater or update version state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     },
     {
       "screen": "B10-preview",
@@ -683,46 +663,6 @@
       "category": "fixture fallback",
       "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
       "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B13-general",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Notification and installed-version rows are not implemented in production general settings.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Notification and installed-version rows are not implemented in production general settings.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings status \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"다시 시작\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
       "screen": "B15",
@@ -1665,26 +1605,6 @@
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing dialog:하나 text \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "Device lifecycle",
-      "reason": "No recorded pending-restart/device-updater producer. Existing host readiness is not a restart fact.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host has no device restart command or pending restart state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device restart command or pending restart state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
       "screen": "B9-update",
       "theme": "light",
       "kind": "contract",
@@ -1708,11 +1628,11 @@
       "screen": "B9-update",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "The host has no device updater or update version state.",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The host has no device updater or update version state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     },
     {
       "screen": "B10-preview",
@@ -1753,46 +1673,6 @@
       "category": "fixture fallback",
       "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
       "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B13-general",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Notification and installed-version rows are not implemented in production general settings.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Notification and installed-version rows are not implemented in production general settings.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings status \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"다시 시작\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
     },
     {
       "screen": "B15",
@@ -2826,21 +2706,21 @@
       "screen": "B14-restart",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "A trusted host produces restart-required state; no restart executor is installed.",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     },
     {
       "screen": "B14-restart",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "A trusted host produces restart-required state; no restart executor is installed.",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     },
     {
       "screen": "B19",
@@ -3233,6 +3113,46 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     }
   ]
 }

@@ -37,7 +37,7 @@ export async function desktopJourney({out,database,store}){
   child.stdout.on('data',chunk=>logs+=chunk);child.stderr.on('data',chunk=>logs+=chunk);
   await until(async()=>{assert.equal(child.exitCode,null,'Electron exited: '+logs);assert.equal(child.signalCode,null,'Electron signalled: '+logs);try{return (await fetch('http://127.0.0.1:'+port+'/json/list')).ok;}catch{return false;}});
   await wait(workbenchReady);assert.equal((await browser('get','url')).url,'massion://app/');
-  const sandbox=await browser('eval',"({node:typeof require,bridge:Object.keys(window.massionDesktop)})");assert.deepEqual(sandbox.result,{node:'undefined',bridge:['onFocus']});
+  const sandbox=await browser('eval',"({node:typeof require,bridge:Object.keys(window.massionDesktop)})");assert.deepEqual(sandbox.result,{node:'undefined',bridge:['getSettings','saveNotifications','restart','onFocus']});
   await paymentJourney({browser,wait,capture,current:()=>store.load('intake'),calls,until},'desktop-payment',true);
   await writeFile(join(out,'desktop-calls.json'),JSON.stringify(await calls(),null,2)+'\n');
   const exited=once(child,'exit');child.stdin.end('quit\n');const timer=setTimeout(()=>child.kill('SIGKILL'),15000);let code;try{[code]=await exited;}finally{clearTimeout(timer);}assert.equal(code,0,'Electron drain: '+logs);

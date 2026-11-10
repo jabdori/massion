@@ -129,6 +129,11 @@ not a real macOS notification center.
 
 This is the loopback development transport explicitly requested by E4. The
 user-only command socket transport, installer discovery,
-an installed-core Restart action and signed distribution remain outside this PR.
+and signed distribution remain outside this shell increment.
 The existing protocol's `update-needed` and `restart-needed` states are passed
-through without admitting writes; this shell never guesses an installed version.
+through without admitting writes. General now displays the installed app version,
+a device-local notification preference and its restart-required state. Restart
+drains the authenticated local daemon before relaunching Massion; an unconfirmed
+drain blocks another attempt. The preference takes effect at the next app start
+and does not claim OS permission. External CLI restart and app update availability
+remain unknown without their own producer. See [device lifecycle](../docs/architecture/device-lifecycle.md).
