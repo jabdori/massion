@@ -34,13 +34,14 @@ export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[nu
  if(normalized!==value){const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=digits(segment.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets).map(([start,end])=>[starts[start]!,ends[end-1]!]);}
  const ranges:Array<[number,number]>=[];
  if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
-  let numeric:{text:string;positions:number[]}|undefined;
-  for(const secret of secrets){let needle=digits(secret.normalize('NFKC').replace(/[\s\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));if(!needle)continue;let haystack=compact,offsets=positions;
-   if(/^[+−(\p{Dash_Punctuation}]{0,2}\d+(?:[.,:\p{Dash_Punctuation}·٫٬'’()−]{1,3}\d+)*\)?$/u.test(needle)){needle=needle.replace(/[^0-9]/g,'');if(!numeric){numeric={text:'',positions:[]};const gaps=[...compact.matchAll(/(?<=\d)[.,:\p{Dash_Punctuation}·٫٬'’()−]{1,3}(?=\d)/gu)];let gap=0;for(let i=0;i<compact.length;i++){if(gaps[gap]?.index===i){i+=gaps[gap++]![0].length-1;continue;}numeric.text+=compact[i];numeric.positions.push(positions[i]!);}}haystack=numeric.text;offsets=numeric.positions;}
-   let start=0;while((start=haystack.indexOf(needle,start))!==-1){ranges.push([offsets[start]!,offsets[start+needle.length-1]!+1]);start+=needle.length;}
+  const grouping=/(?<=[\p{L}0-9])[\p{P}\p{S}]{1,3}(?=[\p{L}0-9])/gu,gaps=[...compact.matchAll(grouping)],groupedPositions:number[]=[];let grouped='',gap=0;
+  for(let i=0;i<compact.length;i++){if(gaps[gap]?.index===i){i+=gaps[gap++]![0].length-1;continue;}grouped+=compact[i];groupedPositions.push(positions[i]!);}
+  for(const secret of secrets){const literal=digits(secret.normalize('NFKC').replace(/[\s\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
+   const code=/^[+−(\p{Dash_Punctuation}]{0,2}[\p{L}0-9]+(?:[\p{P}\p{S}]{1,3}[\p{L}0-9]+)*\)?$/u.test(literal),folded=code?literal.replace(/[^\p{L}0-9]/gu,''):literal.replace(grouping,'');
+   for(const [haystack,needle,offsets] of [[compact,literal,positions],[grouped,folded,groupedPositions]] as const){if(!needle)continue;let start=0;while((start=haystack.indexOf(needle,start))!==-1){ranges.push([offsets[start]!,offsets[start+needle.length-1]!+1]);start+=needle.length;}}
   }
  }
- for(const pattern of [/\b(?:\d[ -]?){13,19}\b/g,/\b(?:Bearer\s+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi])for(const match of value.matchAll(pattern))ranges.push([match.index,match.index+match[0].length]);
+ for(const pattern of [/\b(?:\d[\s,.:\p{Dash_Punctuation}·٫٬'’()−_]{0,3}){13,19}\b/gu,/\b(?:Bearer\s+|(?:password|secret|token|api[\s_-]?key)\s*[:=]\s*)[^\s,;]+/gi])for(const match of value.matchAll(pattern))ranges.push([match.index,match.index+match[0].length]);
  const merged:Array<[number,number]>=[];for(const range of ranges.sort((a,b)=>a[0]-b[0]||b[1]-a[1])){const last=merged.at(-1);if(last&&range[0]<last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range);}return merged;
 }
 export function browserText(value:string,secrets:string[]=[]){let result='',offset=0;for(const [start,end] of browserPrivateRanges(value,secrets)){result+=value.slice(offset,start)+'••••';offset=end;}return result+value.slice(offset);}

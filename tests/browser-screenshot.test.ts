@@ -42,3 +42,7 @@ test('document guard failures prevent screenshot creation before and after DOM r
 test('format-separated card and token patterns are removed without a matching input field',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:['4111\u200b1111\u20601111\uFE0F1111','token=pri\u200bvate'],fields:[]});assert.deepEqual(page.blocks,['••••','••••']);});
 
 test('durable unmasked fields require an explicit benign label',()=>{const safe=sanitizePage({address:raw.address,title:'Order',blocks:[],fields:[{label:'',name:'quantity',type:'number',autocomplete:'',value:'2'}]});assert.equal(safe.fields[0]!.label,'quantity');const page={readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at:1,...safe};assert.doesNotThrow(()=>validateBrowserSession({id:'session',pages:[page]}));page.fields[0]!.label='Verification number';assert.throws(()=>validateBrowserSession({id:'session',pages:[page]}),/browser/i);});
+
+test('standalone card and API-key text uses the same display normalization as known fields',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:['٤١١١–١١١١–١١١١–١١١١','4111\n1111\n1111\n1111','api key: private-value'],fields:[]});assert.deepEqual(page.blocks,['••••','••••','••••']);});
+
+test('literal punctuation secrets are still masked when grouped matching removes separators',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:['a---b'],fields:[{label:'Password',type:'password',autocomplete:'',value:'---'}]});assert.deepEqual(page.blocks,['a••••b']);});
