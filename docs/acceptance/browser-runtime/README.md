@@ -1,5 +1,23 @@
 # Browser runtime (R-B): ephemeral image boundary
 
+## Page-card visual recheck
+
+The lead's latest exception permits only app screenshots of authored synthetic local pages to include live pixels. `scripts/ui-contracts/capture-live-browser.mjs` serves the checked-in reference HTML/CSS over local HTTPS, calls the real `localBrowserAdapter` in an isolated headless session, and captures the same Work while active and after settlement. The origin grant and self-signed certificate wrapper exist only in that test process. Production configuration and the generic image-excluding evidence helper retain their security boundary. No standalone page PNG or image-bearing journal/Record/backup is written.
+
+| Theme / viewport | Live page, domain and read steps | Same Work after settlement |
+| --- | --- | --- |
+| Dark / 1440 | [Live](live-fixture/live-dark-1440.png) | [Ended](live-fixture/ended-dark-1440.png) |
+| Light / 1440 | [Live](live-fixture/live-light-1440.png) | [Ended](live-fixture/ended-light-1440.png) |
+| Dark / 390 | [Live](live-fixture/live-dark-390.png) | [Ended](live-fixture/ended-dark-390.png) |
+| Light / 390 | [Live](live-fixture/live-light-390.png) | [Ended](live-fixture/ended-light-390.png) |
+
+The [capture report](live-fixture/report.json) verifies live rendering, three recorded read steps, same-Work image removal, restart removal, absence of image data from journal/client storage, and mobile bounds. These images are synthetic visual evidence only. The adapter cannot fill, click or submit: the values already exist in the authored page. The B15 form-action limitation remains explicitly documented in the contract allow-list.
+
+No-image cards show one title and the non-retention line, at most three distinct bounded excerpts and six fields; three or more fields replace low-value page/navigation excerpts. Empty structure has only the domain and notice. Each masked value stays beside its label with `••••` and `가림`. B7 renders observed page title/domain/time rows beneath the read count without replacing worker steps. The generic screenshot helper now reveals this fallback while excluding the live image, avoiding an empty rectangle.
+
+B4's three full-source amount blocks and the original zero-sentence text budget are explicit, narrow contract exceptions to the lead's new bounded no-image design. All payment amounts remain on the owner decision. [Scoped gate](page-card-gate.json): no unexplained additions, stale allowances or infrastructure failures. Copy lint has no findings. The broader related batch passes 225 tests; the final UI/evidence batch passes 68 tests plus typecheck. The real-adapter capture verifies eight states and the interaction harness verifies fourteen.
+
+
 The lead replaced the attempted clean-image guarantee with a non-persistence rule. CSS-drawn values can survive DOM masking, so page images are memory-only live presentation. The journal, Record/artifact and portable backup retain only sanitized structural observations, keyed HMAC-SHA-256 image hashes and read telemetry. Durable validation refuses screenshot payloads.
 
 ## Lifetime and presentation

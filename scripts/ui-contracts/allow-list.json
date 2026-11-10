@@ -581,7 +581,7 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The browser session and read-only form now exist. The generic library decision has no typed form-submission effect binding to this Work, so its sidebar cannot claim decision-pending.",
+      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
       "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
@@ -1241,7 +1241,7 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The browser session and read-only form now exist. The generic library decision has no typed form-submission effect binding to this Work, so its sidebar cannot claim decision-pending.",
+      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
       "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
@@ -2125,6 +2125,86 @@
       "category": "generic result presentation",
       "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"페이지 이미지는 작업 후 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead explicitly requested a Korean non-retention sentence in the no-image card; the original artboard permits no sentences.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"페이지 이미지는 작업 후 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead explicitly requested a Korean non-retention sentence in the no-image card; the original artboard permits no sentences.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     }
   ]
 }

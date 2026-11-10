@@ -1,0 +1,106 @@
+{
+  "adapter": "localBrowserAdapter",
+  "syntheticLocalOnly": true,
+  "readOnly": true,
+  "standalonePageImagesWritten": 0,
+  "journalHasNoImage": true,
+  "restartHasNoImage": true,
+  "rows": [
+    {
+      "phase": "live",
+      "theme": "dark",
+      "width": 1440,
+      "filename": "live-dark-1440.png",
+      "domain": "127.0.0.1",
+      "image": true,
+      "notice": false,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "live",
+      "theme": "dark",
+      "width": 390,
+      "filename": "live-dark-390.png",
+      "domain": "127.0.0.1",
+      "image": true,
+      "notice": false,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "live",
+      "theme": "light",
+      "width": 1440,
+      "filename": "live-light-1440.png",
+      "domain": "127.0.0.1",
+      "image": true,
+      "notice": false,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "live",
+      "theme": "light",
+      "width": 390,
+      "filename": "live-light-390.png",
+      "domain": "127.0.0.1",
+      "image": true,
+      "notice": false,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "ended",
+      "theme": "dark",
+      "width": 1440,
+      "filename": "ended-dark-1440.png",
+      "domain": "127.0.0.1",
+      "image": false,
+      "notice": true,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "ended",
+      "theme": "dark",
+      "width": 390,
+      "filename": "ended-dark-390.png",
+      "domain": "127.0.0.1",
+      "image": false,
+      "notice": true,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "ended",
+      "theme": "light",
+      "width": 1440,
+      "filename": "ended-light-1440.png",
+      "domain": "127.0.0.1",
+      "image": false,
+      "notice": true,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    },
+    {
+      "phase": "ended",
+      "theme": "light",
+      "width": 390,
+      "filename": "ended-light-390.png",
+      "domain": "127.0.0.1",
+      "image": false,
+      "notice": true,
+      "overflow": false,
+      "persisted": false,
+      "steps": 3
+    }
+  ]
+}

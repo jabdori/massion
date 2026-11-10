@@ -39,17 +39,17 @@ const openWork=async(app:ReturnType<typeof harness>)=>{await runInContext("paneO
 function deferred(){let release!:(value:ReturnType<typeof reply>)=>void;const promise=new Promise<ReturnType<typeof reply>>(resolve=>release=resolve);return {promise,release};}
 
 const pageTabs=(app:ReturnType<typeof harness>)=>descendants(app.node('pane-tabs')).filter(n=>n.attributes.get('role')==='tab');
-const visibleText=(node:Node):string=>node.hidden||node.className==='visually-hidden'?'':node.children.length?node.children.map(visibleText).join(''):node.textContent;
+const visibleText=(node:Node):string=>node.hidden||node.className.split(' ').includes('visually-hidden')?'':node.children.length?node.children.map(visibleText).join(''):node.textContent;
 
 test('checkout renders a read-only PNG, one browser tab and a domain pill without visible metadata or form controls',async()=>{
  const {app}=fixture();await settle();await checkout(app);
  const image=find(app,'browser-screenshot');assert.ok(image);assert.equal(image.tagName,'IMG');assert.equal(image.attributes.get('src'),'data:image/png;base64,'+screenshot.data);assert.equal(image.attributes.get('alt'),'브라우저 페이지');
  assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.equal(find(app,'browser-address').tagName,'SPAN');
  assert.deepEqual(pageTabs(app).map(n=>n.textContent),['브라우저']);assert.equal(descendants(pane(app)).some(n=>n.attributes.get('role')==='tablist'),false);
- assert.doesNotMatch(visibleText(pane(app)),/Observed|Recipient|Card|페이지|시작|checkout|https:/);
+ assert.doesNotMatch(visibleText(pane(app)),/Recipient|Card|https:/);
  assert.match(find(app,'browser-page-alternative').textContent,/Observed checkout/);assert.match(find(app,'browser-page-alternative').textContent,/••••/);assert.doesNotMatch(pane(app).textContent,/never show this/);
- assert.equal(find(app,'browser-page-alternative').className,'visually-hidden');assert.equal(pane(app).attributes.get('data-session-id'),'browser:1');
- assert.equal(descendants(pane(app)).some(n=>['INPUT','IFRAME','FORM','A','SCRIPT','BUTTON','TIME'].includes(n.tagName)),false);
+ assert.ok(find(app,'browser-page-alternative').className.includes('visually-hidden'));assert.equal(pane(app).attributes.get('data-session-id'),'browser:1');
+ assert.equal(descendants(pane(app)).some(n=>['INPUT','IFRAME','FORM','A','SCRIPT','BUTTON'].includes(n.tagName)),false);
  const query=app.calls.find(c=>c.path.endsWith('/browser'))!;assert.equal(query.path,'/missions/mission%3A1/works/work%3A1/browser');assert.equal(query.options.headers['X-Massion-Feed'],'feed:a');assert.ok([...app.storage.values()].every(value=>!value.includes(screenshot.data))); assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });
 
@@ -214,8 +214,8 @@ for(const execution of ['active','waiting','queued','settled','blocked'])test(ex
 });
 
 
-test('an image load failure shows unavailable without a text fallback',async()=>{
- const {app}=fixture();await settle();await checkout(app);await find(app,'browser-screenshot').fire('error');assert.match(find(app,'browser-page').textContent,/사용 불가/);assert.doesNotMatch(find(app,'browser-page').textContent,/Observed|Recipient|Card/);
+test('an image load failure shows the bounded sanitized fallback',async()=>{
+ const {app}=fixture();await settle();await checkout(app);await find(app,'browser-screenshot').fire('error');assert.match(find(app,'browser-page').textContent,/이미지는 작업 후 보관하지 않아요/);assert.doesNotMatch(find(app,'browser-page').textContent,/never show this/);
 });
 
 
@@ -239,4 +239,19 @@ for(const pending of [false,true])test('narrow navigation clears images and reje
  runInContext("shellShow('settings')",app.context);assert.equal(runInContext('paneVisible()',app.context),false);
  if(pending){hold.release(reply({feedId:state.feed,revision:2,session:state.session}));await settle();}
  assert.equal(runInContext('browserRead===null',app.context),true);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),false);
+});
+
+test('no-image cards deduplicate and bound excerpts, keeping masked labels and markers together',async()=>{
+ const {app,state}=fixture();const observed={...page('주문 / 결제'),screenshot:undefined,blocks:['주문 / 결제','주문 / 결제','장바구니','상품 설명입니다','상품 설명입니다',...Array.from({length:12},(_,i)=>'보관한 내용 '+i+' '.repeat(i))],fields:[{label:'결제 수단',value:'do not display',masked:true}]};state.session.page=observed;state.session.pages=[observed];state.session.pagesRead=1;
+ await settle();await checkout(app);const content=find(app,'browser-page'),nodes=descendants(content);assert.equal(nodes.filter(n=>n.tagName==='H3'&&n.textContent==='주문 / 결제').length,1);assert.equal(nodes.filter(n=>n.className==='browser-excerpt').length,3);assert.equal(content.textContent.split('주문 / 결제').length-1,1);assert.match(content.textContent,/이미지는 작업 후 보관하지 않아요/);assert.doesNotMatch(content.textContent,/do not display|장바구니/);
+ const label=nodes.find(n=>n.tagName==='DT'&&n.textContent==='결제 수단')!;assert.ok(label);assert.match(label.parentElement!.textContent,/결제 수단.*••••.*가림/);
+});
+
+test('empty structural observations show a non-retention notice without a blank page or invented heading',async()=>{
+ const {app,state}=fixture();state.session.page={...page(''),screenshot:undefined,blocks:['','  '],fields:[]};state.session.pages=[state.session.page];state.session.pagesRead=1;await settle();await checkout(app);
+ const content=find(app,'browser-page');assert.match(content.textContent,/이미지는 작업 후 보관하지 않아요/);assert.equal(descendants(content).some(n=>['H3','DL','IMG'].includes(n.tagName)),false);assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.equal(pane(app).textContent,'shop.example.com페이지 이미지는 작업 후 보관하지 않아요.');
+});
+
+test('page-read evidence uses stored title, domain and timestamp without replacing named procedures',async()=>{
+ const {app}=fixture();await settle();await openWork(app);const steps=find(app,'work-browser-evidence-work:1');assert.ok(steps);assert.equal(steps.children.length,2);assert.match(steps.textContent,/Observed checkout.*shop.example.com/);assert.equal(descendants(steps).filter(n=>n.tagName==='TIME').length,2);assert.doesNotMatch(steps.textContent,/https:|checkout\//);
 });

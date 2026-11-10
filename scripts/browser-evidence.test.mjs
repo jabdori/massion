@@ -11,7 +11,7 @@ function fixture({failure,hideFailure=false,visible=false,hasImage=true}={}){
   getElementById:id=>styles.get(id),
   querySelectorAll:selector=>{assert.equal(selector,'#browser-screenshot');return hasImage?[image]:[];}
  };
- const getComputedStyle=()=>({visibility:!visible&&[...styles.values()].some(style=>/#browser-screenshot\s*\{\s*visibility:\s*hidden\s*!important;?\s*\}/.test(style.textContent))?'hidden':image.style.visibility});
+ const getComputedStyle=()=>({visibility:!visible&&[...styles.values()].some(style=>/#browser-screenshot\s*\{\s*visibility:\s*hidden\s*!important;[^}]*\}/.test(style.textContent))?'hidden':image.style.visibility});
  const browser=evidenceBrowser(async(command,...args)=>{
   if(command==='eval'){
    assert.equal(args[0],'-b');return {result:runInNewContext(Buffer.from(args[1],'base64').toString(),{document,getComputedStyle})};

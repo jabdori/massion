@@ -18584,5 +18584,41 @@
    "B22-room:pane",
    "B22-room-steps:conversation"
   ]
+ },
+ "ui.browser.not-kept": {
+  "ko": "페이지 이미지는 작업 후 보관하지 않아요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead-requested no-image card and recorded page-read evidence; 2026-11-10."
+ },
+ "ui.browser.masked-note": {
+  "ko": "가림",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead-requested no-image card and recorded page-read evidence; 2026-11-10."
+ },
+ "ui.browser.read-evidence": {
+  "ko": "읽은 페이지",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead-requested no-image card and recorded page-read evidence; 2026-11-10."
  }
 }
