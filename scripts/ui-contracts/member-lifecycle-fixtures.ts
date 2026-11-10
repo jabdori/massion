@@ -11,6 +11,8 @@ import type {Member,MembersState,MembersCommand} from '../../src/members.ts';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 import type {ScreenFixture} from './fixture-host.ts';
 import {produceMemberPage} from './member-page-fixtures.ts';
+import {roomTelemetryWork} from './room-telemetry-fixtures.ts';
+import {workCardFacts} from '../../src/assistant-service.ts';
 
 /** Preserve recorded background routes; new member metadata comes only from production transitions and reads. */
 export async function memberLifecycleFixture(template:ScreenFixture):Promise<ScreenFixture>{
@@ -36,6 +38,23 @@ export async function memberLifecycleFixture(template:ScreenFixture):Promise<Scr
  // IDs occur in route keys, setup selectors, skill IDs and Work member references.
  let serialized=JSON.stringify(source);for(const [before,after] of mapping)serialized=serialized.replaceAll(before,after);const fixture=JSON.parse(serialized) as ScreenFixture;
  const mission=(fixture.routes['/read-state?mission=intake']?.body as {snapshot?:Snapshot<Mission>})?.snapshot?.value;
+ if(mission&&source.screen.startsWith('B13')){
+  const {work,source:origin,documents,conversation:room}=roomTelemetryWork(mission,'coding',source.now,mapping.get('member-juno')!);
+  mission.works.push(work);mission.documents=[...(mission.documents??[]),...(documents??[])];
+  if(room)mission.conversations=[...(mission.conversations??[]),room];
+  const row={missionId:mission.id,missionRevision:(fixture.routes['/read-state?mission=intake']!.body as any).snapshot.revision,workId:work.id,title:work.title,memberId:origin.memberId,execution:work.execution,acceptance:work.acceptance,unknown:false,started:true,startedAt:work.runtimeRun!.ownership!.startedAt,endedAt:null,turnId:origin.turnId,segment:1,...workCardFacts(work)};
+  (fixture.routes['/assistant/works']!.body as any).works.push(row);
+  for(const [path,response] of Object.entries(fixture.routes)){
+   const body=response.body as any;
+   if(body?.value?.id===mission.id)body.value=structuredClone(mission);
+   if(body?.snapshot?.value?.id===mission.id)body.snapshot.value=structuredClone(mission);
+   if(path==='/assistant/conversation'||path==='/assistant/conversation?segment=1'){
+    body.segment.messages.push(structuredClone(origin.message));
+    body.turns.push({id:origin.turnId,messageId:origin.messageId,at:work.admittedAt,status:'answered',displayStatus:'answered',proposal:{title:work.title,member:'주노'},work:structuredClone(row)});
+   }
+  }
+  fixture.reuse.push('scripts/ui-contracts/room-telemetry-fixtures.ts: command-produced active coding Work bound to the admitted member');
+ }
  if(mission)await store.commit({id:mission.id,expectedRevision:0,commandId:'fixture-recorded-intake',fingerprint:hash(mission),value:mission,events:[],outbox:[]});
  // Fixture transport keeps its existing feed envelope; every member field is the service projection.
  const read={...await service.read(),feedId:conversation.feedId};fixture.routes['/assistant/members']={status:200,body:read};
