@@ -16168,8 +16168,12 @@
  },
  "ui.member-admission-undone": {
   "ko": "구성원 추가 취소됨: {member}",
-  "roles": ["text"],
-  "used_in": ["B21-done-hana:conversation"]
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B21-done-hana:conversation"
+  ]
  },
  "ui.member-added": {
   "ko": "구성원 추가됨: {member}",
@@ -18658,5 +18662,96 @@
    "B13-general-restart:settings"
   ],
   "provenance": "Existing option text in the unchanged approved B13 General contracts"
+ },
+ "ui.payment-intent.decision-line": {
+  "ko": "{payee} · {amount} · {state}",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.source-document": {
+  "ko": "문서 참조",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.source-record": {
+  "ko": "기록 참조",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.source-work": {
+  "ko": "작업 참조",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.source-web": {
+  "ko": "웹 주소",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.source-reference": {
+  "ko": "출처 참조",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.question": {
+  "ko": "{amount} 결제 승인할까요?",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.payee": {
+  "ko": "받는 곳",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.purpose": {
+  "ko": "용도",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.approve": {
+  "ko": "승인",
+  "roles": [
+   "button"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.decline": {
+  "ko": "거절",
+  "roles": [
+   "button"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.approved": {
+  "ko": "승인됨 · Massion 미실행",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
+ },
+ "ui.payment-intent.declined": {
+  "ko": "거절됨",
+  "roles": [
+   "text"
+  ],
+  "used_in": []
  }
 }

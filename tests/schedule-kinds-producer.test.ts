@@ -21,7 +21,7 @@ test('the producer rolls over a full conversation and retains only the exact adm
 });
 
 test('a pending or unknown Representative response stays unknown instead of creating retry permission',async()=>{
- for(const [status,work] of [['pending','admitted'],['unknown','admitted'],['answered','unknown']]){const {assistant,sent}=fixture(status,work);assert.equal(await scheduleWorkProducer(assistant)(request),null,status);assert.equal(sent.length,1);}
+ for(const [status,work] of [['pending','admitted'],['unknown','admitted'],['answered','unknown']] as const){const {assistant,sent}=fixture(status,work);assert.equal(await scheduleWorkProducer(assistant)(request),null,status);assert.equal(sent.length,1);}
 });
 
 test('a direct answer or rejected Work admission cannot fabricate a completed scheduled outcome',async()=>{

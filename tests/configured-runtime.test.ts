@@ -347,3 +347,32 @@ test('credential repair retries only the rejected verifier stage and keeps origi
  assert.equal(w.acceptance,'accepted');assert.equal(s.calls.length,2);assert.equal(w.effects.filter(e=>e.taskId===s.workId+':executor').length,2);assert.equal(w.effects.find(e=>e.id==='credential-run:verifier')!.status,'failed');assert.equal(w.effects.find(e=>e.id==='credential-run:verifier:repair')!.status,'succeeded');
  const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');assert.doesNotThrow(()=>validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect()));
 });
+
+test('member text output creates a typed owner decision before any artifact or checker',async t=>{
+ const output=JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:2500,currency:'USD',purpose:'Requested supplies',sourceReference:'document:quote-1'}),s=await setup(t,{binaryOutput:output});await s.admit();
+ const result=await s.product.run(s.missionId,s.workId,'intent-run',2),w=result.snapshot.value.works[0]!;
+ assert.equal(w.execution,'waiting',JSON.stringify(w.blocker));assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
+ const e=w.effects.find(e=>e.ownerDecision)!;assert.equal(e.ownerDecision!.request.kind,'payment-intent');assert.match(s.calls[0]!.prompt.instruction,/massion-payment-intent\/v1/);
+ const {EffectDecisionsService}=await import('../src/effect-decisions.ts'),service=new EffectDecisionsService(s.store,s.store,()=>s.missionId,{clock:()=>w.runtimeRun!.ownership!.deadlineAt+1});
+ await service.decide({commandId:'approve-intent',decisionId:e.id,answer:'act',requestHash:e.ownerDecision!.requestHash});
+ assert.equal(s.calls.length,1);assert.equal((await s.store.load(s.missionId))!.value.works[0]!.effects.find(e=>e.ownerDecision)!.ownerDecision!.dispatch,undefined);
+ const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect());
+});
+test('malformed typed payment output blocks instead of becoming a checked artifact',async t=>{
+ const s=await setup(t,{binaryOutput:JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:'25 USD',currency:'USD',purpose:'Supplies',sourceReference:'document:quote-1'})});await s.admit();
+ const result=await s.product.run(s.missionId,s.workId,'malformed-intent',2),w=result.snapshot.value.works[0]!;
+ assert.equal(w.execution,'blocked');assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);assert.equal(w.effects.some(e=>e.ownerDecision),false);assert.equal(JSON.parse(w.effects[0]!.receipt!).output,null);assert.match(w.blocker!.detail,/Invalid payment intent/);
+});
+
+for(const answer of ['act','reject'])test('terminal payment intent '+answer+' releases only unused model-budget reservations',async t=>{
+ const output=JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:2500,currency:'USD',purpose:'Requested supplies',sourceReference:'document:quote'}),s=await setup(t,{binaryOutput:output});
+ const {MonthlyBudgetService,reconcileMonthly}=await import('../src/monthly-budget.ts'),budget=new MonthlyBudgetService(s.store);
+ await budget.configure({commandId:'budget-limit',expectedRevision:0,limit:128,timezone:'Asia/Seoul'});await s.admit();await s.product.run(s.missionId,s.workId,'payment-budget-run',2);
+ const w=(await s.store.load(s.missionId))!.value.works[0]!,e=w.effects.find(e=>e.ownerDecision)!;assert.equal((await budget.read()).reserved,123);
+ const {EffectDecisionsService}=await import('../src/effect-decisions.ts');await new EffectDecisionsService(s.store,s.store,()=>s.missionId).decide({commandId:'owner-answer',decisionId:e.id,answer,requestHash:e.ownerDecision!.requestHash});
+ const uncertain=await budget.snapshot();uncertain.missions.get(s.missionId)!.value.works[0]!.effects[0]!.status='unknown';assert.equal(reconcileMonthly(uncertain)[0]!.kind,'hold','A real uncertain invocation must retain its reservation');
+ await new MonthlyBudgetService(s.store).reconcile();const usage=await budget.read();assert.equal(usage.reserved,0);assert.equal(usage.spent,5);assert.equal((await budget.snapshot()).budget!.value.reservations[0]!.state,'settled');
+ const current=(await s.store.load(s.missionId))!,closed=current.value.works[0]!;assert.equal(closed.execution,'waiting');assert.equal(closed.record,undefined);assert.equal(closed.effects.find(e=>e.ownerDecision)!.status,answer==='act'?'pending':'failed');assert.equal(s.calls.length,1);
+ await s.product.admit(s.missionId,{commandId:'next-admission',expectedRevision:current.revision,workId:'next',title:'Next request',budget:64});assert.equal((await budget.admit({missionId:s.missionId,workId:'next',runId:'next-run',amount:64})).status,'reserved');
+ const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect());
+});

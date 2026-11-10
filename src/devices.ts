@@ -18,7 +18,7 @@ export interface DeviceAdapter {
 interface DeviceOperation {id:string;deviceId:string;adapterId:string;decisionId:string;action:'connect'|'disconnect';status:DeviceStatus;binding?:{deviceName:string;agentName:string}}
 export interface DevicesState {kind:'devices';id:string;operations:DeviceOperation[]}
 type DevicesCommand={type:'claim-device';operation:DeviceOperation}|{type:'settle-device';operationId:string;status:DeviceStatus};
-type Admission={id:string;effect?:{kind:string;answer?:string;request:{kind:string;adapterId:string;deviceId?:string;deviceName?:string;agentName?:string}}};
+type Admission={id:string;effect?:{kind:string;answer?:string;request:{kind:string;adapterId?:string;deviceId?:string;deviceName?:string;agentName?:string}}};
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
 const exact=(v:unknown,keys:string[]):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 function ensure(v:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts v {if(!v)throw new DomainError(message,code);}
