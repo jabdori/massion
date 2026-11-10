@@ -212,3 +212,9 @@ for(const [secret,display] of [['ABCD1234','ABCD-1234'],['123456','１２３４�
 test('excessively nested encoded display values fail before committing an observation',async t=>{
  const s=await fixture(t);let encoded='ABCD1234';for(let i=0;i<10;i++)encoded=Buffer.from(encoded).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'ABCD1234'}]};}},clock:s.clock});t.after(()=>service.drain());await assert.rejects(service.capture(request),/encoding bound/i);assert.equal(s.journal().head,before);
 });
+
+for(const variant of ['spaces','wrapped','invisible','compatibility'])test('formatted encoded display candidates remain private: '+variant,async t=>{
+ const s=await fixture(t),encoded=Buffer.from('ABCD-1234').toString('base64'),display=variant==='compatibility'?[...encoded].map(c=>String.fromCharCode(c.charCodeAt(0)+0xfee0)).join(''):encoded.match(/.{1,4}/g)!.join(variant==='invisible'?'\u200b':' '),title=variant==='wrapped'?'Prefix '+display+' Suffix':'앞😀'+display+'뒤';
+ const service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title,blocks:[display],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'ABCD1234'}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);const observed=await service.read('mission','work');assert.equal(observed.session!.page.title,variant==='wrapped'?'••••':'앞😀••••뒤');assert.deepEqual(observed.session!.page.blocks,['••••']);
+ for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(display),'Formatted private encoding must not persist');validateMissionJournalLineage(s.journal().operations);
+});

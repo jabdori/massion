@@ -16,6 +16,7 @@
   "base64Reflection": true,
   "normalizedBase64Reflection": true,
   "bidirectionalBase64Reflection": true,
+  "formattedBase64Reflection": true,
   "base64UrlReflection": true,
   "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,

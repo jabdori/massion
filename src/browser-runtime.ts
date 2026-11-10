@@ -42,16 +42,24 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
  const canonical=(s:string)=>digits(s.normalize('NFKC').toLowerCase().toUpperCase().normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
  if(value.length>262144)throw Error('Browser text bound exceeded');
  const combine=(items:Array<[number,number]>)=>{const merged:Array<[number,number]>=[];for(const range of items.sort((a,b)=>a[0]-b[0]||b[1]-a[1])){const last=merged.at(-1);if(last&&range[0]<last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range);}return merged;};
+ const mapBack=(normalize:(text:string)=>string,nextDecode:boolean)=>{const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=normalize(segment);visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets,encodingDepth,nextDecode).map(([start,end]):[number,number]=>[starts[start]!,ends[end-1]!]);};
+ const display=(text:string)=>digits(text.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
+ if(decode&&display(value)!==value)return combine(mapBack(display,true));
  const ranges:Array<[number,number]>=[];
- if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-]{2,}={0,2}/g)){
-  let decoded:string;try{const binary=atob(match[0].replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,''));decoded=new TextDecoder().decode(Uint8Array.from(binary,c=>c.charCodeAt(0)));}catch{continue;}
-  if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');
-  if(/%[a-f0-9]{2}/i.test(decoded.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}\s]/gu,'')))throw Error('Encoded browser text cannot be retained');
-  if(browserPrivateRanges(decoded,secrets,encodingDepth+1).length)ranges.push([match.index,match.index+match[0].length]);
+ if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-](?:[A-Za-z0-9+/_\s-]*[A-Za-z0-9+/_-])?={0,2}/g)){
+  const token=match[0].replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,'');
+  // 앞뒤의 일반 단어가 붙어도 네 가지 Base64 정렬에서 민감값을 확인합니다.
+  for(let offset=0;offset<4&&offset<token.length-1;offset++){
+   let candidate=token.slice(offset);if(candidate.length%4===1)candidate=candidate.slice(0,-1);
+   let decoded:string;try{const binary=atob(candidate);decoded=new TextDecoder().decode(Uint8Array.from(binary,c=>c.charCodeAt(0)));}catch{continue;}
+   if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');
+   if(/%[a-f0-9]{2}/i.test(display(decoded).replace(/\s/g,'')))throw Error('Encoded browser text cannot be retained');
+   if(browserPrivateRanges(decoded,secrets,encodingDepth+1).length){ranges.push([match.index,match.index+match[0].length]);break;}
+  }
  }
  // Base64 원문은 대소문자를 바꾸기 전에만 디코딩합니다.
  const normalized=canonical(value);
- if(normalized!==value){const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=canonical(segment);visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return combine([...ranges,...browserPrivateRanges(visible,secrets,encodingDepth,false).map(([start,end]):[number,number]=>[starts[start]!,ends[end-1]!])]);}
+ if(normalized!==value)return combine([...ranges,...mapBack(canonical,false)]);
  if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
   const grouping=/(?<=[\p{L}0-9])[\p{P}\p{S}]{1,3}(?=[\p{L}0-9])/gu,gaps=[...compact.matchAll(grouping)],groupedPositions:number[]=[];let grouped='',gap=0;
   for(let i=0;i<compact.length;i++){if(gaps[gap]?.index===i){i+=gaps[gap++]![0].length-1;continue;}grouped+=compact[i];groupedPositions.push(positions[i]!);}
