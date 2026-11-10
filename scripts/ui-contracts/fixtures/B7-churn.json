@@ -140,7 +140,9 @@
                 }
               },
               "evidenceCount": null,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -227,7 +229,23 @@
                   },
                   "status": "settled"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "items": [
+                  {
+                    "label": "요금제",
+                    "value": 6,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "표",
+                    "value": 1,
+                    "unit": "개"
+                  }
+                ]
+              },
+              "tableCount": 1
             }
           },
           {
@@ -321,7 +339,28 @@
                   },
                   "status": "active"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "items": [
+                  {
+                    "label": "해지 사유",
+                    "value": 41,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "기업",
+                    "value": 9,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "그 외",
+                    "value": 32,
+                    "unit": "건"
+                  }
+                ]
+              },
+              "tableCount": 0
             }
           }
         ],
@@ -434,7 +473,28 @@
                 },
                 "status": "active"
               }
-            ]
+            ],
+            "resultFacts": {
+              "format": "massion-facts/v1",
+              "items": [
+                {
+                  "label": "해지 사유",
+                  "value": 41,
+                  "unit": "건"
+                },
+                {
+                  "label": "기업",
+                  "value": 9,
+                  "unit": "건"
+                },
+                {
+                  "label": "그 외",
+                  "value": 32,
+                  "unit": "건"
+                }
+              ]
+            },
+            "tableCount": 0
           },
           {
             "missionId": "intake",
@@ -500,7 +560,23 @@
                 },
                 "status": "settled"
               }
-            ]
+            ],
+            "resultFacts": {
+              "format": "massion-facts/v1",
+              "items": [
+                {
+                  "label": "요금제",
+                  "value": 6,
+                  "unit": "개"
+                },
+                {
+                  "label": "표",
+                  "value": 1,
+                  "unit": "개"
+                }
+              ]
+            },
+            "tableCount": 1
           },
           {
             "missionId": "intake",
@@ -536,7 +612,9 @@
               }
             },
             "evidenceCount": null,
-            "workerSteps": []
+            "workerSteps": [],
+            "resultFacts": null,
+            "tableCount": 0
           }
         ]
       }
@@ -829,7 +907,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                    "receipt": "기업 9건, 그 외 32건이에요.",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -924,7 +1002,7 @@
                     "endedAt": 1793855280008,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "기업 9건, 그 외 32건이에요.",
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
@@ -1177,13 +1255,13 @@
                     "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
                   }
                 ],
-                "endedAt": 1793855280009,
+                "endedAt": 1793855280010,
                 "execution": "waiting",
                 "id": "assistant-2840e7c8b74c0197c547ce73",
                 "instructions": [
                   {
                     "actorId": "local-owner",
-                    "at": 1793855280009,
+                    "at": 1793855280010,
                     "text": "앞으로 표 금액은 원 단위로 써 줘."
                   }
                 ],
@@ -1215,10 +1293,12 @@
                     "status": "queued"
                   },
                   {
+                    "endedAt": 1793855280009,
                     "id": "assistant-2840e7c8b74c0197c547ce73:executor",
                     "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"요금제\",\"value\":6,\"unit\":\"개\"},{\"label\":\"표\",\"value\":1,\"unit\":\"개\"}]}",
                     "startedAt": 1793855280008,
-                    "status": "active"
+                    "status": "settled"
                   },
                   {
                     "id": "assistant-2840e7c8b74c0197c547ce73:verifier",
@@ -1688,7 +1768,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                  "receipt": "기업 9건, 그 외 32건이에요.",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -1783,7 +1863,7 @@
                   "endedAt": 1793855280008,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "기업 9건, 그 외 32건이에요.",
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
@@ -2036,13 +2116,13 @@
                   "taskId": "assistant-2840e7c8b74c0197c547ce73:executor"
                 }
               ],
-              "endedAt": 1793855280009,
+              "endedAt": 1793855280010,
               "execution": "waiting",
               "id": "assistant-2840e7c8b74c0197c547ce73",
               "instructions": [
                 {
                   "actorId": "local-owner",
-                  "at": 1793855280009,
+                  "at": 1793855280010,
                   "text": "앞으로 표 금액은 원 단위로 써 줘."
                 }
               ],
@@ -2074,10 +2154,12 @@
                   "status": "queued"
                 },
                 {
+                  "endedAt": 1793855280009,
                   "id": "assistant-2840e7c8b74c0197c547ce73:executor",
                   "parentId": "assistant-2840e7c8b74c0197c547ce73:root",
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"요금제\",\"value\":6,\"unit\":\"개\"},{\"label\":\"표\",\"value\":1,\"unit\":\"개\"}]}",
                   "startedAt": 1793855280008,
-                  "status": "active"
+                  "status": "settled"
                 },
                 {
                   "id": "assistant-2840e7c8b74c0197c547ce73:verifier",
@@ -2424,7 +2506,9 @@
                 }
               },
               "evidenceCount": null,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -2511,7 +2595,23 @@
                   },
                   "status": "settled"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "items": [
+                  {
+                    "label": "요금제",
+                    "value": 6,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "표",
+                    "value": 1,
+                    "unit": "개"
+                  }
+                ]
+              },
+              "tableCount": 1
             }
           },
           {
@@ -2605,7 +2705,28 @@
                   },
                   "status": "active"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "items": [
+                  {
+                    "label": "해지 사유",
+                    "value": 41,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "기업",
+                    "value": 9,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "그 외",
+                    "value": 32,
+                    "unit": "건"
+                  }
+                ]
+              },
+              "tableCount": 0
             }
           }
         ],

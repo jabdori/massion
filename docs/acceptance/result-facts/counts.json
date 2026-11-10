@@ -1,0 +1,12 @@
+{
+  "baselineCommit": "8ec8849f5513974b0b36872e800e6c1ab4d5167d",
+  "baselineEntries": 262,
+  "finalEntries": 266,
+  "netChange": 4,
+  "removedIdentities": 20,
+  "addedIdentities": 24,
+  "restoredForGenericPresentation": 46,
+  "replacedStaleIdentities": 14,
+  "scopedScreens": 40,
+  "scopedDiagnostics": 216
+}

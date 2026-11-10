@@ -1,0 +1,9 @@
+{
+  "commit": "8ec8849f5513974b0b36872e800e6c1ab4d5167d",
+  "file": "src/work-room-panel.ts",
+  "repeatedTaskSummariesOnMain": true,
+  "separateWorkerTitleOnMain": true,
+  "centeredFlowRowsOnMain": true,
+  "touchedByThisPR": true,
+  "fixedInRedesign": true
+}

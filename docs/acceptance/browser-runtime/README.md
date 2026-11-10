@@ -1,6 +1,6 @@
 # Browser runtime (R-B): ephemeral image boundary
 
-The lead replaced the attempted clean-image guarantee with a non-persistence rule. CSS-drawn values can survive DOM masking, so page images are memory-only live presentation. The journal, Record/artifact and portable backup retain only sanitized structural observations, SHA-256 image hashes and read telemetry. Durable validation refuses screenshot payloads.
+The lead replaced the attempted clean-image guarantee with a non-persistence rule. CSS-drawn values can survive DOM masking, so page images are memory-only live presentation. The journal, Record/artifact and portable backup retain only sanitized structural observations, keyed HMAC-SHA-256 image hashes and read telemetry. Durable validation refuses screenshot payloads.
 
 ## Lifetime and presentation
 
@@ -79,3 +79,5 @@ Merged #145 steering resume. Browser-only authority and lineage validation coexi
 ## Offline-verifier regression
 
 A six-digit capability path is absent from journal/backup both as plaintext and as its former URL digest. Runtime image hashes are HMAC-SHA-256 tags with a fresh RAM-only key, not public offline verifiers. Tests cover deterministic tags within one service, different tags under different keys, missing-key refusal, same-process replay and restart metadata-only lookup. Public fixture source-image hashes are explicitly separated from runtime tags.
+
+Integrated main through PR #146 without replacing browser observations or R-A procedures. The final local batch passes 410 related tests, typecheck, all 14 browser interaction states and the eight scoped screen/theme contracts with no new diagnostics. Two obsolete B7 gap allowances were removed based on the capture. Evidence screenshots exclude live page images.
