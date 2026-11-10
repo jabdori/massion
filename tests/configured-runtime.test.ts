@@ -56,7 +56,7 @@ test('Work telemetry retains host times and independently checked predicates thr
  assert.equal(result.status,'settled',result.reason??'Expected settled Work');assert.ok(Number.isSafeInteger(w.admittedAt));
  for(const task of w.tasks.filter(t=>t.parentId!==null)){assert.ok(Number.isSafeInteger(task.startedAt));assert.ok(task.endedAt!>=task.startedAt!,JSON.stringify(task));}
  assert.ok(w.verdict!.checkedAt!>=w.tasks.find(t=>t.id===s.workId+':verifier')!.startedAt!);
- assert.deepEqual(w.verdict!.predicates,[{criterion:w.criteria.description,passed:true,quote:'two open blockers',reason:'Mock review confirms the bounded acceptance claim'}]);
+ assert.deepEqual(w.verdict!.predicates,[{checkedAt:w.verdict!.checkedAt,criterion:w.criteria.description,passed:true,quote:'two open blockers',reason:'Mock review confirms the bounded acceptance claim'}]);
  assert.deepEqual(w.record!.verdict,w.verdict);
  const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts'),operations=(s.store as InMemoryStore<Mission>).inspect();validateMissionJournalLineage(operations);
  const index=operations.findIndex(op=>(op.events[0] as any).type==='verify'),event=operations[index]!.events[0] as any;
@@ -243,7 +243,7 @@ for(const checks of [[],[{criterion:'Wrong criterion',passed:true,quote:'two ope
 test('a mixed independent check preserves each pass and failure without accepting the result',async t=>{
  const checks=[{criterion:'Identify two open blockers',passed:true,quote:'missing coverage',reason:'First blocker identified'},{criterion:'Identify two open blockers',passed:false,quote:'unresolved dependency',reason:'Second blocker lacks detail'}];
  const s=await setup(t,{failReview:true,reviewChecks:checks});await s.admit();const result=await s.product.run(s.missionId,s.workId,'mixed-checks',2),w=result.snapshot.value.works[0]!;
- assert.deepEqual(w.verdict!.predicates,checks);assert.equal(w.acceptance,'failed');assert.equal(w.record,undefined);
+ assert.deepEqual(w.verdict!.predicates,checks.map(check=>({...check,checkedAt:w.verdict!.checkedAt})));assert.equal(w.acceptance,'failed');assert.equal(w.record,undefined);
 });
 
 test('monthly admission pauses before any model call and a fresh owner increase resumes once through HTTP',async t=>{

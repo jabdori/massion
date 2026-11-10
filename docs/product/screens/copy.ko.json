@@ -1,4 +1,9 @@
 {
+ "ui.table-summary": {
+  "ko": "표 {count} · {status}",
+  "roles": ["text"],
+  "used_in": ["B18-room-b:conversation"]
+ },
  "ui.rule.question": {
   "ko": "반올림을 합계에서 한 번으로 바꿀까요?",
   "roles": [

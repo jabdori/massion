@@ -71,3 +71,23 @@ test('step notes stay owner discussion, bind an exact step and use the drain-awa
  const guarded=new Proxy(s.store,{get(target,key){if(key==='commit')return ()=>{throw new HostDrainError();};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
  await assert.rejects(new ProductService(guarded).appendWorkMessage(input.id,{...message,commandId:'drain-note',messageId:'drain-note',expectedRevision:after.revision}),HostDrainError);assert.deepEqual(await s.store.load(input.id),after);
 });
+
+test('independent predicate observations have host times while v1 replay retains its original shape',async()=>{
+ const {store,send}=await setup(),verifier={id:'verifier',roles:['verifier'] as const};
+ await send({type:'assign',workId:'work',assignment:{id:'producer',actorId:worker.id,role:'executor',taskId:'work:root',model:{provider:'fixture',model:'fixture',reason:'fixture',configVersion:'v1',evidenceClass:'fixture'},extensionVersion:'v1'}},rep.id);
+ await send({type:'assign',workId:'work',assignment:{id:'checker',actorId:verifier.id,role:'verifier',taskId:'work:root',model:{provider:'fixture',model:'checker',reason:'fixture',configVersion:'v1',evidenceClass:'fixture'},extensionVersion:'v1'}},rep.id);
+ await send({type:'admit-effect',workId:'work',effect:{id:'produce',taskId:'work:root',status:'pending',target:'fixture',authority:'fixture'},reserve:1},worker.id);
+ await send({type:'receipt',workId:'work',effectId:'produce',outcome:'succeeded',receipt:'Read source',usage:1},worker.id);
+ await send({type:'settle-task',workId:'work',taskId:'work:root',result:'Read source'},worker.id);
+ await send({type:'publish-artifact',workId:'work',artifact:{id:'work:text',version:1,sha256:'a'.repeat(64),path:'/fixture/work/'+'a'.repeat(64)+'.txt',kind:'text'}},worker.id);
+ const before=(await store.load(input.id))!,app=new Application(store,[owner,worker,verifier],()=>500),command:Command={type:'verify',workId:'work',verdict:{id:'verdict',verifierAssignmentId:'checker',artifactSha256:'a'.repeat(64),artifactVersion:1,criteriaVersion:1,status:'passed',evidence:[{kind:'fixture',detail:'Independent source readback',source:'checker'}],predicates:[{criterion:input.criteria.description,passed:true,quote:'Read source',reason:'Matches the source'}]}};
+ const envelope={missionId:input.id,commandId:'check',expectedRevision:before.revision,actorId:verifier.id,command};
+ const replies=await Promise.all([app.dispatch(envelope),app.dispatch(envelope)]);assert.deepEqual(replies.map(r=>r.status).sort(),['committed','replayed']);
+ const after=(await store.load(input.id))!,verdict=after.value.works[0]!.verdict!;
+ assert.equal(verdict.predicates![0]!.checkedAt,500);assert.equal(verdict.checkedAt,500);assert.equal(after.value.works[0]!.acceptance,'pending');
+ assert.equal(apply(before.value,command,verifier,{observedAt:500,telemetryVersion:1}).value.works[0]!.verdict!.predicates![0]!.checkedAt,undefined);
+ await assert.rejects(app.dispatch({...envelope,commandId:'forged-check',expectedRevision:after.revision,command:{...command,verdict:{...command.verdict,predicates:[{...command.verdict.predicates![0]!,checkedAt:1}]}} as Command}),/predicates/);
+ validateMissionJournalLineage(store.inspect());
+ const tampered=structuredClone(store.inspect());tampered.at(-1)!.value.works[0]!.verdict!.predicates![0]!.checkedAt=1;
+ assert.throws(()=>validateMissionJournalLineage(tampered),/time|predicates|replay|derived|differs|match/i);
+});
