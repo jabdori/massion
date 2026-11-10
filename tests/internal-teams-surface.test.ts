@@ -265,3 +265,12 @@ test('expanded flow distinguishes an accepted Record from skipped recording afte
  await open();let flow=app.all().find(n=>n.className==='room-flow')!;assert.ok(flow.children.some(n=>n.textContent.includes('기록')&&n.children[0]?.textContent));
  Object.assign(state.work,{acceptance:'failed',record:undefined,verdict:{...((state.work as any).verdict),status:'failed'}});state.revision++;await runInContext('loadMission("intake",false)',app.context);await settle();flow=app.all().find(n=>n.className==='room-flow')!;assert.match(flow.textContent,/기록.*건너뜀/);
 });
+
+test('an expired dispatch updates every delivered file row in the fallback pane',async()=>{
+ const {app,state,open}=fixture(),deadline=Date.now()+60000;
+ Object.assign(state.work,{runtimeRun:{ownership:{startedAt:deadline-60000,deadlineAt:deadline}},sourceDocuments:[{document:{id:'source',source:'https://github.com/jabdori/massion/pull/84',content:JSON.stringify({format:'github-review/v2',url:'https://github.com/jabdori/massion/pull/84',files:[{path:'src/a.ts',content:'a'},{path:'src/b.ts',content:'b'}]})}}],effects:[{id:'batch-read',taskId:'group',status:'pending',providerDispatch:{claimedAt:deadline-50000,fileInputs:[{documentId:'source',path:'src/a.ts',sha256:'a'.repeat(64)},{documentId:'source',path:'src/b.ts',sha256:'b'.repeat(64)}]}}]});
+ await open();const files=app.all().find(n=>n.className==='room-files')!,statuses=files.children.map(n=>n.children[1]!);
+ assert.deepEqual(statuses.map(n=>n.textContent),['읽는 중','읽는 중']);assert.equal(new Set(statuses.map(n=>n.id)).size,2);
+ (app.context as any).fileDeadline=deadline;runInContext('Date=class extends Date{static now(){return fileDeadline+1}};workRoomClock()',app.context);
+ assert.deepEqual(statuses.map(n=>n.textContent),['결과 모름','결과 모름']);
+});

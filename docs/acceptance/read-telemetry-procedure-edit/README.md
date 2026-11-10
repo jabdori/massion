@@ -83,3 +83,13 @@ and empty Record layout. Updated those expectations while retaining original-pin
 permission widening, replay and collapsed-source checks. All 80 affected app and
 Work visual tests passed locally. The B8 baseline capture also resolves its two
 Record-heading exceptions; no new/stale diagnostics remain in that scoped gate.
+
+## Codex correction
+
+A current-head P2 review found duplicate file-row IDs when one dispatch delivered
+multiple files in the fallback pane. The new regression first failed on duplicate
+IDs. File rows now bind dispatch, source document and path, and deadline refresh
+updates every bound row. All 96 related app/Work surface tests and typecheck passed;
+both headless theme interaction flows passed again. The full-screen CI run before
+this correction passed its gate with 238 allowed occurrences, zero new/resolved
+occurrences and zero infrastructure errors; the corrected head reruns CI.
