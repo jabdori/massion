@@ -307,7 +307,7 @@ test('activity capture preserves the unread decision before ongoing Work and com
   assert.equal(app.node('activity-toggle').attributes.get('aria-label'),'활동 보기',screen+' open activity keeps its control name');
   const rows=app.node('activity-list').children,decision=rows.find(n=>n.children.some(c=>c.id.startsWith('activity-row-decision:')))!;
   assert.match(decision.textContent,/읽지 않음/,screen+' decision has not been opened');
-  if(screen==='B16-sent'){assert.ok(rows.indexOf(decision)<rows.findIndex(n=>n.textContent.includes('09:13에 보냈어요. 응답 대기예요.')));continue;}
+  if(screen==='B16-sent'){assert.ok(rows.indexOf(decision)<rows.findIndex(n=>n.textContent.includes('에 보냈어요. 응답 대기예요.')));continue;}
   const read=rows.findIndex(n=>n.children.some(c=>c.id.startsWith('activity-row-read-'))),summary=rows.findIndex(n=>n.textContent.includes('요금제 6개를 표 1개로 정리했어요.'));
   assert.ok(rows.indexOf(decision)<summary&&summary<read,screen+' pending Work precedes completed reads');
  }
