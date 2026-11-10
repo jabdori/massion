@@ -196,7 +196,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const workId='workId' in command?command.workId:undefined,owned=workId?this.controllers.get(`${missionId}\0${workId}`):undefined;
   const work=workId?s.value.works.find(w=>w.id===workId):undefined,ownership=work?currentOwnership(work):undefined;
   if(owned&&ownership?.dispatchId!==owned.dispatchId)throw new DomainError('Runtime dispatch ownership changed');
-  const observationCommand=['receipt','block-work','begin-runtime-assembly'].includes(command.type);
+  const observationCommand=['receipt','claim-provider-dispatch','block-work','begin-runtime-assembly'].includes(command.type);
   if(owned?.inputHash&&!observationCommand&&work&&owned.inputHash!==workInputHash(work))throw new SteeringChanged();
   if(work?.runtimeRun?.continuationVersion===1){
    if(command.type==='delegate'&&work.tasks.some(t=>t.id===command.taskId)||command.type==='assign'&&work.assignments.some(a=>a.id===command.assignment.id)||command.type==='settle-task'&&work.tasks.some(t=>t.id===command.taskId&&t.status==='settled')||command.type==='record-step-progress'&&work.tasks.some(t=>t.id===command.taskId&&t.progress&&t.progress.done>=command.progress.done)||command.type==='open-room'&&work.room||command.type==='record-room-turn'&&work.room?.messages.some(m=>m.effectId===command.effectId)||command.type==='publish-artifact'&&work.artifact&&hash(work.artifact)===hash(command.artifact)||command.type==='verify'&&work.verdict?.id===command.verdict.id)return {status:'replayed' as const,value:s.value,revision:s.revision};

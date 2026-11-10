@@ -128,3 +128,9 @@ test('the original budget stops an unfunded revision without increasing or relea
  f.setHook(async(_r,p)=>{if(!changed&&p.stepResults){changed=true;await f.steer();}});
  assert.equal((await f.runtime.run('mission',workId,'run',(await f.read()).revision)).status,'blocked');const w=await f.work();assert.equal(w.blocker.code,'budget_exceeded');assert.equal(w.budget.limit,70);assert.equal(w.budget.reserved,40);assert.equal(w.record,undefined);assert.equal(f.calls.length,4);
 });
+
+for(const slot of ['executor','verifier'])test('steering immediately after '+slot+' intent completes the original claim before revising',async t=>{
+ const f=await fixture(t),commit=f.store.commit.bind(f.store);let changed=false;
+ f.store.commit=async input=>{const c=(input.events[0] as any)?.command,result=await commit(input);if(!changed&&c?.type==='admit-effect'&&c.effect.id==='run:'+slot){changed=true;await f.steer();}return result;};
+ assert.equal((await f.runtime.run('mission',workId,'run',(await f.read()).revision)).status,'settled');const w=await f.work();assert.equal(await f.artifacts.read(w.artifact),'Answer enterprise');assert.ok(w.effects.every((e:any)=>e.status==='succeeded'));assert.equal(f.calls.filter(c=>c.id==='run:'+slot).length,1);assert.equal(f.calls.filter(c=>c.prompt.step).length,2);
+});

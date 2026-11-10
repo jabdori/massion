@@ -62,7 +62,8 @@ three unresolved-effect boundaries, stale writers and competing resumers, late
 steering at assembly/check/publication/verification/acceptance, clean shutdown,
 drain, configuration changes, original budgets and deadlines. A member conversation
 confirms late steering, resumes its revised result, and validates the full portable
-journal. No screen components or allow-list entries change.
+journal. Only the expired-run ownership comparison changes on the client; no layout, copy
+or allow-list entries change.
 
 An unresolved provider or artifact write cannot safely resume: pending intent is
 not proof that nothing happened, and a successful task label is not a receipt.
@@ -71,3 +72,17 @@ does not infer another process's death or remote stop from a different session I
 Expired, cancelled, quarantined, failed-provider or budget-exhausted runs stay
 stopped. There is no authorization restoration or account repair. A later host
 with changed configuration cannot automatically adopt the old run.
+
+## First Codex review corrections
+
+Steering after provider intent but before its claim must finish that admitted
+invocation under its original request hash. Only subsequent finalization is
+superseded. Executor and verifier regressions reproduce the formerly stranded
+pending intent. A resumed run's expired-owner review now compares the latest
+dispatch ownership, while retaining the original ownership history.
+
+The correction batch passed 61 tests with 17 environment-gated skips, plus
+typecheck. Headless Chrome exercised review, cancel, re-review, closure and
+reload without a second write. Desktop and 390px captures are retained locally
+in `.runtime/steering-resume-review/expired-closed.png` and `expired-mobile.png`,
+with accessibility snapshots beside them. No layout or copy changed.
