@@ -4,7 +4,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 const admissionFeed = new AsyncLocalStorage<string>();
 /** Bind every application/runtime/fixture commit in this request to its admitted database. */
 export function withAdmissionFeed<R>(feedId: string, action: () => R): R {
-  identifier(feedId,'feedId'); return admissionFeed.run(feedId,action);
+  identifier(feedId,'feedId');
+  const current=admissionFeed.getStore();if(current!==undefined&&current!==feedId)throw new FeedAdmissionError();
+  return admissionFeed.run(feedId,action);
 }
 export class FeedAdmissionError extends Error {
   constructor() { super('Database feed changed before this transaction could admit a mutation. Earlier request effects may still be unresolved.'); this.name='FeedAdmissionError'; }

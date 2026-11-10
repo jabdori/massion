@@ -1,3 +1,5 @@
+import {isEnvironmentState,replayEnvironment} from './environment-actions.ts';
+import type {EnvironmentState} from './environment-actions.ts';
 import {validateContinuation} from './runtime-continuation.ts';
 import {validCredentialBlocker} from './provider-credentials.ts';
 import {validateMemoryMetadata} from './memory-candidates.ts';
@@ -444,6 +446,7 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
   for (const operation of operations) {
+    if (isEnvironmentState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayEnvironment(operation as unknown as Operation<EnvironmentState>, previous.get(operation.aggregateId) as unknown as Operation<EnvironmentState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isConnectionLifecycleState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionLifecycle(operation as unknown as Operation<ConnectionLifecycleState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionLifecycleState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isDevicesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDevices(operation as unknown as Operation<DevicesState>, previous.get(operation.aggregateId) as unknown as Operation<DevicesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}

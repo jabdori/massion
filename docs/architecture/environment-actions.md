@@ -23,3 +23,11 @@ Owner-needed kinds are confirm-on-device, human-check, enter-value and approve. 
 3. Run typecheck and relevant tests locally. CI owns the full suite and screen contracts. Push one branch, open a PR, and repeat CI plus head-SHA Codex review up to four rounds. Do not merge.
 
 Scope excludes src/browser-*, src/secret-slots.ts and secret sources; actual browser/vault binding; payment execution; virtual desktop implementation; model calls; new UI and contract changes. Fake and journal evidence does not establish real browser, vault or database behavior. The lead owns the independent security review.
+
+## Verification and integration boundaries
+
+The implementation uses a separate bounded internal aggregate, matching existing host-service ledgers. Portable lineage replays its events without adapters, and backup inventory includes no image artifacts. Restoring into a different database feed quarantines the old environment ledger; service restart on the original database preserves waits and bounds. The environment remains private after any secret-fill claim, including an unknown outcome. A trusted host can still poll instrumentation internally; public observation returns no structure, facts or image from a tainted environment.
+
+Nested database admission now refuses to replace a different outer feed identity. A regression reproduced the earlier overwrite before this guard was added. Read-only polls use the smaller of their adapter timeout and remaining absolute wait deadline. The fake checks target identity again after resolving secret bytes and clears those bytes in finally. No real keychain, vault, site, model or payment is used. Existing keychain tests were inspected and already inject fake runners; no real security/op test was found on this branch.
+
+Local evidence: Node 24.21.0, typecheck, 20 new deterministic tests. The related storage/lineage/backup/effect/device/budget/discriminator run passed 141 tests, skipped 8 actual-database cases and reproduced the pre-existing macOS portable-inventory/Turkish-locale directory-realpath failure documented in the work brief. Full-suite, syntax, actual DB and screen checks belong to CI. No UI changed, so no new screen contract or screenshot evidence is proposed.
