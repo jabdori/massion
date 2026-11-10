@@ -1,5 +1,9 @@
 # Confirmed steering during procedure execution
 
+The subsequent [R-O continuation contract](steering-resume.md) adds assembly revisions
+and safe checkpoint resume for new runs. The R-F behavior below remains the legacy
+`steeringVersion: 1` contract when `continuationVersion` is absent.
+
 ## Design (R-F)
 
 Continue the same Work when its owner confirms a direction while the pinned text

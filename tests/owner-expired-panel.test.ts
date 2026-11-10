@@ -15,3 +15,11 @@ test('Late committed closure keeps later private edits and focus',async t=>{cons
 
 test('Unconfirmed closure stays locked and never reissues the command',async t=>{const f=await expiredFixture(t,false,'pending','unknown-no-commit'),app=await f.client(),journal=await f.journal();await chooseExpired(app);await app.node('expired-review').fire('click');await app.submit('expired-form');await app.tick();assert.ok(runInContext('unknownOperation',app.context));assert.equal(app.node('expired-save').disabled,true);await app.submit('expired-form');assert.equal(f.writes(),1);assert.deepEqual(await f.journal(),journal);assert.equal(f.calls.length,0);});
 test('Late ownership review cannot activate a previous Mission decision',async t=>{const f=await expiredFixture(t,false,'activation','held-read'),app=await f.client();await chooseExpired(app);const p=app.node('expired-review').fire('click');await f.until(()=>f.reads()===1);await runInContext("loadMission('other',false)",app.context);await f.until(()=>app.node('loaded-id').textContent==='other');f.release();await p;assert.equal(app.node('loaded-id').textContent,'other');assert.equal(app.node('expired-save').disabled,true);assert.equal(f.writes(),0);});
+
+test('a resumed dispatch can be reviewed and closed with its latest ownership',async t=>{
+ const f=await expiredFixture(t),snapshot=await f.current(),w=snapshot.value.works.find(w=>w.id==='fresh')!,original=structuredClone(w.runtimeRun!.ownership!);
+ w.runtimeRun!.resumptions=[{...original,hostSessionId:'resumed-host',dispatchId:'resumed-dispatch'}];
+ await f.store.commit({id:'mission',commandId:'resumed-fixture',expectedRevision:snapshot.revision,fingerprint:'resumed-fixture',value:snapshot.value,events:[],outbox:[]});
+ const app=await f.client();await chooseExpired(app);await app.node('expired-review').fire('click');assert.equal(app.node('expired-save').disabled,false);await app.submit('expired-form');
+ assert.equal(f.submitted().command.dispatchId,'resumed-dispatch');assert.equal(f.submitted().command.hostSessionId,'resumed-host');assert.deepEqual((await f.current()).value.works.find(w=>w.id==='fresh')!.runtimeRun!.ownership,original);assert.equal(f.writes(),1);assert.equal(f.calls.length,0);
+});

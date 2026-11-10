@@ -1,3 +1,4 @@
+import {canResume} from './runtime-continuation.ts';
 import {Application} from './application.ts';
 import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Actor,Mission,Work} from './domain.ts';
@@ -66,6 +67,7 @@ export interface BudgetAdmission {status:'reserved'|'waiting'|'replayed'|'confli
 function sent(w:Work):boolean {return !!w.runtimeRun||w.effects.length>0;}
 function pristine(w:Work):boolean {return !sent(w)&&!w.runtimeRecovery&&!w.runtimeInterruption&&!w.assignments.length&&!w.artifact&&!w.verdict&&!w.record&&w.acceptance==='pending'&&w.tasks.length===1&&w.tasks[0]?.status==='queued'&&['queued','blocked','waiting','budget-waiting'].includes(w.execution);}
 function recordedSettlement(w:Work):number|undefined {
+ if(canResume(w,Date.now()))return undefined;
  const closed=['settled','cancelled'].includes(w.execution)||!!w.blocker||!!w.runtimeInterruption||!!w.runtimeRecovery||w.execution==='waiting'&&w.endedAt!==undefined;
  return closed&&count(w.budget.measured)&&w.effects.every(e=>e.status==='succeeded'||e.status==='failed')&&(w.moderation??[]).every(e=>e.result?.usage!==null&&e.result!==null)?w.budget.measured:undefined;
 }
