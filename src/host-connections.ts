@@ -1,3 +1,6 @@
+import type {EnvironmentWorkService} from './environment-work-service.ts';
+import {validateEnvironmentWorkDefinitions} from './environment-work.ts';
+import type {EnvironmentWorkDefinition} from './environment-work.ts';
 import type {CliLauncher} from './cli-launcher.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import {KeychainSecretSlots,checkSlot} from './secret-slots.ts';
@@ -26,7 +29,7 @@ interface HostConnection {
  id:string;label:string;providerType:ConnectionInput['providerType'];baseUrl:string;models:string[];
  credential?:{ref:string;environment:string;slot?:never;source?:never}|{ref:string;slot:string;environment?:never;source?:SecretSource};
 }
-export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[];onePassword?:OnePasswordConfig}
+export interface HostManifest {environments?:EnvironmentWorkDefinition[];version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[];onePassword?:OnePasswordConfig}
 export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean;restoredArtifacts?:RestoredArtifactSelection}
 function requireHost(condition:unknown,message:string):asserts condition {if(!condition)throw new DomainError('Host configuration: '+message);}
 function fields(value:unknown,required:string[],optional:string[]=[]):asserts value is Record<string,unknown> {
@@ -38,7 +41,8 @@ function label(value:unknown):asserts value is string {requireHost(typeof value=
 
 /** Validate the entire non-secret schema before touching a database, network or value source. */
 export function parseHostManifest(value:unknown):HostManifest {
- boundedPlainJson(value);fields(value,['version','revision','mode','connections'],['onePassword']);
+ boundedPlainJson(value);fields(value,['version','revision','mode','connections'],['onePassword','environments']);
+ if(value.environments!==undefined)validateEnvironmentWorkDefinitions(value.environments);
  if(value.onePassword!==undefined)validateOnePasswordConfig(value.onePassword);
  requireHost(value.version===1,'unsupported version');identity(value.revision);
  requireHost(value.mode==='https'||value.mode==='local-http-mock','invalid transport mode');
@@ -119,9 +123,9 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
-export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{vaults?:Partial<Record<'onepassword',ExternalVault>>;discriminatorTimeoutMs?:number;transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
- if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport});}
+export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{environment?:()=>EnvironmentWorkService|undefined;vaults?:Partial<Record<'onepassword',ExternalVault>>;discriminatorTimeoutMs?:number;transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
+ if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{environment:options.environment,discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
  let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets,{permissions:new PermissionsService(store),vaults:options.vaults});
- manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,replaceCredential:host.replaceCredential,credentialStored:host.credentialStored,secretSource:host.secretSource,stopSecretSources:host.stopSecretSources,drainSecretSources:host.drainSecretSources,replaceableConnectionIds:host.replaceableConnectionIds,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
+ manager=new ConnectionWorkbench(store,artifacts,{environment:options.environment,discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,replaceCredential:host.replaceCredential,credentialStored:host.credentialStored,secretSource:host.secretSource,stopSecretSources:host.stopSecretSources,drainSecretSources:host.drainSecretSources,replaceableConnectionIds:host.replaceableConnectionIds,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }

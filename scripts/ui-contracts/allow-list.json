@@ -11,7 +11,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "reason": "This historical unknown Work retains page reads without a declared order-history observation, so it offers readback without a completion claim or resend.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -65,16 +65,6 @@
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "gap",
@@ -91,17 +81,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -111,7 +91,7 @@
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -121,18 +101,8 @@
       "diagnostic": "missing pane button \"확인 완료 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B7-fail",
@@ -185,46 +155,6 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"작업 중 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B8-done",
       "theme": "dark",
       "kind": "contract",
@@ -233,16 +163,6 @@
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-fail",
@@ -333,16 +253,6 @@
       "category": "Typed table preview / fixed example budget",
       "reason": "The exact accepted weekly text and preview controls occupy 49 pane characters against the fixed 41-character contract budget.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"결정 대기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
       "screen": "B23",
@@ -361,7 +271,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "reason": "This historical unknown Work retains page reads without a declared order-history observation, so it offers readback without a completion claim or resend.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -415,16 +325,6 @@
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B7-churn",
       "theme": "light",
       "kind": "gap",
@@ -441,17 +341,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -461,7 +351,7 @@
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -471,18 +361,8 @@
       "diagnostic": "missing pane button \"확인 완료 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
+      "reason": "The native Work records an approved, unexecuted intent and declared boolean page/order facts, but no vendor order-history count, receipt identifier or payment execution.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
       "screen": "B7-fail",
@@ -535,46 +415,6 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"작업 중 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B8-done",
       "theme": "light",
       "kind": "contract",
@@ -583,16 +423,6 @@
       "category": "capability / composition",
       "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
       "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B8-fail",
@@ -685,16 +515,6 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar status \"결정 대기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
-    },
-    {
       "screen": "B23",
       "theme": "light",
       "kind": "gap",
@@ -705,196 +525,6 @@
       "ledger": "docs/acceptance/ri/README.md"
     },
     {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 4,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 5,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 4,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{time}\" (found in conversation)",
-      "occurrence": 5,
-      "category": "unrecorded step timestamp",
-      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining",
-      "sources": [
-        "src/internal-teams.ts:9",
-        "src/internal-teams.ts:36",
-        "src/domain.ts:31",
-        "src/domain.ts:314",
-        "src/domain.ts:317",
-        "src/configured-runtime.ts:263",
-        "src/work-room-panel.ts:84"
-      ]
-    },
-    {
       "screen": "B16-sent",
       "theme": "dark",
       "kind": "contract",
@@ -1390,40 +1020,10 @@
       "screen": "B15",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "region pane chip \"{member}\" (found in rail)",
       "occurrence": 1,
       "category": "private page retention",
-      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "reason": "The retained browser tab shows saved page summaries instead of live page/member chrome; the admitted member remains identified on the Work card.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -1470,40 +1070,10 @@
       "screen": "B15",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "private page retention",
-      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "region pane chip \"{member}\" (found in rail)",
       "occurrence": 1,
       "category": "private page retention",
-      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "reason": "The retained browser tab shows saved page summaries instead of live page/member chrome; the admitted member remains identified on the Work card.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -1544,16 +1114,6 @@
       "occurrence": 1,
       "category": "progress note ordering",
       "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "progress note ordering",
-      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
@@ -1627,16 +1187,6 @@
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "progress note ordering",
-      "reason": "Fixture setup opens the real rounding proposal and clears its unread marker, so the checker consumes a later Work marker; retaining unread state produces the warning switch name excluded by this screen contract while other contracts require that warning name.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
-    },
-    {
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
@@ -1685,6 +1235,566 @@
       "category": "progress note ordering",
       "reason": "The stored second Work handoff predates the member reply and steering exchange, so the transcript follows its recorded time; matching the approved placement requires an owner decision on the fixture chronology.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"읽지 않음\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"나중에\"",
+      "occurrence": 1,
+      "category": "bounded owner gate",
+      "reason": "The live browser gate accepts approval or rejection within the original run deadline; deferral does not authorize a later execution or renew that deadline.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The retained browser tab shows saved page summaries instead of live page/member chrome; the admitted member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"나중에\"",
+      "occurrence": 1,
+      "category": "bounded owner gate",
+      "reason": "The live browser gate accepts approval or rejection within the original run deadline; deferral does not authorize a later execution or renew that deadline.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane link \"작업 공간 닫기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "observed browser history",
+      "reason": "The native form producer retains its actual public read and private form page, whose tabs differ from the static three-page prototype ordering.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"이름\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"{date}\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"{count}\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"읽지 않음\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "role sidebar switch \"활동 보기\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "activity attention",
+      "reason": "The rounding decision remains open, so the activity switch retains its warning name instead of hiding owner attention to match the quiet fixture.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"읽지 않음\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"나중에\"",
+      "occurrence": 1,
+      "category": "bounded owner gate",
+      "reason": "The live browser gate accepts approval or rejection within the original run deadline; deferral does not authorize a later execution or renew that deadline.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The retained browser tab shows saved page summaries instead of live page/member chrome; the admitted member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation button \"나중에\"",
+      "occurrence": 1,
+      "category": "bounded owner gate",
+      "reason": "The live browser gate accepts approval or rejection within the original run deadline; deferral does not authorize a later execution or renew that deadline.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane link \"작업 공간 닫기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "observed browser history",
+      "reason": "The native form producer retains its actual public read and private form page, whose tabs differ from the static three-page prototype ordering.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"이름\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"{date}\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing pane text \"{count}\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted browser views retain neither page-controlled form labels and values nor a page identity chip; the host member remains identified on the Work card.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar status \"읽지 않음\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "member Work placement",
+      "reason": "The native Work is pinned to its admitted member; this contract orders the example under the Representative, so the sidebar sequence differs.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "role sidebar switch \"활동 보기\" (text exists without the required role)",
+      "occurrence": 1,
+      "category": "activity attention",
+      "reason": "The rounding decision remains open, so the activity switch retains its warning name instead of hiding owner attention to match the quiet fixture.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Vendor receipts, payment execution and subscription-CLI connection proof remain absent.",
+      "occurrence": 1,
+      "category": "unobserved external evidence",
+      "reason": "Native page reads, scoped filling, owner gates and order-state observations are present; the synthetic producer supplies no vendor receipt, payment execution or subscription connection.",
+      "ledger": "docs/acceptance/E3e/capabilities.md"
     }
   ]
 }

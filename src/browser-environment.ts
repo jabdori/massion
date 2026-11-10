@@ -3,8 +3,8 @@ import {hash} from './domain.ts';
 import {browserOriginRule} from './browser-network.ts';
 import {sanitizePage} from './browser-runtime.ts';
 import type {BrowserAdapter,RawBrowserPage} from './browser-runtime.ts';
-import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateObservation,validateAction} from './environment.ts';
-import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement} from './environment.ts';
+import {environmentFields as exact,environmentId as id,requireEnvironment as ensure,validateBinding,validateObservation,validateAction} from './environment.ts';
+import type {EnvironmentAdapter,EnvironmentAction,EnvironmentObservation,EnvironmentElement,EnvironmentBinding} from './environment.ts';
 
 export interface BrowserEnvironmentConfig {
  environment:string;origin:string;
@@ -87,36 +87,41 @@ function browserOperation(request:any){
 /** Trusted host adapter; neither declarations nor the control channel are model tools. */
 export class BrowserEnvironment implements EnvironmentAdapter,BrowserAdapter {
  readonly #control:BrowserControl;readonly #config:BrowserEnvironmentConfig;readonly #key='massion-'+randomUUID();readonly #surface='browser:'+randomUUID();
- #document='';#generation=0;#private=false;#closed=false;
+ #document='';#generation=0;#private=false;#closed=false;#readGeneration=0;#cached?:{binding:EnvironmentBinding;page:RawBrowserPage};
  constructor(control:BrowserControl,config:BrowserEnvironmentConfig){validateBrowserEnvironment(config);this.#control=control;this.#config=structuredClone(config);}
  async #call(request:object,signal:AbortSignal){
-  ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();
-  try{const result=await this.#control.evaluate(`(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})})`);signal.throwIfAborted();if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
-  catch(error){this.#private=true;if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser environment operation unavailable');}
+  const generation=++this.#readGeneration;this.#cached=undefined;const abort=()=>{this.#private=true;this.#cached=undefined;};
+  try{ensure(!this.#closed,'Browser environment closed');signal.throwIfAborted();signal.addEventListener('abort',abort,{once:true});const result=await this.#control.evaluate(`(${browserOperation.toString()})(${JSON.stringify({config:this.#config,key:this.#key,private:this.#private,...request})})`);signal.throwIfAborted();ensure(!this.#closed&&generation===this.#readGeneration,'Browser operation superseded');if(result?.unsupportedTarget===true)throw new BrowserUnsupportedTargetError();return result;}
+  catch(error){abort();if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser environment operation unavailable');}finally{signal.removeEventListener('abort',abort);}
  }
  async #inspect(signal:AbortSignal):Promise<Snapshot>{
   try{const s=await this.#call({operation:'observe'},signal) as Snapshot;
   ensure(s&&typeof s.document==='string'&&s.document.length>0&&s.document.length<=128&&Number.isSafeInteger(s.revision)&&s.revision>0&&[s.available,s.unsupportedClicks].every(list=>Array.isArray(list)&&list.every(v=>this.#config.elements.some(e=>e.id===v))),'Invalid browser observation');
   ensure(new URL(s.page.address).origin===this.#config.origin,'Browser origin changed');const page=sanitizePage(s.page,undefined,this.#private);this.#private||=page.tainted===true;
-  if(s.document!==this.#document){this.#document=s.document;this.#generation++;}return s;}catch{this.#private=true;throw Error('Browser observation unavailable');}
+  if(s.document!==this.#document){this.#document=s.document;this.#generation++;}
+  return {...s,page:page.tainted?{address:page.address,title:'',blocks:[],fields:[],privateFields:page.summary.privateFields,privateSession:true}:{address:page.address,title:page.title,blocks:page.blocks,fields:page.fields.map(f=>({label:f.label,value:f.value,type:'text',autocomplete:''}))}};}catch{this.#private=true;this.#cached=undefined;throw Error('Browser observation unavailable');}
  }
  #observation(s:Snapshot):EnvironmentObservation{
   const o:EnvironmentObservation={binding:{environment:this.#config.environment,surface:this.#surface,origin:this.#config.origin,generation:this.#generation,revision:s.revision},structure:this.#config.elements.filter(e=>!e.ownerOnly&&s.available.includes(e.id)).map(({selector,ownerOnly,...e})=>{const operations=e.operations.filter(kind=>kind!=='click'||!s.unsupportedClicks.includes(e.id));return {...e,operations,gates:e.gates.length?structuredClone(e.gates):operations.some(k=>['click','submit','select'].includes(k))?[{kind:'irreversible-submit' as const}]:[]};}).filter(e=>e.operations.length),facts:s.facts,image:null};
   validateObservation(o);return o;
  }
- async observe(signal:AbortSignal){return this.#observation(await this.#inspect(signal));}
+ async observe(signal:AbortSignal){
+  const generation=this.#readGeneration+1;
+  try{const s=await this.#inspect(signal);ensure(!this.#closed&&generation===this.#readGeneration&&(!this.#private||s.page.privateSession),'Browser observation superseded');signal.throwIfAborted();const o=this.#observation(s);this.#cached=structuredClone({binding:o.binding,page:s.page});return o;}
+  catch(error){this.#private=true;this.#cached=undefined;throw error;}
+ }
+ /** Reuses only the sanitized page from the exact last observation; never reads the renderer. */
+ observedPage(binding:EnvironmentBinding):RawBrowserPage{validateBinding(binding);ensure(!this.#closed&&this.#cached&&hash(binding)===hash(this.#cached.binding),'Browser observation binding unavailable');return structuredClone(this.#cached.page);}
  async read(input:Parameters<BrowserAdapter['read']>[0]):Promise<RawBrowserPage>{
-  ensure(input.address===this.#config.origin||input.address===this.#config.origin+'/','Current browser address must be origin only');const s=await this.#inspect(input.signal),page=sanitizePage(s.page,undefined,this.#private);
-  if(page.tainted)return {address:page.address,title:'',blocks:[],fields:[],privateFields:page.summary.privateFields,privateSession:true};
-  return {address:page.address,title:page.title,blocks:page.blocks,fields:page.fields.map(f=>({label:f.label,value:f.value,type:'text',autocomplete:''}))};
+  this.#cached=undefined;ensure(input.address===this.#config.origin||input.address===this.#config.origin+'/','Current browser address must be origin only');return (await this.#inspect(input.signal)).page;
  }
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
-  validateAction(action);action=structuredClone(action);ensure(!action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable');let bytes:Uint8Array|undefined;
+  this.#cached=undefined;++this.#readGeneration;validateAction(action);action=structuredClone(action);ensure(!action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable');let bytes:Uint8Array|undefined;
   const check=async()=>{const s=await this.#inspect(context.signal);if(action.input.kind==='click'&&s.unsupportedClicks.includes(action.element))throw new BrowserUnsupportedTargetError();const o=this.#observation(s),node=o.structure.find(n=>n.id===action.element);ensure(hash(o.binding)===hash(action.binding)&&node&&node.operations.includes(action.input.kind)&&hash(node.gates)===hash(action.gates),'Browser action binding changed');return s;};
-  try{await check();if(action.input.kind==='type'){ensure(context.secret,'Secret resolver unavailable');this.#private=true;bytes=await context.secret();ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');}
+   try{await check();if(action.input.kind==='type'){ensure(context.secret,'Secret resolver unavailable');this.#private=true;this.#cached=undefined;bytes=await context.secret();ensure(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16000,'Invalid private input');}
    const snapshot=await check();context.signal.throwIfAborted();const secret=bytes?new TextDecoder('utf-8',{fatal:true}).decode(bytes):undefined;
    const result=await this.#call({operation:'act',expected:{document:snapshot.document,revision:snapshot.revision},action,...(secret===undefined?{}:{secret})},context.signal);ensure(result?.delivered===true,'Browser action delivery unknown');
-  }catch(error){if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser action delivery unavailable');}finally{bytes?.fill(0);}
+   }catch(error){this.#private=true;if(error instanceof BrowserUnsupportedTargetError)throw error;throw Error('Browser action delivery unavailable');}finally{this.#cached=undefined;bytes?.fill(0);}
  }
- async close(){this.#closed=true;await this.#control.close();}
+ async close(){this.#closed=true;this.#cached=undefined;++this.#readGeneration;await this.#control.close();}
 }

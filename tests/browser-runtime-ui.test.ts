@@ -1,3 +1,4 @@
+import {workCardFacts} from '../src/assistant-service.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runInContext} from 'node:vm';
@@ -259,4 +260,30 @@ test('page-read evidence uses stored title, domain and timestamp without replaci
 for(const live of [false,true])test('private-tainted pane uses host copy only with '+(live?'ephemeral pixels':'no retained image'),async()=>{
  const {app,state}=fixture(),p={readId:'private:1',expectedRevision:1,inputHash:'a'.repeat(64),at,address:'https://shop.example.com',tainted:true,summary:{textBlocks:3,frames:0,privateFields:1,fields:[{kind:'number',length:3,private:true}]},...(live?{screenshot}:{})};state.session.page=p;state.session.pages=[p];state.session.pagesRead=1;state.mission.works[0].browserSession.pages=[{...p,screenshot:undefined}];
  await settle();await checkout(app);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),live);assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.match(find(app,'browser-page-alternative').textContent,/비공개 페이지.*비공개 입력값이 있어 상세 내용은 보관하지 않아요/);assert.doesNotMatch(pane(app).textContent,/Observed|Recipient|Card|456/);assert.ok([...app.storage.values()].every(value=>!value.includes(screenshot.data)));
+});
+
+test('Work steps and effects render only typed environment facts with pinned labels, including false facts',async()=>{
+ const {app,state}=fixture(),work=state.mission.works[0];
+ work.runtimeRun={environment:{definition:{facts:[{id:'submitted',label:'전송 상태',kind:'state'},{id:'confirmed',label:'접수 확인',kind:'order-confirmation'}]}}};
+ work.tasks.push({id:'task:observed',parentId:work.tasks[0].id,status:'active',step:{title:'관찰',role:'확인',dependsOn:[]},environment:{records:[{index:0,at,kind:'observed',observation:{observationId:'observation:1',facts:{submitted:true,confirmed:false,undeclared:true},pageReadId:'read:1'}}]}});
+ state.session.page=page('Page text claims everything is confirmed');await settle();await openWork(app);
+ const card=find(app,'work-card-work:1'),step=find(app,'work-step-work:1-task:observed');assert.match(step.textContent,/전송 상태 · 확인됨/);assert.match(step.textContent,/접수 확인 · 미확인/);
+ assert.doesNotMatch(card.textContent,/undeclared|Page text claims|결제 완료/);assert.ok(find(app,'work-browser-work:1'));assert.equal(find(app,'work-browser-evidence-work:1'),undefined);
+ app.context.environmentSummary={id:'turn:observed',work:{missionId:'mission:1',workId:'work:1',missionRevision:2,title:'양식 작성',started:true,execution:'active',acceptance:'pending',...workCardFacts(work)}};const summary=runInContext('chatCard(environmentSummary)',app.context);assert.match(summary.textContent,/전송 상태 확인됨/);assert.match(summary.textContent,/접수 확인 미확인/);assert.match(runInContext('shellResultSummary(environmentSummary.work)',app.context),/접수 확인 미확인/);
+ const facts=descendants(card).filter(n=>n.className==='room-field');assert.ok(facts.some(n=>n.textContent.includes('전송 상태확인됨')));assert.ok(facts.some(n=>n.textContent.includes('접수 확인미확인')));
+});
+test('environment effects show declared deliveries and unexecuted intents without duplicate provider rows',async()=>{
+ const {app,state}=fixture(),work=state.mission.works[0],intent={kind:'payment-intent',payee:'공급처',amountMinor:100,currency:'USD',purpose:'신청',sourceReference:'work:work:1'};
+ work.runtimeRun={environment:{definition:{facts:[],elements:[{id:'pay',gates:[{kind:'payment',intent}]}]}}};work.tasks.push({id:'task:environment',parentId:work.tasks[0].id,status:'settled',step:{title:'내부 단계',role:'확인',dependsOn:[]},environment:{plan:{operations:[{kind:'act',element:'pay'}]},records:[{kind:'intent-approved',index:0,at,approvedAt:at,reference:{id:'entry'}}]}});
+ work.effects=[{id:'model-call',taskId:'task:environment',status:'succeeded',target:'Fixture provider',authority:'grant',providerDispatch:{}},{id:'observed',taskId:'task:environment',status:'succeeded',target:'Observation',authority:'environment-observation:read'},{id:'delivered',taskId:'task:environment',status:'succeeded',target:'신청서 제출',authority:'environment:hash'}];
+ await settle();await openWork(app);const card=find(app,'work-card-work:1'),effects=descendants(card).find(n=>n.className.includes('room-section')&&n.children[0]?.textContent==='전송 1회 보장')!;assert.ok(effects);assert.match(effects.textContent,/신청서 제출완료/);assert.match(effects.textContent,/공급처1.00 USD승인됨 · 미실행/);assert.doesNotMatch(effects.textContent,/내부 단계|Fixture provider|Observation/);
+});
+test('live page telemetry opens the retained browser and detached links cannot cross a thread',async()=>{
+ const {app}=fixture();await settle();await openWork(app);app.context.observedTurn={id:'turn:live',displayStatus:'running',work:{missionId:'mission:1',workId:'work:1',missionRevision:2,title:'Order',started:true,execution:'active',acceptance:'pending'}};
+ const link=runInContext('chatTurnState(observedTurn)',app.context);assert.equal(link.attributes.get('role'),'link');await link.fire('click');await settle();assert.equal(pane(app).hidden,false);assert.match(pane(app).textContent,/Observed checkout/);
+ const reads=app.calls.length;runInContext("chatThread='different';++chatGeneration",app.context);await link.fire('click');await settle();assert.equal(app.calls.length,reads);
+});
+test('recorded room statements expose the existing Copy action with their exact quoted grounds',async()=>{
+ const {app,state}=fixture();state.mission.works[0].room={messages:[{kind:'proposal',text:'관찰된 결과',quote:'주문 확인',at,status:'admitted',assignmentId:'fixture'}]};app.context.copied=[];runInContext('navigator.clipboard={writeText:async text=>copied.push(text)}',app.context);await settle();await openWork(app);
+ const transcript=app.all().find(n=>n.className==='room-transcript')!,copy=descendants(transcript).find(n=>n.tagName==='BUTTON'&&n.attributes.get('aria-label')==='복사');assert.ok(copy);await copy.fire('click');await settle();assert.deepEqual(Array.from(app.context.copied as string[]),['관찰된 결과\n주문 확인']);
 });

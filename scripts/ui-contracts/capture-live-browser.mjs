@@ -11,6 +11,8 @@ import {InMemoryStore} from '../../src/storage.ts';
 import {BrowserSessions,browserSummary} from '../../src/browser-runtime.ts';
 import {localBrowserAdapter} from '../../src/headless-browser.ts';
 import {loadFixture,startFixtureHost} from './fixture-host.ts';
+import {browserFixture} from './browser-fixtures.ts';
+import {resultFactsFixture} from './result-facts-fixtures.ts';
 import {workbenchReady} from './report.ts';
 
 // 합성 로컬 페이지의 앱 화면만 저장합니다. 일반 증거 경로에는 이 예외를 적용하지 않습니다.
@@ -27,7 +29,8 @@ try{
  source=createServer({key:await readFile(join(root,'key.pem')),cert:await readFile(join(root,'cert.pem'))},(req,res)=>{const name=req.url.slice(1),body=files.get(name);if(!body){res.writeHead(404);res.end();return;}requested.push(name);res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(body);});await new Promise(r=>source.listen(0,'127.0.0.1',r));
  // 자체 서명 인증서 예외는 이 임시 테스트 실행 파일에만 존재합니다.
  await writeFile(join(root,'agent-browser'),'#!'+process.execPath+'\nconst {spawnSync}=require("node:child_process");const r=spawnSync('+JSON.stringify(realBrowser)+',[...process.argv.slice(2),"--ignore-https-errors",...'+JSON.stringify(extra)+'],{stdio:"inherit"});process.exit(r.status??1);\n',{mode:0o700});process.env.PATH=root+':'+originalPath;
- const origin='https://127.0.0.1:'+source.address().port,adapter=localBrowserAdapter({MASSION_BROWSER_READS:'1',MASSION_BROWSER_ORIGINS:origin}),template=await loadFixture('B15'),store=new InMemoryStore(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:'reader',roles:['executor']}],()=>clock);
+ const origin='https://127.0.0.1:'+source.address().port,adapter=localBrowserAdapter({MASSION_BROWSER_READS:'1',MASSION_BROWSER_ORIGINS:origin}),template=await browserFixture(resultFactsFixture(await loadFixture('B15',['live-browser-source']))),store=new InMemoryStore(),app=new Application(store,[{id:'local-owner',roles:['owner']},{id:'reader',roles:['executor']}],()=>clock);
+ assert.ok(template.steps.some(step=>step.readySelector==='#work-heading-library'),'Live read-only capture must use its library Work, not the member-action overlay');
  const mission=(template.routes['/read-state?mission=intake'].body).snapshot.value;let sequence=0,clock=template.now-180000;
  await app.create({id:'intake',purpose:mission.purpose,scope:mission.scope,constraints:mission.constraints,criteria:mission.criteria},'local-owner','create');
  const send=async(command,actorId='local-owner')=>{const result=await app.dispatch({missionId:'intake',expectedRevision:(await store.load('intake')).revision,commandId:'evidence-'+(++sequence),actorId,command});assert.equal(result.status,'committed');};

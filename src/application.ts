@@ -1,3 +1,4 @@
+import {environmentWorkEffectId} from './environment-work-state.ts';
 import {requiresMemoryTime} from './memory-expiry.ts';
 import {apply,createMission,DomainError,endsWork,observesWork,hash} from './domain.ts';
 import type {Actor,Command,Mission} from './domain.ts';
@@ -25,7 +26,7 @@ export class Application {
     const actor=this.actor(envelope.actorId);
     if(!Number.isSafeInteger(envelope.expectedRevision)||envelope.expectedRevision<1)throw new DomainError('Invalid expected revision');
     if(typeof envelope.commandId!=='string'||!envelope.commandId.length)throw new DomainError('Missing command identity');
-    const fingerprint=hash({actorId:actor.id,command:envelope.command,expectedRevision:envelope.expectedRevision});
+    const fingerprint=hash({actorId:actor.id,command:envelope.command,...(envelope.command.type==='record-environment-work'?{}:{expectedRevision:envelope.expectedRevision})});
     const prior=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});
     if(prior.status!=='unknown')return prior;
     const snapshot=await this.store.load(envelope.missionId);
@@ -38,7 +39,7 @@ export class Application {
     }
     if(envelope.command.type==='steer'){const workId=envelope.command.workId;if(snapshot.value.works.find(w=>w.id===workId)?.monthlyBudgetDecision)throw new DomainError('Resolve the monthly budget decision before steering budget-paused Work');}
     const {value,events}=apply(snapshot.value,envelope.command,actor,(envelope.command.type==='evaluate-growth'&&envelope.command.ownerDecision||(envelope.command.type==='adopt-growth'||envelope.command.type==='revert-growth'||envelope.command.type==='answer-rule-change')&&envelope.command.recordChangeTime)||observesWork(envelope.command.type)||endsWork(envelope.command.type)||requiresMemoryTime(snapshot.value,envelope.command.type)?{observedAt:this.clock(),...(endsWork(envelope.command.type)?{workEndVersion:2 as const}:{}),...(observesWork(envelope.command.type)?{telemetryVersion:2 as const}:{})}:undefined);
-    const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:[];
+    const outbox=envelope.command.type==='admit-effect'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:envelope.command.effect.id}]:envelope.command.type==='record-environment-work'&&envelope.command.update.kind==='claim'?[{type:'effect-admitted',workId:envelope.command.workId,effectId:environmentWorkEffectId(envelope.command.environment,envelope.command.taskId,envelope.command.index)}]:[];
     const result=await this.store.commit({id:envelope.missionId,expectedRevision:envelope.expectedRevision,commandId:envelope.commandId,fingerprint,value,events,outbox});
     if(result.status==='conflict'&&result.reason==='idempotency'){
       const stored=await this.store.lookupOperation({id:envelope.missionId,commandId:envelope.commandId,fingerprint});

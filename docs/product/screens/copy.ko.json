@@ -18801,5 +18801,65 @@
    "B15:pane"
   ],
   "provenance": "Lead private-taint persistence rule; 2026-11-10."
+ },
+ "ui.environment.observed": {
+  "ko": "확인됨",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.not-observed": {
+  "ko": "미확인",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.target": {
+  "ko": "대상",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.approved": {
+  "ko": "승인됨",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.gate.account-creation": {
+  "ko": "계정 생성",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.gate.personal-data-submission": {
+  "ko": "개인정보 제출",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.gate.terms-acceptance": {
+  "ko": "약관 동의",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.gate.irreversible-submit": {
+  "ko": "되돌릴 수 없는 제출",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.gate.payment": {
+  "ko": "결제 승인",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.who": {
+  "ko": "확인할 사람",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.what": {
+  "ko": "확인할 내용",
+  "roles": ["text"],
+  "used_in": []
+ },
+ "ui.environment.where": {
+  "ko": "확인할 곳",
+  "roles": ["text"],
+  "used_in": []
  }
 }

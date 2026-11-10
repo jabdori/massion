@@ -34,7 +34,9 @@ test('started Work snapshots have assigned executors and consistent task, attemp
  const {loadFixture}=await hostModule();
  for(const screen of screens){
   const f=await loadFixture(screen);
-  assert.equal(f.now,screen==='B22-room-steps'?Date.UTC(2026,10,5,1,44):screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
+  const native=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value.works.find(w=>w.runtimeRun?.environment);
+  if(native)assert.ok(f.now>=native.runtimeRun!.ownership!.startedAt&&f.now<native.runtimeRun!.ownership!.deadlineAt,screen+' retains its observed time inside the original run');
+  else assert.equal(f.now,screen==='B22-room-steps'?Date.UTC(2026,10,5,1,44):screen==='B16'?Date.UTC(2026,10,5,0,12):['B16-sent','B16-later'].includes(screen)?Date.UTC(2026,10,5,0,13):1793855520000,screen);
   const mission=(f.routes['/missions/intake']?.body as {value:Mission}|undefined)?.value;
   if(!mission)continue;
   const summaries=(f.routes['/assistant/works']!.body as {works:Array<{workId:string;execution:string;acceptance:string;unknown:boolean;started:boolean}>}).works;
@@ -232,9 +234,9 @@ test('B22 steps setup opens the Work room without expanding legacy evidence',asy
 });
 
 test('E6c effect fixtures use production decision sources',async()=>{
- const {loadFixture}=await hostModule();
+ const {loadFixture}=await hostModule(),{effectFixture}=await import('../scripts/ui-contracts/effect-fixtures.ts');
  for(const screen of ['B4','B16','B16-sent','B16-later']){
-  const fixture=await loadFixture(screen);
+  const fixture=screen==='B4'?await effectFixture(await loadFixture(screen,['legacy-effect-source'])):await loadFixture(screen);
   for(const [path,response] of Object.entries(fixture.routes))if(path.startsWith('/assistant/conversation')){
    const view=response.body as any;
    if(['B26','B26-later'].includes(screen)||path!=='/assistant/conversation')assert.deepEqual(view.decisions??[],[],screen+' '+path+' must not imply an unimplemented owner decision');
