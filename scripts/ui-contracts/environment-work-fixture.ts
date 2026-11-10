@@ -31,7 +31,7 @@ import {nativeEnvironmentFixture,nativeForm} from './native-environment-fixture.
 import type {ScreenFixture} from './fixture-host.ts';
 
 const owner:Actor={id:'local-owner',roles:['owner']},assistant:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']};
-const generated=new URL('./fixtures/environment-work.generated.json',import.meta.url);
+const generated=new URL('./environment-work.generated.json',import.meta.url);
 export const ENVIRONMENT_WORK_SCREENS=['B4','B15','B7','B8','B7-done','B8-done'];
 interface Checkpoint {now:number;snapshot:Snapshot<Mission>;chat:Awaited<ReturnType<AssistantService['read']>>;members:Awaited<ReturnType<MembersService['read']>>;decisions:Awaited<ReturnType<EnvironmentWorkService['decisions']>>;browser:Awaited<ReturnType<BrowserSessions['read']>>;ownership:Awaited<ReturnType<typeof readRuntimeOwnership>>;conversation:Awaited<ReturnType<typeof readWorkConversation>>;artifact:Awaited<ReturnType<typeof readRecordArtifact>>;journal?:readonly Operation<any>[]}
 export interface EnvironmentWorkFixtureData {origin:string;memberId:string;workId:string;turnId:string;checkpoints:Record<string,Checkpoint>;submissions:number;paymentCalls:number;filled:boolean;textDidNotConfirm:boolean;wrongHashRejected:boolean;form?:EnvironmentWorkFixtureData}

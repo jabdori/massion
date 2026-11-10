@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {loadFixture} from './fixture-host.ts';
 import {environmentWorkFixture,ENVIRONMENT_WORK_SCREENS} from './environment-work-fixture.ts';
 
-const data=JSON.parse(await readFile(new URL('./fixtures/environment-work.generated.json',import.meta.url),'utf8'));
+const data=JSON.parse(await readFile(new URL('./environment-work.generated.json',import.meta.url),'utf8'));
 
 test('cached native Work replies anchor their cards and preserve member identity across every route',async()=>{
  for(const screen of ENVIRONMENT_WORK_SCREENS){
