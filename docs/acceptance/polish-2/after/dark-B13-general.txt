@@ -1,0 +1,56 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e3]
+    - button "결과물" [ref=e4]
+    - button "예약" [ref=e5]
+    - group "앱"
+      - button "GitHub" [ref=e7]
+    - generic
+      - button "내 계정" [expanded=false, ref=e8]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e6]
+      - button "설정" [ref=e9]
+      - LabelText
+        - searchbox "설정 검색" [ref=e20]
+      - button "일반" [ref=e10]
+        - StaticText "일반"
+      - button "기억" [ref=e11]
+        - StaticText "기억"
+      - button "구성원" [ref=e12]
+        - StaticText "구성원"
+      - button "기기" [ref=e13]
+        - StaticText "기기"
+      - button "연결" [ref=e14]
+        - StaticText "연결"
+      - button "사용량" [ref=e15]
+        - StaticText "사용량"
+      - button "앱" [ref=e16]
+        - StaticText "앱"
+      - button "개선" [ref=e17]
+        - StaticText "개선"
+      - button "권한" [ref=e18]
+        - StaticText "권한"
+  - main "설정" [ref=e2]
+    - region "일반" [ref=e19]
+      - heading "일반" [level=2, ref=e21]
+      - strong
+        - StaticText "이름"
+      - textbox "이름" [ref=e22]: 하나
+        - StaticText "하나"
+      - strong
+        - StaticText "아침 브리핑"
+      - combobox "아침 브리핑" [expanded=false, disabled, ref=e23]: —
+        - MenuListPopup
+          - option "—" [disabled, ref=e25]
+          - option "끔" [disabled, ref=e26]
+          - option "적게" [disabled, ref=e27]
+          - option "많이" [disabled, ref=e28]
+      - strong
+        - StaticText "알림"
+      - combobox "알림" [expanded=false, ref=e24]: 켜짐
+        - MenuListPopup
+          - option "켜짐" [selected, ref=e29]
+          - option "꺼짐" [ref=e30]
+      - strong
+        - StaticText "버전"
+      - StaticText "1.0.0-rc.1"

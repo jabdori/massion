@@ -107,3 +107,5 @@ The security review also reproduced a multiply encoded capability path reflected
 ## Encoded structural text
 
 The follow-up security review reproduced percent-encoded reflections of a masked recovery code. Capture now refuses retained percent-encoded text before dispatch (including nested/fullwidth forms), and durable schema validation applies the same boundary. The four regressions failed before this fix; all 170 affected browser/privacy/lineage tests and typecheck pass afterward. This deliberately conservative behavior can make a page with legitimate percent-encoded display text unavailable; it adds no decoder or image persistence path.
+
+Main #148/#149 were then merged, preserving the original-verifier labels and new Korean app labels alongside browser read evidence. All 275 affected tests, typecheck and the six scoped screen/theme cases pass without unexplained gate deltas; see [merge gate](page-card-merge-gate.json).

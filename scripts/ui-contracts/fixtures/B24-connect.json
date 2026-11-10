@@ -92,7 +92,7 @@
             "connection": {
               "appId": "app-github",
               "slot": "github-token",
-              "label": "GitHub token",
+              "label": "GitHub 토큰",
               "connected": false
             }
           }
@@ -188,7 +188,7 @@
             "connection": {
               "appId": "app-github",
               "slot": "github-token",
-              "label": "GitHub token",
+              "label": "GitHub 토큰",
               "connected": false
             }
           }

@@ -16,9 +16,9 @@ massion.handle('item',async({ref})=>{const p=await get('/pulls/'+ref),files=awai
  const candidates=await Promise.all(files.slice(0,11).filter(f=>f.status!=='removed').map(async f=>{try{const d=await get('/contents/'+f.filename.split('/').map(encodeURIComponent).join('/')+'?ref='+p.head.sha);if(d.type!=='file'||d.path!==f.filename||d.encoding!=='base64'||d.size>10000)return null;const content=fileText(d.content);return content.includes('\0')?null:{path:f.filename,content};}catch{return null;}}));
  const sourceFiles=[];for(const f of candidates)if(f&&encodeURIComponent(JSON.stringify([...sourceFiles,f])).replace(/%[A-F0-9]{2}/g,'x').length<=12000)sourceFiles.push(f);
  return {...(sourceFiles.length?{sourceFiles}:{}),title:p.title+' #'+p.number,github:identity(p),meta:state(p)+' · '+p.user.login+' · '+p.head.ref+' → '+p.base.ref,fields:[['Changes','+'+p.additions+' −'+p.deletions]],groups:[{title:'Files '+files.length,rows:files.map(f=>({id:f.filename,title:f.filename,meta:'+'+f.additions+' −'+f.deletions}))},{title:'Commits '+commits.length,rows:commits.map(c=>({id:c.sha,title:subject(c.commit.message),meta:c.sha.slice(0,7)+' · '+when(c.commit.committer.date)}))}]};});`;
-export const GITHUB_APP:AppPackage={manifest:{format:'massion.app.v1',id:'github',name:'GitHub',version:'1.4.2',description:'Pull requests',
- permissions:{read:['Repositories','Pull requests','Check results'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub token'}],events:['PR opened','PR merged']},
- contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},handlers:['page','item']},source};
+export const GITHUB_APP:AppPackage={manifest:{format:'massion.app.v1',id:'github',name:'GitHub',version:'1.4.2',description:'PR',
+permissions:{read:['저장소','PR','체크 결과'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub 토큰'}],events:['PR 열림','PR 병합']},
+contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['코드 리뷰'],skills:['PR 요약'],procedures:['PR 리뷰'],tools:['gh']},handlers:['page','item']},source};
 export const CATALOG:readonly AppPackage[]=[GITHUB_APP];
 
 // Display metadata only; install authority remains with CATALOG's executable packages.
