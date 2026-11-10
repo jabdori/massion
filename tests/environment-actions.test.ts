@@ -152,3 +152,17 @@ test('replacing a live environment with an empty feed cannot erase secret taint'
  const first=new InMemoryStore<any>();let active=first;const proxy=new Proxy(first,{get(_target,key){const value=Reflect.get(active,key);return typeof value==='function'?value.bind(active):value;}}),adapter=new FakeEnvironment();adapter.observation.structure[0]!.gates=[];
  const service=new EnvironmentActions(proxy,proxy,adapter,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>new TextEncoder().encode('private-fixture')});const entry=await service.propose('step','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});await service.execute('step',entry.hash);active=new InMemoryStore();const reads=adapter.reads;await assert.rejects(service.observe(),/feed/i);assert.equal(adapter.reads,reads);assert.equal(active.inspect().length,0);
 });
+
+test('an observation started before proposal invalidates an approval created while the adapter read is pending',async()=>{
+ const s=setup();let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r),read=s.adapter.observe.bind(s.adapter);
+ s.adapter.observe=async signal=>{if(!first)return read(signal);first=false;entered();await gate;return structuredClone(s.adapter.observation);};
+ const observing=s.service.observe();await ready;const entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';release();await observing;s.adapter.observation.binding=original;
+ await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});
+
+test('observation reconciliation retries against an approval committed during its store write',async()=>{
+ const s=setup(),original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';let release!:()=>void,entered!:()=>void,held=false;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(!held&&input.events[0].command.type==='observe'&&input.events[0].command.binding.surface==='other'){held=true;entered();await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const service=s.create(owner),observing=service.observe();await ready;s.adapter.observation.binding=original;const entry=await service.propose('step','control',{kind:'click'});await service.answer('approve','step',entry.hash,'approve');release();await observing;
+ await service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});

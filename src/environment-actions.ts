@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {hash} from './domain.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 import {withAdmissionFeed} from './storage.ts';
@@ -12,6 +13,7 @@ export interface EnvironmentEntry {id:string;hash:string;request:Request;status:
 export interface EnvironmentState {kind:'environment-actions';id:string;owner:string;environment:string;feedId:string;tainted:boolean;at:number;entries:EnvironmentEntry[]}
 interface Context {owner:string;environment:string;feedId:string}
 type Command=
+ |{type:'observe';binding:EnvironmentBinding}
  |{type:'propose';stepId:string;request:Request}
  |{type:'answer';stepId:string;hash:string;answer:'approve'|'decline'|'cancel'}
  |{type:'claim'|'invalidate'|'delivered';stepId:string;hash:string}
@@ -23,7 +25,7 @@ const binding=(r:Request)=>r.type==='action'?r.action.binding:r.binding;
 const sameSurface=(a:EnvironmentBinding,b:EnvironmentBinding)=>a.environment===b.environment&&a.surface===b.surface&&a.origin===b.origin&&a.generation===b.generation;
 const actor=(c:Command)=>c.type==='answer'?'local-owner':'environment-host';
 const fingerprint=(c:Context,command:Command)=>hash({context:c,actor:actor(command),command});
-const hostCommand=(c:Context,command:Command)=>prefix+hash([stateId(c),command.type,command.stepId,command.type==='poll-result'?command.poll:command.type==='reserve-poll'?command:0]);
+const hostCommand=(c:Context,command:Command)=>command.type==='observe'?prefix+randomUUID():prefix+hash([stateId(c),command.type,command.stepId,command.type==='poll-result'?command.poll:command.type==='reserve-poll'?command:0]);
 function empty(c:Context):EnvironmentState{return {kind:'environment-actions',id:stateId(c),...c,tainted:false,at:0,entries:[]};}
 function validateRequest(r:Request,owner:string,environment:string){
  exact(r,r?.type==='action'?['type','action']:['type','binding','wait']);
@@ -38,7 +40,13 @@ function validateState(s:EnvironmentState){
 }
 export function isEnvironmentState(value:unknown):value is EnvironmentState{return !!value&&typeof value==='object'&&(value as EnvironmentState).kind==='environment-actions';}
 function apply(current:EnvironmentState,command:Command,at:number):EnvironmentState {
- validateState(current);boundedPlainJson(command);ensure(integer(at)&&at>=current.at,'Environment clock moved backwards');const s=structuredClone(current);s.at=at;ensure(id(command.stepId),'Invalid step identity');
+ validateState(current);boundedPlainJson(command);ensure(integer(at)&&at>=current.at,'Environment clock moved backwards');const s=structuredClone(current);s.at=at;
+ if(command.type==='observe'){
+  exact(command,['type','binding']);validateBinding(command.binding);
+  for(const e of s.entries)if((e.status==='waiting'||e.status==='ready')&&!sameSurface(binding(e.request),command.binding)){e.status='invalidated';e.updatedAt=at;}
+  validateState(s);return s;
+ }
+ ensure(id(command.stepId),'Invalid step identity');
  if(command.type==='propose'){
   for(const e of s.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline){e.status='timed-out';e.updatedAt=at;}
   exact(command,['type','stepId','request']);validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
@@ -89,10 +97,10 @@ export class EnvironmentActions {
  async #load(){const read=await this.#store.readState(stateId(this.#options));this.#feedId??=read.feedId;ensure(read.feedId===this.#feedId,'Environment database feed changed','conflict');const context:Context={owner:this.#options.owner,environment:this.#options.environment,feedId:read.feedId};const value:EnvironmentState=read.snapshot?.value??empty(context);validateState(value);ensure(value.feedId===read.feedId&&value.id===stateId(context),'Environment database feed changed','conflict');return {context,value,revision:read.snapshot?.revision??0};}
  async state(){const {value}=await this.#load(),at=this.#clock();for(const e of value.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline)e.status='timed-out';return value;}
  async #observe(timeoutMs=this.#timeout):Promise<EnvironmentObservation>{
-  const pendingEntry=(await this.#load()).value.entries.find(e=>e.status==='waiting'||e.status==='ready');
+  await this.#load();
   let observation:EnvironmentObservation;try{observation=await callTool(signal=>this.#adapter.observe(signal),{readOnly:true,timeoutMs});}catch{throw new Error('Environment observation unavailable');}
   validateObservation(observation);observation=structuredClone(observation);
-  if(pendingEntry&&!sameSurface(binding(pendingEntry.request),observation.binding))this.#entry(await this.#dispatch({type:'invalidate',stepId:pendingEntry.id,hash:pendingEntry.hash}),pendingEntry.id);
+  const reconciled=await this.#dispatch({type:'observe',binding:observation.binding});ensure(reconciled.status!=='conflict','Environment observation conflict','conflict');
   ensure(observation.binding.environment===this.#options.environment,'Environment observation identity changed');return observation;
  }
  async observe(){const generation=++this.#readGeneration,{context}=await this.#load(),observation=await this.#observe(),{value}=await this.#load();ensure(generation===this.#readGeneration&&context.feedId===value.feedId,'Stale environment observation','conflict');return value.tainted?{...observation,structure:[],facts:{},image:null}:{...observation,image:observation.image&&observation.image.expiresAt>this.#clock()?observation.image:null};}
