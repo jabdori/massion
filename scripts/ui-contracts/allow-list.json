@@ -4565,6 +4565,26 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "business-procedure",
+      "reason": "Same missing worker-message sequence as occurrences 1-5. The skipped step no longer renders a time (the contract has none there), so the stray time that used to satisfy one ordered slot is gone and the existing residual is counted once more. No contract time was removed.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
+      "occurrence": 6,
+      "category": "business-procedure",
+      "reason": "Same missing worker-message sequence as occurrences 1-5. The skipped step no longer renders a time (the contract has none there), so the stray time that used to satisfy one ordered slot is gone and the existing residual is counted once more. No contract time was removed.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     }
   ]
 }
