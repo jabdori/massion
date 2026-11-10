@@ -1,0 +1,6 @@
+{
+  "privateFieldsMasked": true,
+  "privateTextRemoved": true,
+  "primitivePixelsDiffer": true,
+  "limitation": "CSS segment drawings survive current sanitizer"
+}

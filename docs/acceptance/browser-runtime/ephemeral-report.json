@@ -1,0 +1,8 @@
+{
+  "cssPrimitivePixelsDiffer": true,
+  "liveImageVisible": true,
+  "settledImageRemoved": true,
+  "restartImageRemoved": true,
+  "journalAndBackupContainNoImageOrSentinel": true,
+  "pageImagesWritten": 0
+}
