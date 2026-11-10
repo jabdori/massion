@@ -95,7 +95,7 @@ function renderWorkRoom(work,inspection){
    if(dependencies)row.setAttribute('title',dependencies);
   }
   if(!task.step&&uncertain)row.append(element('span',copy('conversation.text.01'),'room-step-status'));else if(bad&&currentVerdict?.evidence.length)row.append(element('span',currentVerdict.evidence.map(e=>e.detail).join(' · '),'room-step-status'));
-  if(!task.step&&role==='verifier'&&currentVerdict)row.append(element('span',copy(currentVerdict.status==='passed'?'ui.room.verdict-passed':'ui.room.verdict-failed'),'room-step-status'));
+  if(!task.step&&task.id===verificationTask&&currentVerdict)row.append(element('span',copy(currentVerdict.status==='passed'?'ui.room.verdict-passed':'ui.room.verdict-failed'),'room-step-status'));
   const status=copy(uncertain?'conversation.text.01':bad?'ui.check-failed':state==='done'?'sidebar.status.03':state==='active'?'sidebar.status.02':'ui.waiting');row.setAttribute('aria-label',task.step?[task.step.title,name.textContent,task.step.role,skipped?copy('ui.room.skipped',{reason:skipped}):status].join(' · '):(role==='verifier'?copy('settings.chip.02'):copy('ui.write'))+' · '+status);
   const time=workStepTime(task);if(time&&!skipped)row.append(element('time',time,'room-time'));
   if(task.progress?.note){const note=element('div',undefined,'room-step-note');note.append(element('span',task.progress.note.label),element('span',task.progress.note.text));row.append(note);}

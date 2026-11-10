@@ -79,6 +79,14 @@ test('a failed verdict marks only its bound verification task as failed',async()
  assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'5/5');
 });
 
+test('a queued verifier never inherits another task verdict',async()=>{
+ const {app,nodes,work}=await scene('B7-done');
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'queued'});renderMission()}`,app.context);
+ const other=nodes().find(n=>n.id.endsWith('-other-review-task'))!;
+ assert.ok(other);assert.ok(!other.children.some(n=>hasClass(n,'room-step-status')));
+ assert.ok(!other.textContent.includes('맞음')&&!other.textContent.includes('아님'));
+});
+
 test('a rejected Stop reports the revision conflict while the Work stays running',async()=>{
  const {app,nodes,posted,work}=await scene('B7',409),stop=nodes().find(n=>n.id==='work-room-stop-'+work.id)!;
  await stop.fire('click');await settle();

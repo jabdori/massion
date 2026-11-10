@@ -45,7 +45,9 @@ Each file below has both `dark-` and `light-` variants in [before](before/) and
 
 Browser assertion output is retained in
 [before measurements](before/interaction-measurements.json) and
-[after measurements](after/interaction-measurements.json). Compared rendered
+[after measurements](after/interaction-measurements.json), with the final CSS
+[General/member measurements](after/general-member-measurements.json) confirming
+a 24 px restart-action gap and the UI font in both themes. Compared rendered
 pairs with the approved artboards for General, Apps, Work and Member screens.
 The one mechanical design scan of the changed source returned no findings.
 
@@ -58,7 +60,9 @@ node --test tests/device-lifecycle-surface.test.ts tests/work-room-visual.test.t
 npm run typecheck
 ```
 
-119 focused tests pass; typecheck passes. New/expanded behavior assertions were
+119 focused tests pass; typecheck passes. After the final Settings-only CSS
+specificity/scoping correction, the 30 affected Settings tests and typecheck
+pass again. New/expanded behavior assertions were
 observed failing before the implementation. Earlier exploratory runs used the
 machine default Node 26; the final focused run uses the supported Node 24 line.
 
@@ -75,6 +79,14 @@ Its descriptive briefing option text follows the owner's unset-label correction.
 Four installed-version exceptions were removed; none were added. Full source,
 unit, durable-store, install and all-screen checks belong to PR CI under the
 owner's verification budget. CI/current-head Codex status is reported on the PR.
+
+## Codex correction
+
+The initial review identified a second queued verification task inheriting the
+first task's verdict. A new regression reproduced that false result before the
+fix. Verdict labels now require the task bound by `verifierAssignmentId`, just
+like failure evidence; unrelated queued checks remain pending. The affected
+Work/member surface tests and typecheck pass after the correction.
 
 ## Remaining
 
