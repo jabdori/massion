@@ -794,11 +794,11 @@ test('continued steering retains restart no-replay and refuses unsafe or legacy 
  validateMissionJournalLineage(f.store.inspect() as any);
 });
 
-for(const stage of ['receipt','settle-task','record-step-progress'])test(`steering racing a worker ${stage} retains its outcome without another provider call`,async t=>{
+for(const stage of ['claim-provider-dispatch','receipt','settle-task','record-step-progress'])test(`steering racing a worker ${stage} retains its outcome without another provider call`,async t=>{
  const f=await setup(t);await f.admit();let raced=false;const commit=f.store.commit.bind(f.store);
  f.store.commit=async input=>{
   const event=input.events[0] as any,w=input.value.works?.at(-1),command=event?.command;
-  if(!raced&&event?.type===stage&&w?.runtimeRun?.steeringVersion===1&&(stage==='receipt'?command.effectId.endsWith(':step:0'):command.taskId.endsWith(':step:0'))){
+  if(!raced&&event?.type===stage&&w?.runtimeRun?.steeringVersion===1&&(['receipt','claim-provider-dispatch'].includes(stage)?command.effectId.endsWith(':step:0'):command.taskId.endsWith(':step:0'))){
    raced=true;await f.product.intervene('intake',{commandId:'race-worker-'+stage,expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Enterprise customers'}});
   }
   return commit(input);
@@ -806,5 +806,17 @@ for(const stage of ['receipt','settle-task','record-step-progress'])test(`steeri
  const before=f.calls.length;f.script.push(v2('On it.','Enterprise churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.acceptance,'accepted');assert.equal(f.calls.length-before,7);assert.ok(w.effects.every(e=>e.status==='succeeded'));
  assert.equal(f.workPrompts.filter(p=>p.binding?.workId===w.id&&p.step?.title==='Read inputs').length,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+for(const outcome of ['lost','replayed'])test(`continued team never invokes a worker after a ${outcome} claim acknowledgment`,async t=>{
+ const f=await setup(t);await f.admit();let intercepted=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{const result=await commit(input),event=input.events[0] as any;
+  if(!intercepted&&event?.type==='claim-provider-dispatch'&&event.command.effectId.endsWith(':step:0')){intercepted=true;if(outcome==='lost')throw new CommitOutcomeUnknownError(input,new Error('Lost claim acknowledgment'));if(result.status==='committed')return {...result,status:'replayed'};}
+  return result;
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!,effect=w.effects.find(e=>e.id.endsWith(':step:0'))!;assert.equal(intercepted,true);assert.equal(f.calls.length-before,1);assert.equal(effect.status,'pending');assert.ok(effect.providerDispatch);assert.equal(w.record,undefined);
+ assert.equal((await f.product.run('intake',w.id,'reclaim',(await f.store.load('intake'))!.revision)).status,'already-started');assert.equal(f.calls.length-before,1);
  validateMissionJournalLineage(f.store.inspect() as any);
 });

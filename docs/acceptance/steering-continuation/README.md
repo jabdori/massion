@@ -53,3 +53,11 @@ control. This changes only the test driver's readiness predicate.
 No live models, paid providers or production storage were used locally. CI owns
 the full suite and durable-database/E2E checks; head-specific results remain on
 PR #137. No merge or release is authorized here.
+
+The second review also reproduced a steer racing the worker dispatch claim.
+A definite revision refusal now retries that same claim with the original effect,
+request hash and ownership, bounded to three attempts. Invocation still requires
+a fresh committed response. Lost and replayed claim acknowledgments each have a
+regression proving zero worker calls and no restart reclaim. The affected
+claim/steering/lifetime batch passed 42 tests with six environment-gated skips;
+the two ambiguous-acknowledgment regressions passed separately.

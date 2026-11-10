@@ -239,8 +239,12 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   if(!controller.signal.aborted&&Date.now()<ownership.deadlineAt){
    if(ownership.hostSessionId!==HOST_SESSION_ID||!this.owns(missionId,workId,runId))throw new DomainError('Only the original active host dispatch may attempt a provider claim');
    const descriptor=role.adapter.descriptor;claim={id:randomUUID(),runId,hostSessionId:ownership.hostSessionId,dispatchId:ownership.dispatchId,actorId:role.identity,assignmentId:`${runId}:${slot}:assignment`,provider:descriptor.provider,model:descriptor.model,configVersion:descriptor.configVersion,requestHash:providerRequestHash(request),claimedAt:Date.now()};
-   const admitted=await this.dispatch(missionId,{type:'claim-provider-dispatch',workId,effectId,claim},role.identity,claim.id);
-   if(admitted.status!=='committed')throw new DomainError('Provider claim is not a fresh committed admission; inspect original evidence without invoking again');
+   for(let attempt=0;;attempt++){
+    const admitted=await this.dispatch(missionId,{type:'claim-provider-dispatch',workId,effectId,claim},role.identity,claim.id);
+    if(admitted.status==='committed')break;
+    if(admitted.status==='conflict'&&admitted.reason==='revision'&&attempt<2&&current.work.runtimeRun?.steeringVersion===1)continue;
+    throw new DomainError('Provider claim is not a fresh committed admission; inspect original evidence without invoking again');
+   }
    const fresh=await this.active(missionId,workId,controller),effect=fresh.effects.find(e=>e.id===effectId);if(!effect||hash(effect.providerDispatch)!==hash(claim))throw new DomainError('Original provider dispatch claim is unavailable');validateProviderDispatch(fresh,effect,claim);
    if(providerRequestHash(request)!==claim.requestHash)throw new DomainError('Provider request changed after dispatch claim');
   }
