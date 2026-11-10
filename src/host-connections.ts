@@ -1,3 +1,5 @@
+import {validateEnvironmentWorkDefinitions} from './environment-work.ts';
+import type {EnvironmentWorkDefinition} from './environment-work.ts';
 import type {CliLauncher} from './cli-launcher.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import {KeychainSecretSlots,checkSlot} from './secret-slots.ts';
@@ -26,7 +28,7 @@ interface HostConnection {
  id:string;label:string;providerType:ConnectionInput['providerType'];baseUrl:string;models:string[];
  credential?:{ref:string;environment:string;slot?:never;source?:never}|{ref:string;slot:string;environment?:never;source?:SecretSource};
 }
-export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[];onePassword?:OnePasswordConfig}
+export interface HostManifest {environments?:EnvironmentWorkDefinition[];version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[];onePassword?:OnePasswordConfig}
 export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean;restoredArtifacts?:RestoredArtifactSelection}
 function requireHost(condition:unknown,message:string):asserts condition {if(!condition)throw new DomainError('Host configuration: '+message);}
 function fields(value:unknown,required:string[],optional:string[]=[]):asserts value is Record<string,unknown> {
@@ -38,7 +40,8 @@ function label(value:unknown):asserts value is string {requireHost(typeof value=
 
 /** Validate the entire non-secret schema before touching a database, network or value source. */
 export function parseHostManifest(value:unknown):HostManifest {
- boundedPlainJson(value);fields(value,['version','revision','mode','connections'],['onePassword']);
+ boundedPlainJson(value);fields(value,['version','revision','mode','connections'],['onePassword','environments']);
+ if(value.environments!==undefined)validateEnvironmentWorkDefinitions(value.environments);
  if(value.onePassword!==undefined)validateOnePasswordConfig(value.onePassword);
  requireHost(value.version===1,'unsupported version');identity(value.revision);
  requireHost(value.mode==='https'||value.mode==='local-http-mock','invalid transport mode');
