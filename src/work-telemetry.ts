@@ -12,3 +12,9 @@ export function validateStepProgress(value:unknown):asserts value is StepProgres
  const line=(v:unknown)=>typeof v==='string'&&v.trim().length>0&&v.length<=500&&v.isWellFormed();
  if(!p||!keys.every(k=>['done','total','at','note'].includes(k))||!Number.isSafeInteger(p.at)||p.at<0||!Number.isSafeInteger(p.total)||p.total<1||p.total>10000||!Number.isSafeInteger(p.done)||p.done<0||p.done>p.total||Object.hasOwn(p,'note')&&(!p.note||Object.keys(p.note).length!==2||!line(p.note.label)||!line(p.note.text)))throw new DomainError('Invalid step progress');
 }
+
+export function validateProcedureEdit(mission:import('./domain.ts').Mission,work:import('./domain.ts').Work,task:import('./domain.ts').Task):void {
+ const e=task.procedureEdit;if(!Object.hasOwn(task,'procedureEdit'))return;
+ const m=mission.conversations?.find(c=>c.workId===work.id)?.messages.find(m=>m.id===e?.messageId);
+ if(!e||Object.keys(e).length!==5||!['messageId','actorId','title','instruction','at'].every(k=>Object.hasOwn(e,k))||!task.step||!m?.stepNote||m.stepNote.taskId!==task.id||m.stepNote.title!==e.title||m.text!==e.instruction||!Number.isSafeInteger(e.at)||e.at<0||m.at!==undefined&&e.at<m.at||!work.assignments.some(a=>a.taskId===task.id&&a.actorId===e.actorId&&a.role==='executor'))throw new DomainError('Invalid procedure acknowledgement');
+}

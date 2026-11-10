@@ -6,7 +6,7 @@ import {isMonthlyBudgetState,replayMonthlyBudget} from './monthly-budget.ts';
 import type {MonthlyBudgetState} from './monthly-budget.ts';
 import {isEffectDecisionCommand,validateOwnerEffect,EFFECT_HOST,EFFECT_COMMAND_PREFIX} from './effect-decisions.ts';
 import {validateRoom} from './member-rooms.ts';
-import {validatePredicates,validateStepProgress} from './work-telemetry.ts';
+import {validatePredicates,validateStepProgress,validateProcedureEdit} from './work-telemetry.ts';
 import {validateTeamProcedure,validateTeamTask,memberProcedures} from './internal-teams.ts';
 import {validateModeration} from './discriminator.ts';
 import {validateMemoryExpiries} from './memory-expiry.ts';
@@ -146,7 +146,9 @@ function checkVerdictBinding(work: Work, current: boolean): void {
   }
 }
 function checkRecord(work: Work,mission:Mission): void {
-  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['room','team','assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  const record = object(work.record, 'accepted Record', ['id', 'workId', 'criteria', 'artifact', 'verdict', 'receipts', 'assignments', 'memoryVersions', 'evidenceClass', 'checksum'], ['createdAt','procedureEdits','room','team','assistantSource','questions','conversationSource','correction','artifactSnapshot','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeOwnership']);
+  if(Object.hasOwn(record,'createdAt'))integer(record.createdAt,'Record creation time',0);
+  const edits=work.tasks.filter(t=>t.procedureEdit).map(t=>({taskId:t.id,edit:t.procedureEdit}));if(edits.length)equal(record.procedureEdits,edits,'Record procedure acknowledgements');else ensure(!Object.hasOwn(record,'procedureEdits'),'Record has unbound procedure acknowledgement');
   text(record.id, 'Record ID'); ensure(record.workId === work.id, 'Record work binding mismatch'); sha(record.checksum, 'Record checksum');
   const { checksum, ...payload } = record; ensure(hash(payload) === checksum, 'Record checksum mismatch');
   criteria(record.criteria); artifact(record.artifact); verdict(record.verdict);
@@ -257,7 +259,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
-    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt','progress']);if(Object.hasOwn(task,'progress')){validateStepProgress(task.progress);ensure(!!task.step,'Progress must bind a worker step');}
+    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt','progress','procedureEdit']);if(Object.hasOwn(task,'progress')){validateStepProgress(task.progress);ensure(!!task.step,'Progress must bind a worker step');}
     for(const key of ['startedAt','endedAt'])if(Object.hasOwn(task,key))integer(task[key],'task time',0);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
     if (task.parentId !== null) text(task.parentId, 'parent task ID'); oneOf(task.status, ['queued', 'active', 'settled'], 'task status');
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
@@ -279,6 +281,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (Object.hasOwn(item, 'artifact')) artifact(item.artifact);
   if (Object.hasOwn(item, 'verdict')) verdict(item.verdict);
   const work = value as Work;
+  for(const task of work.tasks)validateProcedureEdit(mission,work,task);
   unique(work.tasks.map(entry => entry.id), 'task ID'); unique(work.assignments.map(entry => entry.id), 'assignment ID'); unique(work.effects.map(entry => entry.id), 'effect ID');
   const taskIds = new Set(work.tasks.map(entry => entry.id));
   ensure(work.tasks.filter(task => task.parentId === null).length === 1 && work.tasks.some(task => task.id === `${work.id}:root` && task.parentId === null), 'invalid root task');
@@ -406,6 +409,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'retry-credential':{required:['workId','effectId','connectionId','configHash','replacementCommandId']},
   'block-work': { required: ['workId', 'blocker'] },
   delegate: { required: ['workId', 'taskId', 'parentId'], optional:['step'] },
+  'acknowledge-step-note':{required:['workId','messageId']},
   'record-step-progress':{required:['workId','taskId','progress']},
   'settle-task': { required: ['workId', 'taskId', 'result'] },
   'admit-effect': { required: ['workId', 'effect', 'reserve'],optional:['inputHash'] },

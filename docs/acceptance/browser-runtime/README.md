@@ -81,3 +81,5 @@ Merged #145 steering resume. Browser-only authority and lineage validation coexi
 A six-digit capability path is absent from journal/backup both as plaintext and as its former URL digest. Runtime image hashes are HMAC-SHA-256 tags with a fresh RAM-only key, not public offline verifiers. Tests cover deterministic tags within one service, different tags under different keys, missing-key refusal, same-process replay and restart metadata-only lookup. Public fixture source-image hashes are explicitly separated from runtime tags.
 
 Integrated main through PR #146 without replacing browser observations or R-A procedures. The final local batch passes 410 related tests, typecheck, all 14 browser interaction states and the eight scoped screen/theme contracts with no new diagnostics. Two obsolete B7 gap allowances were removed based on the capture. Evidence screenshots exclude live page images.
+
+Main PR #147 was subsequently integrated: file-read/procedure-edit observations coexist with browser-only authority and opaque navigation IDs. The merge validation passes 368 related tests, typecheck and the eight scoped screen/theme contracts without allowance deltas.

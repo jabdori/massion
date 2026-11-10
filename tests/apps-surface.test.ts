@@ -437,3 +437,19 @@ test('a missing page read cannot drop the current feed fence from a PR item read
  const {app}=fixture(true,[],[],[],undefined,(b,headers)=>b.handler==='page'?page:headers['X-Massion-Feed']==='feed:a'?item:{title:'Unfenced replacement database',groups:[]});await settle();await app.node('rail-apps').children[0]!.fire('click');await settle();
  await runInContext("appPage=null;appSelect('84')",app.context);await settle();assert.doesNotMatch(app.node('app-view').textContent,/Unfenced replacement database/);assert.match(app.node('app-view').textContent,/answer the owner/);
 });
+
+test('file badges stay on the selected exact head and expire without a feed event',async()=>{
+ const {app}=fixture();await settle();
+ (app.context as any).fileItem={...item,feedId:'feed:a',github:{repository:'jabdori/massion',number:84,headSha:'a'.repeat(40),url:'https://github.com/jabdori/massion/pull/84'}};
+ runInContext(`
+  globalThis.fileNow=100;globalThis.Date=class extends Date{static now(){return fileNow}};
+  globalThis.fileTimers=[];globalThis.setTimeout=(fn,ms)=>{fileTimers.push({fn,ms});return 1};
+  feedId='feed:a';reconnectRequired=false;paneTabs=[{key:'file-tab',appTab:{id:'app-github',missionId:'intake',workId:'read'}}];paneActive='file-tab';
+  snapshot={revision:1,value:{id:'intake',works:[{id:'read',runtimeRun:{ownership:{deadlineAt:200}},sourceDocuments:[{document:{id:'source',source:fileItem.github.url,content:JSON.stringify({format:'github-review/v2',...fileItem.github,files:[{path:'src/assistant-service.ts',content:'const a = 1;'}]})}}],effects:[{id:'read-effect',status:'pending',providerDispatch:{claimedAt:101,fileInputs:[{documentId:'source',path:'src/assistant-service.ts',sha256:'a'.repeat(64)}]}}]}]}};
+ `,app.context);
+ assert.equal(runInContext("appFileStatus(fileItem,'src/assistant-service.ts')",app.context),'읽는 중');
+ runInContext('appReviewClock(fileItem)',app.context);assert.equal((app.context as any).fileTimers.length,1);
+ runInContext('fileNow=201',app.context);assert.equal(runInContext("appFileStatus(fileItem,'src/assistant-service.ts')",app.context),'결과 모름');
+ runInContext("fileItem.github.headSha='b'.repeat(40)",app.context);assert.equal(runInContext("appFileStatus(fileItem,'src/assistant-service.ts')",app.context),null);
+ runInContext("fileItem.github.headSha='a'.repeat(40);feedId='feed:b'",app.context);assert.equal(runInContext("appFileStatus(fileItem,'src/assistant-service.ts')",app.context),null);
+});

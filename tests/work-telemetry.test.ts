@@ -91,3 +91,21 @@ test('independent predicate observations have host times while v1 replay retains
  const tampered=structuredClone(store.inspect());tampered.at(-1)!.value.works[0]!.verdict!.predicates![0]!.checkedAt=1;
  assert.throws(()=>validateMissionJournalLineage(tampered),/time|predicates|replay|derived|differs|match/i);
 });
+
+test('a worker acknowledges an owner proposal only before its step starts, preserving admission pins',async()=>{
+ const s=await teamFixture();
+ await s.send({type:'delegate',workId:'work',taskId:'work:step:1',parentId:'work:executor',step:{title:'Draft',role:'Write',dependsOn:['work:step:0'],instruction:'Draft after reading'}},rep.id);
+ await s.send({type:'assign',workId:'work',assignment:{id:'writer',actorId:worker.id+'2',role:'executor',taskId:'work:step:1',model:{provider:'fixture',model:'fixture',reason:'fixture',configVersion:'v1',evidenceClass:'fixture'},extensionVersion:'v1'}},rep.id);
+ await s.send({type:'append-work-message',workId:'work',messageId:'edit',replyTo:null,text:'Write tests before the draft',stepNote:{taskId:'work:step:1',title:'Tests first'}});
+ const before=(await s.store.load(input.id))!,app=new Application(s.store,[owner,{id:'worker2',roles:['executor']}],()=>500);
+ const command={type:'acknowledge-step-note',workId:'work',messageId:'edit'} as unknown as Command;
+ const envelope={missionId:input.id,commandId:'ack',expectedRevision:before.revision,actorId:'worker2',command};
+ const results=await Promise.all([app.dispatch(envelope),app.dispatch(envelope)]);assert.deepEqual(results.map(r=>r.status).sort(),['committed','replayed']);
+ const after=(await s.store.load(input.id))!,w=after.value.works[0]!,task=w.tasks.find(t=>t.id==='work:step:1')!;
+ assert.deepEqual(task.step,before.value.works[0]!.tasks.find(t=>t.id===task.id)!.step);assert.deepEqual(w.team,before.value.works[0]!.team);
+ assert.deepEqual((task as any).procedureEdit,{messageId:'edit',actorId:'worker2',title:'Tests first',instruction:'Write tests before the draft',at:500});
+ assert.notEqual(workInputHash(w),workInputHash(before.value.works[0]!));
+ await assert.rejects(app.dispatch({...envelope,commandId:'owner-ack',expectedRevision:after.revision,actorId:owner.id}),/role|assigned/);
+ await s.send({type:'append-work-message',workId:'work',messageId:'late',replyTo:null,text:'Too late',stepNote:{taskId:'work:step:0',title:'Rewrite started step'}});
+ await assert.rejects(s.send({type:'acknowledge-step-note',workId:'work',messageId:'late'} as unknown as Command,worker.id),/started|queued/);
+});

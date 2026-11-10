@@ -1,3 +1,4 @@
+import {workFileInputs} from './github-review.ts';
 import {DomainError,hash} from './domain.ts';
 import type {Task,Work} from './domain.ts';
 import {applySkills,bodyHash} from './skills.ts';
@@ -6,7 +7,7 @@ import {ASSISTANT_ACTOR_ID} from './assistant-conversation.ts';
 
 export interface ProcedurePin {id:string;version:number;hash:string;body:SkillBody}
 export interface TeamProcedure {memberId:string;skillsRevision:number;procedures:ProcedurePin[]}
-export interface TeamStep {role:string;title:string;dependsOn:string[];skipReason?:string;instruction?:string}
+export interface TeamStep {sourceFiles?:string[];role:string;title:string;dependsOn:string[];skipReason?:string;instruction?:string}
 export const MAX_TEAM_STEPS=12;
 const defaultBody:SkillBody={description:'Complete the request',steps:['Read inputs','Draft result'],verify:'Check the result against the request'};
 const fail=()=>{throw new DomainError('Invalid internal team procedure or plan');};
@@ -33,12 +34,12 @@ export function parseTeamPlan(output:string,work:Work):TeamStep[] {
  const count=procedureSteps(work.team!).length;
  if(!exact(plan,['steps'])||!Array.isArray(plan.steps)||plan.steps.length!==count)fail();
  return plan.steps.map((s:any,i:number)=>{
-  if(!exact(s,['role','title','dependsOn'],['skipReason','instruction'])||!line(s.role,40)||!line(s.title)||!Array.isArray(s.dependsOn)||s.dependsOn.length>count||new Set(s.dependsOn).size!==s.dependsOn.length||!s.dependsOn.every((n:unknown)=>Number.isSafeInteger(n)&&(n as number)>=0&&(n as number)<i)||Object.hasOwn(s,'skipReason')&&!line(s.skipReason)||Object.hasOwn(s,'instruction')&&!line(s.instruction,2000))fail();
-  return {role:s.role,title:s.title,dependsOn:s.dependsOn.map((n:number)=>`${work.id}:step:${n}`),...(s.skipReason?{skipReason:s.skipReason}:{}),...(s.instruction?{instruction:s.instruction}:{})};
+  if(!exact(s,['role','title','dependsOn'],['skipReason','instruction','sourceFiles'])||!line(s.role,40)||!line(s.title)||!Array.isArray(s.dependsOn)||s.dependsOn.length>count||new Set(s.dependsOn).size!==s.dependsOn.length||!s.dependsOn.every((n:unknown)=>Number.isSafeInteger(n)&&(n as number)>=0&&(n as number)<i)||Object.hasOwn(s,'skipReason')&&!line(s.skipReason)||Object.hasOwn(s,'instruction')&&!line(s.instruction,2000)||Object.hasOwn(s,'sourceFiles')&&(!Array.isArray(s.sourceFiles)||!s.sourceFiles.length||s.sourceFiles.length>33||new Set(s.sourceFiles).size!==s.sourceFiles.length||!s.sourceFiles.every((p:unknown)=>workFileInputs(work).some(f=>f.path===p))))fail();
+  return {role:s.role,title:s.title,dependsOn:s.dependsOn.map((n:number)=>`${work.id}:step:${n}`),...(s.skipReason?{skipReason:s.skipReason}:{}),...(s.instruction?{instruction:s.instruction}:{}),...(s.sourceFiles?{sourceFiles:[...s.sourceFiles]}:{})};
  });
 }
 export function validateTeamTask(work:Work,task:Task):void {
  const s=task.step;if(!Object.hasOwn(task,'step'))return;if(!s)return fail();
- if(!work.team||!/^\d+$/.test(task.id.slice((work.id+':step:').length))||!task.id.startsWith(work.id+':step:')||Number(task.id.split(':').at(-1))>=procedureSteps(work.team).length||task.parentId!==`${work.id}:executor`||!exact(s,['role','title','dependsOn'],['skipReason','instruction'])||!line(s.role,40)||!line(s.title)||!Array.isArray(s.dependsOn)||new Set(s.dependsOn).size!==s.dependsOn.length||s.dependsOn.some(id=>!work.tasks.some(t=>t.id===id&&t.step&&Number(t.id.split(':').at(-1))<Number(task.id.split(':').at(-1))))||Object.hasOwn(s,'skipReason')&&!line(s.skipReason)||Object.hasOwn(s,'instruction')&&!line(s.instruction,2000))fail();
+ if(!work.team||!/^\d+$/.test(task.id.slice((work.id+':step:').length))||!task.id.startsWith(work.id+':step:')||Number(task.id.split(':').at(-1))>=procedureSteps(work.team).length||task.parentId!==`${work.id}:executor`||!exact(s,['role','title','dependsOn'],['skipReason','instruction','sourceFiles'])||!line(s.role,40)||!line(s.title)||!Array.isArray(s.dependsOn)||new Set(s.dependsOn).size!==s.dependsOn.length||s.dependsOn.some(id=>!work.tasks.some(t=>t.id===id&&t.step&&Number(t.id.split(':').at(-1))<Number(task.id.split(':').at(-1))))||Object.hasOwn(s,'skipReason')&&!line(s.skipReason)||Object.hasOwn(s,'instruction')&&!line(s.instruction,2000)||Object.hasOwn(s,'sourceFiles')&&(!Array.isArray(s.sourceFiles)||!s.sourceFiles.length||s.sourceFiles.length>33||new Set(s.sourceFiles).size!==s.sourceFiles.length||!s.sourceFiles.every((p:unknown)=>workFileInputs(work).some(f=>f.path===p))))fail();
 }
 export function teamTaskReady(work:Work,task:Task):boolean {return !!task.step&&!task.step.skipReason&&task.step.dependsOn.every(id=>work.tasks.some(t=>t.id===id&&t.status==='settled'));}

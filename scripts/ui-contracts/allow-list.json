@@ -367,16 +367,6 @@
     {
       "screen": "B8",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
@@ -407,42 +397,12 @@
     {
       "screen": "B8-done",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The expanded flow has actual task and check times. A separate Record/skipped-Record flow event is not produced; check failure never creates a Record.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The expanded flow has actual task and check times. A separate Record/skipped-Record flow event is not produced; check failure never creates a Record.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
     },
     {
       "screen": "B8-fail",
@@ -468,21 +428,11 @@
       "screen": "B8-unknown",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -491,8 +441,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -501,8 +451,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -511,8 +461,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 4,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1077,16 +1027,6 @@
     {
       "screen": "B8",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
@@ -1117,42 +1057,12 @@
     {
       "screen": "B8-done",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The expanded flow has actual task and check times. A separate Record/skipped-Record flow event is not produced; check failure never creates a Record.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "The expanded flow has actual task and check times. A separate Record/skipped-Record flow event is not produced; check failure never creates a Record.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
     },
     {
       "screen": "B8-fail",
@@ -1178,21 +1088,11 @@
       "screen": "B8-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1201,8 +1101,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1211,8 +1111,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1221,8 +1121,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 4,
       "category": "check-time-and-predicates",
-      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "reason": "The Record section and flow heading are present. These four ordered times belong to browser/payment activity absent from this legacy unknown-effect fixture. No independent verdict, accepted Record or receipt time is inferred from an unresolved outcome; browser/payment producers belong to R-B.",
+      "ledger": "docs/acceptance/read-telemetry-procedure-edit/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1427,102 +1327,6 @@
     {
       "screen": "B22-room",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported active procedure-edit scenario",
-      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/assistant-service.ts:253",
-        "src/domain.ts:316",
-        "src/domain.ts:344",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 1,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 2,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 3,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 4,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽는 중\"",
-      "occurrence": 1,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "dark",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
       "occurrence": 1,
@@ -1533,22 +1337,6 @@
         "src/assistant-conversation-panel.ts:7",
         "docs/product/screens/contracts/B22-room.json",
         "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported active procedure-edit scenario",
-      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/assistant-service.ts:253",
-        "src/domain.ts:316",
-        "src/domain.ts:344",
-        "scripts/ui-contracts/fixtures/B22-room.json"
       ]
     },
     {
@@ -1569,102 +1357,6 @@
     {
       "screen": "B22-room",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported active procedure-edit scenario",
-      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/assistant-service.ts:253",
-        "src/domain.ts:316",
-        "src/domain.ts:344",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 1,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 2,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 3,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽음\"",
-      "occurrence": 4,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane status \"읽는 중\"",
-      "occurrence": 1,
-      "category": "unsupported file-read telemetry",
-      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/apps.ts:18",
-        "src/domain.ts:31",
-        "src/apps-panel.ts:42",
-        "scripts/ui-contracts/fixtures/B22-room.json"
-      ]
-    },
-    {
-      "screen": "B22-room",
-      "theme": "light",
       "kind": "visual",
       "diagnostic": "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)",
       "occurrence": 1,
@@ -1675,22 +1367,6 @@
         "src/assistant-conversation-panel.ts:7",
         "docs/product/screens/contracts/B22-room.json",
         "docs/acceptance/E3d2/full150.json:819"
-      ]
-    },
-    {
-      "screen": "B22-room-steps",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "unsupported active procedure-edit scenario",
-      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
-      "sources": [
-        "src/assistant-service.ts:253",
-        "src/domain.ts:316",
-        "src/domain.ts:344",
-        "scripts/ui-contracts/fixtures/B22-room.json"
       ]
     },
     {
