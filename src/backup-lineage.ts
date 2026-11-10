@@ -213,7 +213,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['steeringVersion','roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
+    if(Object.hasOwn(run,'steeringVersion'))ensure(run.steeringVersion===1&&!!item.team,'Invalid steering runtime version');
     if(Object.hasOwn(run,'roomVersion'))ensure(run.roomVersion===1&&!!item.team,'Invalid room runtime version');
     if(Object.hasOwn(run,'toolTimeoutVersion'))ensure(run.toolTimeoutVersion==='tool-timeouts/v1','unsupported tool timeout policy');
     if(Object.hasOwn(run,'ownership'))validateRuntimeOwnership(run.ownership as import('./domain.ts').RuntimeOwnership);
@@ -226,8 +227,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
       }
     }
     ensure(run.criteriaHash === hash(item.criteria) && item.missionSnapshot && budget.unit === 'output-tokens', 'runtime criteria/input/budget binding mismatch');
-    // Owner steering can append instructions after admission. The original
-    // inputHash is retained, not recomputed from later mutable instructions.
+    // Legacy steering retains its admission hash. Versioned continuation repins
+    // only through the journaled steer transition; later stopping keeps that pin.
   }
   validateRuntimeInterruption(value as Work);
   const deadlinePendingIds=(value as Work).runtimeInterruption?.pendingEffectIds??[];
@@ -397,7 +398,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   delegate: { required: ['workId', 'taskId', 'parentId'], optional:['step'] },
   'record-step-progress':{required:['workId','taskId','progress']},
   'settle-task': { required: ['workId', 'taskId', 'result'] },
-  'admit-effect': { required: ['workId', 'effect', 'reserve'] },
+  'admit-effect': { required: ['workId', 'effect', 'reserve'],optional:['inputHash'] },
   receipt: { required: ['workId', 'effectId', 'outcome', 'receipt', 'usage'],optional:['providerDispatchId'] },
   'reconcile-effect': { required: ['workId', 'effectId', 'outcome', 'receipt'] },
   'publish-artifact': { required: ['workId', 'artifact'] },

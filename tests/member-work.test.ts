@@ -29,14 +29,14 @@ const steer=(reply:string,workId:string|null)=>JSON.stringify({reply,work:null,s
 
 async function setup(t:test.TestContext,providerType='openrouter'){
  const root=await mkdtemp(join(tmpdir(),'massion-member-work-'));t.after(()=>rm(root,{recursive:true,force:true}));
- const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let roomTurn:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
+ const store=new InMemoryStore<any>(),artifacts=new TextArtifactStore(join(root,'artifacts')),script:string[]=[],prompts:any[]=[],calls:string[]=[],workPrompts:any[]=[];let now=Date.now();const start=now,clock=()=>now;let onExecute:((signal:AbortSignal)=>Promise<void>)|undefined;let roomTurn:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;let plan:((steps:string[])=>unknown)|undefined,worker:((prompt:any,signal:AbortSignal)=>Promise<string>)|undefined;
  const completion=(model:string,content:string)=>new Response(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model,choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content}}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  let produced='Answer bounded fixture text',reviewQuote='Answer bounded';
  let moderationHook:((signal:AbortSignal)=>Promise<void>)|undefined;
  const transport=async(_url:string|URL|Request,init?:RequestInit)=>{
   const body=JSON.parse(String(init!.body));if(body.questions){if(moderationHook)await moderationHook(init!.signal as AbortSignal);const q=body.questions.moderation,keys=Object.keys(q.criteria),answer=q.type==='noul'?{type:'noul',noul:1}:{type:'choice',choice:keys[0],probabilities:Object.fromEntries(keys.map((k,i)=>[k,i?0:1])),confidence:1};return new Response(JSON.stringify({model:body.model,answers:{moderation:answer},usage:{input_tokens:1,output_tokens:1}}),{headers:{'content-type':'application/json'}});}const prompt=JSON.parse(body.messages[0].content.split('\n\nInput references')[0]);
   if(Object.hasOwn(prompt,'currentMessage')){prompts.push({model:body.model,prompt});return completion(body.model,script.shift()??v1('Hello.'));}
-  calls.push(body.model);
+  calls.push(body.model);workPrompts.push(prompt);
   if(prompt.teamPlanning)return completion(body.model,JSON.stringify(plan?plan(prompt.teamPlanning.steps):{steps:prompt.teamPlanning.steps.map((title:string,i:number)=>({role:i===0?'Research':'Writing',title,dependsOn:i?[i-1]:[],...(title==='Optional comparison'?{skipReason:'No comparison requested'}:{})}))}));
   if(prompt.roomTurn)return completion(body.model,roomTurn?await roomTurn(prompt,init!.signal as AbortSignal):JSON.stringify({kind:prompt.roomTurn==='challenge'?'challenge':'concede',text:prompt.roomTurn==='challenge'?'The result needs concrete evidence':'The evidence is incomplete',quote:prompt.roomTurn==='challenge'?reviewQuote:''}));
   if(prompt.artifact)return completion(body.model,JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:reviewQuote,reason:'Controlled fixture'}]}));
@@ -64,12 +64,13 @@ async function setup(t:test.TestContext,providerType='openrouter'){
   return (await members.read()).members.find(x=>x.name===name)!;
  };
  const chatFor=(member:{id:string;name:string;modelGroup:string},ownerStore?:Store<any>)=>new AssistantService(store,product,m,{clock,member:{id:member.id,name:member.name,modelGroup:member.modelGroup},...(ownerStore?{ownerStore}:{})});
- return {setOutput:(output:string,quote:string)=>{produced=output;reviewQuote=quote;},setModerationHook:(hook:typeof moderationHook)=>{moderationHook=hook;},setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
+ return {workPrompts,setOutput:(output:string,quote:string)=>{produced=output;reviewQuote=quote;},setModerationHook:(hook:typeof moderationHook)=>{moderationHook=hook;},setRoomTurn:(r:typeof roomTurn)=>{roomTurn=r;},setPlan:(p:typeof plan)=>{plan=p;},setWorker:(w:typeof worker)=>{worker=w;},root,store,artifacts,m,settings,transport,product,assistant,members,script,prompts,calls,say,intake,admit,chatFor,grant,profile,setNow:(v:number)=>{now=v;},setExecutionHook:(hook:(signal:AbortSignal)=>Promise<void>)=>{onExecute=hook;},start};
 }
 
 async function runningWork(f:Awaited<ReturnType<typeof setup>>,t:test.TestContext){
  let entered=()=>{},release=()=>{},signal:AbortSignal|undefined;
  const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ f.setWorker(async()=> 'Answer bounded worker evidence');
  f.setExecutionHook(async s=>{signal=s;entered();s.addEventListener('abort',release,{once:true});await gate;});
  t.after(async()=>{release();await f.assistant.idle();});f.script.push(v2('On it.','Churn causes','Quill'));await f.say(f.assistant,'Find churn causes');await started;f.setNow(Date.now());
  return {work:(await f.intake()).works.at(-1)!,release,signal:()=>signal!};
@@ -274,6 +275,7 @@ test('a duplicate message committed after its replay lookup returns the stored r
 test('a member steering message interrupts the active provider call after recording the owner instruction',async t=>{
  const f=await setup(t),quill=await f.admit();let entered=()=>{},release=()=>{},signal:AbortSignal|undefined;
  const started=new Promise<void>(r=>{entered=r;}),pending=new Promise<void>(r=>{release=r;});
+ f.setWorker(async()=> 'Answer bounded worker evidence');
  f.setExecutionHook(async s=>{signal=s;entered();s.addEventListener('abort',release,{once:true});await pending;});t.after(async()=>{release();await f.assistant.idle();});
  f.script.push(v2('On it.','Churn causes','Quill'));await f.say(f.assistant,'Find churn causes');await started;
  const work=(await f.intake()).works.at(-1)!;f.script.push(steer('Annual plans only.',work.id));const chat=f.chatFor(quill);await f.say(chat,'Annual plans only.');await confirmLast(chat);
@@ -734,4 +736,107 @@ for(const kind of ['application/pdf','image/png'])test(`multi-step member Work c
  f.setOutput(JSON.stringify(output),kind==='application/pdf'?'Answer bounded':'#ff0000');f.script.push(v2('On it.','Create '+kind,'Quill'));await f.say(f.assistant,'Create '+kind);await f.assistant.idle();
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker}));assert.equal(w.artifact!.kind,kind);assert.equal(w.room!.artifact.sha256,w.artifact!.sha256);assert.equal(w.record!.room!.artifact.sha256,w.artifact!.sha256);
  const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.ok(w.room!.messages.every(m=>Number.isSafeInteger(m.at)));assert.equal(w.verdict!.status,'passed');assert.ok(w.verdict!.predicates?.length);
+});
+
+
+test('confirmed procedure steering continues once with fresh inputs, telemetry and replayable journal',async t=>{
+ const f=await setup(t),quill=await f.admit(),chat=f.chatFor(quill);
+ const table=JSON.stringify({format:'massion-table/v1',caption:'Enterprise churn',columns:['Customer','Reason'],rows:[['Enterprise customers','Support']]});f.setOutput(table,'Enterprise customers');
+ let entered=()=>{},release=()=>{},signal:AbortSignal|undefined;
+ const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ let workers=0;
+ f.setWorker(async(_prompt,s)=>{workers++;if(workers===1){signal=s;entered();s.addEventListener('abort',release,{once:true});await gate;}return 'Answer bounded worker evidence';});
+ t.after(async()=>{release();await f.assistant.idle();});
+ f.script.push(v2('On it.','Churn causes','Quill'));await f.say(f.assistant,'Find churn causes');await started;
+ const original=(await f.intake()).works.at(-1)!,before=f.calls.length;
+ f.setNow(Date.now());f.script.push(steer('Apply the enterprise scope?',original.id));await f.say(chat,'Focus on enterprise customers');
+ const view=await chat.read(),input={segment:view.segment!.number,turnId:view.turns.at(-1)!.id};
+ const confirmations=await Promise.all([chat.confirmSteer(input),chat.confirmSteer(input)]);
+ assert.ok(confirmations.every(r=>['recorded','unknown'].includes(r.status??'')));
+ const continued=(await f.intake()).works.at(-1)!;
+ assert.equal(continued.execution,'active');assert.equal(continued.instructions!.length,1);assert.equal(continued.endedAt,undefined);assert.equal(signal!.aborted,false);
+ assert.deepEqual(continued.effects,original.effects);assert.equal(f.calls.length,before);
+ release();await f.assistant.idle();
+ const final=(await f.intake()).works.at(-1)!;assert.equal(final.acceptance,'accepted',JSON.stringify({execution:final.execution,blocker:final.blocker,effects:final.effects.map(e=>[e.id,e.status])}));assert.equal(workers,2);
+ assert.equal(await f.artifacts.read(final.artifact!),table);assert.ok(final.verdict!.predicates!.length);assert.ok(final.verdict!.predicates!.every(p=>p.checkedAt===final.verdict!.checkedAt&&Number.isSafeInteger(p.checkedAt)));
+ const prompts=f.workPrompts.filter(p=>p.binding?.workId===original.id),assembly=prompts.find(p=>p.stepResults),check=prompts.find(p=>p.artifact);
+ assert.equal(assembly.work.instructions[0].text,'Focus on enterprise customers');assert.deepEqual(check.requirements.instructions,assembly.work.instructions);
+ assert.equal(prompts.find(p=>p.step?.dependsOn.length)?.work.instructions[0].text,'Focus on enterprise customers');
+ assert.equal(new Set(final.effects.map(e=>e.id)).size,final.effects.length);assert.ok(final.tasks.filter(t=>t.step).every(t=>t.startedAt&&t.endedAt));
+ const {workInputHash}=await import('../src/domain.ts');assert.equal(final.runtimeRun!.inputHash,workInputHash(final));assert.equal(check.binding.inputHash,workInputHash(final));
+ validateMissionJournalLineage(f.store.inspect() as any);
+ const restart=f.chatFor(quill);assert.equal((await restart.read()).turns.at(-1)!.steer!.status,'recorded');assert.equal((await restart.confirmSteer(input)).status,'recorded');assert.equal(f.calls.length,before+5);
+});
+
+test('steering racing assembly admission refreshes its prompt before one fresh effect',async t=>{
+ const f=await setup(t);await f.admit();let raced=false;
+ const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{
+  const event=input.events[0] as any,w=input.value.works?.at(-1);
+  if(!raced&&event?.type==='admit-effect'&&w?.runtimeRun?.steeringVersion===1&&event.command.effect.taskId===w.id+':executor'){
+   raced=true;const current=(await f.store.load('intake'))!;
+   await f.product.intervene('intake',{commandId:'race-direction',expectedRevision:current.revision,command:{type:'steer',workId:w.id,instruction:'Only enterprise customers'}});
+  }
+  return commit(input);
+ };
+ f.script.push(v2('On it.','Enterprise churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.acceptance,'accepted');
+ const assembly=f.workPrompts.filter(p=>p.binding?.workId===w.id&&p.stepResults);assert.equal(assembly.length,1);assert.equal(assembly[0].work.instructions[0].text,'Only enterprise customers');
+ assert.equal(w.effects.filter(e=>e.taskId===w.id+':executor'&&e.providerDispatch).length,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('continued steering retains restart no-replay and refuses unsafe or legacy phases',async t=>{
+ const f=await setup(t);await f.admit();let entered=()=>{},release=()=>{};
+ const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+ f.setWorker(async(_p,signal)=>{entered();signal.addEventListener('abort',release,{once:true});await gate;return 'Answer bounded evidence';});
+ t.after(async()=>{release();await f.assistant.idle();});f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await started;
+ const before=(await f.store.load('intake'))!,w=before.value.works.at(-1)!,command:Command={type:'steer',workId:w.id,instruction:'Enterprise customers'},owner={id:'local-owner',roles:['owner'] as const},time={observedAt:Date.now(),telemetryVersion:1 as const,workEndVersion:2 as const};
+ for(const mutate of [(x:any)=>delete x.runtimeRun.steeringVersion,(x:any)=>{x.effects.at(-1).status='unknown';},(x:any)=>{x.artifact={id:'a',version:1,sha256:'a'.repeat(64),path:'a',kind:'text'};},(x:any)=>{x.runtimeRun.ownership.deadlineAt=time.observedAt;}]){
+  const state=structuredClone(before.value);mutate(state.works.at(-1));assert.equal(apply(state,command,owner,time).value.works.at(-1)!.execution,'waiting');
+ }
+ const reply=await f.product.intervene('intake',{commandId:'before-restart',expectedRevision:before.revision,command});assert.notEqual(reply.status,'conflict');
+ const connections=createHostConnections(f.store,f.artifacts,{manifest,allowLiveExecution:false},{transport:f.transport,settings:f.settings,readEnvironment:()=>undefined});await connections.restoreSettings();
+ const restarted=new ProductService(f.store,undefined,connections),snapshot=(await f.store.load('intake'))!,calls=f.calls.length;
+ assert.equal((await restarted.run('intake',w.id,'restart',snapshot.revision)).status,'already-started');assert.equal(f.calls.length,calls);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+for(const stage of ['claim-provider-dispatch','receipt','settle-task','record-step-progress'])test(`steering racing a worker ${stage} retains its outcome without another provider call`,async t=>{
+ const f=await setup(t);await f.admit();let raced=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{
+  const event=input.events[0] as any,w=input.value.works?.at(-1),command=event?.command;
+  if(!raced&&event?.type===stage&&w?.runtimeRun?.steeringVersion===1&&(['receipt','claim-provider-dispatch'].includes(stage)?command.effectId.endsWith(':step:0'):command.taskId.endsWith(':step:0'))){
+   raced=true;await f.product.intervene('intake',{commandId:'race-worker-'+stage,expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Enterprise customers'}});
+  }
+  return commit(input);
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Enterprise churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.acceptance,'accepted');assert.equal(f.calls.length-before,7);assert.ok(w.effects.every(e=>e.status==='succeeded'));
+ assert.equal(f.workPrompts.filter(p=>p.binding?.workId===w.id&&p.step?.title==='Read inputs').length,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+for(const outcome of ['lost','replayed'])test(`continued team never invokes a worker after a ${outcome} claim acknowledgment`,async t=>{
+ const f=await setup(t);await f.admit();let intercepted=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{const result=await commit(input),event=input.events[0] as any;
+  if(!intercepted&&event?.type==='claim-provider-dispatch'&&event.command.effectId.endsWith(':step:0')){intercepted=true;if(outcome==='lost')throw new CommitOutcomeUnknownError(input,new Error('Lost claim acknowledgment'));if(result.status==='committed')return {...result,status:'replayed'};}
+  return result;
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!,effect=w.effects.find(e=>e.id.endsWith(':step:0'))!;assert.equal(intercepted,true);assert.equal(f.calls.length-before,1);assert.equal(effect.status,'pending');assert.ok(effect.providerDispatch);assert.equal(w.record,undefined);
+ assert.equal((await f.product.run('intake',w.id,'reclaim',(await f.store.load('intake'))!.revision)).status,'already-started');assert.equal(f.calls.length-before,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});
+
+test('steering racing the failure blocker retains the failed worker outcome without replay',async t=>{
+ const f=await setup(t);await f.admit();f.setWorker(async()=> 'x'.repeat(16001));let raced=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{const event=input.events[0] as any,w=input.value.works?.at(-1);
+  if(!raced&&event?.type==='block-work'&&w?.runtimeRun?.steeringVersion===1){raced=true;await f.product.intervene('intake',{commandId:'race-blocker',expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Enterprise customers'}});}
+  return commit(input);
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.execution,'blocked');assert.equal(w.blocker?.code,'provider_failed');assert.match(w.blocker!.detail,/team step did not complete/);assert.equal(f.calls.length-before,2);
+ assert.equal(w.effects.find(e=>e.id.endsWith(':step:0'))!.status,'failed');assert.equal(w.instructions!.length,1);assert.equal(w.record,undefined);assert.equal(w.artifact,undefined);
+ validateMissionJournalLineage(f.store.inspect() as any);
 });
