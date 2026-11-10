@@ -11,8 +11,8 @@ const sequence=(...parts:string[])=>new RegExp(parts.map(part=>part.replace(/[.*
 // docs/architecture/apps.md, Surface: Settings > Apps (B23, B23-github), the install card (B24, B24-done), the rail and app page (B22) and the Work room tab (B22-room).
 const sourceFixture=await loadFixture('B23');
 const T0=Date.UTC(2026,10,5,10,31);
-const perms={read:['Repositories','Pull requests','Check results'],write:[],network:['api.github.com'],files:['Work folder · read'],secrets:[{slot:'github-token',label:'GitHub token'}],events:['PR opened','PR merged']};
-const github={id:'app-github',name:'GitHub',origin:'catalog',memberId:null,version:'1.4.0',enabled:true,installedAt:T0,check:null,permissions:perms,contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},versions:[{index:1,version:'1.3.2',at:T0-2*86400000,current:false},{index:2,version:'1.4.0',at:T0,current:true}]};
+const perms={read:['저장소','PR','체크 결과'],write:[],network:['api.github.com'],files:['Work folder · read'],secrets:[{slot:'github-token',label:'GitHub 토큰'}],events:['PR 열림','PR 병합']};
+const github={id:'app-github',name:'GitHub',origin:'catalog',memberId:null,version:'1.4.0',enabled:true,installedAt:T0,check:null,permissions:perms,contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['코드 리뷰'],skills:['PR 요약'],procedures:['PR 리뷰'],tools:['gh']},versions:[{index:1,version:'1.3.2',at:T0-2*86400000,current:false},{index:2,version:'1.4.0',at:T0,current:true}]};
 const page={title:'GitHub',meta:'jabdori/massion',groups:[{title:'Open',rows:[{id:'84',title:'feat(assistant): answer the owner and start Representative Work',meta:'#84 · 2026-11-05 10:28',state:'Open'}]},{title:'Merged',rows:[{id:'83',title:'feat(assistant): store the continuing assistant conversation',meta:'#83',state:'Merged'}]}]};
 const item={title:'feat(assistant): answer the owner and start Representative Work #84',meta:'Open · jabdori · feat/assistant-conversation-turns → main',groups:[{title:'Files 2',rows:[{id:'src/assistant-service.ts',title:'src/assistant-service.ts',meta:'+206 −0'}]}],fields:[['Changes','+769 −39']]};
 function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=[],rail:any[]=[{id:'app-github',name:'GitHub',page:true,item:true,roomTab:'PR #'}],view?:(body:any,headers:Record<string,string>)=>unknown,installedApp=github,loseReply?:()=>Promise<never>){
@@ -20,7 +20,7 @@ function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'&&path==='/assistant/apps/view'){const b=JSON.parse(options.body);if(view)return reply(await view(b,options.headers??{}));return reply(b.app==='app-github'&&b.handler==='page'&&b.ref===undefined?page:b.handler==='item'&&b.ref==='84'?item:{error:'x'});}
   if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});if(loseReply)await loseReply();return reply({status:'committed',revision:2});}
-  if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[installedApp,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'Pull requests',available:true,installed}]});
+  if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[installedApp,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'PR',available:true,installed}]});
   if(path==='/missions/intake')return reply(structuredClone(sourceFixture.routes[path]!.body));
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?rail:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
@@ -35,7 +35,7 @@ const open=async(app:ReturnType<typeof harness>)=>{await app.node('me-settings')
 
 test('Settings > Apps lists installed apps and the catalog; Install asks in the Representative conversation',async()=>{
  const {app,posted}=fixture(false);await settle();await open(app);
- const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.settings.installed-count',{count:0}),copy('settings.text.03'),copy('settings.heading.13'),'GitHub','Pull requests',copy('settings.link.04')));
+const body=app.node('settings-apps-body');assert.match(body.textContent,sequence(copy('ui.settings.installed-count',{count:0}),copy('settings.text.03'),copy('settings.heading.13'),'GitHub','PR',copy('settings.link.04')));
  await button(body,copy('settings.link.04'))[0]!.fire('click');await settle();
  assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.action,posted.at(-1)!.body.catalogId],['/assistant/apps','install','github']);
  assert.equal(app.node('page-chat').hidden,false,'the card is answered in the conversation');
@@ -47,8 +47,8 @@ test('an installed app opens its page: permissions, what it adds, versions with 
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  const detail=app.node('settings-apps-body');
  assert.match(detail.textContent,sequence('‹ '+copy('ui.apps'),'GitHub','1.4.0 · ',copy('settings.link.05'),copy('settings.button.04')));
- assert.match(detail.textContent,sequence(copy('sidebar.heading.01'),copy('ui.panel.tools'),'Repositories · Pull requests · Check results',copy('settings.text.02'),'api.github.com',copy('sidebar.button.14'),'Work folder · read',copy('settings.text.05'),'GitHub token',copy('settings.text.04'),'PR opened · PR merged'));
- assert.match(detail.textContent,sequence(copy('settings.heading.12'),copy('ui.panel.member-templates'),'Code review',copy('settings.heading.07'),'PR summary',copy('settings.heading.09'),'PR review',copy('ui.panel.tools'),'gh',copy('ui.panel.screens'),'GitHub · '+copy('ui.panel.app-tab',{title:'PR'})));
+ assert.match(detail.textContent,sequence(copy('sidebar.heading.01'),copy('ui.panel.tools'),'저장소 · PR · 체크 결과',copy('settings.text.02'),'api.github.com',copy('sidebar.button.14'),'Work folder · read',copy('settings.text.05'),'GitHub 토큰',copy('settings.text.04'),'PR 열림 · PR 병합'));
+ assert.match(detail.textContent,sequence(copy('settings.heading.12'),copy('ui.panel.member-templates'),'코드 리뷰',copy('settings.heading.07'),'PR 요약',copy('settings.heading.09'),'PR 리뷰',copy('ui.panel.tools'),'gh',copy('ui.panel.screens'),'GitHub · '+copy('ui.panel.app-tab',{title:'PR'})));
  assert.match(detail.textContent,sequence(copy('settings.heading.04'),'1.4.0',copy('ui.panel.current-version',{date:''}),'1.3.2',copy('settings.button.13')));
  assert.doesNotMatch(detail.textContent,/assistant|Lead|sandbox/i);
  await button(detail,copy('settings.button.13'))[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.body.action,posted.at(-1)!.body.appId,posted.at(-1)!.body.version],['rollback','app-github',1]);
@@ -56,9 +56,9 @@ test('an installed app opens its page: permissions, what it adds, versions with 
 });
 
 test('the install card shows its detail line and rows; the done line offers Remove',async()=>{
- const card={id:'app-decision:1',at:T0,title:'GitHub',question:'Install GitHub app?',detail:'GitHub · 1.4.0',rows:[['Read','Repositories · Pull requests'],['Write','None']],action:'Install',state:'open'};
+ const card={id:'app-decision:1',at:T0,title:'GitHub',question:'Install GitHub app?',detail:'GitHub · 1.4.0',rows:[['Read','저장소 · PR'],['Write','None']],action:'Install',state:'open'};
  const {app,posted}=fixture(false,[card]);await settle();
- const node=app.all().find(n=>n.id==='chat-decision-app-decision:1')!;assert.match(node.textContent,sequence('Install GitHub app?','GitHub · 1.4.0','Read','Repositories · Pull requests','Write','None',copy('settings.link.04'),copy('conversation.button.04')));
+ const node=app.all().find(n=>n.id==='chat-decision-app-decision:1')!;assert.match(node.textContent,sequence('Install GitHub app?','GitHub · 1.4.0','Read','저장소 · PR','Write','None',copy('settings.link.04'),copy('conversation.button.04')));
  await button(node,copy('settings.link.04'))[0]!.fire('click');await settle();assert.deepEqual([posted.at(-1)!.path,posted.at(-1)!.body.answer],['/assistant/decisions','act']);
  const done=fixture(true,[{...card,state:'done',line:'GitHub app installed',remove:'app-github'}]);await settle();
  const line=done.app.all().find(n=>n.id==='chat-system-app-decision:1')!;assert.match(line.textContent,sequence('GitHub app installed',copy('conversation.link.24')));
@@ -238,7 +238,7 @@ test('Settings app search filters loaded installed, self-made and recommended ro
  const find=catalog.app.all().find(n=>n.id==='settings-app-search')!;
  const install=button(catalog.app.node('settings-apps-body'),copy('settings.link.04'))[0]!;
  find.value='missing';await find.fire('input');assert.equal(install.parentElement!.hidden,true);
- find.value='pull requests';await find.fire('input');assert.equal(install.parentElement!.hidden,false);
+ find.value='PR';await find.fire('input');assert.equal(install.parentElement!.hidden,false);find.value='zzzz';await find.fire('input');assert.equal(install.parentElement!.hidden,true);
  assert.equal(catalog.posted.length,0);
 });
 
@@ -258,7 +258,7 @@ test('Settings app detail never reveals secret values or claims an unproduced cr
  const data={...github,permissions:{...perms,secrets:[{...perms.secrets[0]!,value:sentinel}]},tokenStatus:'expired'};
  const {app}=fixture(true,[],[],[],undefined,undefined,data);await settle();await open(app);
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
- const body=app.node('settings-apps-body');assert.match(body.textContent,/GitHub token/);assert.doesNotMatch(body.textContent,new RegExp(sentinel+'|저장됨|만료됨'));
+ const body=app.node('settings-apps-body');assert.match(body.textContent,/GitHub 토큰/);assert.doesNotMatch(body.textContent,new RegExp(sentinel+'|저장됨|만료됨'));
  assert.equal(button(body,copy('settings.button.06')).length,0);
  assert.equal(app.all().filter(n=>n.type==='password'&&body.contains(n)).length,0);
  assert.equal(app.node('app-connect-panel').hidden,true);assert.equal(app.node('app-connect-token').value,'');

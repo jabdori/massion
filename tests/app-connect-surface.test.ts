@@ -6,7 +6,7 @@ import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 
-const decision={id:'connect:github',at:1793851920000,title:'GitHub',question:'Connect GitHub?',rows:[['Read','Repositories']],action:copy('conversation.button.12'),state:'open',line:'GitHub connected',remove:'app-github',connection:{appId:'app-github',slot:'github-token',label:'GitHub token',connected:false}};
+const decision={id:'connect:github',at:1793851920000,title:'GitHub',question:'Connect GitHub?',rows:[['Read','저장소']],action:copy('conversation.button.12'),state:'open',line:'GitHub connected',remove:'app-github',connection:{appId:'app-github',slot:'github-token',label:'GitHub 토큰',connected:false}};
 test('connection copy uses the approved app placeholder',()=>{
  assert.equal(copy('ui.apps.connect-question',{app:'GitHub'}),'GitHub 앱을 연결할까요?');
  assert.equal(copy('ui.apps.connected',{app:'GitHub'}),'GitHub 앱 연결됨');
