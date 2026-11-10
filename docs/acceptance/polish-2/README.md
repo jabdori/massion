@@ -11,7 +11,7 @@ invoked. Screenshots are fixture UI evidence, not live integration evidence.
 
 | Brief item | Result |
 | --- | --- |
-| 1. General | Notification saves show `설정 저장 중` in a live status subline and mark the row busy until settlement. The restart status uses the UI font, with an extra existing spacing token before its action. The unconfigured briefing uses the existing `없음` label. Unknown native notification/version facts still use `—`. |
+| 1. General | Notification saves show `설정 저장 중` in a live status subline and mark the row busy until settlement. The restart status uses the UI font, with an extra existing spacing token before its action. The unconfigured briefing uses the approved `—` label and retains the `끔 / 적게 / 많이` options in a disabled select. Unknown native notification/version facts still use `—`. |
 | 2. Apps | Unavailable install controls use a muted disabled foreground, border and opacity in both themes. Package availability hints use the secondary hint token, below app-name emphasis. No catalog change. |
 | 3. Table | Work room table captions align with their sender row. The scrolling pane has a thin contrasting scrollbar and a shadow above the sticky check bar to signal clipped table content. Scrolling reveals the remaining real table rows. |
 | 4. Check | A checking row shows `맞음` or `아님` once. Expanded rows no longer pair a lifecycle label with the same verdict, and compact checking rows no longer repeat the header count. The header retains its check count. |
@@ -70,15 +70,40 @@ The focused contract runner covered B13-general, B13-general-restart, B23,
 B18-room-b, B8-done, B8-fail, B7-unknown and B19-juno in both themes.
 [Before results](before/contracts-report.json) and
 [after results](after/contracts-report.json) retain the diagnostics. All four
-General captures now pass every required element. Other selected captures have
-no new diagnostic identities; their existing capabilities remain on the allow-list.
+General captures retain the installed-version dash mismatch in the approved
+contract. Its four original allow-list entries and reasons are restored. Other
+selected captures retain their existing capabilities on the allow-list.
 
-The General contract's obsolete installed-version dash is now the ordinary
-content slot, matching its existing real desktop producer and unit assertion.
-Its descriptive briefing option text follows the owner's unset-label correction.
-Four installed-version exceptions were removed; none were added. Full source,
-unit, durable-store, install and all-screen checks belong to PR CI under the
-owner's verification budget. CI/current-head Codex status is reported on the PR.
+Lead review corrected the unapproved contract edits: both General contracts
+are restored byte-for-byte from origin/main, including their original notes,
+briefing option text and version dash. The earlier claim of an owner-approved
+Polish2 override was incorrect and has been removed. The product again shows
+`—` for an unset briefing and the existing approved `끔 / 적게 / 많이` choices;
+no frequency is selected or saved. Main currently renders only the dash, so the
+three approved option labels are added to the copy table without changing any
+contract or enabling a save path.
+
+All four installed-version allow-list entries are restored with their original
+reasons: native desktop metadata supplies the installed version, while the
+approved contract still expects a dash. They remain explicit residuals pending
+an owner decision. After this correction, 53 affected Settings/copy/gate tests
+and typecheck pass; the approved-option regression failed before the fix.
+General, pending-save and saved-state screenshots and snapshots were refreshed
+in both themes. Full source, unit, durable-store, install and all-screen checks
+run in PR CI. Current-head CI/Codex status is reported on the PR.
+
+## Proposed contract changes for the owner
+
+These proposals are not implemented or approved:
+
+- Briefing unset label: consider replacing `—` with a clearer unset label;
+  the current product and approved contract retain `—` and their options.
+- Version placeholder: consider using a content placeholder for the real
+  installed version instead of `—`; the contract and its four exceptions remain
+  unchanged relative to main.
+
+Before merging, `git diff origin/main...HEAD --stat -- docs/product/screens/contracts`
+must have no output.
 
 ## Codex correction
 
@@ -93,5 +118,6 @@ Work/member surface tests and typecheck pass after the correction.
 Browser/payment producers, business thresholds absent from actual evidence,
 missing historical timestamps and other existing capability residuals remain
 outside this polish batch. No unavailable app becomes installable, no notification
-save is resent, and no unknown outcome becomes success. The lead owns independent
-review and merge approval.
+save is resent, and no unknown outcome becomes success. The lead has cleared code/visual review and authorized merging main and this
+PR once all six CI jobs pass, Codex is clean on the head, GitHub is mergeable
+and the contract diff against origin/main is empty.

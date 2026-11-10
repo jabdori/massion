@@ -232,11 +232,11 @@ test('review 7: unusable discriminator profiles have no selectable control or sa
  const app=harness(async(path)=>path==='/connections'?reply({configHash:'h',modelGroups:[],connections:[],runtime:{connections:profiles,defaultRoutes:[]},providerTypes:[],grants:[],liveExecutionEnabled:false}):reply({}));await settle();await open(app,'connections');assert.equal(byId(app,'settings-discriminator-model'),undefined);assert.ok(!app.all().some(n=>n.tagName==='OPTION'&&profiles.some(p=>p.id===n.value)));assert.ok(!app.calls.some(c=>c.options?.method==='POST'));
 });
 
-test('General distinguishes an unset briefing from unknown native notifications',async()=>{
+test('General unknown selects retain a selected visible dash without claiming a schedule or version',async()=>{
  const {app}=fixture();await settle();await open(app,'general');
  const fields=app.all().filter(n=>n.tagName==='SELECT'&&n.disabled&&n.attributes.has('aria-label'));
  assert.equal(fields.length,2);
- for(const field of fields){assert.equal(field.children[0]!.textContent,copy(field.attributes.get('aria-label')===copy('settings.combobox.01')?'settings.text.03':'ui.settings.unknown-value'));assert.equal((field.children[0] as any).selected,true);}
+ for(const field of fields){assert.equal(field.children[0]!.textContent,copy('ui.settings.unknown-value'));assert.equal((field.children[0] as any).selected,true);}
  });
 
 test('Group detail keeps numbered models and avatar-name-chevron member order with truthful running status',async()=>{

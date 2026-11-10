@@ -5,7 +5,7 @@ B19, B23 and B7/B8 artboards and existing visual tokens. No new API, dependency,
 scenario-specific producer, app catalog edit or browser-runtime edit.
 
 - [x] Extend native General tests for visible pending saves and the existing
-  unset label; retain readback, restart and unknown-outcome fences.
+  approved unset label/options; retain readback, restart and unknown-outcome fences.
 - [x] Extend Work room tests for one verdict value per checking row. Keep the
   count in the card header, and real evidence/times in their existing rows.
 - [x] Correct General status spacing, unavailable app contrast, procedure chip
@@ -15,7 +15,9 @@ scenario-specific producer, app catalog edit or browser-runtime edit.
   states. Compare approved artboards; remove only resolved allow-list entries.
 - [x] Run focused tests and typecheck.
 - [ ] Push one PR, then address CI and current-head Codex P1/P2 findings (maximum
-  four review loops). Leave merging to lead approval.
+  four review loops). The lead now authorizes merging main and the PR after six
+  CI jobs pass, current-head Codex is clean, GitHub is mergeable and the contract
+  diff against origin/main is empty.
 
 Already implemented on current main, to verify without rewriting: real failed
 check evidence (no invented business threshold), expand/collapse glyph switching,
@@ -24,9 +26,12 @@ Reach: Settings, app Settings CSS, Work room rendering/CSS, their existing tests
 focused browser assertions and acceptance evidence. Stored state, commands,
 credentials and execution ownership remain unchanged.
 
-The briefing control has no frequency producer; use the existing `None` label
-for its unconfigured value rather than implying a saved frequency. No synthetic
-check evidence or timestamps are introduced. Fixture captures prove UI behavior,
+Lead correction: restore both General contracts byte-for-byte from origin/main.
+Keep the approved briefing dash and off/low/high options disabled; no frequency
+producer or saved selection is inferred. Restore all four installed-version
+exceptions with their original reasons. A clearer unset label and a version
+placeholder are proposals for the owner, not approved contract changes.
+No synthetic check evidence or timestamps are introduced. Fixture captures prove UI behavior,
 not live native/provider integration. Full suites and all contracts run in CI.
 
 Korean wrapping follows [MDN word-break](https://developer.mozilla.org/en-US/docs/Web/CSS/word-break)

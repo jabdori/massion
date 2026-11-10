@@ -158,7 +158,8 @@ async function settingsDesktopRestart(){
 function settingsDesktopProfile(){if(settingsDesktop?.restartRequired)$('profile-health').textContent=copy('settings.status.01');}
 function settingsGeneralView(){
  const name=element('input');name.id='settings-name';name.value=settingsRepName();name.readOnly=true;name.setAttribute('aria-label',copy('page.columnheader.02'));
- const rows=[settingsRow(copy('page.columnheader.02'),'',name)],briefing=element('select'),option=element('option',copy('settings.text.03'));option.value='';option.selected=true;briefing.setAttribute('aria-label',copy('settings.combobox.01'));briefing.disabled=true;briefing.append(option);rows.push(settingsRow(copy('settings.combobox.01'),'',briefing));
+ const rows=[settingsRow(copy('page.columnheader.02'),'',name)],briefing=element('select');briefing.setAttribute('aria-label',copy('settings.combobox.01'));briefing.disabled=true;
+ for(const [value,key] of [['','ui.settings.unknown-value'],['off','ui.settings.briefing-off'],['low','ui.settings.briefing-low'],['high','ui.settings.briefing-high']]){const option=element('option',copy(key));option.value=value;option.selected=value==='';briefing.append(option);}rows.push(settingsRow(copy('settings.combobox.01'),'',briefing));
  const notifications=element('select');notifications.id='settings-notifications';notifications.setAttribute('aria-label',copy('settings.combobox.02'));
  const choices=settingsDesktop?[['on',copy('ui.settings.notifications-on')],['off',copy('ui.settings.notifications-off')]]:[['',copy('ui.settings.unknown-value')]];
  for(const [value,label] of choices){const o=element('option',label);o.value=value;o.selected=settingsDesktop?value===(settingsDesktop.notifications?'on':'off'):true;notifications.append(o);}

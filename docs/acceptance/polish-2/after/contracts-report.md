@@ -1,21 +1,21 @@
 # UI contracts
 
-Mode: **REPORT-ONLY**. 6/16 screen/theme runs pass all measured checks; 10 have drift, gaps or errors.
+Mode: **REPORT-ONLY**. 2/16 screen/theme runs pass all measured checks; 14 have drift, gaps or errors.
 
 Element passes count required matches. Failures also include forbidden strings and hard text budgets; they are not required-minus-passed. Visual checks cover tokens and region rectangles, not pixel similarity. Missing state interactions and artboards are gaps. Infrastructure errors fail either mode.
 
 | Screen | Theme | Elements passed / required | Contract failures | Warnings | Visual failures | Gaps | Errors | Pair |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| B13-general | dark | 21 / 21 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B13-general.png) |
-| B13-general-restart | dark | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B13-general-restart.png) |
+| B13-general | dark | 20 / 21 | 1 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B13-general.png) |
+| B13-general-restart | dark | 22 / 23 | 1 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B13-general-restart.png) |
 | B23 | dark | 29 / 29 | 0 | 0 | 0 | 1 | 0 | [PNG](pairs/dark/B23.png) |
 | B18-room-b | dark | 67 / 69 | 2 | 2 | 2 | 1 | 0 | [PNG](pairs/dark/B18-room-b.png) |
 | B8-done | dark | 34 / 36 | 2 | 3 | 0 | 2 | 0 | [PNG](pairs/dark/B8-done.png) |
 | B8-fail | dark | 36 / 36 | 0 | 3 | 0 | 2 | 0 | [PNG](pairs/dark/B8-fail.png) |
 | B7-unknown | dark | 36 / 46 | 10 | 3 | 0 | 2 | 0 | [PNG](pairs/dark/B7-unknown.png) |
 | B19-juno | dark | 37 / 37 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/dark/B19-juno.png) |
-| B13-general | light | 21 / 21 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B13-general.png) |
-| B13-general-restart | light | 23 / 23 | 0 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B13-general-restart.png) |
+| B13-general | light | 20 / 21 | 1 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B13-general.png) |
+| B13-general-restart | light | 22 / 23 | 1 | 0 | 0 | 0 | 0 | [PNG](pairs/light/B13-general-restart.png) |
 | B23 | light | 29 / 29 | 0 | 0 | 0 | 1 | 0 | [PNG](pairs/light/B23.png) |
 | B18-room-b | light | 67 / 69 | 2 | 2 | 2 | 1 | 0 | [PNG](pairs/light/B18-room-b.png) |
 | B8-done | light | 34 / 36 | 2 | 3 | 0 | 2 | 0 | [PNG](pairs/light/B8-done.png) |

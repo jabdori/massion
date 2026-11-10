@@ -4,8 +4,8 @@
     {
       "screen": "B13-general",
       "theme": "dark",
-      "passed": 21,
-      "failed": 0,
+      "passed": 20,
+      "failed": 1,
       "warnings": 0,
       "required": 21,
       "visualFailures": [],
@@ -16,8 +16,8 @@
     {
       "screen": "B13-general-restart",
       "theme": "dark",
-      "passed": 23,
-      "failed": 0,
+      "passed": 22,
+      "failed": 1,
       "warnings": 0,
       "required": 23,
       "visualFailures": [],
@@ -116,8 +116,8 @@
     {
       "screen": "B13-general",
       "theme": "light",
-      "passed": 21,
-      "failed": 0,
+      "passed": 20,
+      "failed": 1,
       "warnings": 0,
       "required": 21,
       "visualFailures": [],
@@ -128,8 +128,8 @@
     {
       "screen": "B13-general-restart",
       "theme": "light",
-      "passed": 23,
-      "failed": 0,
+      "passed": 22,
+      "failed": 1,
       "warnings": 0,
       "required": 23,
       "visualFailures": [],

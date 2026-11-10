@@ -1,4 +1,7 @@
 {
+ "ui.settings.briefing-off": {"ko": "끔", "roles": ["option"], "used_in": ["B13-general:settings", "B13-general-restart:settings"], "provenance": "Existing option text in the unchanged approved B13 General contracts"},
+ "ui.settings.briefing-low": {"ko": "적게", "roles": ["option"], "used_in": ["B13-general:settings", "B13-general-restart:settings"], "provenance": "Existing option text in the unchanged approved B13 General contracts"},
+ "ui.settings.briefing-high": {"ko": "많이", "roles": ["option"], "used_in": ["B13-general:settings", "B13-general-restart:settings"], "provenance": "Existing option text in the unchanged approved B13 General contracts"},
  "ui.room.record-created": {
   "ko": "기록 생성",
   "roles": ["text"],

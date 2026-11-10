@@ -1971,6 +1971,46 @@
       ]
     },
     {
+      "screen": "B13-general",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
       "screen": "B7",
       "theme": "dark",
       "kind": "gap",

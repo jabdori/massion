@@ -39,15 +39,18 @@
         - StaticText "하나"
       - strong
         - StaticText "아침 브리핑"
-      - combobox "아침 브리핑" [expanded=false, disabled, ref=e23]: 없음
+      - combobox "아침 브리핑" [expanded=false, disabled, ref=e23]: —
         - MenuListPopup
-          - option "없음" [disabled, ref=e26]
+          - option "—" [disabled, ref=e26]
+          - option "끔" [disabled, ref=e27]
+          - option "적게" [disabled, ref=e28]
+          - option "많이" [disabled, ref=e29]
       - strong
         - StaticText "알림"
       - combobox "알림" [expanded=false, ref=e24]: 꺼짐
         - MenuListPopup
-          - option "켜짐" [ref=e27]
-          - option "꺼짐" [selected, ref=e28]
+          - option "켜짐" [ref=e30]
+          - option "꺼짐" [selected, ref=e31]
       - strong
         - StaticText "버전"
       - StaticText "1.0.0-rc.1"

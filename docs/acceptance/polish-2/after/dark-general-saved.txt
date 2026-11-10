@@ -35,22 +35,25 @@
       - heading "일반" [level=2, ref=e21]
       - strong
         - StaticText "이름"
-      - textbox "이름" [ref=e28]: 하나
+      - textbox "이름" [ref=e31]: 하나
         - StaticText "하나"
       - strong
         - StaticText "아침 브리핑"
-      - combobox "아침 브리핑" [expanded=false, disabled, ref=e29]: 없음
+      - combobox "아침 브리핑" [expanded=false, disabled, ref=e32]: —
         - MenuListPopup
-          - option "없음" [disabled, ref=e32]
+          - option "—" [disabled, ref=e35]
+          - option "끔" [disabled, ref=e36]
+          - option "적게" [disabled, ref=e37]
+          - option "많이" [disabled, ref=e38]
       - strong
         - StaticText "알림"
-      - combobox "알림" [expanded=false, ref=e30]: 꺼짐
+      - combobox "알림" [expanded=false, ref=e33]: 꺼짐
         - MenuListPopup
-          - option "켜짐" [ref=e33]
-          - option "꺼짐" [selected, ref=e34]
+          - option "켜짐" [ref=e39]
+          - option "꺼짐" [selected, ref=e40]
       - strong
         - StaticText "버전"
       - StaticText "1.0.0-rc.1"
       - status
         - StaticText "다시 시작 필요"
-      - button "다시 시작" [ref=e31]
+      - button "다시 시작" [ref=e34]
