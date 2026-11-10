@@ -1557,82 +1557,12 @@
     {
       "screen": "B23",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings heading \"추천\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 4,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 5,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 6,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "The host catalog contains only GitHub; the six other recommended apps have no installable packages.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
+      "ledger": "docs/acceptance/ri/README.md"
     },
     {
       "screen": "B2",
@@ -3187,82 +3117,12 @@
     {
       "screen": "B23",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings heading \"추천\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 4,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 5,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 6,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "The host catalog contains only GitHub; the six other recommended apps have no installable packages.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
+      "ledger": "docs/acceptance/ri/README.md"
     },
     {
       "screen": "B15",

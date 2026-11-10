@@ -32,6 +32,17 @@ const state=async(store:InMemoryStore<any>)=>(await store.load(APPS_ID))!.value 
 const install=(s:AppsService,commandId='c-install')=>s.act({commandId,action:'install',catalogId:'github'});
 const answer=(s:AppsService,decisionId:string,a:'act'|'later'|'ask',commandId='c-'+a)=>s.decide({commandId,decisionId,answer:a});
 
+test('recommended apps without packages are unavailable and cannot create install decisions',async()=>{
+ const store=new InMemoryStore(),service=new AppsService(store),before=store.inspect();
+ const read=await service.read(),unavailable=read.catalog.filter(c=>!c.available);
+ assert.deepEqual(unavailable.map(c=>c.id),['slack','linear','google-calendar','notion','figma','sentry']);
+ assert.ok(unavailable.every(c=>!c.installed));
+ assert.equal(read.catalog.find(c=>c.id==='github')!.available,true);
+ for(const c of unavailable)await assert.rejects(service.act({commandId:'install-'+c.id,action:'install',catalogId:c.id}),/Unknown catalog app/);
+ assert.deepEqual(store.inspect(),before);assert.deepEqual(await service.decisions(null),[]);
+ await install(service);assert.equal((await service.decisions(null))[0]!.question,'Install GitHub app?');
+});
+
 test('a manifest is exact, hosts are bare, the source is scanned and the package hash pins it',()=>{
  assert.equal(validatePackage(GITHUB_APP),null);
  assert.match(validatePackage({...GITHUB_APP,manifest:{...GITHUB_APP.manifest,extra:1} as any})!,/Manifest/);
@@ -166,7 +177,7 @@ test('routes: list, install, answer and view; the conversation read carries the 
  {
   const get=async(path:string)=>{const r=await fetch(base+path,{headers});return {status:r.status,body:await r.json() as any};};
   const post=async(path:string,body:unknown)=>{const r=await fetch(base+path,{method:'POST',headers,body:JSON.stringify(body)});return {status:r.status,body:await r.json() as any};};
-  assert.deepEqual((await get('/assistant/apps')).body.catalog.map((c:any)=>[c.id,c.installed]),[['github',false]]);
+  assert.deepEqual((await get('/assistant/apps')).body.catalog.filter((c:any)=>c.available).map((c:any)=>[c.id,c.installed]),[['github',false]]);
   assert.equal((await post('/assistant/apps',{commandId:'c1',action:'install',catalogId:'github'})).status,201);
   let chat=(await get('/assistant/conversation')).body;const card=chat.decisions.find((d:any)=>d.id.startsWith('app-decision:'));assert.equal(card.question,'Install GitHub app?');assert.deepEqual(chat.apps,[]);
   assert.equal((await post('/assistant/decisions',{commandId:'c2',decisionId:card.id,answer:'act'})).status,200);
