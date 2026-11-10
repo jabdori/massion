@@ -12,8 +12,8 @@ never acceptance, permissions, effect receipts or a business oracle.
 Validate marked results before worker settlement and artifact writes; the task
 command also rejects malformed marked envelopes. No command, storage field,
 backup format or dependency is added. Project only settled, non-skipped results
-into existing Work-list and conversation reads. Validated table rows also supply
-pricing metadata. Prefer final assembly facts over worker facts without adding
+into existing Work-list and conversation reads. Only tables explicitly marked `business:"pricing"` supply pricing
+metadata; generic tables supply a table count without business meaning. Prefer final assembly facts over worker facts without adding
 duplicate counts. Share the host projection with activity rows and cards before
 any pane opens. Existing revision, feed and request-generation fences replace
 or discard summaries with the rest of each row. Exception status takes priority.

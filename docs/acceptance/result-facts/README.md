@@ -74,3 +74,21 @@ Additional runtime/conversation/telemetry regression batch: 79 tests, 76 passed,
 three existing environment-gated skips, zero failures. This batch does not overlap
 the 142-test batch above. The skips are disposable real-SurrealDB tests; no live
 provider or existing database was used.
+
+## Review corrections
+
+Codex identified that generic table rows could be mislabeled as pricing plans.
+The red/green regression now retains their generic table count with no business
+facts. Only an explicit, validated `business:"pricing"` table discriminator or
+an explicit facts envelope supplies pricing meaning. Controlled pricing producers
+were updated at source and their fixtures regenerated.
+
+The first CI suite also caught two older visual-test assumptions: structured
+facts render semantically inside the existing disclosure, and authoritative list
+facts remain usable when an unrelated pane revision changes. The updated tests
+still require closed disclosures and reject stale pane fallbacks. Accepted
+results retain their counts while unknown/stopped status takes priority.
+
+The review-fix batch passed 124 tests with no failures/skips; it overlaps earlier
+batches and is not an additional aggregate count. Typecheck passed. Final-head
+full-suite and screen evidence is reported by CI on the PR.

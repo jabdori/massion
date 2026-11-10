@@ -62,6 +62,8 @@ function shellResultSummary(work){
  const status=shellWorkLabel(work);
  if(facts.kind==='pricing'&&work.acceptance==='pending'&&status===copy('sidebar.status.07'))return copy('ui.facts.pricing',facts);
  if(facts.kind==='churn'&&work.acceptance==='pending'&&work.execution==='active')return copy('ui.facts.churn',facts)+(work.workerSteps?.some(t=>t.status==='active'&&t.step.title==='원인 정리')?' '+copy('ui.facts.churn.running'):'');
+ if(facts.kind==='pricing')return copy('ui.facts.pricing-counts',facts)+' · '+status;
+ if(facts.kind==='churn')return copy('ui.facts.churn',facts)+' '+status;
  if(facts.kind==='causes')return copy('ui.facts.causes',{...facts,status:work.acceptance==='failed'?copy('ui.check-failed'):status});
  return '';
 }

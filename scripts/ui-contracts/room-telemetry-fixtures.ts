@@ -14,7 +14,7 @@ const time=(clock:string)=>Date.parse('2026-11-05T'+clock+':00+09:00');
 /** 외부 조회가 없는 통제 예시이며 출처 링크나 실제 시장 가격을 주장하지 않습니다. */
 export function pricingTableResult():string {
  const rows=[['A사','기본','9,900원','통제 예시'],['A사','팀','19,900원','통제 예시'],['B사','개인','8,000원','통제 예시'],['B사','팀','19,000원','통제 예시'],['B사','기업','45,000원','통제 예시'],['C사','연간 ÷ 12','12,500원','통제 예시']];
- const result=JSON.stringify({format:'massion-table/v1',caption:'경쟁사 가격 · '+rows.length+'개',columns:['회사','요금제','월 요금','출처'],rows});
+ const result=JSON.stringify({format:'massion-table/v1',business:'pricing',caption:'경쟁사 가격 · '+rows.length+'개',columns:['회사','요금제','월 요금','출처'],rows});
  validateTableOutput(result);return result;
 }
 const pricing=[

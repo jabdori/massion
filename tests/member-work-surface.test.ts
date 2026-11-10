@@ -60,6 +60,14 @@ test('typed result counts render before a pane opens and follow list revisions, 
  f.state.feedId='replacement';f.state.works=[];f.state.turns=[];await runInContext('chatReset()',f.app.context);await settle();assert.doesNotMatch(f.app.node('activity-list').textContent,/요금제 8개/);
 });
 
+test('accepted business results retain their counts while unknown and stopped status take priority',async()=>{
+ const {app}=fixture();await settle();
+ const work={...row({workId:'w1',title:'Prices',memberId:null,execution:'settled',acceptance:'accepted',started:true}),resultFacts:{format:'massion-facts/v1',kind:'pricing',plans:6,tables:1}};
+ const summary=(value:unknown)=>runInContext('shellResultSummary('+JSON.stringify(value)+')',app.context);
+ assert.equal(summary(work),'요금제 6개 · 표 1개 · 완료');
+ for(const state of [{unknown:true},{execution:'blocked'},{execution:'cancelled'}])assert.equal(summary({...work,...state}),'');
+});
+
 test('Work lines come from the host Work list: the Representative\'s and each member\'s running Work, also Work outside the shown segment; activity lists them all',async()=>{
  const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
  await settle();

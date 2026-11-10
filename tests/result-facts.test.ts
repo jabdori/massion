@@ -9,6 +9,13 @@ import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 import {validateMissionLineage} from '../src/backup-lineage.ts';
 
 const facts={format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32};
+test('generic table rows never acquire pricing semantics without an explicit producer discriminator',()=>{
+ const mission=createMission({id:'intake',purpose:'Customers',scope:'local',constraints:[],criteria:{version:1,description:'Controlled customer rows',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing'),task=work.tasks.find(t=>t.step?.title==='표 만들기')!;
+ const table={format:'massion-table/v1',caption:'Customers',columns:['Name'],rows:[['A'],['B']]};task.result=JSON.stringify(table);
+ assert.deepEqual(workResultFacts(work),{resultFacts:null,tableCount:1});
+ task.result=JSON.stringify({...table,business:'pricing'});assert.deepEqual(workResultFacts(work),{resultFacts:{format:'massion-facts/v1',kind:'pricing',plans:2,tables:1},tableCount:1});
+ task.result=JSON.stringify({...table,business:'customers'});assert.deepEqual(workResultFacts(work),{resultFacts:null,tableCount:0});
+});
 test('checking-seat text cannot overwrite producer counts or invent business observations',()=>{
  const mission=createMission({id:'intake',purpose:'Prices',scope:'local',constraints:[],criteria:{version:1,description:'Controlled prices',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing'),checker=work.tasks.find(t=>t.id===work.id+':verifier')!;
  checker.status='settled';checker.result=JSON.stringify({format:'massion-facts/v1',kind:'causes',causes:999,evidence:999});
