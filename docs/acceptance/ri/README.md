@@ -17,6 +17,8 @@ The catalog change removes **14** diagnostic identities without adding any.
 It initially reduced the list from 426 to 412 above `80672ac`; after merging
 `9422008`, which adds two upstream B7 residuals, the list is **428 to 414**
 relative to current main. Those upstream Work-room changes are outside this slice.
+The later merge of `8a36766` brings PR #138's independently verified E2E browser
+control and send-readiness fixes from main; no app-frame code is authored here.
 
 The B23 capability gap remains in both themes because the six apps still have no
 executable packages. Its reason now distinguishes available display metadata from
