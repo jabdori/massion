@@ -213,3 +213,18 @@ test('conversation table summaries use settled typed results from the exact curr
  assert.match(card().textContent,/표 1개 · 확인 대기/);
  runInContext('snapshot.revision++',app.context);assert.doesNotMatch(card().textContent,/표 1개 ·/);
 });
+
+test('skipped steps use the skip glyph and carry no time',async()=>{
+ const measure=async(screen:string)=>{
+  const {app,nodes,work}=await scene(screen);
+  const task=(work.tasks as any[]).find(t=>t.step&&t.step.skipReason);
+  assert.ok(task,screen+' needs a skipped task');
+  runInContext(`const w=snapshot.value.works.find(x=>x.id===${JSON.stringify(work.id)});const t=(w.tasks.find(x=>x.step&&x.step.skipReason)||w.tasks[0]);t.startedAt=1700000000000;t.endedAt=1700000060000;renderMission()`,app.context);
+  const row=nodes().find(n=>hasClass(n,'room-step')&&hasClass(n,'skipped'))!;
+  assert.ok(row.children.some(n=>hasClass(n,'room-marker')&&hasClass(n,'skipped')));
+  assert.equal(row.children.find(n=>n.tagName==='TIME')?.textContent??'','');
+  assert.ok(row.textContent.includes('건너뜀'));
+ };
+ await measure('B7-churn');
+ await measure('B18-room-b');
+});
