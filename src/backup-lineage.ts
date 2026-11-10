@@ -1,3 +1,4 @@
+import {validateContinuation} from './runtime-continuation.ts';
 import {validCredentialBlocker} from './provider-credentials.ts';
 import {validateMemoryMetadata} from './memory-candidates.ts';
 import {isMonthlyBudgetState,replayMonthlyBudget} from './monthly-budget.ts';
@@ -215,7 +216,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['steeringVersion','roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['continuationVersion','continuationConfig','resumptions','assembly','steeringVersion','roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
     if(Object.hasOwn(run,'steeringVersion'))ensure(run.steeringVersion===1&&!!item.team,'Invalid steering runtime version');
     if(Object.hasOwn(run,'roomVersion'))ensure(run.roomVersion===1&&!!item.team,'Invalid room runtime version');
     if(Object.hasOwn(run,'toolTimeoutVersion'))ensure(run.toolTimeoutVersion==='tool-timeouts/v1','unsupported tool timeout policy');
@@ -232,6 +233,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     // Legacy steering retains its admission hash. Versioned continuation repins
     // only through the journaled steer transition; later stopping keeps that pin.
   }
+  validateContinuation(value as Work);
   validateRuntimeInterruption(value as Work);
   const deadlinePendingIds=(value as Work).runtimeInterruption?.pendingEffectIds??[];
   let recoveryPendingIds: string[] = [];
@@ -393,6 +395,8 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'revise-budget': { required: ['workId', 'limit', 'reason'] },
   assign: { required: ['workId', 'assignment'] },
   'revise-work': { required: ['workId'] },
+  'resume-runtime': {required:['workId','previousDispatchId','ownership']},
+  'begin-runtime-assembly': {required:['workId','inputHash']},
   'activate-runtime': { required: ['workId', 'run'] },
   'close-expired-runtime': { required: ['workId','runId','dispatchId','hostSessionId','deadlineAt','observedAt','reason','acknowledgeUncertainOutcome'] },
   'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
