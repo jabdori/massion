@@ -1,0 +1,282 @@
+[
+  {
+    "screen": "B2",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b2-dark"
+  },
+  {
+    "screen": "B3-run",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "dependency",
+    "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+    "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "business-procedure",
+    "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+  },
+  {
+    "screen": "B7-done",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "business-activity",
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "business-activity",
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
+  },
+  {
+    "screen": "B9",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-restart",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-update",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
+  },
+  {
+    "screen": "B18",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+  },
+  {
+    "screen": "B2",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b2-light"
+  },
+  {
+    "screen": "B3-run",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "dependency",
+    "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+    "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "business-procedure",
+    "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "business-activity",
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "business-activity",
+    "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+    "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
+  },
+  {
+    "screen": "B9",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-restart",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B9-update",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "Activity business facts",
+    "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
+    "ledger": "docs/acceptance/E3d2/residuals.md"
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
+  },
+  {
+    "screen": "B18",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+    "occurrence": 1,
+    "category": "unsupported product capability",
+    "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
+    "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+  }
+]

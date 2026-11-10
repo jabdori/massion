@@ -1,0 +1,574 @@
+[
+  {
+    "before": {
+      "screen": "B6",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "occurrence": 1,
+      "category": "dependency",
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+    },
+    "after": {
+      "screen": "B6",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "business-activity",
+      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
+    },
+    "after": {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "business-activity",
+      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
+    },
+    "after": {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B6",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "occurrence": 1,
+      "category": "dependency",
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+    },
+    "after": {
+      "screen": "B6",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "business-activity",
+      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
+    },
+    "after": {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "occurrence": 1,
+      "category": "capability / composition",
+      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
+      "occurrence": 1,
+      "category": "business-activity",
+      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
+      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
+    },
+    "after": {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  },
+  {
+    "before": {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+    },
+    "after": {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    }
+  }
+]

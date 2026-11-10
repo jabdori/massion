@@ -5,34 +5,14 @@
   },
   "entries": [
     {
-      "screen": "B2",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b2-dark"
-    },
-    {
-      "screen": "B3-run",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "dependency",
-      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
       "screen": "B5",
       "theme": "dark",
       "kind": "contract",
       "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-dark"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B5",
@@ -40,19 +20,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "dependency",
-      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B6-token",
@@ -128,16 +98,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "business-procedure",
@@ -168,31 +128,11 @@
       "screen": "B7-done",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-done",
@@ -250,19 +190,9 @@
       "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "business-result predicate",
+      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -270,19 +200,9 @@
       "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -290,9 +210,9 @@
       "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The check bar uses the exact pinned criteria and independent evidence. The prototype business threshold and its matching caption are not produced by this bounded text scenario.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "business-result predicate",
+      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -318,31 +238,11 @@
       "screen": "B7-unknown",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -380,9 +280,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"작업 중 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8",
@@ -420,9 +320,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8-done",
@@ -490,9 +390,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-dark"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -553,66 +453,6 @@
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B9-update",
@@ -833,36 +673,6 @@
       "category": "capability",
       "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
       "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
-    },
-    {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-dark"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
     },
     {
       "screen": "B18-room-b",
@@ -925,34 +735,14 @@
       "ledger": "docs/acceptance/ri/README.md"
     },
     {
-      "screen": "B2",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b2-light"
-    },
-    {
-      "screen": "B3-run",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "dependency",
-      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
       "screen": "B5",
       "theme": "light",
       "kind": "contract",
       "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No browser-work runtime/page-read telemetry produces this completed-attempt line. The local interruption time is now recorded and displayed, but it is not a browser page count or browser-attempt completion receipt.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-light"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B5",
@@ -960,19 +750,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "No order-history connector/read route or original payment/order identity exists for this unknown payment. The existing read-back Check action remains; no order-inspection success is fabricated.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b5-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "dependency",
-      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B6-token",
@@ -1048,16 +828,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "business-procedure",
@@ -1088,31 +858,11 @@
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-done",
@@ -1170,19 +920,9 @@
       "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "business-result predicate",
+      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -1190,19 +930,9 @@
       "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Actual procedure steps and messages now exist. The activity row still lacks a structured business-result summary; counts and outcomes are not inferred from worker prose.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -1210,9 +940,9 @@
       "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "The check bar uses the exact pinned criteria and independent evidence. The prototype business threshold and its matching caption are not produced by this bounded text scenario.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
+      "category": "business-result predicate",
+      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-fail",
@@ -1238,31 +968,11 @@
       "screen": "B7-unknown",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
+      "category": "file-read telemetry",
+      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -1300,9 +1010,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"작업 중 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8",
@@ -1340,9 +1050,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8-done",
@@ -1410,9 +1120,9 @@
       "kind": "contract",
       "diagnostic": "missing conversation link \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
       "occurrence": 1,
-      "category": "business-activity",
-      "reason": "The bounded executor writes and reviews text. The Work-list read exposes state, identity and start/end, not browser/page/file-read telemetry or structured plan/customer/order counts. Generic stage progress and verdict evidence are shown; business counts are not inferred from prose.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b8-unknown-light"
+      "category": "browser telemetry",
+      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B8-unknown",
@@ -1473,66 +1183,6 @@
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "Activity business facts",
-      "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
       "screen": "B9-update",
@@ -1753,36 +1403,6 @@
       "category": "capability",
       "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
       "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "unsupported product capability",
-      "reason": "The durable task/assignment model has executor/verifier stages, not the named investigation/classification/summary/table team roles and table-result metadata in this composite label. Actual assignee, state, elapsed time, assigned stage counts and verdict evidence are rendered; the missing roles/result summary are not invented.",
-      "ledger": "docs/acceptance/e3b/after-failures.md#b18-light"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
     },
     {
       "screen": "B18-room-b",
@@ -2199,8 +1819,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 1,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2218,8 +1838,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 2,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2237,8 +1857,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 3,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2256,8 +1876,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 4,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2275,8 +1895,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 5,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2294,8 +1914,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 1,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2313,8 +1933,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 2,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2332,8 +1952,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 3,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2351,8 +1971,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 4,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2370,8 +1990,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 5,
       "category": "unrecorded step timestamp",
-      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
+      "reason": "The five prototype printer steps require browser/payment observations from PR #127. This Representative-authored Work has no member procedure pin; current team admission requires assistantSource.memberId. Churn/pricing are now command-produced, but their times cannot establish printer events.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2541,92 +2161,12 @@
       "category": "capability",
       "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
       "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B7",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "gap",
       "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
       "occurrence": 1,
       "category": "capability",
       "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
@@ -2643,90 +2183,10 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
       "screen": "B7-churn",
       "theme": "light",
       "kind": "gap",
       "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-done",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B8-unknown",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
       "occurrence": 1,
       "category": "capability",
       "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
@@ -2933,6 +2393,266 @@
       "category": "installed version",
       "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
       "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "presentation order",
+      "reason": "The typed pricing result and complete label are present. The prototype requires a different existing activity/conversation order; no business count or role is missing.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "occurrence": 1,
+      "category": "browser telemetry",
+      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
+      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     }
   ]
 }

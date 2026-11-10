@@ -15,13 +15,13 @@ const owner:Actor={id:'local-owner',roles:['owner']},host:Actor={id:'runtime-rep
 const directory=new URL('./fixtures/',import.meta.url);
 const json=async(path:URL)=>JSON.parse(await readFile(path,'utf8'));
 
-function churnSource(original:Work){
+export function churnSource(original:Work){
  const settled=original.acceptance==='failed',memberId=original.assistantSource!.memberId!,spec=[
   {title:'범위 정하기',role:'조사',dependsOn:[],status:'settled',result:'지난 90일 해지'},
   {title:'자료 모으기',role:'조사',dependsOn:[0],status:'settled',instruction:'지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘.',result:'해지 사유 41건 모았어요.'},
-  {title:'나누기',role:'분류',dependsOn:[0],status:'settled',instruction:'모은 건은 기업 고객과 그 외로 나눠 줘.',result:'기업 9건, 그 외 32건이에요.'},
+  {title:'나누기',role:'분류',dependsOn:[0],status:'settled',instruction:'모은 건은 기업 고객과 그 외로 나눠 줘.',result:JSON.stringify({format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32})},
   {title:'설문 다시 보내기',role:'설문',dependsOn:[],status:'settled',skipReason:'지난달 설문 있음',result:'Skipped · 지난달 설문 있음'},
-  {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?'기업 고객 원인 1개 · 근거 2건':undefined}
+  {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?JSON.stringify({format:'massion-facts/v1',kind:'causes',causes:1,evidence:2}):undefined}
  ];
  const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:original.title,body:{description:original.title,steps:spec.map(s=>s.title),verify:original.criteria.description}},owner,{observedAt:original.admittedAt??0}).value;
  return {...original,team:memberProcedures(skills,memberId,1),tasks:spec.map((s,index)=>({id:original.id+':step:'+index,parentId:original.id+':executor',status:s.status as Task['status'],...(s.result?{result:s.result}:{}),step:{title:s.title,role:s.role,dependsOn:s.dependsOn.map(i=>original.id+':step:'+i),...(s.instruction?{instruction:s.instruction}:{}),...(s.skipReason?{skipReason:s.skipReason}:{})}}))};

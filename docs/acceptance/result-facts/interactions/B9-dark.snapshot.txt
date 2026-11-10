@@ -1,0 +1,195 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - generic
+      - button "내 계정" [expanded=false, ref=e9]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기, 확인 필요" [checked=true, ref=e10]
+      - button "검색" [expanded=false, ref=e11]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e23]
+            - StaticText "하나"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e24]
+            - StaticText "퀼"
+            - status "작업 중"
+        - listitem [level=1]
+          - button "주노" [ref=e25]
+            - StaticText "주노"
+    - generic
+      - generic
+        - button "우선순위" [expanded=false, ref=e20]
+        - button "정렬" [expanded=false, ref=e21]
+      - list "활동 보기"
+        - listitem [level=1]
+          - link "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3." [ref=e26]
+            - strong
+              - StaticText "반올림 규칙 바꾸기"
+            - StaticText "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3."
+            - status
+              - StaticText "읽지 않음"
+        - listitem [level=1]
+          - button "이탈 원인 조사 작업 중 해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요." [ref=e27]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+  - main "하나" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e12]
+      - heading "하나" [level=1, ref=e13]
+        - button "하나" [expanded=false, ref=e22]
+      - button "작업 공간" [ref=e14]
+      - button "더 보기" [expanded=false, ref=e15]
+    - region "대화" [ref=e16]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 4일 (수)"
+          - paragraph
+            - StaticText "아래 문단을 세 개의 요점으로 요약해 줘. 모든 단어는 6글자 이하."
+          - paragraph
+            - StaticText "응답이 끊겼어요 · 21:12"
+            - button "다시 시도" [ref=e35]
+          - region "반올림을 합계에서 한 번으로 바꿀까요?" [ref=e28]
+            - strong
+              - StaticText "반올림을 합계에서 한 번으로 바꿀까요?"
+            - StaticText "21:20"
+            - DescriptionList
+              - term "지금"
+              - definition
+                - StaticText "줄마다 반올림 · TOTAL 4 cents · 사례 1/3 맞음"
+              - term "변경 후"
+              - definition
+                - StaticText "합계에서 한 번 · 3 cents · 사례 3/3 맞음"
+              - term "주의"
+              - definition
+                - StaticText "줄마다 반올림하는 세금 규칙이면 합계가 달라질 수 있어요."
+            - button "바꾸기" [ref=e36]
+            - button "나중에" [ref=e37]
+            - link "사례 보기" [ref=e38]
+          - paragraph
+            - StaticText "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 구해 줘."
+          - generic
+            - paragraph
+              - StaticText "TOTAL: 3 cents"
+            - button "복사" [ref=e39]
+          - paragraph
+            - StaticText "할인 후 합계를 구해 줘. 정확히 한 줄로만 답해."
+          - generic
+            - paragraph
+              - StaticText "TOTAL: 3 cents"
+            - button "복사" [ref=e40]
+          - paragraph
+            - StaticText "3센트 상품 두 개, 주문 전체 50% 할인. 할인 후 합계를 한 줄로 답해 줘."
+          - generic
+            - paragraph
+              - StaticText "TOTAL: 4 cents"
+            - button "복사" [ref=e41]
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - generic
+            - paragraph
+              - strong
+                - StaticText "아침 브리핑"
+              - StaticText " | 11월 5일 (목) 08:00"
+            - list
+              - listitem [level=1]
+                - ListMarker "• "
+                - StaticText "반올림 규칙 결정 대기 21:20 · "
+                - link "반올림 규칙" [ref=e55]
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e42]
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 09:40"
+          - generic
+            - button "이탈 원인 조사 실행 중 퀼 271분 조사 분류 요약 확인 4/5 · 나누기 완료 · 원인 정리 중" [ref=e43]
+              - strong
+                - StaticText "이탈 원인 조사"
+              - StaticText "실행 중"
+              - StaticText "퀼"
+              - StaticText "271분"
+              - StaticText "조사"
+              - StaticText "분류"
+              - StaticText "요약"
+              - StaticText "확인"
+              - StaticText "4/5 · 나누기 완료 · 원인 정리 중"
+            - status
+              - StaticText "작업 중"
+      - generic
+        - form
+          - textbox "하나에게 메시지 보내기" [ref=e29]
+          - button "파일 추가" [disabled, ref=e30]
+          - button "기본 권한" [ref=e31]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e32]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "이탈 원인 조사" [selected, ref=e17]
+      - button "이탈 원인 조사 닫기" [ref=e18]
+        - StaticText "×"
+    - button "넓히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e19]
+        - article
+          - StaticText "실행 중"
+          - time
+            - StaticText "271분"
+          - button "중지" [ref=e33]
+          - heading "이탈 원인 조사" [level=3, ref=e34]
+          - paragraph
+            - StaticText "하나가 넘김 · 09:41"
+          - list
+            - listitem "퀼" [level=1, ref=e44]
+              - StaticText "퀼"
+            - listitem "조사" [level=1, ref=e45]
+            - listitem "분류" [level=1, ref=e46]
+            - listitem "요약" [level=1, ref=e47]
+            - listitem "확인" [level=1, ref=e48]
+              - StaticText "확인"
+          - list "절차"
+            - listitem "범위 정하기 · 퀼 · 조사 · 완료" [level=1, ref=e50]
+              - StaticText "범위 정하기"
+              - StaticText "1/1"
+              - time
+                - StaticText "09:41"
+            - listitem "자료 모으기 · 퀼 · 조사 · 완료" [level=1, ref=e51]
+              - StaticText "자료 모으기"
+              - StaticText "41/41"
+              - time
+                - StaticText "10:05"
+            - listitem "나누기 · 퀼 · 분류 · 완료" [level=1, ref=e52]
+              - StaticText "나누기"
+              - StaticText "41/41"
+              - time
+                - StaticText "10:24"
+            - listitem "설문 다시 보내기 · 퀼 · 설문 · 건너뜀 · 지난달 설문 있음" [level=1, ref=e53]
+              - StaticText "설문 다시 보내기"
+              - StaticText "건너뜀 · 지난달 설문 있음"
+            - listitem "원인 정리 · 퀼 · 요약 · 실행 중" [level=1, ref=e54]
+              - StaticText "원인 정리"
+              - StaticText "0/1"
+              - StaticText "실행 중"
+              - time
+                - StaticText "10:24"
+            - listitem [level=1]
+              - StaticText "확인"
+              - StaticText "0/1"
+            - listitem [level=1]
+              - StaticText "기록"
+          - group
+            - button "확인 대기" [expanded=false, ref=e49]
+              - strong
+                - StaticText "확인 대기"

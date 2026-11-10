@@ -145,7 +145,9 @@
                 }
               },
               "evidenceCount": 1,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -202,7 +204,9 @@
                 }
               },
               "evidenceCount": null,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -296,7 +300,14 @@
                   },
                   "status": "settled"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "kind": "causes",
+                "causes": 1,
+                "evidence": 2
+              },
+              "tableCount": 0
             }
           }
         ],
@@ -409,7 +420,14 @@
                 },
                 "status": "settled"
               }
-            ]
+            ],
+            "resultFacts": {
+              "format": "massion-facts/v1",
+              "kind": "causes",
+              "causes": 1,
+              "evidence": 2
+            },
+            "tableCount": 0
           },
           {
             "missionId": "intake",
@@ -445,7 +463,9 @@
               }
             },
             "evidenceCount": null,
-            "workerSteps": []
+            "workerSteps": [],
+            "resultFacts": null,
+            "tableCount": 0
           },
           {
             "missionId": "intake",
@@ -481,7 +501,9 @@
               }
             },
             "evidenceCount": 1,
-            "workerSteps": []
+            "workerSteps": [],
+            "resultFacts": null,
+            "tableCount": 0
           }
         ]
       }
@@ -769,7 +791,7 @@
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
                       },
                       {
-                        "result": "기업 9건, 그 외 32건이에요.",
+                        "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                       },
                       {
@@ -777,7 +799,7 @@
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                       },
                       {
-                        "result": "기업 고객 원인 1개 · 근거 2건",
+                        "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                       }
                     ],
@@ -815,7 +837,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                    "receipt": "기업 9건, 그 외 32건이에요.",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -823,7 +845,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
-                    "receipt": "기업 고객 원인 1개 · 근거 2건",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
@@ -934,7 +956,7 @@
                     "endedAt": 1793855280008,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "기업 9건, 그 외 32건이에요.",
+                    "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                     "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
@@ -963,7 +985,7 @@
                     "endedAt": 1793855280010,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "기업 고객 원인 1개 · 근거 2건",
+                    "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                     "startedAt": 1793855280009,
                     "status": "settled",
                     "step": {
@@ -1777,7 +1799,7 @@
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
                     },
                     {
-                      "result": "기업 9건, 그 외 32건이에요.",
+                      "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                     },
                     {
@@ -1785,7 +1807,7 @@
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                     },
                     {
-                      "result": "기업 고객 원인 1개 · 근거 2건",
+                      "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                     }
                   ],
@@ -1823,7 +1845,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                  "receipt": "기업 9건, 그 외 32건이에요.",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -1831,7 +1853,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
-                  "receipt": "기업 고객 원인 1개 · 근거 2건",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
@@ -1942,7 +1964,7 @@
                   "endedAt": 1793855280008,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "기업 9건, 그 외 32건이에요.",
+                  "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
                   "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
@@ -1971,7 +1993,7 @@
                   "endedAt": 1793855280010,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "기업 고객 원인 1개 · 근거 2건",
+                  "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
                   "startedAt": 1793855280009,
                   "status": "settled",
                   "step": {
@@ -2667,7 +2689,9 @@
                 }
               },
               "evidenceCount": 1,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -2724,7 +2748,9 @@
                 }
               },
               "evidenceCount": null,
-              "workerSteps": []
+              "workerSteps": [],
+              "resultFacts": null,
+              "tableCount": 0
             }
           },
           {
@@ -2818,7 +2844,14 @@
                   },
                   "status": "settled"
                 }
-              ]
+              ],
+              "resultFacts": {
+                "format": "massion-facts/v1",
+                "kind": "causes",
+                "causes": 1,
+                "evidence": 2
+              },
+              "tableCount": 0
             }
           }
         ],

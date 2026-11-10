@@ -1,0 +1,57 @@
+contract B7-done (B7 업무 방 · 프린터 토너 주문 완료) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-status-layout/snapshots/light/B7-done.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기" -> switch "활동 보기"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    sidebar      status   "읽지 않음" -> status "읽지 않음"
+  ok    sidebar      button   "우선순위" -> button "우선순위"
+  ok    sidebar      link     "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 {progress}, 새 규칙 {progress}." -> link "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3."
+  ok    sidebar      status   "읽지 않음" -> statictext "읽지 않음"
+  ok    sidebar      link     "{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요." -> button "이탈 원인 조사 작업 중 읽지 않음 해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "복사" -> button "복사"
+  ok    pane         tab      "{work_title}" -> tab "프린터 토너 주문"
+  ok    pane         link     "넓히기" -> button "넓히기"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         text     "완료" -> statictext "완료"
+  ok    pane         heading  "{work_title}" -> heading "프린터 토너 주문"
+  ok    pane         text     "{member}" -> statictext "하나"
+  ok    pane         chip     "확인" -> statictext "확인"
+  ok    pane         text     "절차" -> statictext "절차"
+  ok    pane         text     "{progress}" -> statictext "2/2"
+  ok    pane         chip     "{member}" -> statictext "작성"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":192,"strings":22,"sentences":3,"longest":47} proto {"chars":216,"strings":14,"sentences":5,"longest":47} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":449,"strings":41,"sentences":8,"longest":36} proto {"chars":159,"strings":11,"sentences":3,"longest":30} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":92,"strings":16,"sentences":0,"longest":13} proto {"chars":305,"strings":37,"sentences":0,"longest":24} source visibleTextBudget
+  warn  budget conversation sentences 8 > 3: "반올림을 합계에서 한 번으로 바꿀까요?"
+  warn  budget conversation chars 449 > 227
+  FAIL  order  sidebar      link     "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요." (occurrence already consumed or found earlier)
+  FAIL  missing sidebar      link     "{work_title} 파일 {count}를 다 읽었어요. {time} 완료."
+  FAIL  missing sidebar      link     "{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요."
+  FAIL  region pane         text     "{time}" (found in conversation)
+  FAIL  region pane         text     "{time}" (found in conversation)
+  FAIL  region pane         text     "{time}" (found in conversation)
+  FAIL  missing pane         text     "{amount}"
+  FAIL  region pane         text     "{time}" (found in conversation)
+  FAIL  missing pane         text     "{count}"
+  FAIL  region pane         text     "{time}" (found in conversation)
+  FAIL  missing pane         button   "확인 완료 주문 내역 {count}"
+FAIL: 11 failures, 2 warnings, 47 required elements

@@ -1,0 +1,278 @@
+- generic
+  - navigation "주 메뉴" [ref=e1]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e9]
+    - generic
+      - button "내 계정" [expanded=false, ref=e10]
+  - complementary "구성원과 작업"
+    - generic
+      - switch "활동 보기" [checked=true, ref=e11]
+      - button "검색" [expanded=false, ref=e12]
+    - generic
+      - list
+        - listitem [level=1]
+          - button "하나" [ref=e24]
+            - StaticText "하나"
+      - list "구성원"
+        - listitem [level=1]
+          - button "퀼" [ref=e25]
+            - StaticText "퀼"
+            - status "작업 중"
+        - listitem [level=1]
+          - button "주노" [ref=e26]
+            - StaticText "주노"
+            - status "읽지 않음"
+    - generic
+      - generic
+        - button "우선순위" [expanded=false, ref=e21]
+        - button "정렬" [expanded=false, ref=e22]
+      - list "활동 보기"
+        - listitem [level=1]
+          - link "반올림 규칙 바꾸기 합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3." [ref=e27]
+            - strong
+              - StaticText "반올림 규칙 바꾸기"
+            - StaticText "합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3."
+        - listitem [level=1]
+          - button "이탈 원인 조사 기업 고객 원인 1개 · 근거 2건 · 확인 실패" [ref=e28]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "기업 고객 원인 1개 · 근거 2건 · 확인 실패"
+        - listitem [level=1]
+          - button "경쟁사 가격 작업 중 읽지 않음 요금제 6개를 표 1개로 정리했어요. 확인 대기예요." [ref=e29]
+            - strong
+              - StaticText "경쟁사 가격"
+            - status "작업 중"
+              - StaticText "퀼"
+            - StaticText "읽지 않음"
+            - StaticText "요금제 6개를 표 1개로 정리했어요. 확인 대기예요."
+        - listitem [level=1]
+          - button "PR #84 검토 읽지 않음 완료" [ref=e30]
+            - strong
+              - StaticText "PR #84 검토"
+            - StaticText "읽지 않음"
+            - StaticText "완료"
+  - main "퀼 작업 중" [ref=e2]
+    - sectionheader
+      - button "사이드바 숨기기" [expanded=true, ref=e13]
+      - heading "퀼" [level=1, ref=e14]
+        - button "퀼" [expanded=false, ref=e23]
+        - status
+          - StaticText "작업 중"
+      - button "작업 공간" [ref=e15]
+      - button "더 보기" [expanded=false, ref=e16]
+    - region "대화" [ref=e17]
+      - generic
+        - log
+          - paragraph
+            - StaticText "11월 5일 (목)"
+          - paragraph
+            - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
+          - generic
+            - button "경쟁사 가격 확인 대기 4분 조사 표 정리 확인 표 1개 · 확인 대기" [ref=e36]
+              - strong
+                - StaticText "경쟁사 가격"
+              - StaticText "확인 대기"
+              - StaticText "4분"
+              - StaticText "조사"
+              - StaticText "표 정리"
+              - StaticText "확인"
+              - StaticText "표 1개 · 확인 대기"
+            - status
+              - StaticText "작업 중"
+          - paragraph
+            - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
+          - button "이탈 원인 조사 실패 14:09 – 14:09 조사 분류 요약 확인 확인 실패 · 근거 1건" [ref=e37]
+            - strong
+              - StaticText "이탈 원인 조사"
+            - StaticText "실패"
+            - StaticText "14:09 – 14:09"
+            - StaticText "조사"
+            - StaticText "분류"
+            - StaticText "요약"
+            - StaticText "확인"
+            - StaticText "확인 실패 · 근거 1건"
+          - paragraph
+            - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:09"
+            - paragraph
+              - StaticText "지난 90일 해지 건부터 볼게요."
+            - button "복사" [ref=e38]
+          - paragraph
+            - StaticText "기업 고객은 따로 봐 줘."
+          - paragraph
+            - button "방향 바꿈: 이탈 원인 조사 · 14:09" [ref=e39]
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:09"
+            - paragraph
+              - StaticText "기업 고객은 따로 나눠서 같이 정리할게요."
+            - button "복사" [ref=e40]
+          - paragraph
+            - StaticText "앞으로 표 금액은 원 단위로 써 줘."
+          - paragraph
+            - StaticText "기억 후보: 표 금액은 원 단위"
+            - button "남기기" [ref=e41]
+            - button "지우기" [ref=e42]
+          - generic
+            - StaticText "퀼"
+            - time
+              - StaticText "14:12"
+            - paragraph
+              - StaticText "알겠어요. 경쟁사 가격 표부터 원 단위로 쓸게요."
+            - button "복사" [ref=e43]
+          - generic
+            - paragraph
+              - strong
+                - StaticText "이탈 원인 조사"
+              - StaticText "실패"
+            - paragraph
+              - StaticText "확인 실패"
+            - button "다시 시도" [ref=e44]
+            - button "닫기" [ref=e45]
+          - article
+            - strong
+              - StaticText "나"
+            - time
+              - StaticText "14:08"
+            - paragraph
+              - StaticText "기업 고객은 따로 봐 줘."
+      - generic
+        - form
+          - textbox "퀼에게 메시지 보내기" [ref=e31]
+          - button "파일 추가" [disabled, ref=e32]
+          - button "기본 권한" [ref=e33]
+            - StaticText "기본 권한"
+          - button "보내기" [ref=e34]
+  - region "작업" [ref=e3]
+    - tablist "열린 작업"
+      - tab "이탈 원인 조사" [selected, ref=e18]
+      - button "이탈 원인 조사 닫기" [ref=e19]
+        - StaticText "×"
+    - button "넓히기" [ref=e7]
+    - button "작업 공간 닫기" [ref=e8]
+    - tabpanel
+      - region "미션" [ref=e20]
+        - generic
+          - article
+            - StaticText "실패"
+            - time
+              - StaticText "14:09 – 14:09"
+            - heading "이탈 원인 조사" [level=3, ref=e35]
+            - paragraph
+              - StaticText "하나가 넘김 · 14:09"
+            - list
+              - listitem "퀼" [level=1, ref=e46]
+                - StaticText "퀼"
+              - listitem "조사" [level=1, ref=e47]
+              - listitem "분류" [level=1, ref=e48]
+              - listitem "요약" [level=1, ref=e49]
+              - listitem "확인" [level=1, ref=e50]
+                - StaticText "확인"
+            - generic
+              - sectionheader
+                - strong
+                  - StaticText "절차"
+                - StaticText "5/5"
+              - list "절차"
+                - listitem "범위 정하기 · 퀼 · 조사 · 완료" [level=1, ref=e58]
+                  - StaticText "범위 정하기"
+                  - time
+                    - StaticText "14:09"
+                - listitem "자료 모으기 · 퀼 · 조사 · 완료" [level=1, ref=e59]
+                  - StaticText "자료 모으기"
+                  - StaticText "조사"
+                  - time
+                    - StaticText "14:09"
+                - listitem "나누기 · 퀼 · 분류 · 완료" [level=1, ref=e60]
+                  - StaticText "나누기"
+                  - StaticText "분류"
+                  - time
+                    - StaticText "14:09"
+                - listitem "설문 다시 보내기 · 퀼 · 설문 · 건너뜀 · 지난달 설문 있음" [level=1, ref=e61]
+                  - StaticText "설문 다시 보내기"
+                  - StaticText "건너뜀 · 지난달 설문 있음"
+                - listitem "원인 정리 · 퀼 · 요약 · 완료" [level=1, ref=e62]
+                  - StaticText "원인 정리"
+                  - StaticText "요약"
+                  - time
+                    - StaticText "14:09"
+                - listitem [level=1]
+                  - StaticText "확인"
+                  - StaticText "해지 사유 7건 누락"
+                  - StaticText "1/1"
+                  - time
+                    - StaticText "14:09"
+                - listitem [level=1]
+                  - StaticText "기록"
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "조사"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘."
+              - button "복사" [ref=e51]
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "분류"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "모은 건은 기업 고객과 그 외로 나눠 줘."
+              - button "복사" [ref=e52]
+            - article
+              - StaticText "조사"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "해지 사유 41건 모았어요."
+              - button "복사" [ref=e53]
+            - article
+              - StaticText "분류"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요."
+              - button "복사" [ref=e54]
+            - article
+              - strong
+                - StaticText "퀼"
+              - StaticText "→"
+              - StaticText "요약"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "두 묶음 따로 원인을 정리해 줘."
+              - button "복사" [ref=e55]
+            - article
+              - StaticText "요약"
+              - StaticText "→"
+              - strong
+                - StaticText "퀼"
+              - time
+                - StaticText "14:09"
+              - paragraph
+                - StaticText "기업 고객 원인 1개 · 근거 2건"
+              - button "복사" [ref=e56]
+            - group
+              - button "확인 실패 근거 1건" [expanded=false, ref=e57]
+                - strong
+                  - StaticText "확인 실패"
+                - StaticText "근거 1건"
