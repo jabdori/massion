@@ -1,3 +1,4 @@
+import {MEMBERS_ID,applyMembers,admittedMemberId,proposalDecisionId,PROPOSAL_PREFIX,memberThread} from '../src/members.ts';
 import {once} from 'node:events';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,12 +13,14 @@ import type {ConnectionWorkbench} from '../src/connection-workbench.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
-const owner={id:'local-owner',roles:['owner'] as const},member={id:'quill',name:'Quill',modelGroup:'default'},route={profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http' as const,outputTokenCap:256};
+const owner={id:'local-owner',roles:['owner'] as const},member={id:admittedMemberId('memory-member'),name:'Quill',modelGroup:'default'},route={profileId:'fixture',configHash:'a'.repeat(64),provider:'fixture',model:'fixture',mode:'mock-http' as const,outputTokenCap:256};
 const body={name:'Preferred summary',content:'Use a short summary.',sourceWorkId:null};
 const output=(memory:unknown=body,steer:string|null=null)=>JSON.stringify({reply:'Suggested.',work:null,steer,memory});
 async function setup(options:{ownerStore?:(store:InMemoryStore<any>)=>Store<any>;invoke?:()=>void}={}){
  const store=new InMemoryStore<any>(),product=new ProductService(store);await product.create({id:'intake',purpose:'Remember owner instructions',scope:'local',constraints:[],criteria:{version:1,description:'Answer',oracle:'bounded-text-review/v1'}},'create');
  const start=Date.now();let now=start,calls=0,text=output();
+ const proposalId=PROPOSAL_PREFIX+'memory',decisionId=proposalDecisionId(proposalId),propose={type:'propose-member' as const,decisionId,topic:'Memory fixture',works:[{title:'Fixture source'}],count:2},admit={type:'admit-member' as const,decisionId,memberId:member.id,name:member.name,shape:'square'};
+ let revision=0;for(const [commandId,command,actor] of [[proposalId,propose,{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],['memory-member',admit,owner]] as const){const prior=await store.load(MEMBERS_ID),derived=applyMembers(prior?.value??null,command,actor,{observedAt:start});await store.commit({id:MEMBERS_ID,commandId,fingerprint:hash({actorId:actor.id,command}),expectedRevision:revision++,...derived,outbox:[]});}
  const connections={list:()=>({representative:{intakeMissionId:'intake'}}),resolveMember:async()=>({status:'resolved',route,intakeMissionId:'intake',maxInputBytes:32768,release(){},adapter:{descriptor:{provider:'fixture',model:'fixture',configVersion:'v1',enabled:true,capabilities:[],evidenceClass:'fixture'},async invoke(){calls++;options.invoke?.();return {status:'completed',output:text,usage:{inputTokens:1,outputTokens:1},reason:'fixture'};}}})} as unknown as ConnectionWorkbench;
  const ownerStore=options.ownerStore?.(store)??store,service=()=>new AssistantService(store,product,connections,{member,ownerStore,clock:()=>now,turnTimeoutMs:10000}),chat=service();
  const send=()=>chat.send({commandId:'remark',segment:1,expectedRevision:0,text:'Please remember this preference.'});
@@ -75,7 +78,7 @@ test('a response reaching the turn deadline has no candidate or automatic memory
 async function sourceCandidate(f:Awaited<ReturnType<typeof setup>>){
  const {Application}=await import('../src/application.ts'),{memoryCandidateId,memoryWorkSource}=await import('../src/memory-candidates.ts');
  const app=new Application(f.store,[owner]);await app.dispatch({missionId:'intake',commandId:'source-work',expectedRevision:1,actorId:owner.id,command:{type:'admit-work',workId:'source',title:'Original source Work',budget:0}});
- const mission=await f.mission(),sourceWork=memoryWorkSource(mission,mission.works[0]!),messageId=ownerMessageId('remark'),turnId=assistantTurnId(messageId),thread='member:quill',conversation=new AssistantConversation(f.store,[owner,{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],()=>f.start,thread);
+ const mission=await f.mission(),sourceWork=memoryWorkSource(mission,mission.works[0]!),messageId=ownerMessageId('remark'),turnId=assistantTurnId(messageId),thread=memberThread(member.id),conversation=new AssistantConversation(f.store,[owner,{id:ASSISTANT_ACTOR_ID,roles:['assistant']}],()=>f.start,thread);
  await conversation.dispatch({segment:1,commandId:'remark',expectedRevision:0,actorId:owner.id,command:{type:'open-assistant-segment',segment:1,previous:null,messageId,text:'Remember the instruction from this Work.',turn:{status:'pending',id:turnId,route,ownership:{hostSessionId:'host:fixture',dispatchId:'dispatch:fixture',startedAt:f.start,deadlineAt:f.start+10000},requestHash:'b'.repeat(64),contextMessageIds:[]}}});
  const segment=(await f.store.load(segmentId(1,thread)))!.value,candidate={id:memoryCandidateId(segment.id,turnId),version:1 as const,name:'Named source instruction',content:'Keep the instruction.',missionId:'intake',scope:'local',memberId:member.id,segmentId:segment.id,turnId,messageHash:hash(segment.messages[0]),sourceWork,state:'proposed' as const};
  await conversation.dispatch({segment:1,commandId:'assistant-settle:'+turnId,expectedRevision:1,actorId:ASSISTANT_ACTOR_ID,command:{type:'settle-assistant-turn',turnId,status:'answered',usage:{inputTokens:1,outputTokens:1},receipt:'Fixture response',reply:'Suggested.',proposal:null,memoryCandidate:candidate}});return {sourceWork,candidate,app};
@@ -93,15 +96,13 @@ test('portable backup roundtrip preserves candidate decisions, names and exact s
  const f=await setup();await sourceCandidate(f);await f.chat.decideMemory(await f.choice());const operations=[...structuredClone(f.store.inspect())],journal={schemaVersion:2 as const,head:operations.length,operations},artifacts=new TextArtifactStore(join(root,'source')),serialized=await exportPortableBackup({exportJournal:async()=>journal},artifacts),parsed=parsePortableBackup(serialized);
  const restored=new InMemoryStore<any>();let imported=false;
  await restorePortableBackup(serialized,{exportJournal:async()=>({schemaVersion:2,head:0,operations:[]}),restoreJournal:async j=>{validateMissionJournalLineage(j.operations);for(const op of j.operations)await restored.commit({id:op.aggregateId,expectedRevision:op.expectedRevision,commandId:op.commandId,fingerprint:op.fingerprint,value:op.value,events:op.events,outbox:op.outbox});imported=true;return {status:'restored',head:j.head,checksum:''};}},join(root,'restored'));
- assert.equal(imported,true);assert.deepEqual(parsed.journal.operations,journal.operations);assert.deepEqual(await restored.load('intake'),await f.store.load('intake'));assert.deepEqual(await restored.load(segmentId(1,'member:quill')),await f.store.load(segmentId(1,'member:quill')));validateMissionJournalLineage(restored.inspect());
+ assert.equal(imported,true);assert.deepEqual(parsed.journal.operations,journal.operations);assert.deepEqual(await restored.load('intake'),await f.store.load('intake'));assert.deepEqual(await restored.load(segmentId(1,memberThread(member.id))),await f.store.load(segmentId(1,memberThread(member.id))));validateMissionJournalLineage(restored.inspect());
  const restoredChat=new AssistantService(restored,new ProductService(restored),undefined,{member,clock:()=>f.start});const view:any=await restoredChat.read();assert.equal(view.turns[0].memoryCandidate.status,'saved');assert.deepEqual(view.turns[0].memoryCandidate.sourceWork,(await f.mission()).memories[0]!.sourceWork);
 });
 
 test('HTTP rejects stale memory review before intent and lets the owner review again',async t=>{
- const {createWorkbench}=await import('../src/server.ts'),{applyMembers,MEMBERS_ID}=await import('../src/members.ts');
+ const {createWorkbench}=await import('../src/server.ts');
  const f=await setup();await f.send();const choice=await f.choice();
- const roster=applyMembers(null,{type:'propose-member',decisionId:'fixture-member',topic:'Memory fixture',works:[{title:'Fixture source'}],count:2},{id:ASSISTANT_ACTOR_ID,roles:['assistant']},{observedAt:Date.now()});
- const admitted=applyMembers(roster.value,{type:'admit-member',decisionId:'fixture-member',memberId:member.id,name:member.name,shape:'square'},owner,{observedAt:Date.now()});await f.store.commit({id:MEMBERS_ID,commandId:'fixture-members',fingerprint:hash(admitted.value),expectedRevision:0,...admitted,outbox:[]});
  await f.product.admit('intake',{commandId:'concurrent-owner',expectedRevision:choice.missionRevision,workId:'concurrent',title:'Owner update',budget:0});
  const server=createWorkbench(f.store,process.cwd(),{scheduleIntervalMs:0});t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
  const post=(decision:any)=>fetch('http://127.0.0.1:'+address.port+'/assistant/memory-candidates',{method:'POST',headers:{'Content-Type':'application/json','X-Massion-Feed':choice.feedId},body:JSON.stringify({member:member.id,...decision})});

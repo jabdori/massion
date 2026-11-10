@@ -10,20 +10,21 @@ export const ASSISTANT_CONVERSATION_PREFIX='assistant-conversation:',ASSISTANT_A
 export const SEGMENT_MESSAGES=16,SEGMENT_BYTES=65536,MESSAGE_BYTES=4096,TITLE_BYTES=512,RECEIPT_BYTES=1024,DIAGNOSTIC_BYTES=256,MODEL_BYTES=256,CONTEXT_MESSAGES=12,PENDING_GRACE_MS=30000;
 /** Worst-case serialized growth of one exchange: owner message, turn, reply, settle and outcome fields. Texts exclude C0 controls other than tab and line breaks, so JSON escaping at most doubles their bytes. */
 export const EXCHANGE_RESERVE_BYTES=28672;
-export interface AssistantMessage {at?:number;id:string;ordinal:number;actorId:string;role:'owner'|'representative';turnId:string|null;text:string}
+export interface MessageMember {id:string;name:string}
+export interface AssistantMessage {member?:MessageMember;at?:number;id:string;ordinal:number;actorId:string;role:'owner'|'representative';turnId:string|null;text:string}
 export interface AssistantDiagnostic {code:string;message:string}
 export interface AssistantRoute {profileId:string;configHash:string;provider:string;model:string;mode:'mock-http'|'live';outputTokenCap:number}
 export interface AssistantUsage {inputTokens:number|null;outputTokens:number|null}
 /** `missionId` pins the intake Mission the Work was admitted to, so the card outlives a later settings change. Absent on outcomes recorded before it existed. */
 export interface AssistantOutcome {missionId?:string;work:{status:'admitted'|'not_created'|'unknown';diagnostics:AssistantDiagnostic[]};run:{status:'requested'|'not_started'|'off';diagnostics:AssistantDiagnostic[]}}
-export interface AssistantTurn {memoryCandidate?:MemoryCandidate;id:string;messageId:string;status:'not_started'|'pending'|'answered'|'failed'|'unknown';diagnostics?:AssistantDiagnostic[];route?:AssistantRoute;ownership?:RuntimeOwnership;requestHash?:string;contextMessageIds?:string[];usage?:AssistantUsage;receipt?:string;proposal?:AssistantProposal;steer?:AssistantSteer;outcome?:AssistantOutcome}
+export interface AssistantTurn {member?:MessageMember;memoryCandidate?:MemoryCandidate;id:string;messageId:string;status:'not_started'|'pending'|'answered'|'failed'|'unknown';diagnostics?:AssistantDiagnostic[];route?:AssistantRoute;ownership?:RuntimeOwnership;requestHash?:string;contextMessageIds?:string[];usage?:AssistantUsage;receipt?:string;proposal?:AssistantProposal;steer?:AssistantSteer;outcome?:AssistantOutcome}
 /** `member` is the name the Representative's model gave (member-work.md); the host checks it at admission. */
 export interface AssistantProposal {title:string;member?:string}
 /** A member thread's remark recorded as a Work's steering, or refused before or at its commit. */
 export interface AssistantSteer {missionId:string;workId:string;status:'proposed'|'recorded'|'not_recorded'|'unknown';expectedRevision?:number;confirmedBy?:string}
 export const MEMBER_NAME_CHARS=32;
 export interface AssistantSegment {kind:'assistant-conversation';id:string;segment:number;previous:{id:string;lastMessageId:string}|null;closed:boolean;timeWatermark:number;messages:AssistantMessage[];turns:AssistantTurn[]}
-export type AssistantTurnInput = {status:'pending';id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
+export type AssistantTurnInput = {status:'pending';member?:MessageMember;id:string;route:AssistantRoute;ownership:RuntimeOwnership;requestHash:string;contextMessageIds:string[]} | {status:'not_started';id:string;diagnostics:AssistantDiagnostic[]};
 export type AssistantCommand =
  | {type:'append-assistant-message';recordMessageTime?:true;messageId:string;text:string;turn:AssistantTurnInput}
  | {type:'open-assistant-segment';recordMessageTime?:true;segment:number;previous:{id:string;lastMessageId:string}|null;messageId:string;text:string;turn:AssistantTurnInput}
@@ -60,11 +61,12 @@ function expire(segment:AssistantSegment,observedAt:number):void {for(const t of
 function turnInput(v:unknown,messageId:string,observedAt:number):AssistantTurn {
  const t=v as AssistantTurnInput;ensure(t&&typeof t==='object'&&t.id===assistantTurnId(messageId),'Turn identity must derive from its owner message');
  if(t.status==='not_started'){ensure(exact(t,['status','id','diagnostics']),'Exact not-started turn fields required');return {id:t.id,messageId,status:t.status,diagnostics:diagnostics(t.diagnostics,1)};}
- ensure(t.status==='pending'&&exact(t,['status','id','route','ownership','requestHash','contextMessageIds']),'Exact pending turn fields required');const r=t.route;
+ ensure(t.status==='pending'&&exact(t,['status','id','route','ownership','requestHash','contextMessageIds',...(Object.hasOwn(t,'member')?['member']:[])]),'Exact pending turn fields required');const r=t.route;
  ensure(exact(r,['profileId','configHash','provider','model','mode','outputTokenCap'])&&id(r.profileId)&&sha(r.configHash)&&['mock-http','live'].includes(r.mode)&&count(r.outputTokenCap,1),'Invalid Representative route pin');text(r.provider,128,'route provider',true);text(r.model,MODEL_BYTES,'route model',true);
  validateRuntimeOwnership(t.ownership);ensure(t.ownership.startedAt<=observedAt&&observedAt<t.ownership.deadlineAt,'Pending turn ownership must contain the recorded time');ensure(sha(t.requestHash),'Invalid request hash');
  ensure(Array.isArray(t.contextMessageIds)&&t.contextMessageIds.length<=CONTEXT_MESSAGES&&Object.keys(t.contextMessageIds).length===t.contextMessageIds.length&&t.contextMessageIds.every(id)&&new Set(t.contextMessageIds).size===t.contextMessageIds.length,'Invalid context message pins');
- return {id:t.id,messageId,status:'pending',route:structuredClone(r),ownership:structuredClone(t.ownership),requestHash:t.requestHash,contextMessageIds:structuredClone(t.contextMessageIds)};
+ if(Object.hasOwn(t,'member')){ensure(exact(t.member,['id','name'])&&id(t.member!.id),'Invalid message member');memberName(t.member!.name);}
+ return {...(t.member?{member:structuredClone(t.member)}:{}),id:t.id,messageId,status:'pending',route:structuredClone(r),ownership:structuredClone(t.ownership),requestHash:t.requestHash,contextMessageIds:structuredClone(t.contextMessageIds)};
 }
 function append(segment:AssistantSegment,command:{messageId:string;text:string;turn:unknown;recordMessageTime?:true},actor:Actor,observedAt:number):void {
  ensure(typeof command.messageId==='string'&&/^m:[a-f0-9]{32}$/.test(command.messageId),'Invalid owner message identity');text(command.text,MESSAGE_BYTES,'owner message');const turn=turnInput(command.turn,command.messageId,observedAt);
@@ -96,7 +98,7 @@ export function applyAssistant(current:AssistantSegment|null,command:AssistantCo
    const t=observe(state,time);ensure(!state.closed,'Segment is closed; no reply lands after close');const turn=state.turns.find(x=>x.id===command.turnId);ensure(turn&&turn.status==='pending','Only a pending turn settles, once');
    if(command.status!=='unknown')ensure(t<turn.ownership!.deadlineAt,'A reply after the deadline is not accepted; settle unknown');
    turn.status=command.status;turn.usage=structuredClone(command.usage);turn.receipt=command.receipt;
-   if(command.status==='answered'){if(command.memoryCandidate){ensure(command.proposal===null&&!command.steer&&command.memoryCandidate.state==='proposed','Memory proposal cannot steer or admit Work');validateMemoryCandidate(command.memoryCandidate,state.id,turn.id,hash(state.messages.find(m=>m.id===turn.messageId)),thread);turn.memoryCandidate=structuredClone(command.memoryCandidate);}ensure(command.usage.outputTokens!==null&&command.usage.outputTokens<=turn.route!.outputTokenCap,'Answered usage must be known and within the cap');if(command.proposal)turn.proposal=structuredClone(command.proposal);if(command.steer)turn.steer=structuredClone(command.steer);state.messages.push({id:'r:'+turn.id,ordinal:state.messages.length+1,actorId:actor.id,role:'representative',turnId:turn.id,text:command.reply,...(command.recordMessageTime?{at:t}:{})});}
+   if(command.status==='answered'){ensure(!turn.member||command.proposal===null,'A member-authored answer cannot propose Work');if(command.memoryCandidate){ensure(command.proposal===null&&!command.steer&&command.memoryCandidate.state==='proposed','Memory proposal cannot steer or admit Work');validateMemoryCandidate(command.memoryCandidate,state.id,turn.id,hash(state.messages.find(m=>m.id===turn.messageId)),thread);turn.memoryCandidate=structuredClone(command.memoryCandidate);}ensure(command.usage.outputTokens!==null&&command.usage.outputTokens<=turn.route!.outputTokenCap,'Answered usage must be known and within the cap');if(command.proposal)turn.proposal=structuredClone(command.proposal);if(command.steer)turn.steer=structuredClone(command.steer);state.messages.push({id:'r:'+turn.id,ordinal:state.messages.length+1,actorId:actor.id,role:'representative',turnId:turn.id,text:command.reply,...(turn.member?{member:structuredClone(turn.member)}:{}),...(command.recordMessageTime?{at:t}:{})});}
    expire(state,t);break;
   }
   case 'decide-assistant-memory': {
@@ -155,6 +157,11 @@ export class AssistantConversation {
   const concurrent=await this.store.lookupOperation(identity);if(concurrent.status!=='unknown')return concurrent;
   if((snapshot?.revision??0)!==expectedRevision)return {status:'conflict',revision:snapshot?.revision??0,reason:'revision'};
   if(command.type==='open-assistant-segment'&&segment>1){const before=(await this.store.load(segmentId(segment-1,this.thread)))?.value;ensure(before?.closed,'Segment '+(segment-1)+' must be closed before the next opens','conflict');ensure(command.previous?.lastMessageId===before.messages.at(-1)!.id,'Open must name the previous segment last message');}
+  if((command.type==='open-assistant-segment'||command.type==='append-assistant-message')&&command.turn.status==='pending'&&command.turn.member){
+   const member=command.turn.member,org=(await this.store.load(ASSISTANT_CONVERSATION_PREFIX+'members'))?.value as unknown as {members:{id:string;name:string;archivedAt?:number;admissionOpen?:true}[]}|undefined;
+   ensure(org?.members.some(m=>m.id===member.id&&m.name===member.name&&m.archivedAt===undefined&&m.admissionOpen!==true),'Message member is not an admitted active identity','conflict');
+   ensure(!this.thread||this.thread==='member:'+member.id,'Message member does not own this thread');
+  }
   const {value,events}=applyAssistant(snapshot?.value??null,command,actor,{observedAt:this.clock()},this.thread);
   const result=await this.store.commit({id:aggregate,expectedRevision,commandId,fingerprint,value,events,outbox:[]});
   if(result.status==='conflict'&&result.reason==='idempotency'){const stored=await this.store.lookupOperation(identity);if(stored.status!=='unknown')return stored;}return result;

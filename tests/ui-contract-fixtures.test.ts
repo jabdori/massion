@@ -173,7 +173,7 @@ test('completed and deferred v2 decisions render the declared readiness node wit
   });
   await settle();
   assert.ok(app.all().some(n=>n.id===f.readySelector.slice(1)),screen+' readiness node must be rendered');
-  if(screen==='B21-done-hana')assert.ok(app.all().some(n=>n.id==='side-member-member-sem'),'admitted member must appear in the sidebar');
+  if(screen==='B21-done-hana'){const memberId=(f.routes['/assistant/conversation']!.body as {decisions:{memberId:string}[]}).decisions[0]!.memberId;assert.ok(app.all().some(n=>n.id==='side-member-'+memberId),'the actually admitted member must appear in the sidebar');}
   for(const d of (f.routes['/assistant/conversation']!.body as {decisions:{id:string}[]}).decisions)
    assert.ok(app.all().some(n=>n.id==='chat-system-'+d.id),screen+' completed/deferred decision must not be discarded');
  }
@@ -285,7 +285,7 @@ test('R-A fixtures come from timed command producers and retain named worker dep
 
 test('browser fixture reads retain their exact Work inputs and redacted form values',async()=>{
  const {loadFixture}=await hostModule();
- for(const screen of ['B4','B5','B15','B7']){const f=await loadFixture(screen),mission=(f.routes['/missions/intake']!.body as {value:Mission}).value,w=mission.works.find(w=>w.browserSession)!;assert.ok(w,screen);for(const page of w.browserSession!.pages){assert.equal(page.inputHash,workInputHash(w),screen);assert.ok(page.fields.filter(f=>f.masked).every(f=>f.value==='••••'));}const query=f.routes['/missions/intake/works/'+w.id+'/browser']!.body as any;assert.equal(query.session.pagesRead,w.browserSession!.pages.length);assert.deepEqual(query.session.page,w.browserSession!.pages.at(-1));}
+ for(const screen of ['B4','B5','B15','B7']){const f=await loadFixture(screen),mission=(f.routes['/missions/intake']!.body as {value:Mission}).value,w=mission.works.find(w=>w.browserSession)!;assert.ok(w,screen);for(const page of w.browserSession!.pages){assert.equal(page.inputHash,workInputHash(w),screen);assert.ok(page.fields.filter(f=>f.masked).every(f=>f.value==='••••'));}const query=f.routes['/missions/intake/works/'+w.id+'/browser']!.body as any;assert.equal(query.session.pagesRead,w.browserSession!.pages.length);assert.deepEqual(query.session.page,w.browserSession!.pages.at(-1));if(screen==='B7')assert.ok(!f.gaps.some(g=>g.includes('browser/page-read telemetry is absent')));}
 });
 
 test('failed churn keeps its command-produced procedure, worker messages and failed independent check',async()=>{

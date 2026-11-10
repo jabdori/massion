@@ -38,7 +38,7 @@ export async function browserFixture(template:ScreenFixture,images?:Record<strin
   const snapshot=(fixture.routes['/read-state?mission=intake']!.body as any).snapshot;workId=snapshot.value.works.find((w:any)=>w.execution==='active'&&w.acceptance==='pending').id;
   await store.commit({id:missionId,expectedRevision:0,commandId:'recorded-fixture-baseline',fingerprint:'recorded-fixture-baseline',value:structuredClone(snapshot.value),events:[],outbox:[]});
  }
- const pages:RawBrowserPage[]=library?(images?['library-guide','library-availability','library-form'].map(name=>images[name]!):libraryPages):unknown?[checkoutPage,checkoutPage,checkoutPage,checkoutPage]:[{address:'https://research.example.com/pricing',title:'요금제',blocks:['요금제 비교','공개 요금 안내'],fields:[]},{address:'https://research.example.com/plans',title:'플랜 안내',blocks:['플랜 안내','공개 이용 조건'],fields:[]}];
+ const pages:RawBrowserPage[]=library?(images?['library-guide','library-availability','library-form'].map(name=>images[name]!):libraryPages):unknown?[checkoutPage,checkoutPage,checkoutPage,checkoutPage]:[{address:'https://shop.example.com/orders',title:'지난 주문',blocks:['지난 주문','레이저 토너 검정'],fields:[]},{address:'https://shop.example.com/item',title:'상품 정보',blocks:['레이저 토너 검정','수량 1'],fields:[]}];
  const service=await capturePages(store,missionId,workId,pages,fixture.now),snapshot=(await store.load(missionId))!;if(library||unknown)validateMissionJournalLineage(store.inspect());
  const read=fixture.routes['/read-state?mission=intake']!.body as any;if(library)read.snapshot.value.works.unshift(snapshot.value.works[0]);else if(unknown)read.snapshot.value.works.find((w:any)=>w.id===workId).browserSession=snapshot.value.works[0]!.browserSession;else read.snapshot.value=snapshot.value;if(!unknown)read.snapshot.revision=snapshot.revision;
  fixture.routes['/missions/intake']={status:200,body:structuredClone(read.snapshot)};
@@ -46,6 +46,6 @@ export async function browserFixture(template:ScreenFixture,images?:Record<strin
  const conversation=fixture.routes['/assistant/conversation']!.body as any;for(const turn of conversation.turns??[])if(turn.work?.workId===workId){turn.work.browser=browserSummary(read.snapshot.value.works.find((w:any)=>w.id===workId));turn.work.missionRevision=read.snapshot.revision;}
  await attachBrowserRoute(fixture,service,missionId,workId);(fixture.routes['/missions/'+missionId+'/works/'+workId+'/browser']!.body as any).revision=read.snapshot.revision;
  if(library){fixture.steps=[{action:'click',selector:'[id="side-line-intake/library"]',readySelector:'#work-heading-library'},{action:'click',selector:'#work-browser-library',readySelector:'#pane-effect:not([hidden])'}];fixture.gaps=[];}
- else if(!unknown)fixture.gaps=fixture.gaps.map(g=>g.replace(' or browser/page-read telemetry',''));
+ else if(!unknown)fixture.gaps=fixture.gaps.filter(g=>g!=='Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.').map(g=>g.replace(' or browser/page-read telemetry',''));
  fixture.reuse.push('scripts/ui-contracts/browser-fixtures.ts: BrowserSessions captures actual adapter read shapes; no network or form submission');return fixture;
 }

@@ -107,7 +107,8 @@ function assignment(value: unknown): asserts value is Assignment {
   oneOf(model.evidenceClass, ['fixture', 'real-provider'], 'evidence class');
 }
 function effect(value: unknown, recoveryPendingIds: readonly string[] = []): asserts value is Effect {
-  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt','providerDispatch','ownerDecision']);
+  const item = object(value, 'effect', ['id', 'taskId', 'status', 'target', 'authority'], ['receipt','providerDispatch','ownerDecision','deliveredAt']);
+  if(Object.hasOwn(item,'deliveredAt')){integer(item.deliveredAt,'file delivery time',0);const dispatch=(value as Effect).providerDispatch;ensure(item.status==='succeeded'&&!!dispatch?.fileInputs?.length&&(item.deliveredAt as number)>=dispatch.claimedAt,'File delivery time requires a successful claimed file receipt');}
   if(item.ownerDecision)validateOwnerEffect(value as Effect,recoveryPendingIds.includes(String(item.id)));
   for (const key of ['id', 'taskId', 'target', 'authority']) text(item[key], `effect ${key}`);
   oneOf(item.status, ['pending', 'succeeded', 'failed', 'unknown'], 'effect status');

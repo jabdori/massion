@@ -18,6 +18,7 @@ for(const screen of ['B4','B15','B7'])for(const theme of ['dark','light']){
   await evaluate(`globalThis.browserCommands=0;const original=fetch;globalThis.fetch=(p,o)=>{if(p==='/protocol/request'&&JSON.parse(o.body).kind==='command')browserCommands++;return original(p,o)}`);
   for(const step of host.fixture.steps){await browser(step.action,step.selector,...(step.action==='fill'?[step.value]:[]));if(step.readySelector)await browser('wait',step.readySelector);}
   if(screen==='B7'){
+   const evidence=await evaluate(`Array.from(document.querySelectorAll('.work-room:not([hidden]) .browser-read-steps li')).map(row=>row.innerText)`);assert.equal(evidence.length,2);assert.match(evidence[0],/지난 주문[\s\S]*shop.example.com/);assert.match(evidence[1],/상품 정보[\s\S]*shop.example.com/);
    for(const width of [1440,390]){await browser('set','viewport',String(width),'900');const layout=await evaluate(`(()=>{const row=document.querySelector('.work-room:not([hidden]) .room-browser'),[time,count,button]=[...row.children].map(e=>e.getBoundingClientRect());return {separated:time.right+4<=count.left&&count.right+4<=button.left,chat:document.getElementById('chat-log').innerText,overflow:document.documentElement.scrollWidth>innerWidth}})()`);assert.equal(layout.separated,true);assert.equal(layout.overflow,false);assert.match(layout.chat,/작업 중 · 페이지 2개 읽음/);rows.push({screen,theme,width,separated:true});await browser('screenshot',out+'/'+screen+'-'+theme+'-'+width+'.png');}
    continue;
   }
