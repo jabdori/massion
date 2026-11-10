@@ -239,9 +239,17 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  }
  private async active(missionId:string,workId:string,controller?:AbortController){controller?.signal.throwIfAborted();const {work}=await this.current(missionId,workId);controller?.signal.throwIfAborted();if(work.execution==='cancelled'||work.execution==='waiting'||work.blocker)throw new DomainError('Work is cancelled, steered, or blocked');return work;}
  private async proposePayment(missionId:string,workId:string,taskId:string,request:PaymentIntent,controller:AbortController){
-  const store=new Proxy(this.app.store,{get:(target,key)=>{if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(this.draining)throw new HostDrainError();controller.signal.throwIfAborted();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
-  const result=await new EffectDecisionsService(this.app.store,store,()=>missionId).propose({missionId,workId,taskId,stepId:'payment-intent',request});
-  if(result.status==='conflict')throw new DomainError('Payment intent admission conflicted','conflict');
+  const {work}=await this.current(missionId,workId),source=work.effects.findLast(e=>e.taskId===taskId&&e.providerDispatch&&e.status==='succeeded'),inputHash=source?.receipt?JSON.parse(source.receipt).binding?.inputHash:undefined;
+  if(typeof inputHash!=='string')throw new DomainError('Original payment producer input unavailable');
+  const assembly=!!this.controllers.get(`${missionId}\0${workId}`)?.inputHash;
+  const store=new Proxy(this.app.store,{get:(target,key)=>{if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{if(this.draining)throw new HostDrainError();controller.signal.throwIfAborted();if(inputHash!==workInputHash(input.value.works.find(w=>w.id===workId)!))throw new SteeringChanged();return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  try{
+   const result=await new EffectDecisionsService(this.app.store,store,()=>missionId).propose({missionId,workId,taskId,stepId:'payment-intent',request});
+   if(result.status==='conflict')throw new DomainError('Payment intent admission conflicted','conflict');
+  }catch(error){
+   if(!(error instanceof SteeringChanged)||assembly)throw error;
+   await this.block(missionId,workId,'Worker payment intent belongs to changed inputs; no approval admitted.');
+  }
  }
  private continuationConfig(){return hash({authorization:this.options.authorization,executor:{identity:this.options.executor.identity,model:this.options.executor.adapter.descriptor},verifier:{identity:this.options.verifier.identity,model:this.options.verifier.adapter.descriptor},outputTokenCap:this.options.outputTokenCap,connectionBindings:this.options.connectionBindings??null});}
  private effectId(work:Work,slot:string){const r=work.runtimeRun!,version=r.assembly?.version??1;return r.id+':'+slot+(r.continuationVersion===1&&version>1&&!slot.startsWith('step:')&&slot!=='planning'?':revision:'+version:'');}

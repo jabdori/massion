@@ -37,3 +37,9 @@ One unresolved intent per Work; multiple simultaneous worker intents fail closed
 - Approved/declined lines now identify the payee and amount/currency and use the recorded owner-answer time, including chronological placement. Work detail keeps the same identity in its timeline.
 - The source row shows the declared reference kind (document, Record, Work, web address or generic reference). The internal reference remains immutable in the intent but is never rendered as the row label; no source is fetched or verified.
 - Related effect/client/Work-pane tests: 88 passed. Typecheck passed. The browser verification regenerated all listed screenshots and snapshots, and asserts the human source label plus the exact payee/amount/answer/time in both themes and after mobile reload.
+
+### CI and Codex follow-up
+
+The UTC CI runner exposed a Seoul-only expected clock value in the recovery tests. The assertion now derives the browser-local answer time; all 25 client tests pass under UTC and the four recovery cases pass under Asia/Seoul.
+
+Codex found that owner steering during a producing call or proposal contention could bind old payment output to newer inputs. Proposal admission now retains the producing effect's original input hash and compares it at every commit attempt. Assembly uses the existing steering-change path; stale worker declarations block without an approval or provider replay. Three regressions reproduce receipt-time steering, proposal CAS contention and worker-output steering. Related member/runtime/effect tests pass 162 / 3 environment-gated skips (165 cases), and typecheck passes. Existing UI captures remain current because this follow-up changes only runtime admission and the test expectation.

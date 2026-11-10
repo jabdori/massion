@@ -908,3 +908,28 @@ test('member worker payment declarations pause after sibling receipts and skip d
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.execution,'waiting');assert.equal(w.effects.filter((e:any)=>e.ownerDecision).length,1);const declared=w.effects.find(e=>e.ownerDecision)!.ownerDecision!.request;assert.equal(declared.kind,'payment-intent');if(declared.kind==='payment-intent')assert.equal(declared.amountMinor,34000);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);
  assert.equal(f.workPrompts.filter(p=>p.step).length,1);assert.equal(f.workPrompts.some(p=>p.artifact),false);validateMissionJournalLineage(f.store.inspect());
 });
+
+for(const boundary of ['receipt','propose-owner-effect'])test('payment assembly keeps its original input fence across '+boundary+' steering',async t=>{
+ const f=await setup(t);await f.admit();let raced=false;const commit=f.store.commit.bind(f.store);
+ const envelope={format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:34000,currency:'KRW',purpose:'Requested supplies',sourceReference:'document:quote'};
+ f.setWorker(async()=> 'Answer bounded worker evidence');f.setOutput(JSON.stringify(envelope),'Example supplier');
+ f.store.commit=async input=>{
+  const event=input.events[0] as any,w=input.value.works?.at(-1);
+  if(!raced&&event?.type===boundary&&w?.runtimeRun?.steeringVersion===1&&(boundary==='propose-owner-effect'||event.command.effectId===w.runtimeRun.id+':executor')){
+   raced=true;await f.product.intervene('intake',{commandId:'payment-steering-'+boundary,expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Use the updated request instead'}});
+  }
+  return commit(input);
+ };
+ f.script.push(v2('On it.','Review payment request','Quill'));await f.say(f.assistant,'Review the supplied payment request');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.effects.some(e=>e.ownerDecision),false,'Old assembly output must not become an intent for the new inputs');assert.equal(w.execution,'blocked');assert.equal(w.record,undefined);validateMissionJournalLineage(f.store.inspect());
+});
+test('worker payment output cannot be rebound after its request changes',async t=>{
+ const f=await setup(t);await f.admit();let raced=false;const commit=f.store.commit.bind(f.store);
+ f.setWorker(async()=>JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:34000,currency:'KRW',purpose:'Requested supplies',sourceReference:'document:quote'}));
+ f.store.commit=async input=>{const event=input.events[0] as any,w=input.value.works?.at(-1);
+  if(!raced&&event?.type==='receipt'&&event.command.effectId.endsWith(':step:0')){raced=true;await f.product.intervene('intake',{commandId:'worker-payment-steering',expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Use the updated request instead'}});}
+  return commit(input);
+ };
+ f.script.push(v2('On it.','Review payment request','Quill'));await f.say(f.assistant,'Review the supplied payment request');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.effects.some(e=>e.ownerDecision),false);assert.equal(w.execution,'blocked');assert.equal(w.artifact,undefined);validateMissionJournalLineage(f.store.inspect());
+});

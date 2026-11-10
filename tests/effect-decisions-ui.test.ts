@@ -184,7 +184,7 @@ for(const failure of ['drain','contention','server','timeout'])test('typed inten
  assert.equal(runInContext('storage.get(chatEffectReceiptKey(chatDecisions()[0]))',app.context),null);
  state.hold=null;state.answer=reply({status:'committed'});await button(app.node('chat-log'),'승인').fire('click');await settle();assert.equal(posts(app).length,2);
  state.decisions=[{...d,state:'done',answeredAt:at+60000,line:'공급처 · 34,000원 · 승인됨 · Massion 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
- assert.match(app.node('chat-log').textContent,/공급처 · 34,000원 · 승인됨 · Massion 미실행 · 14:12/);assert.equal(button(app.node('chat-log'),'승인'),undefined);
+ assert.ok(app.node('chat-log').textContent.includes('공급처 · 34,000원 · 승인됨 · Massion 미실행 · '+new Date(at+60000).toTimeString().slice(0,5)));assert.equal(button(app.node('chat-log'),'승인'),undefined);
 });
 test('an old receipt lock cannot hide or block a typed intent decision',async()=>{
  const request={kind:'payment-intent',item:'구매 요청'},d={...decision(request),action:'승인',effect:{...decision(request).effect,requestHash:'a'.repeat(64)}};
