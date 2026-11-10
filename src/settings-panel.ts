@@ -95,7 +95,7 @@ async function settingsLifecyclePost(key,path,body){
  try{const {response,body:result}=await request(path,{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify({commandId,...body})});
   if(epoch!==connectionEpoch||feed!==(chatView&&chatView.feedId)){unknown();return false;}
   if(response.ok&&result&&(['committed','replayed','completed','settled','saved','checked'].includes(result.status)||result.status==='stale'&&path.endsWith('/recheck')))ok=true;
-  else if(!response.ok&&result?.outcome==='rejected')settingsActionError=copy('ui.panel.unavailable');else unknown();
+  else if(!response.ok&&(result?.outcome==='rejected'||response.status===409&&result?.status==='conflict'&&result.reason==='revision'))settingsActionError=copy('ui.panel.unavailable');else unknown();
  }catch(error){if(error?.commandNotSent===true)settingsActionError=copy('ui.panel.unavailable');else unknown();}finally{settingsPending.delete(identity);if(epoch===connectionEpoch&&feed===(chatView&&chatView.feedId))await settingsLoad(settingsShown);}
  return ok;
 }
