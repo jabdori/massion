@@ -1,3 +1,4 @@
+import {workerCommand} from '../src/app-sandbox.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AppsService,APPS_ID,applyApps} from '../src/apps.ts';
@@ -109,7 +110,7 @@ test('legacy connection completion replays without adding new credential metadat
  assert.deepEqual(store.inspect(),journal);assert.equal((await store.load(APPS_ID))!.value.apps[0].credential,undefined);
 });
 
-test('GitHub reads record invalid credentials from the exact authenticated response without claiming expiry',async()=>{
+test('GitHub reads record invalid credentials from the exact authenticated response without claiming expiry',{skip:workerCommand()===null&&'no network sandbox on this host'},async()=>{
  const f=await setup();await f.service.act({commandId:'reconnect-network',action:'reconnect',appId:'app-github'});
  const decision=(await f.service.decisions(null)).find(d=>d.state==='open')!;await f.service.connect({commandId:'network-key',decisionId:decision.id,token:'never-render-token'});
  const service=new AppsService(f.store,{...f.options,network:async()=>({status:401,body:JSON.stringify({message:'Bad credentials',documentation_url:'https://docs.github.com/rest'})})});
