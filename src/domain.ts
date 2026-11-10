@@ -34,7 +34,7 @@ export interface ProviderDispatchClaim {id:string;runId:string;hostSessionId:str
 export interface Effect { ownerDecision?:import('./effect-decisions.ts').OwnerEffectDecision; providerDispatch?:ProviderDispatchClaim; id: string; taskId: string; status: 'pending' | 'succeeded' | 'failed' | 'unknown'; target: string; authority: string; receipt?: string }
 export interface StepProgress {done:number;total:number;at:number;note?:{label:string;text:string}}
 export interface Task { progress?:StepProgress; startedAt?:number;endedAt?:number; step?:import('./internal-teams.ts').TeamStep; id: string; parentId: string | null; status: 'queued' | 'active' | 'settled'; result?: string }
-export interface CheckPredicate {criterion:string;passed:boolean;quote:string;reason:string}
+export interface CheckPredicate {checkedAt?:number;criterion:string;passed:boolean;quote:string;reason:string}
 export interface Verdict { checkedAt?:number;predicates?:CheckPredicate[]; id: string; verifierAssignmentId: string; artifactSha256: string; artifactVersion: number; criteriaVersion: number; status: 'passed' | 'failed' | 'stale'; evidence: Evidence[]; check?: CheckFamily }
 /** A model identity with the family the host map gave it when the check ran; null is unknown and counts as the same family. */
 export interface ModelIdentity {provider:string;model:string;family:string|null}
@@ -235,18 +235,18 @@ export function freshSourceWork(w:Work):boolean {
 /** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
 export const observesWork=(type:string)=>['admit-work','admit-effect','record-step-progress','settle-task','verify','steer','append-work-message','append-mission-message','open-room','record-room-turn'].includes(type);
-export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2;telemetryVersion?:1}): { value: Mission; events: unknown[] } {
+export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2;telemetryVersion?:1|2}): { value: Mission; events: unknown[] } {
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
-  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||(command.type==='adopt-growth'||command.type==='revert-growth')&&command.recordChangeTime===true||command.type==='answer-rule-change'&&command.recordChangeTime===true||time?.telemetryVersion===1&&observesWork(command.type)||time===undefined,'Unexpected expiry clock context');
+  text(actor.id, 'actor');ensure(isEffectDecisionCommand(command.type)||requiresMemoryTime(current,command.type)||endsWork(command.type)||command.type==='evaluate-growth'&&command.ownerDecision===true||(command.type==='adopt-growth'||command.type==='revert-growth')&&command.recordChangeTime===true||command.type==='answer-rule-change'&&command.recordChangeTime===true||(time?.telemetryVersion===1||time?.telemetryVersion===2)&&observesWork(command.type)||time===undefined,'Unexpected expiry clock context');
   if(time&&Object.hasOwn(time,'workEndVersion'))ensure(time.workEndVersion===2&&endsWork(command.type),'Invalid Work end version');
   if(command.type==='adopt-growth'||command.type==='revert-growth'){
     if(Object.hasOwn(command,'recordChangeTime'))ensure(command.recordChangeTime===true,'Invalid Growth time marker');
     if(command.recordChangeTime){const g=current.growth.find(g=>g.id===command.growthId),since=command.type==='adopt-growth'?g?.ruleChange?.at:g?.adoptedAt;ensure(time&&Object.keys(time).length===1&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0&&time.observedAt<=8640000000000000&&(since===undefined||time.observedAt>=since),'Invalid Growth transition time');}
   }
   if(command.type==='propose-growth')ensure(!Object.hasOwn(command.proposal,'adoptedAt')&&!Object.hasOwn(command.proposal,'revertedAt'),'Invalid proposal transition time');
-  if(time&&Object.hasOwn(time,'telemetryVersion'))ensure(time.telemetryVersion===1&&observesWork(command.type)&&Object.keys(time).every(k=>['observedAt','workEndVersion','telemetryVersion'].includes(k))&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Invalid telemetry time');
-  const at=time?.telemetryVersion===1?time.observedAt:undefined;
+  if(time&&Object.hasOwn(time,'telemetryVersion'))ensure((time.telemetryVersion===1||time.telemetryVersion===2)&&observesWork(command.type)&&Object.keys(time).every(k=>['observedAt','workEndVersion','telemetryVersion'].includes(k))&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Invalid telemetry time');
+  const at=time?.telemetryVersion===1||time?.telemetryVersion===2?time.observedAt:undefined;
   const state = structuredClone(current);
   const work = 'workId' in command ? state.works.find(w => w.id === command.workId) : undefined;
   if ('workId' in command && command.type !== 'admit-work' && command.type !== 'observe-growth') ensure(work, 'Unknown work');
@@ -442,7 +442,7 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
     if(command.type==='admit-work')w!.admittedAt=at;
     if(command.type==='admit-effect'){const task=w!.tasks.find(t=>t.id===command.effect.taskId)!;task.startedAt??=at;}
     if(command.type==='settle-task')w!.tasks.find(t=>t.id===command.taskId)!.endedAt=at;
-    if(command.type==='verify')w!.verdict!.checkedAt=at;
+    if(command.type==='verify'){w!.verdict!.checkedAt=at;if(time?.telemetryVersion===2)for(const predicate of w!.verdict!.predicates??[])predicate.checkedAt=at;}
     if(command.type==='steer'){w!.instructions!.at(-1)!.at=at;if(w!.execution==='active'&&w!.runtimeRun?.steeringVersion===1)w!.runtimeRun.inputHash=workInputHash(w!);}
   }
   // Missing time keeps pre-Q12 journals unchanged; unversioned time keeps the original overwrite rule.

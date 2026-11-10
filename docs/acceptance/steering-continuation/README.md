@@ -61,3 +61,20 @@ a fresh committed response. Lost and replayed claim acknowledgments each have a
 regression proving zero worker calls and no restart reclaim. The affected
 claim/steering/lifetime batch passed 42 tests with six environment-gated skips;
 the two ambiguous-acknowledgment regressions passed separately.
+
+## Main integration after lead approval
+
+Merge `bb07ab4` (PR #140 typed tables/telemetry v2, with PR #138 already in the
+ancestry) without rewriting history. Retain final/worker table validation and
+predicate host observation times alongside the steering input binding and
+continuation rules. The existing end-to-end steering regression now produces a
+typed table, asserts its exact artifact bytes and predicate times, and replays
+the combined journal.
+
+The allow-list combines both branches' deletions: base 428, steering 408, main
+412, integrated 392. Ten screen/theme captures have zero new, stale or
+infrastructure diagnostics: [scoped gate](main140-gate.json). The pricing table
+and confirmed steering coexist in the [B18 comparison](B18-main140-pair.png).
+Four steering browser flows and both table interaction flows passed. Typecheck
+and the related batch passed: 197 tests, three actual-DB skips, no failures.
+Full checks and current-head Codex review remain recorded on PR #137.

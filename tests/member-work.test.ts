@@ -735,6 +735,7 @@ for(const kind of ['application/pdf','image/png'])test(`multi-step member Work c
 
 test('confirmed procedure steering continues once with fresh inputs, telemetry and replayable journal',async t=>{
  const f=await setup(t),quill=await f.admit(),chat=f.chatFor(quill);
+ const table=JSON.stringify({format:'massion-table/v1',caption:'Enterprise churn',columns:['Customer','Reason'],rows:[['Enterprise customers','Support']]});f.setOutput(table,'Enterprise customers');
  let entered=()=>{},release=()=>{},signal:AbortSignal|undefined;
  const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
  let workers=0;
@@ -751,6 +752,7 @@ test('confirmed procedure steering continues once with fresh inputs, telemetry a
  assert.deepEqual(continued.effects,original.effects);assert.equal(f.calls.length,before);
  release();await f.assistant.idle();
  const final=(await f.intake()).works.at(-1)!;assert.equal(final.acceptance,'accepted',JSON.stringify({execution:final.execution,blocker:final.blocker,effects:final.effects.map(e=>[e.id,e.status])}));assert.equal(workers,2);
+ assert.equal(await f.artifacts.read(final.artifact!),table);assert.ok(final.verdict!.predicates!.length);assert.ok(final.verdict!.predicates!.every(p=>p.checkedAt===final.verdict!.checkedAt&&Number.isSafeInteger(p.checkedAt)));
  const prompts=f.workPrompts.filter(p=>p.binding?.workId===original.id),assembly=prompts.find(p=>p.stepResults),check=prompts.find(p=>p.artifact);
  assert.equal(assembly.work.instructions[0].text,'Focus on enterprise customers');assert.deepEqual(check.requirements.instructions,assembly.work.instructions);
  assert.equal(prompts.find(p=>p.step?.dependsOn.length)?.work.instructions[0].text,'Focus on enterprise customers');

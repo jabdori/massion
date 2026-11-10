@@ -131,7 +131,7 @@ function verdict(value: unknown): asserts value is Verdict {
   }
 }
 function checkVerdictBinding(work: Work, current: boolean): void {
-  const value = work.verdict!;validatePredicates(value.predicates,work.criteria,value.status);
+  const value = work.verdict!;validatePredicates(value.predicates,work.criteria,value.status,value.checkedAt);
   ensure(work.artifact, 'verdict has no artifact');
   const verifier = work.assignments.find(entry => entry.id === value.verifierAssignmentId && entry.role === 'verifier');
   ensure(verifier, 'verdict verifier assignment is missing');
