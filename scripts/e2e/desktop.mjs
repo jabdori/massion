@@ -13,6 +13,7 @@ import {workbenchReady} from '../ui-contracts/report.ts';
 import {paymentJourney} from './decisions.mjs';
 import {stopOwnedChild} from '../../tests/support/owned-process.ts';
 import {browserCommand} from './browser-command.mjs';
+import {evidenceBrowser,redactEvidence} from '../browser-evidence.mjs';
 
 export async function desktopJourney({out,database,store}){
  assert.ok(process.platform==='linux'&&process.env.DISPLAY,'Run E2E under Linux Xvfb; native visible launches are forbidden');
@@ -21,7 +22,7 @@ export async function desktopJourney({out,database,store}){
  const origin='http://127.0.0.1:'+await reserve(),port=await reserve();let child,childArgv,logs='';const evidence=[];
  const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a2-desktop'])).stdout.trim();
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('AGENT_BROWSER_')));Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
- const browser=async(...args)=>{const data=await browserCommand(()=>run('agent-browser',['--session',session,'--cdp',String(port),'--json',...args],{env,timeout:35000,maxBuffer:4e6}));if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;};
+ const browser=evidenceBrowser(async(...args)=>{const data=await browserCommand(()=>run('agent-browser',['--session',session,'--cdp',String(port),'--json',...args],{env,timeout:35000,maxBuffer:4e6}));if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;});
  const wait=code=>browser('wait','--fn',code),until=async check=>{const end=Date.now()+20000;while(!await check()){assert.ok(Date.now()<end,'Desktop deadline: '+logs);await new Promise(r=>setTimeout(r,30));}};
  const calls=async()=>{try{return (await readFile(join(root,'calls.jsonl'),'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}};
  const capture=async(name,patterns)=>{const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern);evidence.push(name);};
@@ -47,6 +48,6 @@ export async function desktopJourney({out,database,store}){
  finally{
   if(child)await stopOwnedChild(child,{cwd:root,argv:childArgv});
   await browser('close').catch(()=>{});await drainDaemon(socket,origin).catch(()=>{});
-  await writeFile(join(out,'desktop.log'),logs);await writeFile(join(out,'desktop-daemon.log'),await readFile(join(root,'daemon.log'),'utf8').catch(()=>''));await rm(root,{recursive:true,force:true});
+  await writeFile(join(out,'desktop.log'),redactEvidence(logs));await writeFile(join(out,'desktop-daemon.log'),redactEvidence(await readFile(join(root,'daemon.log'),'utf8').catch(()=>'')));await rm(root,{recursive:true,force:true});
  }
 }

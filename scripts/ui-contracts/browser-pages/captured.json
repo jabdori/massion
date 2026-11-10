@@ -1,0 +1,98 @@
+{
+  "library-guide": {
+    "address": "https://library.example.com",
+    "title": "이용 안내",
+    "blocks": [
+      "시립도서관",
+      "이용 안내",
+      "스터디룸",
+      "신청",
+      "내 신청",
+      "이용 안내",
+      "스터디룸",
+      "이용 하루 전까지 취소 가능"
+    ],
+    "fields": [],
+    "sourceAddress": "https://library.example.com/guide",
+    "sourceSha256": "9b3c3a6192ba81c13ea9f67b3c95bb2903cc8af42abc55ff68631b70246a251a"
+  },
+  "library-availability": {
+    "address": "https://library.example.com",
+    "title": "빈 시간",
+    "blocks": [
+      "시립도서관",
+      "이용 안내",
+      "스터디룸",
+      "신청",
+      "내 신청",
+      "빈 시간",
+      "스터디룸 B",
+      "11월 11일 (수)",
+      "15:00–17:00 · 4명"
+    ],
+    "fields": [],
+    "sourceAddress": "https://library.example.com/availability",
+    "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
+  },
+  "library-form": {
+    "address": "https://library.example.com",
+    "tainted": true,
+    "summary": {
+      "textBlocks": 6,
+      "frames": 0,
+      "privateFields": 1,
+      "fields": [
+        {
+          "kind": "text",
+          "length": 3,
+          "private": false
+        },
+        {
+          "kind": "tel",
+          "length": 13,
+          "private": true
+        },
+        {
+          "kind": "select",
+          "length": 11,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 11,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 6,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 2,
+          "private": false
+        }
+      ]
+    },
+    "sourceAddress": "https://library.example.com/apply",
+    "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
+  },
+  "checkout": {
+    "address": "https://shop.example.com",
+    "tainted": true,
+    "summary": {
+      "textBlocks": 16,
+      "frames": 0,
+      "privateFields": 1,
+      "fields": [
+        {
+          "kind": "text",
+          "length": 16,
+          "private": true
+        }
+      ]
+    },
+    "sourceAddress": "https://shop.example.com/checkout",
+    "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
+  }
+}

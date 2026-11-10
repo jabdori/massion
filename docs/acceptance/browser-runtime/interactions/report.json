@@ -1,0 +1,174 @@
+[
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "width": 1440,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B4",
+    "theme": "dark",
+    "width": 390,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "width": 1440,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B4",
+    "theme": "light",
+    "width": 390,
+    "image": false,
+    "structural": true
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 0,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 1,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "dark",
+    "index": 2,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 0,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 1,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B15",
+    "theme": "light",
+    "index": 2,
+    "commands": 0,
+    "domain": "library.example.com",
+    "hiddenAlternative": true,
+    "image": true,
+    "imageOnly": true,
+    "pixels": [
+      584,
+      764
+    ],
+    "rect": [
+      848,
+      206,
+      584,
+      764
+    ]
+  },
+  {
+    "screen": "B7",
+    "theme": "dark",
+    "width": 1440,
+    "separated": true
+  },
+  {
+    "screen": "B7",
+    "theme": "dark",
+    "width": 390,
+    "separated": true
+  },
+  {
+    "screen": "B7",
+    "theme": "light",
+    "width": 1440,
+    "separated": true
+  },
+  {
+    "screen": "B7",
+    "theme": "light",
+    "width": 390,
+    "separated": true
+  }
+]

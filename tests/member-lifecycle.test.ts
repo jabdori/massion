@@ -142,7 +142,7 @@ test('member screen fixtures use production lifecycle reads and consistently rem
   assert.ok(!JSON.stringify(fixture).includes('member-quill'));assert.ok(!JSON.stringify(fixture).includes('member-juno'));
   const selected=view.members[screen==='B19-juno'?1:0]!;assert.ok(fixture.steps.some(s=>s.action!=='offline'&&s.readySelector==='#settings-member-'+selected.id));
   const skills=(fixture.routes['/assistant/skills']!.body as any).skills;assert.ok(skills.every((s:any)=>view.members.some(m=>m.id===s.memberId)));
-  for(const m of [...view.members,...view.archived]){assert.equal(m.scheduleCount,screen==='B19'&&m.id===selected.id?2:0);assert.equal(m.workCount,0);assert.equal(m.lastActiveAt,screen==='B19'&&m.id===selected.id?source.now:null);assert.equal(m.messageCount,screen==='B19'&&m.id===selected.id?2:0);}
+  for(const m of [...view.members,...view.archived]){const coding=screen==='B13'&&m.modelGroup==='coding';assert.equal(m.scheduleCount,screen==='B19'&&m.id===selected.id?2:0);assert.equal(m.workCount,coding?1:0);assert.equal(m.lastActiveAt,coding?source.now-240000:screen==='B19'&&m.id===selected.id?source.now:null);assert.equal(m.messageCount,screen==='B19'&&m.id===selected.id?2:0);}
   if(screen==='B13')assert.deepEqual(fixture.routes['/assistant/schedules'],source.routes['/assistant/schedules']);else assert.equal(view.members.find(m=>m.id===selected.id)!.builtinSkills.length,2);assert.ok(fixture.reuse.some(s=>s.includes('member-lifecycle-fixtures.ts')));
  }
  const unrelated=JSON.parse(await readFile(new URL('../scripts/ui-contracts/fixtures/B12.json',import.meta.url),'utf8'));assert.deepEqual(await memberLifecycleFixture(unrelated),unrelated);

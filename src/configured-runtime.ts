@@ -1,5 +1,6 @@
 import {parseStepResult,PROGRESS_NOTE_INSTRUCTION,STEP_RESULT_FORMAT} from './member-progress.ts';
 import type {ProgressNote} from './member-progress.ts';
+import {requireProvidedSecrets} from './secret-requests.ts';
 import {githubSource,workFileInputs} from './github-review.ts';
 import {parsePaymentIntent,PAYMENT_INTENT_FORMAT} from './payment-intent.ts';
 import type {PaymentIntent} from './payment-intent.ts';
@@ -121,6 +122,7 @@ export function workAdmissionPreflight(snapshot:Snapshot<Mission>,workId:string,
  if(work.execution==='cancelled')add('work_cancelled','This Work is cancelled and cannot admit a run.');
  if(snapshot.revision!==expectedRevision||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)add('revision_conflict','Work changed since this selection was checked. Refresh the Mission and check again.');
  if(!work.missionSnapshot)add('input_snapshot_missing','This Work lacks a pinned Mission input snapshot. Explicit rebind or new Work is required.');
+ try{requireProvidedSecrets(work);}catch{add('secret_request_pending','An owner secret request is unresolved.');}
  try{requireAnswered(work);}catch(error){add('clarification_pending',error instanceof DomainError?error.message:'Owner clarification unavailable');}
  try{resolvedPrerequisites(snapshot.value,work);}catch(error){add('prerequisite_unavailable',error instanceof DomainError?error.message:'Exact prerequisite evidence unavailable');}
  try{pinnedWorkSources(snapshot.value,work);}catch(error){add('source_input_unavailable',error instanceof DomainError?error.message:'Pinned document source is unavailable');}
@@ -239,7 +241,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private async block(missionId:string,workId:string,reason:string,code:'provider_failed'|'budget_exceeded'|'verification_failed'='provider_failed'){
   const {work}=await this.current(missionId,workId);if(work.execution!=='cancelled'&&work.execution!=='waiting')await this.send(missionId,{type:'block-work',workId,blocker:{code,detail:reason}},'runtime-representative');
  }
- private async active(missionId:string,workId:string,controller?:AbortController){controller?.signal.throwIfAborted();const {work}=await this.current(missionId,workId);controller?.signal.throwIfAborted();if(work.execution==='cancelled'||work.execution==='waiting'||work.blocker)throw new DomainError('Work is cancelled, steered, or blocked');return work;}
+ private async active(missionId:string,workId:string,controller?:AbortController){controller?.signal.throwIfAborted();const {work}=await this.current(missionId,workId);controller?.signal.throwIfAborted();requireProvidedSecrets(work);if(work.execution==='cancelled'||work.execution==='waiting'||work.blocker)throw new DomainError('Work is cancelled, steered, or blocked');return work;}
  private async proposePayment(missionId:string,workId:string,taskId:string,request:PaymentIntent,controller:AbortController){
   const {work}=await this.current(missionId,workId),source=work.effects.findLast(e=>e.taskId===taskId&&e.providerDispatch&&e.status==='succeeded'),inputHash=source?.receipt?JSON.parse(source.receipt).binding?.inputHash:undefined;
   if(typeof inputHash!=='string')throw new DomainError('Original payment producer input unavailable');

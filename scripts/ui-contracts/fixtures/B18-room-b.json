@@ -16,9 +16,7 @@
       "readySelector": "#work-heading-assistant-6a2a6478f24797a3b996652d"
     }
   ],
-  "gaps": [
-    "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
-  ],
+  "gaps": [],
   "reuse": [
     "scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands"
   ],

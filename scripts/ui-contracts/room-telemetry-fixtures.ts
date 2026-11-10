@@ -35,9 +35,9 @@ const churn=[
 ];
 
 /** Observed units are controlled fixture inputs, never parsed from a model's prose. */
-export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn',now?:number){
+export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn',now?:number,memberId=kind==='coding'?'member-juno':'member-quill'){
  const stamp=(clock:string)=>time(clock)+(kind==='pricing'?200*60000:now===undefined?0:now-time('10:44'));
- const spec:typeof pricing|typeof coding|typeof churn=kind==='pricing'?pricing:kind==='churn'?churn:coding,memberId=kind==='coding'?'member-juno':'member-quill',title=kind==='pricing'?'경쟁사 가격':kind==='churn'?'이탈 원인 조사':'PR #84 검토',start=kind==='pricing'?'10:30':kind==='churn'?'09:41':'10:40';
+ const spec:typeof pricing|typeof coding|typeof churn=kind==='pricing'?pricing:kind==='churn'?churn:coding,title=kind==='pricing'?'경쟁사 가격':kind==='churn'?'이탈 원인 조사':'PR #84 검토',start=kind==='pricing'?'10:30':kind==='churn'?'09:41':'10:40';
  const messageId=ownerMessageId('room-telemetry-'+kind),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),runId=assistantRunId(turnId),message={id:messageId,ordinal:1,actorId:owner.id,role:'owner' as const,turnId:null,text:kind==='pricing'?'경쟁사 가격도 확인해 줘.':kind==='churn'?'지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.':'PR #84 검토해 줘.',at:stamp(start)};
  const source={segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'fixture',model:'fixture-representative'},memberId};
  const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:title,body:{description:title,steps:spec.map(s=>s.title),verify:mission.criteria.description}},owner,{observedAt:stamp(start)}).value,team=memberProcedures(skills,memberId,1);
@@ -94,7 +94,7 @@ export async function regenerateRoomScreens(only?:string[]){
   }
   const steps=kind==='pricing'?[{selector:'#side-member-member-quill',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="side-line-intake/'+work.id+'"]',action:'click',readySelector:'#work-heading-'+work.id}]:[{selector:'#side-member-member-juno',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="chat-card-'+source.turnId+'"] .chat-card-open',action:'click',readySelector:'#work-heading-'+work.id}];
   const parent=await loadFixture(base,['regeneration-source']),routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(parent.routes[key])));
-  const output={screen,extends:base,description:'Selected room observations produced by domain commands; no injected challenge transcript or external calls.',now,readySelector:kind==='pricing'?'#side-member-member-quill':'#side-member-member-juno',steps,gaps:kind==='pricing'?['The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.']:[],reuse:['scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands'],routes};
+  const output={screen,extends:base,description:'Selected room observations produced by domain commands; no injected challenge transcript or external calls.',now,readySelector:kind==='pricing'?'#side-member-member-quill':'#side-member-member-juno',steps,gaps:[],reuse:['scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands'],routes};
   await writeFile(new URL(screen+'.json',directory),JSON.stringify(output,null,2)+'\n');
  }
 }

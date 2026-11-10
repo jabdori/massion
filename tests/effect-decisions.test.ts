@@ -30,7 +30,7 @@ async function setup(adapter?:EffectAdapter,owned=false){
 
 test('payment pauses atomically; overlapping approval runs the pinned effect once, and replay never sends again',async()=>{
  const calls:any[]=[];const s=await setup({id:'fixture-payment',kind:'payment',async send(input){calls.push(input);return {idempotencyKey:input.idempotencyKey,remoteId:'order-1',outcome:'succeeded',detail:'Order fixture'};}});
- await s.propose();const before=await s.read(),id=before.effects[0]!.id;assert.equal(before.execution,'waiting');assert.equal(calls.length,0);
+ await s.propose();assert.deepEqual((await s.service.decisions())[0]!.rows.find(row=>row[0]==='판매처'),['판매처','오피스몰 · shop.example.com']);const before=await s.read(),id=before.effects[0]!.id;assert.equal(before.execution,'waiting');assert.equal(calls.length,0);
  const results=await Promise.all([1,2].map(()=>s.service.decide({commandId:'pay',decisionId:id,answer:'act'})));
  assert.ok(results.every(r=>['committed','replayed'].includes(r.status)));assert.equal(calls.length,1);assert.deepEqual(calls[0].request,payment);
  assert.equal((await s.read()).effects[0]!.status,'succeeded');await s.service.decide({commandId:'pay',decisionId:id,answer:'act'});assert.equal(calls.length,1);

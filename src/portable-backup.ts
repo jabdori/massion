@@ -1,3 +1,4 @@
+import {isEnvironmentState} from './environment-actions.ts';
 import {isMonthlyBudgetState} from './monthly-budget.ts';
 /** Private bounded data backup. No environment, credentials, provider or effect APIs. */
 import { createHash } from 'node:crypto';
@@ -43,6 +44,7 @@ function inventory(journal: PortableJournal<Mission>): Artifact[] {
   validateMissionJournalLineage(journal.operations);
   const inventory = new Map<string, Artifact>();
   for (const operation of journal.operations) {
+    if (isEnvironmentState(operation.value)) continue;
     if (isMonthlyBudgetState(operation.value) || isAssistantSegment(operation.value) || isMembersState(operation.value) || isSchedulesState(operation.value) || isPermissionsState(operation.value) || isSkillsState(operation.value) || isAppsState(operation.value) || isDevicesState(operation.value) || isConnectionLifecycleState(operation.value)) continue; // Replayed by lineage; segments, members, schedules, permission rules, skills and apps hold no artifacts.
     validateMissionLineage(operation.value);
     if (operation.value.id !== operation.aggregateId) fail('Mission aggregate lineage mismatch');

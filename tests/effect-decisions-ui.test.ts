@@ -166,12 +166,15 @@ test('typed intent approval pins the shown hash and never displays payment succe
  assert.equal(JSON.parse(posts(app)[0]!.options!.body as string).requestHash,'a'.repeat(64));
  state.decisions=[{...d,state:'done',line:'승인됨 · 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
  assert.match(app.node('chat-log').textContent,/승인됨 · 미실행/);assert.doesNotMatch(app.node('chat-log').textContent,/결제 완료|응답 없음/);assert.equal(posts(app).length,1);
+ assert.ok(find(app,'chat-system-decision:1').className.split(' ').includes('chat-payment-history'));
 });
 test('typed decline is explicit and detached controls cannot answer a changed intent or feed',async()=>{
  const request={kind:'payment-intent',item:'Fixture intent'},d={...decision(request),action:'승인',effect:{...decision(request).effect,requestHash:'a'.repeat(64)}};
  const {app,state}=fixture(d);await settle();const old=button(find(app,'chat-decision-decision:1'),'승인')!;
  state.decisions=[{...d,effect:{...d.effect,requestHash:'b'.repeat(64)}}];await refresh(app);await old.fire('click');assert.equal(posts(app).length,0);
  const decline=button(find(app,'chat-decision-decision:1'),'거절')!;await decline.fire('click');await settle();assert.equal(JSON.parse(posts(app)[0]!.options!.body as string).answer,'reject');
+ state.decisions=[{...d,state:'done',line:'거절됨',effect:{...d.effect,answer:'reject'}}];await refresh(app);
+ assert.ok(find(app,'chat-system-decision:1').className.split(' ').includes('chat-payment-history'));
  state.feed='feed:b';await refresh(app);await old.fire('click');assert.equal(posts(app).length,1);
 });
 

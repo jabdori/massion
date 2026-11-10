@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from '../../tests/support/secret-grants.ts';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -20,6 +21,7 @@ const exec=promisify(execFile),root=await mkdtemp(join(tmpdir(),'massion-setting
 const store=new InMemoryStore(),slots=new InMemorySecretSlots(),members=new MembersService(store,()=>undefined),report=[],contrast=[];
 const manifest=parseHostManifest({version:1,revision:'fixture-ui',mode:'https',connections:[{id:'api',label:'OpenAI API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}},{id:'codex',label:'Codex',providerType:'codex-cli',baseUrl:'cli://codex/',models:['gpt-6.1-terra']}]});
 const connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets:slots,readEnvironment:()=>undefined,transport:async()=>{throw Error('No network in Settings verification');}});
+await grantConnectionSecrets(store,connections);
 const logins=new LoginConnections(async call=>({spawned:true,exitCode:0,stdout:call.command.includes('claude')?'{}':'',stderr:call.command.includes('claude')?'':'Logged in using ChatGPT',timedOut:false,aborted:false,overflow:false}));
 for(const name of ['퀼','주노']){
  const commandId=PROPOSAL_PREFIX+'settings-ui-'+hash(name).slice(0,8),decisionId=proposalDecisionId(commandId),command={type:'propose-member',decisionId,topic:name,works:[{title:'First fixture Work'},{title:'Second fixture Work'}],count:2},actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']},s=await store.load(MEMBERS_ID),transition=applyMembers(s?.value??null,command,actor,{observedAt:Date.now()});

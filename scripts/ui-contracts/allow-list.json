@@ -8,16 +8,6 @@
       "screen": "B5",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B5",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "browser telemetry",
@@ -31,7 +21,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The research Work is blocked by the provider-confirmed token expiry, so its sidebar row must say stopped rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -41,7 +31,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The pricing Work is recorded waiting for checking, so its sidebar row must say waiting rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -51,7 +41,7 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "Juno has only the accepted PR review in this capture, so its member row is unread rather than working.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -61,7 +51,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The PR review has an accepted Record, so its sidebar row must say completed rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -211,8 +201,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "ledger": "docs/acceptance/E3e/residuals.md#b8-dark"
     },
     {
       "screen": "B8",
@@ -241,8 +231,8 @@
       "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-dark"
     },
     {
       "screen": "B8-done",
@@ -325,23 +315,13 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
       "screen": "B10-preview",
       "theme": "dark",
       "kind": "contract",
       "diagnostic": "missing composer textbox \"퀼에게 메시지 보내기\"",
       "occurrence": 1,
       "category": "Representative-only Work source",
-      "reason": "Validated Work sources belong to the Representative; the row member is its assignee. Open the real source segment, not an unrelated member segment with the same number.",
+      "reason": "The accepted result pins its original Representative segment, so opening it retains the Hana composer rather than opening an unrelated Quill segment.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -351,18 +331,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "reason": "The exact accepted weekly text and preview controls occupy 49 pane characters against the fixed 41-character contract budget.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B13",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"주노 작업 중 · 일 {count} · 예약 {count} 코딩\"",
-      "occurrence": 1,
-      "category": "fixture fallback",
-      "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
       "screen": "B15",
@@ -371,168 +341,8 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane link \"작업 공간 닫기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"{member}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
       "screen": "B23",
@@ -543,16 +353,6 @@
       "category": "capability",
       "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
       "ledger": "docs/acceptance/ri/README.md"
-    },
-    {
-      "screen": "B5",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation button \"{duration} 동안 작업 · 페이지 {count} 읽음\"",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B5",
@@ -571,7 +371,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The research Work is blocked by the provider-confirmed token expiry, so its sidebar row must say stopped rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -581,7 +381,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The pricing Work is recorded waiting for checking, so its sidebar row must say waiting rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -591,7 +391,7 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "Juno has only the accepted PR review in this capture, so its member row is unread rather than working.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -601,7 +401,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The PR review has an accepted Record, so its sidebar row must say completed rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -751,8 +551,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "ledger": "docs/acceptance/E3e/residuals.md#b8-light"
     },
     {
       "screen": "B8",
@@ -781,8 +581,8 @@
       "diagnostic": "order pane text \"{progress}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
+      "ledger": "docs/acceptance/E3e/residuals.md#b8-done-light"
     },
     {
       "screen": "B8-done",
@@ -865,23 +665,13 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
       "screen": "B10-preview",
       "theme": "light",
       "kind": "contract",
       "diagnostic": "missing composer textbox \"퀼에게 메시지 보내기\"",
       "occurrence": 1,
       "category": "Representative-only Work source",
-      "reason": "Validated Work sources belong to the Representative; the row member is its assignee. Open the real source segment, not an unrelated member segment with the same number.",
+      "reason": "The accepted result pins its original Representative segment, so opening it retains the Hana composer rather than opening an unrelated Quill segment.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -891,18 +681,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "reason": "The exact accepted weekly text and preview controls occupy 49 pane characters against the fixed 41-character contract budget.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B13",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"주노 작업 중 · 일 {count} · 예약 {count} 코딩\"",
-      "occurrence": 1,
-      "category": "fixture fallback",
-      "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
       "screen": "B15",
@@ -911,168 +691,8 @@
       "diagnostic": "missing sidebar status \"결정 대기\"",
       "occurrence": 1,
       "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{work_title}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar status \"실행 중\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order sidebar link \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "The library Work/form producer is absent. Real Quill activity is supplied; missing earlier library requirements retain their strict-order cascades.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane tab \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane link \"작업 공간 닫기\"",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 2,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{work_title}\" (found in rail)",
-      "occurrence": 3,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"이름\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{date}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{count}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane chip \"{member}\" (found in rail)",
-      "occurrence": 1,
-      "category": "Browser session/form",
-      "reason": "No session/address-bar/form/pane producer; dependent controls and geometry cannot be fabricated.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The production workbench has no browser tab, address bar, or embedded library form; only its submission decision can render.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
+      "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
       "screen": "B23",
@@ -1083,70 +703,6 @@
       "category": "capability",
       "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
       "ledger": "docs/acceptance/ri/README.md"
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B15",
-      "theme": "dark",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region composer: [530,808,680,78] != [324,808,492,78] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
-    },
-    {
-      "screen": "B15",
-      "theme": "light",
-      "kind": "visual",
-      "diagnostic": "region main: [300,44,1140,856] != [300,44,540,856] (2px tolerance)",
-      "occurrence": 1,
-      "category": "unsupported browser surface",
-      "reason": "No browser-tab, embedded-form or library Work producer exists in B15. Its pane is hidden, so the main/composer keep the shared full-width layout. Both exact geometry diagnostics already occur in the pre-Q14 E3c and E3d2 full150 reports. Reserving an empty pane would conceal the missing capability.",
-      "ledger": "docs/acceptance/room-residuals/README.md#browser-pane",
-      "sources": [
-        "scripts/ui-contracts/fixtures/B15.json:1",
-        "src/surface-shell.ts:128",
-        "docs/acceptance/E3d2/full150.json:581",
-        "docs/acceptance/e3c/full150.json:589"
-      ]
     },
     {
       "screen": "B7-done",
@@ -1339,113 +895,13 @@
       ]
     },
     {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
       "screen": "B16-sent",
       "theme": "dark",
       "kind": "contract",
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The rule proposal now has a real activity row. Reading it clears that row unread marker; the remaining PR unread marker follows the sent link, while the contract expects one before it. Unrelated activity order is preserved.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-sent-row-chronology"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The browser page subtotal, shipping and total slots require an actual page snapshot; amounts in the conversation card are not observed page content.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane chip \"{member}\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The unavailable pane has no page member chip. The name placeholder matches earlier unavailable text; reordering controls cannot supply the missing page identity.",
-      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
-    },
-    {
-      "screen": "B4",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No browser page snapshot producer is installed; the browser tab shows unavailable and no checkout text fallback.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No browser page snapshot producer exists; the browser tab truthfully shows unavailable.",
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
       "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
@@ -1455,48 +911,8 @@
       "diagnostic": "order sidebar link \"깨지는 테스트 고치기 09:13에 보냈어요. 응답 대기예요.\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The rule proposal now has a real activity row. Reading it clears that row unread marker; the remaining PR unread marker follows the sent link, while the contract expects one before it. Unrelated activity order is preserved.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-sent-row-chronology"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
+      "reason": "The missing rounding proposal has no preceding unread marker. The checker consumes the later unrelated PR #84 unread text, then finds the existing sent link before it; changing unrelated activity order would conceal the missing producer.",
+      "ledger": "docs/acceptance/e6c/README.md#post-merge-contract-identities"
     },
     {
       "screen": "B7-churn",
@@ -1509,16 +925,6 @@
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
       "screen": "B7-churn",
       "theme": "light",
       "kind": "gap",
@@ -1527,16 +933,6 @@
       "category": "capability",
       "reason": "Member-authored progress is produced. These fixture text Works still have no browser/page-read observation; a narrative note is not browser telemetry.",
       "ledger": "docs/acceptance/member-progress-notes.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B7-unknown",
@@ -1691,54 +1087,84 @@
       ]
     },
     {
-      "screen": "B13-general",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "installed version",
-      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B13-general",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "installed version",
-      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "installed version",
-      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "installed version",
-      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
-      "ledger": "docs/acceptance/device-lifecycle.md"
-    },
-    {
-      "screen": "B7",
+      "screen": "B9-update",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
       "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
+      "category": "capability",
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     },
     {
       "screen": "B7-done",
@@ -1811,16 +1237,6 @@
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
-      "screen": "B7",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
-      "occurrence": 1,
-      "category": "browser telemetry",
-      "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B7-done",
       "theme": "light",
       "kind": "gap",
@@ -1889,6 +1305,226 @@
       "category": "browser telemetry",
       "reason": "Churn and pricing have actual procedure steps and typed counts. Browser/page-read observations are outside this fixture.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 2,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{amount}\" (found in conversation)",
+      "occurrence": 3,
+      "category": "ephemeral page fallback",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"이름\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{date}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{count}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"이름\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{date}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{count}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
       "screen": "B6",

@@ -1,0 +1,135 @@
+# Browser runtime (R-B): ephemeral image boundary
+
+## Page-card visual recheck
+
+The lead's latest exception permits only app screenshots of authored synthetic local pages to include live pixels. `scripts/ui-contracts/capture-live-browser.mjs` serves the checked-in reference HTML/CSS over local HTTPS, calls the real `localBrowserAdapter` in an isolated headless session, and captures the same Work while active and after settlement. The origin grant and self-signed certificate wrapper exist only in that test process. Production configuration and the generic image-excluding evidence helper retain their security boundary. No standalone page PNG or image-bearing journal/Record/backup is written.
+
+| Theme / viewport | Live page, domain and read steps | Same Work after settlement |
+| --- | --- | --- |
+| Dark / 1440 | [Live](live-fixture/live-dark-1440.png) | [Ended](live-fixture/ended-dark-1440.png) |
+| Light / 1440 | [Live](live-fixture/live-light-1440.png) | [Ended](live-fixture/ended-light-1440.png) |
+| Dark / 390 | [Live](live-fixture/live-dark-390.png) | [Ended](live-fixture/ended-dark-390.png) |
+| Light / 390 | [Live](live-fixture/live-light-390.png) | [Ended](live-fixture/ended-light-390.png) |
+
+The [capture report](live-fixture/report.json) verifies live rendering, three recorded read steps, same-Work image removal, restart removal, absence of image data from journal/client storage, and mobile bounds. These images are synthetic visual evidence only. The adapter cannot fill, click or submit: the values already exist in the authored page. The B15 form-action limitation remains explicitly documented in the contract allow-list.
+
+No-image cards show one title and the non-retention line, at most three distinct bounded excerpts and six fields; three or more fields replace low-value page/navigation excerpts. Empty structure has only the domain and notice. Each masked value stays beside its label with `••••` and `가림`. B7 renders observed page title/domain/time rows beneath the read count without replacing worker steps. The generic screenshot helper now reveals this fallback while excluding the live image, avoiding an empty rectangle.
+
+B4's three full-source amount blocks and the original zero-sentence text budget are explicit, narrow contract exceptions to the lead's new bounded no-image design. The payment total stays visible on the owner decision; component amounts remain in its typed request. [Scoped gate](page-card-gate.json): no unexplained additions, stale allowances or infrastructure failures. Copy lint has no findings. The broader related batch passes 225 tests; the final UI/evidence batch passes 68 tests plus typecheck. The real-adapter capture verifies eight states and the interaction harness verifies fourteen.
+
+
+The lead replaced the attempted clean-image guarantee with a non-persistence rule. CSS-drawn values can survive DOM masking, so page images are memory-only live presentation. The journal, Record/artifact and portable backup retain only sanitized structural observations, keyed HMAC-SHA-256 image hashes and read telemetry. Durable validation refuses screenshot payloads.
+
+## Lifetime and presentation
+
+Images enter a bounded in-memory map only after a confirmed observation commit and an authoritative active-Work check. Storage writes invalidate them before leaving active or changing inputs; completion/uncertain write notification, runtime deadline, feed change, host drain and restart also discard them. A same-process replay does not recapture; a restarted service requires observation lookup instead. Live queries alone merge images into their no-store response; the client never persists them and clears its view on disconnect, navigation or state change.
+
+B15 uses live images while active. B4 payment approval is `waiting`, so it uses sanitized structural text/fields with the domain-only pill. Ended/restarted Work likewise displays structure without an image. B7 page-read activity and R-A named steps remain.
+
+## Verification
+
+- 122 related tests passed plus typecheck; an additional HTTP close/restart test also passed: capture/settle/artifact/acceptance/Record/backup, restart/replay, state/input/feed changes, deadline/drain, tampered image-bearing backup refusal, client clearing and evidence exclusion.
+- A PNG carrying a private sentinel is tested against every serialized journal, Record, backup and decoded artifact blob: no image bytes, base64 or sentinel survive; its hash remains.
+- The actual CSS primitive fixture still produces different image bytes for different private codes, proving the original counterexample remains real. Live display works, but settle/backup/restart drop the pixels: [in-memory proof](ephemeral-report.json). No PNG is written by that capture path.
+- 14 headless interaction states verify active images, waiting structural content, domain pills, tabs, mobile bounds and B7 telemetry. Evidence captures hide the page-image element before screenshotting; only boolean/hash/geometry results and image-excluded app screenshots are retained. Previously checked-in reference/capture PNGs were removed.
+- The six affected screen/theme captures have no new, stale or infrastructure diagnostics: [scoped gate](ephemeral-gate.json). Full tests, durable-store integration and all 150 screen/theme contracts remain CI gates on the final head. No contract exception is added for retaining private images.
+
+## Limits
+
+The live owner-visible image may contain CSS-drawn secrets; it is not certified clean. This is precisely why its bytes are absent from every persistence/evidence path. Only fixtures and loopback sites were used; no live third-party site, payment or model call occurred. The optional real adapter remains off by default. No PR merge, tag or release is performed.
+
+## Lifecycle and reflected-format follow-up
+
+Head-specific review reproduced a delayed commit response that could reinsert an image after stop/reactivation, and a narrow-screen navigation path that hid the pane without clearing pixels. Pending captures now carry a one-way invalidation token across the dispatch, and pane-away navigation clears the read and rejects late responses. Both failed before their fixes and pass afterward.
+
+A separate structural privacy finding used invisible format separators inside a reflected code. Matching now removes Unicode format/default-ignorable code points for comparison and maps each match back to original UTF-16 offsets. Five separator classes (including supplementary variation selectors), standalone card/token patterns and a real browser reflection fixture are covered. The 99 affected tests and typecheck pass; no new page PNG is written.
+
+Sensitive metadata now uses NFKC plus format/default-ignorable removal before both sensitive and benign classification. The fullwidth/invisible-separator label, name and autocomplete matrix failed before and passes after; the actual browser fixture pairs an obfuscated Security code label with benign `name=quantity`. All 50 focused browser/privacy tests and typecheck pass, along with the memory-only PNG and CSS-primitive persistence proofs.
+
+The final reflection correction applies NFKC to both observed text and sensitive needles. Grapheme-based source start/end maps cover fullwidth digits in either direction, decomposed accents and compatibility ligature expansion without corrupting adjacent emoji/text. All four durable-journal regressions failed before and pass after; the actual browser fixture adds a fullwidth reflection above the controls. The 54 focused tests, typecheck and memory-only capture proofs pass; reference-page metadata/image hashes are unchanged.
+
+The final default-deny tightening requires every nonempty semantic signal to be explicitly benign; unknown labels/names/autocomplete no longer borrow a benign `quantity` exemption. Stored unmasked fields must also carry a benign label. Unicode decimal digit scripts and bounded numeric grouping/phone punctuation are normalized with source offsets preserved. The reported unknown-label, grouped-code and digit-script cases failed before and pass after; Arabic/Devanagari digits, minus/group separators and an international phone case are covered. All 85 affected tests, typecheck and the actual grouped/Arabic reflection capture pass. Reference page hashes remain unchanged.
+
+Recovery-code grouping now uses the same bounded punctuation/symbol matching as numeric values, while a parallel literal pass preserves punctuation-only passwords. Grouped recovery codes, underscores, slash/symbol separators and mixed-script values failed before and pass after; the real browser fixture includes an independent grouped recovery code. Standalone card/API-key text also handles formatted digits and spaced labels without relying on an input field. All 93 affected tests, typecheck and memory-only capture proofs pass; reference-page hashes remain unchanged.
+
+Caseless canonicalization now precedes both literal and grouped matching. ASCII recovery-code case changes, German sharp-S expansions, dotted-I composition and Greek sigma forms failed before and pass after with original UTF-16 ranges preserved. The live fixture uses a lowercase private recovery value reflected in uppercase. All 98 affected tests, typecheck and actual memory-only capture proofs pass; reference-page hashes remain unchanged.
+
+## Mainline lifecycle/polish integration
+
+Merged main through PR #130 (member/app/connection/device lifecycle and settings) and #136 (visual polish). Both fixture-producer sets and both exception-removal sets remain. Reconnect clears browser images and invalidates settings together. The host drains browser captures alongside the new device/connection services using main's all-settled cleanup.
+
+All 249 related browser, privacy, settings, connection, device, member and Work-room tests pass, as does typecheck. Fourteen affected screen/theme captures have no new/stale/infrastructure diagnostics: [merged gate](lifecycle-polish-merge-gate.json).
+
+Merged PR #138's E2E network/send stabilization after main advanced again. The harness reuses main's native Chrome proxy configuration and removes the duplicate browser-egress helper; HTTP, CONNECT and upgraded connections remain denied, including reset-socket handling. Evidence image exclusion and diagnostic scrubbing are preserved. The 12 affected helper/network tests (including the real headless isolated-frame test) and typecheck pass. Product browser/persistence code is unchanged.
+
+## Exact-origin network correction
+
+A production-adapter HTTPS regression reproduced same-host cross-port requests before the fix. The adapter now installs native scheme/host/effective-port routing before navigation, with an owned deny-only proxy for every other request and implicit loopback bypass disabled. Parser resources, redirects and protocol changes are checked before the target receives a connection. Wildcard/bypass-pattern origins are rejected. TLS verification is unchanged in product code; the generated fixture certificate bypass exists only in the test wrapper.
+
+All 25 affected tests, including the real production-adapter origin test and isolated-frame network test, and typecheck pass. The allowed page and same-origin stylesheet load, and denied target connection counters stay zero. The shared denial server preserves E2E HTTP/CONNECT/Upgrade and reset-socket coverage; browser image persistence code is unchanged.
+
+The live read boundary also validates the durable browser schema, so a legacy image-bearing snapshot is refused after restart rather than copied into the pane. Its regression passes alongside the runtime suite. The origin probe counts actual HTTP-on-TLS errors separately from harmless aborted TLS handshakes.
+
+The owned read context explicitly denies automatic downloads before navigation. The HTTPS probe gives its test browser an observable download directory: the attachment appeared before the guard and the directory stays empty afterward. Product TLS verification is unchanged. The 14 focused origin/adapter/lifecycle tests and typecheck pass, including refusal of legacy image-bearing state on read.
+
+## Procedure/settings mainline integration
+
+Merged main through #139 and #141, preserving telemetry v2, typed result tables, command-produced named steps/messages and newer settings producers. Browser summaries and page-read activity remain additional observations; the browser-only actor restriction remains intact. Shared residual descriptions now refer to the newer producers, and both sides' measured exception removals are retained.
+
+All 372 related browser/privacy/procedure/member/telemetry/table/settings tests and typecheck pass. All 14 live browser interaction states pass. Sixteen affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](procedure-settings-merge-gate.json).
+
+## Origin-only persistence and latest main
+
+Observed addresses now retain only origins. Commands retain a random navigation identity, while exact request bindings stay in memory. Same-process retries reuse that identity; after restart callers read the retained observation and capture replay is refused without invoking the adapter. Raw reset/magic-link tokens and their guessable URL digests never enter observations, journal commands or portable backups. URL components are treated as private in reflected text/labels too; this can conservatively mask public route words. Fixed fixture source addresses are declared inputs, separate from observed origin-only metadata.
+
+Merged #137 steering continuation and #143 device lifecycle without removing either producer or exception-removal set. The 176 related browser/steering/device/desktop tests and typecheck pass. Twenty-two affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](steering-device-merge-gate.json).
+
+The origin probe now uses the workflow's explicitly selected Chrome and reports only fixed product failure stages plus bounded fixture-only CLI diagnostics. Native origin routing is the sole browser egress policy, consistent with the E2E network approach; iframe and alternate-host probes preserve denial coverage. The local 80-test privacy/origin suite passes. Linux CI remains the final verification.
+
+Merged #142 credential-expiry repair and #144 member producers. Browser summaries coexist with credential-repair facts, and both browser and credential lineage validators/authority guards are retained. All 284 related tests plus 7 credential-repair tests and typecheck pass. Fourteen affected screen/theme captures have no new/stale/infrastructure diagnostics: [merged gate](credential-member-merge-gate.json).
+
+URL privacy also covers bare/encoded query names and fragment parts, not just query values. Same-path redirect regressions verify those tokens are absent from the browser query, journal and portable backup; all failed before and pass after. The 82 affected tests, typecheck and actual memory-only capture proofs pass, with unchanged reference-page image hashes.
+
+Complex accessible-label sources now fail closed instead of borrowing a benign field name. Referenced names, nested/alternative/generated/hidden labels and unsupported ARIA metadata are conservatively masked; benign values require explicit simple text labeling. The actual image-alt reference, nested-alt and nested-ARIA fixtures exposed their distinct values before the fix and are masked afterward. The 106 affected tests, typecheck and in-memory PNG proof pass; reference-page hashes remain unchanged.
+
+Merged #145 steering resume. Browser-only authority and lineage validation coexist with continuation commands/validation, and host drain awaits both startup resumption and browser cleanup. Continuations retain the original deadline; no pixels are reconstructed from durable state. The 196 related checks pass (2 environment-dependent skips), and typecheck completes successfully.
+
+## Offline-verifier regression
+
+A six-digit capability path is absent from journal/backup both as plaintext and as its former URL digest. Runtime image hashes are HMAC-SHA-256 tags with a fresh RAM-only key, not public offline verifiers. Tests cover deterministic tags within one service, different tags under different keys, missing-key refusal, same-process replay and restart metadata-only lookup. Public fixture source-image hashes are explicitly separated from runtime tags.
+
+Integrated main through PR #146 without replacing browser observations or R-A procedures. The final local batch passes 410 related tests, typecheck, all 14 browser interaction states and the eight scoped screen/theme contracts with no new diagnostics. Two obsolete B7 gap allowances were removed based on the capture. Evidence screenshots exclude live page images.
+
+Main PR #147 was subsequently integrated: file-read/procedure-edit observations coexist with browser-only authority and opaque navigation IDs. The merge validation passes 368 related tests, typecheck and the eight scoped screen/theme contracts without allowance deltas.
+
+The security review also reproduced a multiply encoded capability path reflected after server decoding. URL-secret collection now decodes to a bounded fixed point and re-splits every decoded component. Depths 2, 4 and 8 are checked through live query/journal/portable backup; excessive nesting and malformed decoding are refused. All four new regressions failed before the fix; the 163-test browser/privacy/lineage batch passes afterward.
+
+## Encoded structural text
+
+The follow-up security review reproduced percent-encoded reflections of a masked recovery code. Capture now refuses retained percent-encoded text before dispatch (including nested/fullwidth forms), and durable schema validation applies the same boundary. The four regressions failed before this fix; all 170 affected browser/privacy/lineage tests and typecheck pass afterward. This deliberately conservative behavior can make a page with legitimate percent-encoded display text unavailable; it adds no decoder or image persistence path.
+
+Main #148/#149 were then merged, preserving the original-verifier labels and new Korean app labels alongside browser read evidence. All 275 affected tests, typecheck and the six scoped screen/theme cases pass without unexplained gate deltas; see [merge gate](page-card-merge-gate.json).
+
+The subsequent Base64 finding is fixed in the shared private-range matcher: known private values include padded/unpadded and URL-safe forms, plus bounded standard nesting. Four new read/journal/portable-backup regressions failed before and pass afterward. The real DOM fixture adds Base64, unpadded and nested recovery-code reflections; different input values produce identical masked pixels before capture. All 174 related tests, typecheck and the real in-memory capture check pass. Existing reference-page metadata/image hashes are unchanged, so the committed live-pane screenshots remain applicable.
+
+Encoding now starts from the same canonical private forms used by literal matching, plus Unicode composition/compatibility and case forms. Six normalized-before-encoding regressions (fullwidth, digit script, grouped code, case expansion, composed and decomposed Unicode) failed before and pass afterward. The actual capture probe now places its encoded reflections inside the viewport and asserts their visible masked text before comparing images; that strengthened check failed before and passes after the correction. All 180 related tests and typecheck pass. Reference-page hashes remain unchanged.
+
+The bidirectional follow-up decodes Base64/URL-safe display candidates before canonical comparison and masks the original encoded span. Tests preserve surrounding Korean/emoji text while removing grouped/fullwidth/digit-script preimages from reads, journal and backup. Excessive nesting and Base64-wrapped percent encodings are refused before commit. Five regressions and the real in-viewport encoded-reflection probe failed before this correction; all 186 related tests, typecheck and the actual capture check now pass. Public reference-page hashes remain unchanged.
+
+Whitespace-separated candidates are now compacted as a whole before decoding. Case-preserving compatibility/ignored-character normalization maps ranges back to the original source, and four quartet alignments handle ordinary word wrappers without enumerating substring combinations. Four additional read/journal/backup regressions and the visible pixel probe failed before and pass now. All 190 related tests, typecheck and actual capture checks pass; reference-page hashes remain unchanged.
+
+Punctuation-separated candidates are collected as a single source span. Both Base64-alphabet-preserving and alphanumeric compactions are compared, covering dots and symbols that can also belong to the Base64 alphabet. Four new cases and the in-viewport dotted probe failed before and pass afterward; all 194 related tests, typecheck and actual capture checks pass. Reference-page hashes remain unchanged.
+
+Mixed alphabet/grouping symbols are now interpreted independently at each occurrence, preserving genuine symbols even when the same character is also a separator. At most 64 interpretations are checked; larger ambiguous candidates are fully masked, which can also suppress benign punctuation-rich content. Reserved URL delimiters (including colon) and their compatibility forms split capability suffixes before retention. Nine new regressions failed before the changes; the ambiguity-limit case is covered too. All 204 related tests, typecheck and the real mixed-symbol viewport probe pass. Reference-page hashes remain unchanged.
+
+Main #151–#153 are integrated: file-read activity and member attribution/undo coexist with browser observations. The merge batch passes 464 tests (one actual-DB check deferred to CI), typecheck, 84 focused fixture/UI checks, 14 browser interactions and eight refreshed real-adapter live/end captures. B7 now records the order example’s synthetic shop pages (previous orders and item information); its stale no-browser-telemetry gap was removed with a failing-before regression. [Final merge gate](main-153-gate.json) has no unexplained deltas; copy lint has no findings.
+
+Main #150 (typed payment intents) was subsequently merged. The legacy checkout domain pill and browser lifecycle remain intact. The related merge batch passes 423 tests with three environment-dependent DB cases deferred to CI, plus typecheck and the [six-case screen gate](payment-merge-gate.json).
+
+UTF-8 hex candidates now use the same bounded decoded-value comparison, including grouped and compatibility preimages. Exact raw private values are checked before normalization, and BOM characters are preserved during decoding. Four new hex regressions and the visible hex probe failed before the fix; all 209 related tests, typecheck and actual capture checks pass, including an invisible-value regression. Reference-page hashes remain unchanged.
+
+Private seeds now include bounded decoded URI/Base64/hex UTF-8 forms, so decoded capability paths and encoded field seeds cannot evade comparison. Percent-separated hex is decoded rather than skipped; recognized private values are masked, while remaining unsafe percent text is refused. Hex matches map decoded characters back to their original byte spans, preserving surrounding text and avoiding partial masking of overlapping encodings. Five new cases failed before the changes; all 215 related tests, typecheck and the actual encoded-seed viewport probe pass. Seed-depth refusal and literal invisible values are covered. Reference-page hashes remain unchanged.
+
+Hex source ranges now accumulate from both nibble alignments, removing a shifted second copy rather than stopping after the first match. Decoded private seeds are re-split on reserved/compatibility boundaries after every decode, including nested encoded suffixes. Five regressions failed before these corrections; all 220 related tests, typecheck and the real structured-seed viewport probe pass. Reference-page hashes remain unchanged.
+
+Backslash and its encoded/compatibility forms now split both URL components and decoded private seeds. Five added cases failed before and pass afterward; all 225 related tests, typecheck and the real backslash-seed viewport probe pass. Reference-page hashes remain unchanged.

@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from '../../tests/support/secret-grants.ts';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -27,6 +28,7 @@ const connections=createHostConnections(store,new TextArtifactStore(root),{manif
  inference++;if(!rejected){rejected=true;return Response.json({error:{code:'1003',message:'Fixture expiry'}},{status:401});}
  assert.equal(new Headers(init.headers).get('authorization'),'Bearer fixture-new-key');return completion(body.model,'확인한 자료입니다.');
 }});
+await grantConnectionSecrets(store,connections);
 const profile=connections.configuration().connections[0];connections.authorize({id:'grant',scope:'fixture',executorProfileId:profile.id,verifierProfileId:profile.id,maxOutputTokensPerCall:256,expectedConfigHash:connections.list().configHash});connections.setDefaultRoute({authorizationId:'grant',outputTokenCap:256,expectedConfigHash:connections.list().configHash});
 await new ProductService(store).create({id:'intake',purpose:'자료 정리',scope:'fixture',constraints:[],criteria:{version:1,description:'요청한 자료를 정리한다',oracle:TEXT_REVIEW_ORACLE}},'create');connections.setRepresentative({profileId:profile.id,outputTokenCap:256,intakeMissionId:'intake',expectedConfigHash:connections.list().configHash});
 const appNetwork=async request=>githubInvalid?{status:401,body:'{"message":"Bad credentials"}'}:githubFixture(request.url);
