@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from '../../tests/support/secret-grants.ts';
 import {CLI_RESTART_GAP} from './device-lifecycle-fixtures.ts';
 import {Application} from '../../src/application.ts';
 import {InMemoryStore} from '../../src/storage.ts';
@@ -21,6 +22,7 @@ export async function settingsLifecycleFixture(template:ScreenFixture):Promise<S
   const prior=fixture.routes['/connections']!.body as any,store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots();
   const manifest=parseHostManifest({version:1,revision:'settings-fixture',mode:'https',connections:prior.connections.map((c:any)=>({id:c.id,label:c.label,providerType:c.providerType,baseUrl:MODEL_PROVIDER_TYPES.find(p=>p.id===c.providerType)!.baseUrl,models:[c.providerType==='claude-code-cli'?'claude-sonnet-5-5':c.providerType==='codex-cli'?'gpt-6.1-terra':'fixture'],...(!isCliProvider(c.providerType)?{credential:{ref:'credential-'+c.id,slot:'api-key'}}:{})}))});
   const connections=createHostConnections(store,new TextArtifactStore('/fixture-artifacts'),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>{throw Error('Fixture environment is unavailable');},transport:async()=>Response.json({error:{code:'1003',message:'Fixture expired credential'}},{status:401})});
+await grantConnectionSecrets(store,connections);
   const service=new ConnectionLifecycle(store,connections,{clock:()=>fixture.now,observe:async target=>({status:fixture.screen==='B14-expired'&&target.providerType==='zai'?(await connections.discover(target.id,target.configHash)).credentialFailure?.kind==='expired'?'expired':'unknown':'detected',restart:fixture.screen==='B14-restart'&&isCliProvider(target.providerType)?'required':'not-required',update:fixture.screen==='B14-update'&&isCliProvider(target.providerType)?'available':'current',source:'host'})});
   const targets=connections.list().connections;
   for(const target of targets){const original=prior.connections.find((c:any)=>target.label===c.label);if(!isCliProvider(target.providerType)&&original?.credentialConfigured)await service.replaceKey({commandId:'fixture-key-'+original.id,connectionId:target.id,expectedConfigHash:target.configHash,apiKey:'fixture-secret'});await service.recheck({commandId:'fixture-check-'+original.id,connectionId:target.id,expectedConfigHash:target.configHash});}

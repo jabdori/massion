@@ -1,3 +1,5 @@
+import {PermissionsService} from '../src/permissions.ts';
+import {InMemoryStore} from '../src/storage.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -64,7 +66,8 @@ test('post-check executable changes refuse launch and raw runner errors never es
 test('slot manifests resolve only the exact host binding and expose no values in configuration',async()=>{
  const secrets=new InMemorySecretSlots(),sentinel=randomUUID();await secrets.set(slot,sentinel);
  const manifest=parseHostManifest({version:1,revision:'slots-v1',mode:'https',connections:[{id:slot.owner,label:'Fixture',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'credential-ref',slot:slot.slot}}]});
- const host=compileHostBindings(manifest,()=>assert.fail('slot must never read environment'),()=>false,secrets),connection=host.bindings.connections[0]!.input;
+ const permissions=new PermissionsService(new InMemoryStore()),host=compileHostBindings(manifest,()=>assert.fail('slot must never read environment'),()=>false,secrets,{permissions}),connection=host.bindings.connections[0]!.input;
+ const {kind,state,...binding}=host.secretSource(connection.id)!;await permissions.act({commandId:'grant',action:'grant-secret',...binding});
  assert.equal(await host.resolveCredential({secretRef:'credential-ref',profileId:connection.id,endpoint:connection.baseUrl+'models',signal:new AbortController().signal}),sentinel);
  assert.ok(!JSON.stringify([manifest,host.bindings]).includes(sentinel));
  await assert.rejects(host.resolveCredential({secretRef:'credential-ref',profileId:connection.id,endpoint:'https://other.example/v1/models',signal:new AbortController().signal}));

@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from '../../tests/support/secret-grants.ts';
 import {InMemoryStore} from '../../src/storage.ts';
 import {InMemorySecretSlots} from '../../src/secret-slots.ts';
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
@@ -18,6 +19,7 @@ export async function credentialRepairFixture(template:ScreenFixture):Promise<Sc
  const manifest=parseHostManifest({version:1,revision:'credential-fixture',mode:'https',connections:[{id:'zai',label:'Z.ai',providerType:'zai',baseUrl:'https://api.z.ai/api/coding/paas/v4/',models:['glm-fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]});
  await secrets.set({owner:'zai',slot:'api-key'},'fixture-only-key');
  const connections=createHostConnections(store,new TextArtifactStore('/fixture-artifacts'),{manifest,allowLiveExecution:true},{secrets,readEnvironment:()=>{throw Error('No fixture environment credentials');},transport:async()=>Response.json({error:{code:'1003',message:'Fixture token expired'}},{status:401})});
+await grantConnectionSecrets(store,connections);
  const profile=(connections.configuration() as any).connections[0];connections.authorize({id:'fixture-grant',scope:'fixture',executorProfileId:profile.id,verifierProfileId:profile.id,maxOutputTokensPerCall:32,expectedConfigHash:connections.list().configHash});
  const product=new ProductService(store,new ProviderRegistry(),connections),missionId=prior.missionId,workId=prior.workId;
  await product.create({id:missionId,purpose:'Credential repair fixture',scope:'fixture',constraints:[],criteria:{version:1,description:'Checked result',oracle:TEXT_REVIEW_ORACLE}},'fixture-create');

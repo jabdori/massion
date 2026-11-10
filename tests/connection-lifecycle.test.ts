@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -17,6 +18,7 @@ async function fixture(t:test.TestContext){
  const set=secrets.set.bind(secrets);secrets.set=async(slot,key)=>{assert.deepEqual(slot,{owner:'account',slot:'api-key'});writes++;await set(slot,key);};secrets.read=async()=>{reads++;assert.fail('Replacement and read models cannot read secrets');};
  const manifest=parseHostManifest({version:1,revision:'lifecycle-v1',mode:'https',connections:[{id:'account',label:'Owner API',providerType:'compatible',baseUrl:'https://fixture.example/v1/',models:['fixture'],credential:{ref:'key-ref',slot:'api-key'}}]});
  const connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>assert.fail('No environment access'),transport:async()=>new Response('{"data":[{"id":"fixture"}]}',{headers:{'content-type':'application/json'}})});
+ await grantConnectionSecrets(store,connections);
  const connection=connections.list().connections[0]!,command={commandId:'replace-one',connectionId:connection.id,expectedConfigHash:connection.configHash};
  return {store,secrets,connections,command,writes:()=>writes,reads:()=>reads};
 }
@@ -27,7 +29,7 @@ test('key replacement writes the exact manifest slot once and never reads or per
  const result=await service.replaceKey({...f.command,apiKey});assert.equal(result.status,'completed');assert.equal(f.writes(),1);
  assert.equal((await service.read()).connections[0]!.canReplaceKey,true);
  const replay=await service.replaceKey({...f.command,apiKey:'different-fixture-secret'});assert.equal(replay.status,'completed');assert.equal(f.writes(),1);assert.equal(f.reads(),0);
- assert.doesNotMatch(JSON.stringify([result,replay,await service.read(),f.store.inspect()]),/fixture-secret|api-key|key-ref/);
+ assert.doesNotMatch(JSON.stringify([result,replay,await service.read(),f.store.inspect()]),/fixture-secret-never-persist|different-fixture-secret|key-ref/);
 });
 
 function deferred<T=void>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(r=>resolve=r);return {promise,resolve};}
@@ -46,7 +48,7 @@ test('unknown key write is redacted and never resent by a replay, new identity o
 test('invalid key, stale binding and extra client facts are rejected before intent or effects',async t=>{
  const f=await fixture(t),service=new lifecycleModule.ConnectionLifecycle(f.store,f.connections);
  for(const body of [{...f.command,apiKey:''},{...f.command,apiKey:'bad\nkey'},{...f.command,apiKey:'é'},{...f.command,apiKey:'x'.repeat(1025)},{...f.command,apiKey:'valid',expectedConfigHash:'0'.repeat(64)},{...f.command,apiKey:'valid',restart:'required'}])await assert.rejects(service.replaceKey(body),e=>e instanceof Error&&e.name==='Error'&&'code' in e);
- assert.equal(f.writes(),0);assert.equal(f.store.inspect().length,0);
+ assert.equal(f.writes(),0);assert.equal(f.store.inspect().filter(o=>o.aggregateId!=='assistant-conversation:permissions').length,0);
 });
 
 test('an overlapping command paused after load replays the stored result instead of applying the reducer again',async t=>{
@@ -75,7 +77,7 @@ test('latest admitted recheck wins when host responses complete out of order',as
 test('drain during an asynchronous state load rejects admission without persisting intent or a key',async t=>{
  const f=await fixture(t),loaded=deferred(),release=deferred();let held=false;
  const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{const result=await target.load(id);if(!held){held=true;loaded.resolve();await release.promise;}return result;};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
- const service=new lifecycleModule.ConnectionLifecycle(store,f.connections),pending=service.replaceKey({...f.command,apiKey:'fixture-key'});await loaded.promise;service.beginDrain();release.resolve();await assert.rejects(pending,/draining/);await service.drain();assert.equal(f.writes(),0);assert.equal(f.store.inspect().length,0);
+ const service=new lifecycleModule.ConnectionLifecycle(store,f.connections),pending=service.replaceKey({...f.command,apiKey:'fixture-key'});await loaded.promise;service.beginDrain();release.resolve();await assert.rejects(pending,/draining/);await service.drain();assert.equal(f.writes(),0);assert.equal(f.store.inspect().filter(o=>o.aggregateId!=='assistant-conversation:permissions').length,0);
 });
 
 test('drain stops waiting for a trusted observer that ignores abort and discards its late response',async t=>{
@@ -102,7 +104,7 @@ test('discovery invalidates a previous same-binding request before it can overwr
 test('connection aggregate has a reserved identity and strictly replays non-secret intent and observation events',async t=>{
  const f=await fixture(t),service=new lifecycleModule.ConnectionLifecycle(f.store,f.connections,{clock:()=>101,observe:async()=>({status:'expired',update:'available',restart:'required',source:'host'})});
  await service.replaceKey({...f.command,apiKey:'fixture-secret'});await service.recheck({...f.command,commandId:'observe'});
- const operations=f.store.inspect() as unknown as import('../src/storage.ts').Operation<lifecycleModule.ConnectionLifecycleState>[];
+ const operations=f.store.inspect().filter(o=>o.aggregateId===lifecycleModule.CONNECTION_LIFECYCLE_ID) as unknown as import('../src/storage.ts').Operation<lifecycleModule.ConnectionLifecycleState>[];
  assert.match(operations[0]!.aggregateId,/^assistant-conversation:/);assert.equal(operations[0]!.value.kind,'connection-lifecycle');
  assert.equal(typeof lifecycleModule.replayConnectionLifecycle,'function');
  for(let n=0;n<operations.length;n++)lifecycleModule.replayConnectionLifecycle(operations[n]!,operations[n-1]);
@@ -119,7 +121,7 @@ test('environment and CLI bindings reject key editing without reading their cred
   const service=new lifecycleModule.ConnectionLifecycle(f.store,manager),c=manager.list().connections[0]!;
   assert.equal((await service.read()).connections[0]!.canReplaceKey,false);await assert.rejects(service.replaceKey({commandId:kind,connectionId:c.id,expectedConfigHash:c.configHash,apiKey:'fixture-key'}),/editable secret slot/);
  }
- assert.equal(f.writes(),0);assert.equal(f.store.inspect().length,0);
+ assert.equal(f.writes(),0);assert.equal(f.store.inspect().filter(o=>o.aggregateId!=='assistant-conversation:permissions').length,0);
 });
 
 test('default model discovery failure remains unavailable and success never proves inference validity',async t=>{
@@ -147,7 +149,7 @@ test('a lost intent commit acknowledgment yields unknown and a later replay neve
 test('a definite ownerStore rejection is propagated before any effect',async t=>{
  const f=await fixture(t),{HostDrainError}=await import('../src/runtime-lifetime.ts');
  const store=new Proxy(f.store,{get(target,key){if(key==='commit')return async()=>{throw new HostDrainError();};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
- await assert.rejects(new lifecycleModule.ConnectionLifecycle(store,f.connections).replaceKey({...f.command,apiKey:'fixture-key'}),HostDrainError);assert.equal(f.writes(),0);assert.equal(f.store.inspect().length,0);
+ await assert.rejects(new lifecycleModule.ConnectionLifecycle(store,f.connections).replaceKey({...f.command,apiKey:'fixture-key'}),HostDrainError);assert.equal(f.writes(),0);assert.equal(f.store.inspect().filter(o=>o.aggregateId!=='assistant-conversation:permissions').length,0);
 });
 
 test('idempotency conflict at settlement replays its persisted result with one secret write',async t=>{

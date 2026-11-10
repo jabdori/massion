@@ -1,3 +1,4 @@
+import {validateSecretRequests,SECRET_REQUEST_HOST} from './secret-requests.ts';
 import {isEnvironmentState,replayEnvironment} from './environment-actions.ts';
 import type {EnvironmentState} from './environment-actions.ts';
 import {validateBrowserSession} from './browser-runtime.ts';
@@ -185,7 +186,7 @@ function checkRecord(work: Work,mission:Mission): void {
 }
 function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>): asserts value is Work {
   const item = object(value, 'Work', ['id', 'title', 'missionVersion', 'criteria', 'execution', 'acceptance', 'tasks', 'attempts', 'assignments', 'effects', 'appliedMemoryVersions', 'budget'],
-    ['browserSession','monthlyBudgetDecision','room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt','admittedAt']);
+    ['secretRequests','browserSession','monthlyBudgetDecision','room','team','moderation','assistantSource','questions','conversationSource','correction','runtimeRun', 'runtimeRecovery', 'blocker', 'instructions', 'missionSnapshot', 'artifact', 'verdict', 'record','organizationSnapshot','sourceDocuments','prerequisites','prerequisiteRecords','runtimeInterruption','endedAt','admittedAt']);
   if(Object.hasOwn(item,'admittedAt'))integer(item.admittedAt,'Work admission time',0);
   if(Object.hasOwn(item,'browserSession'))validateBrowserSession(item.browserSession);
   if(Object.hasOwn(item,'monthlyBudgetDecision'))text(item.monthlyBudgetDecision,'monthly budget decision');
@@ -193,7 +194,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if(Object.hasOwn(item,'team'))validateTeamProcedure(item.team,(value as Work).assistantSource?.memberId);
   if(Object.hasOwn(item,'endedAt'))integer(item.endedAt,'Work end time',0);
   if(Object.hasOwn(item,'assistantSource'))validateAssistantSource(item.assistantSource,String(item.id));
-  clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
+  validateSecretRequests(value as Work);clarificationInput(value as Work);if((value as Work).runtimeRun||(value as Work).assignments.length||(value as Work).effects.length||(value as Work).artifact||(value as Work).verdict)requireAnswered(value as Work);correctionInput(value as Work);conversationSourceInput(value as Work);
   validateProviderDispatchClaims(value as Work);validateModeration(value as Work);validateRoom(value as Work);
   pinnedWorkSources(mission,value as Work);
   prerequisitePins(mission,value as Work);if(Object.hasOwn(item,'prerequisiteRecords')||(Object.hasOwn(item,'prerequisites')&&(item.runtimeRun||(item.effects as unknown[]).length||item.acceptance==='accepted')))resolvedPrerequisites(mission,value as Work);
@@ -377,6 +378,9 @@ export function collectMissionArtifacts(mission: Mission): Artifact[] {
 }
 
 const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: string[] }> = {
+  'request-secret':{required:['workId','requestId','declaration']},
+  'answer-secret-request':{required:['workId','requestId','requestHash','provisionId','answer','selections']},
+  'settle-secret-request':{required:['workId','requestId','requestHash','provisionId','status']},
   'record-browser-private-origin':{required:['workId','sessionId','origin']},
   'record-browser-page':{required:['workId','sessionId','navigationId','page']},
   'propose-owner-effect':{required:['workId','taskId','stepId','effectId','request']},
@@ -485,6 +489,8 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
       ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)||command.type==='answer-rule-change'?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
+      if(command.type==='request-secret'||command.type==='settle-secret-request')ensure(actor.id===SECRET_REQUEST_HOST&&operation.commandId.startsWith('assistant-secret-'),'secret host identity mismatch');
+      if(command.type==='answer-secret-request')ensure(actor.id==='local-owner'&&operation.commandId===command.provisionId&&!operation.commandId.startsWith('assistant-'),'secret decision identity mismatch');
       if(isEffectDecisionCommand(command.type))ensure(command.type==='answer-owner-effect'?actor.id==='local-owner'&&!operation.commandId.startsWith('assistant-'):actor.id===EFFECT_HOST&&operation.commandId.startsWith(EFFECT_COMMAND_PREFIX),'effect command authority mismatch');
       if(command.type==='record-browser-page')ensure(command.page.expectedRevision===operation.expectedRevision&&operation.commandId.startsWith('assistant-browser:'),'browser command identity mismatch');
       checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
