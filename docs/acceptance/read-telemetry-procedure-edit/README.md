@@ -69,3 +69,9 @@ credential-repair validation and file/procedure observations. A repaired invocat
 cannot acknowledge a new note for its already started step; the proposal stays
 discussion. Typecheck and 185 related integration tests passed (182 passed,
 three environment-gated skips), including token-repair and member runtime paths.
+
+
+The first CI harness run caught an inconsistent shared fixture clock in B22-room.
+Keep that screen's original frozen time and align only its command-produced coding
+observations to it. All 141 UI harness/copy-lint tests then passed locally; both
+theme interaction flows passed again and their captures were refreshed.

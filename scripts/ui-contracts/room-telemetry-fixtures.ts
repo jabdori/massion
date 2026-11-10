@@ -28,8 +28,8 @@ const pricing=[
 const coding=[{role:'읽기',title:'읽기',dependsOn:[],start:'10:40',done:4,total:11},{role:'테스트',title:'테스트 돌리기',dependsOn:[0]}];
 
 /** Observed units are controlled fixture inputs, never parsed from a model's prose. */
-export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'){
- const stamp=(clock:string)=>time(clock)+(kind==='pricing'?200*60000:0);
+export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding',now?:number){
+ const stamp=(clock:string)=>time(clock)+(kind==='pricing'?200*60000:now===undefined?0:now-time('10:44'));
  const spec:typeof pricing|typeof coding=kind==='pricing'?pricing:coding,memberId=kind==='pricing'?'member-quill':'member-juno',title=kind==='pricing'?'경쟁사 가격':'PR #84 검토',start=kind==='pricing'?'10:30':'10:40';
  const messageId=ownerMessageId('room-telemetry-'+kind),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),runId=assistantRunId(turnId),message={id:messageId,ordinal:1,actorId:owner.id,role:'owner' as const,turnId:null,text:kind==='pricing'?'경쟁사 가격도 확인해 줘.':'PR #84 검토해 줘.',at:stamp(start)};
  const source={segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'fixture',model:'fixture-representative'},memberId};
