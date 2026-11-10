@@ -97,3 +97,15 @@ After merging main's skipped-step glyph/time correction (#136), the affected
 recaptured on the merged implementation; the scoped gate still has no new,
 stale or infrastructure diagnostics. The two additional B7-churn allowances from
 main are retained. Relative to that main, this PR removes 16 entries (428 -> 412).
+
+Lead visual follow-up: removed the shared attribution strip's raw assignment
+model fallback. Named product members and pinned connection labels remain;
+identity rows without a real display source are omitted for fixture and real
+Works alike. One regression test substitutes an arbitrary real-provider model
+ID, verifies the named member remains, and verifies no identity row remains
+without a named member source. Related batch: 110 passed; typecheck passed.
+B18 and B8 variants in both themes retain a clean scoped diagnostic gate with
+no allowance changes (`attribution-gate.json`). Expanded/mobile screenshots in
+`table/` were refreshed in both themes; the existing browser flow also checks
+attribution labels. Main's #138 E2E fix was merged without conflicts.
+Optional caption indentation and compact scroll affordance are unchanged.

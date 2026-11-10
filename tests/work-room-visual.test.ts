@@ -228,3 +228,12 @@ test('skipped steps use the skip glyph and carry no time',async()=>{
  await measure('B7-churn');
  await measure('B18-room-b');
 });
+
+test('room attribution uses named product members and omits identities without a display source',async()=>{
+ const {app,nodes,work}=await scene('B18-room-b'),strip=()=>nodes().find(n=>hasClass(n,'room-models'))!;
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});for(const a of w.assignments){a.model.model='provider-internal/route-42';a.model.evidenceClass='real-provider'}renderMission()}`,app.context);
+ assert.ok(strip().children.some(n=>n.children.some(child=>child.tagName==='STRONG'&&child.textContent==='퀼')));
+ assert.doesNotMatch(strip().textContent,/provider-internal|route-42|bounded-fixture|확인한 쪽/);
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});delete w.assistantSource.memberId;for(const row of shellWorks)if(row.workId===w.id)row.memberId=null;renderMission()}`,app.context);
+ assert.equal(strip().children.length,1);assert.equal(strip().children[0]!.children[1]!.className,'room-connection');
+});
