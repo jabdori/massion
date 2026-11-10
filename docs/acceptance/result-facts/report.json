@@ -59,9 +59,7 @@
       "warnings": 3,
       "required": 28,
       "visualFailures": [],
-      "gaps": [
-        "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry."
-      ],
+      "gaps": [],
       "errors": [],
       "pair": "pairs/dark/B6-token.png"
     },
@@ -342,9 +340,7 @@
       "warnings": 3,
       "required": 28,
       "visualFailures": [],
-      "gaps": [
-        "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry."
-      ],
+      "gaps": [],
       "errors": [],
       "pair": "pairs/light/B6-token.png"
     },

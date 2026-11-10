@@ -1,4 +1,4 @@
-contract B6-token (B6 토큰 만료) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-head/snapshots/light/B6-token.json
+contract B6-token (B6 토큰 만료) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-credential-merge/snapshots/light/B6-token.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -26,11 +26,11 @@ contract B6-token (B6 토큰 만료) vs /Users/code/orca/workspaces/massion/resu
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget sidebar      app {"chars":30,"strings":8,"sentences":0,"longest":9} proto {"chars":28,"strings":6,"sentences":0,"longest":9} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":278,"strings":33,"sentences":4,"longest":36} proto {"chars":21,"strings":4,"sentences":0,"longest":9} source visibleTextBudget
+  budget conversation app {"chars":208,"strings":23,"sentences":4,"longest":36} proto {"chars":21,"strings":4,"sentences":0,"longest":9} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   warn  budget conversation sentences 4 > 0: "경쟁사 가격도 확인해 줘."
   warn  budget conversation longest string 36 > 24 chars
-  warn  budget conversation chars 278 > 47
+  warn  budget conversation chars 208 > 47
   FAIL  missing sidebar      status   "실행 중"
   FAIL  missing sidebar      status   "실행 중"
   FAIL  order  sidebar      status   "작업 중" (occurrence already consumed or found earlier)

@@ -92,3 +92,17 @@ results retain their counts while unknown/stopped status takes priority.
 The review-fix batch passed 124 tests with no failures/skips; it overlaps earlier
 batches and is not an additional aggregate count. Typecheck passed. Final-head
 full-suite and screen evidence is reported by CI on the PR.
+
+## Main integration
+
+Merged `origin/main` at `486b422` (credential repair, PR #142) without rebase or
+force-push. The conversation slot retains both newer result facts and the typed
+credential exception. The allow-list identity union preserves all removals from
+both branches: current main has 262 entries; this branch has 234 (the same 28 R-M
+removals). B6-token was recaptured in both themes against its current production
+credential fixture and the combined scoped gate remains clean.
+
+The merged result/credential/conversation/fixture batch passed 187 tests, zero
+failures/skips; typecheck passed. The final pricing table discriminator was also
+checked through both themes' real headless table interactions, including exact
+Copy/Original data, expansion and mobile visibility.
