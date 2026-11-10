@@ -86,3 +86,14 @@ typecheck. Headless Chrome exercised review, cancel, re-review, closure and
 reload without a second write. Desktop and 390px captures are retained locally
 in `.runtime/steering-resume-review/expired-closed.png` and `expired-mobile.png`,
 with accessibility snapshots beside them. No layout or copy changed.
+
+## Main integration
+
+Merge the credential-repair work from main without rewriting history. Completed
+repair receipts are valid retained results; their original rejected attempts do
+not prevent assembly or safe resume, and neither attempt is called again. An
+unfinished repair still requires its original live owner-confirmed continuation.
+Combined steering/restart/credential tests passed 158 cases with five gated skips;
+typecheck passed. A separate regression proves that clean checkpoint reservations
+remain held while resumable and settle to measured usage after the original
+deadline makes resumption impossible.

@@ -1,11 +1,17 @@
+import {validCredentialFailure} from './provider-credentials.ts';
 import {DomainError,workInputHash} from './domain.ts';
-import type {Work,RuntimeOwnership} from './domain.ts';
+import type {Work,RuntimeOwnership,Effect} from './domain.ts';
 import {validateRuntimeOwnership} from './runtime-lifetime.ts';
 
 export const currentOwnership=(w:Work)=>w.runtimeRun?.resumptions?.at(-1)??w.runtimeRun?.ownership;
+export function completedEffect(w:Work,e:Effect):Effect|undefined {
+ if(e.status==='succeeded')return e;if(e.status!=='failed')return;
+ let receipt;try{receipt=JSON.parse(e.receipt!);}catch{return;}
+ if(validCredentialFailure(receipt.credentialFailure))return w.effects.find(next=>next.id===e.id+':repair'&&next.taskId===e.taskId&&next.status==='succeeded');
+}
 export function canResume(w:Work,at:number):boolean {
  const run=w.runtimeRun,o=currentOwnership(w);
- return !!(run?.continuationVersion===1&&w.team&&o&&at>=o.startedAt&&at<o.deadlineAt&&!w.runtimeRecovery&&!w.monthlyBudgetDecision&&!['waiting','cancelled','budget-waiting'].includes(w.execution)&&w.acceptance!=='accepted'&&w.acceptance!=='failed'&&(!w.runtimeInterruption||w.runtimeInterruption.reason==='host-shutdown')&&(!w.blocker||w.runtimeInterruption?.reason==='host-shutdown')&&w.effects.every(e=>e.status==='succeeded'&&!e.ownerDecision));
+ return !!(run?.continuationVersion===1&&w.team&&o&&at>=o.startedAt&&at<o.deadlineAt&&!w.runtimeRecovery&&!w.monthlyBudgetDecision&&!['waiting','cancelled','budget-waiting'].includes(w.execution)&&w.acceptance!=='accepted'&&w.acceptance!=='failed'&&(!w.runtimeInterruption||w.runtimeInterruption.reason==='host-shutdown')&&(!w.blocker||w.runtimeInterruption?.reason==='host-shutdown')&&w.effects.every(e=>completedEffect(w,e)&&!e.ownerDecision));
 }
 export function validateContinuation(w:Work){
  const r=w.runtimeRun;if(!r)return;
@@ -23,7 +29,7 @@ export function resumeRuntime(w:Work,previousDispatchId:string,ownership:Runtime
 }
 export function beginAssembly(w:Work,inputHash:string){
  const r=w.runtimeRun!;
- if(r?.continuationVersion!==1||inputHash!==workInputHash(w)||w.acceptance==='accepted'||['waiting','cancelled','blocked','budget-waiting'].includes(w.execution)||w.effects.some(e=>e.status!=='succeeded')||w.tasks.some(t=>t.step&&t.status!=='settled'))throw new DomainError('Assembly requires current inputs and settled effects');
+ if(r?.continuationVersion!==1||inputHash!==workInputHash(w)||w.acceptance==='accepted'||['waiting','cancelled','blocked','budget-waiting'].includes(w.execution)||w.effects.some(e=>!completedEffect(w,e))||w.tasks.some(t=>t.step&&t.status!=='settled'))throw new DomainError('Assembly requires current inputs and settled effects');
  if(r.assembly?.inputHash===inputHash)return;
  const version=(r.assembly?.version??0)+1;if(version>4)throw new DomainError('Assembly revision limit reached');
  if(version>1){

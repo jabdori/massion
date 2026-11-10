@@ -143,3 +143,15 @@ test('a clean checkpoint releases its monthly hold only after the original deadl
  t.mock.timers.enable({apis:['Date'],now:before.runtimeRun.ownership.deadlineAt+1});await budget.reconcile();
  const reservation=(await budget.snapshot()).budget!.value.reservations[0]!;assert.equal(reservation.state,'settled');assert.equal(reservation.usage,2);assert.deepEqual(await f.work(),before);assert.equal(f.calls.length,2);
 });
+
+for(const mode of ['steer','restart'])test('completed credential repair is reused by '+mode+' without another repair or provider call',async t=>{
+ const f=await fixture(t),adapter=f.options.executor.adapter,invoke=adapter.invoke.bind(adapter),ids:string[]=[];let rejected=false,repairs=0,changed=false;
+ adapter.invoke=async request=>{ids.push(request.invocationId);if(!rejected){rejected=true;return {status:'failed',output:null,usage:{inputTokens:0,outputTokens:0},reason:'Credential fixture rejection',credentialFailure:{kind:'invalid',code:'invalid_api_key'},credentialBinding:{connectionId:'producer',configHash:'a'.repeat(64),generation:0}};}return invoke(request);};
+ f.options.repairCredential=async({blocker})=>{repairs++;await f.app.dispatch({missionId:'mission',commandId:'repair',expectedRevision:(await f.read()).revision,actorId:'local-owner',command:{type:'retry-credential',workId,effectId:blocker.effectId,connectionId:blocker.connectionId,configHash:blocker.configHash,replacementCommandId:'fixture-replacement'}});};
+ const runtime=new ConfiguredTextRuntime(f.store,f.options),commit=f.store.commit.bind(f.store);let crashed=false;
+ if(mode==='restart')f.store.commit=async input=>{const c=(input.events[0] as any)?.command,result=await commit(input);if(!crashed&&c?.type==='receipt'&&c.effectId==='run:planning:repair'){crashed=true;throw Error('Crash after repaired result');}return result;};
+ else f.setHook(async(_r,p)=>{if(!changed&&p.stepResults){changed=true;await f.steer();}});
+ if(mode==='restart'){await assert.rejects(runtime.run('mission',workId,'run',(await f.read()).revision));f.store.commit=commit;assert.equal((await new ConfiguredTextRuntime(f.store,f.options).resume('mission',workId)).status,'settled');}
+ else assert.equal((await runtime.run('mission',workId,'run',(await f.read()).revision)).status,'settled');
+ assert.equal(repairs,1);assert.equal(ids.filter(id=>id==='run:planning').length,1);assert.equal(ids.filter(id=>id==='run:planning:repair').length,1);assert.equal((await f.work()).acceptance,'accepted');validateMissionLineage((await f.read()).value);
+});

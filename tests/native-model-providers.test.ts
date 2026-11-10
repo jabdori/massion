@@ -23,3 +23,15 @@ for(const protocol of ['anthropic-messages/v1','gemini-generate-content/v1'] as 
 test('Gemini mixed text/code/file payload cannot satisfy bounded text completion',()=>{for(const key of ['executableCode','codeExecutionResult','fileData','inlineData','functionCall']){const v=response('gemini-generate-content/v1') as any;v.candidates[0].content.parts[0][key]={payload:'fixture'};assert.equal(parseNativeCompletion('gemini-generate-content/v1',v,'exact-model',8).status,'failed');}const v=response('anthropic-messages/v1','exact-model','\ud800');assert.throws(()=>parseNativeCompletion('anthropic-messages/v1',v,'exact-model',8));});
 
 test('direct native factory creation requires every explicit byte/token/timeout limit',()=>{for(const protocol of ['anthropic-messages/v1','gemini-generate-content/v1'] as const){const factory=nativeProfileFactory(protocol,{mode:'https',resolveCredential:async()=> 'synthetic',transport:async()=>{assert.fail('Configuration must not send');}});for(const key of ['maxInputBytes','maxOutputTokens','maxResponseBytes','timeoutMs']){const p=profile(protocol) as any;delete p.limits[key];assert.throws(()=>factory.create(p),/Invalid native profile/);}}});
+
+test('native authentication codes are typed without leaking provider diagnostics or retrying permission errors',async()=>{
+ for(const protocol of ['anthropic-messages/v1','gemini-generate-content/v1'] as const){
+  const p={...profile(protocol),providerKind:protocol==='anthropic-messages/v1'?'anthropic':'gemini'},code=protocol==='anthropic-messages/v1'?'authentication_error':'API_KEY_INVALID',status=protocol==='anthropic-messages/v1'?401:400;
+  const body=protocol==='anthropic-messages/v1'?{type:'error',error:{type:code,message:'secret-diagnostic'}}:{error:{code:400,message:'secret-diagnostic',status:'INVALID_ARGUMENT',details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',domain:'googleapis.com',reason:code}]}};
+  for(const httpStatus of [status,403]){
+   let sends=0;const adapter=nativeProfileFactory(protocol,{mode:'https',resolveCredential:async()=> 'secret-key',transport:async()=>{sends++;return Response.json(body,{status:httpStatus});}}).create(p);
+   const result=await adapter.invoke({invocationId:'auth-test',workId:'work',instruction:'fixture',inputReferences:[],signal:new AbortController().signal});
+   assert.equal(sends,1);assert.equal(result.status,httpStatus===status?'failed':'unknown');assert.deepEqual(result.credentialFailure,httpStatus===status?{kind:'invalid',code}:undefined);assert.doesNotMatch(JSON.stringify(result),/secret-diagnostic|secret-key/);
+  }
+ }
+});
