@@ -64,6 +64,22 @@ test('retrying a completed provision returns its stored outcome without another 
  }
 });
 
+test('settlement retries fresh revisions at most three times without repeating vault writes',async()=>{
+ for(const conflicts of [2,3]){
+  const f=await fixture(),commit=f.store.commit.bind(f.store),set=f.own.set.bind(f.own);let attempts=0,writes=0;
+  f.own.set=async(s,v)=>{writes++;await set(s,v);};
+  f.store.commit=async input=>{
+   if(input.events.some(e=>(e as {type?:string}).type==='settle-secret-request')&&++attempts<=conflicts)await f.app.dispatch({missionId:'mission',commandId:'concurrent-'+attempts,expectedRevision:(await f.store.load('mission'))!.revision,actorId:'local-owner',command:{type:'append-work-message',workId:'work',messageId:'message-'+attempts,replyTo:null,text:'Concurrent owner message'}});
+   return commit(input);
+  };
+  assert.deepEqual(await f.service.answer(f.answer),{status:conflicts===2?'provided':'unavailable'});assert.equal(attempts,3);assert.equal(writes,2);
+  assert.equal((await f.service.read('mission','work')).requests[0]!.state,conflicts===2?'provided':'unavailable');
+  assert.deepEqual(await f.service.answer(f.answer),{status:conflicts===2?'provided':'unavailable'});assert.equal(writes,2);assert.equal(attempts,3);
+  if(conflicts===2)await assert.doesNotReject(f.service.drain());else await assert.rejects(f.service.drain(),/unsettled/);
+  validateMissionJournalLineage(f.store.inspect());
+ }
+});
+
 test('external request selections resolve at use; imports keep value-free provenance and use only the own store after provision',async()=>{
  for(const kind of ['external-ref','import'] as const){
   const f=await fixture();let reads=0;const service=new SecretRequestsService(f.store,f.own,{onepassword:{read:async()=>{reads++;return 'fixture-external';}}}),answer={...f.answer,selections:declaration.fields.map(field=>({slot:field.slot,source:{kind,vendor:'onepassword' as const,reference:'op://fixture/item/'+field.slot}})),values:{}};
