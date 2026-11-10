@@ -229,7 +229,7 @@ for(const [plain,format,separator] of [['ABCD??1234','base64url','-'],['AB?CD123
  for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(display));validateMissionJournalLineage(s.journal().operations);
 });
 
-for(const separator of [':','%253A','%EF%BC%9A'])test('reserved capability path boundaries cannot retain token suffixes: '+separator,async t=>{
+for(const separator of [':','%253A','%EF%BC%9A','%5C','%255C','%EF%BC%BC'])test('reserved capability path boundaries cannot retain token suffixes: '+separator,async t=>{
  const s=await fixture(t),token='M4G1CL1NK7e32',address='https://shop.example.com/reset'+separator+token,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:token,blocks:[token],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
  for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(token),'Capability suffix must not persist');validateMissionJournalLineage(s.journal().operations);
 });
@@ -261,7 +261,7 @@ for(const first of ['WXYZ','ABCD'])test('both hex byte alignments are redacted: 
  for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(Buffer.from('WXYZ').toString('hex')),'No shifted private hex suffix may persist');validateMissionJournalLineage(s.journal().operations);
 });
 
-for(const structure of ['reset:ABCD1234','reset：ABCD1234','reset:'+Buffer.from('ABCD1234').toString('base64')])test('decoded structured capability suffixes remain private: '+structure.slice(0,6),async t=>{
+for(const structure of ['reset:ABCD1234','reset：ABCD1234','reset\\ABCD1234','reset'+String.fromCharCode(0xff3c)+'ABCD1234','reset:'+Buffer.from('ABCD1234').toString('base64')])test('decoded structured capability suffixes remain private: '+structure.slice(0,6),async t=>{
  const s=await fixture(t),address='https://shop.example.com/recover/'+Buffer.from(structure).toString('base64url'),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:'ABCD1234',blocks:['ABCD1234'],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
  for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes('ABCD1234'),'Decoded structured suffix must not persist');validateMissionJournalLineage(s.journal().operations);
 });

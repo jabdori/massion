@@ -24,7 +24,7 @@ export function browserAddress(value:string){let u:URL;try{u=new URL(value);}cat
 export function browserUrlSecrets(value:string){
  const u=new URL(value),parts=[u.username,u.password,u.pathname,u.search.slice(1),u.hash.slice(1),...u.searchParams.keys(),...u.searchParams.values()],secrets=new Set<string>();
  for(let part of parts)for(let depth=0;;depth++){
-  for(const value of [part,part.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'')])for(const piece of [value,...value.split(/[/?#:\[\]@!$&'()*+,;=]/)])if(piece)secrets.add(piece);
+  for(const value of [part,part.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'')])for(const piece of [value,...value.split(/[\\/?#:\[\]@!$&'()*+,;=]/)])if(piece)secrets.add(piece);
   if(!/%[a-f0-9]{2}/i.test(part))break;if(depth===8)throw Error('Browser URL encoding bound exceeded');
   try{part=decodeURIComponent(part);}catch{throw Error('Invalid browser URL encoding');}
  }
@@ -38,7 +38,7 @@ export function browserPrivateSeeds(values:string[]){
   if(/%[a-f0-9]{2}/i.test(encoded))try{next.push(decodeURIComponent(encoded));}catch{}
   if(/^[A-Za-z0-9+/_-]+={0,2}$/.test(encoded))try{const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,''));next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));}catch{}
   if(/^(?:[a-f0-9]{2})+$/i.test(encoded))try{next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(encoded.match(/../g)!,pair=>parseInt(pair,16))));}catch{}
-  for(const decoded of next)for(const part of [decoded,...decoded.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').split(/[/?#:\[\]@!$&'()*+,;=]/)]){if(!part||seeds.has(part))continue;if(depth>=8||seeds.size>=1024)throw Error('Browser private normalization bound exceeded');seeds.add(part);queue.push({value:part,depth:depth+1});}
+  for(const decoded of next)for(const part of [decoded,...decoded.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').split(/[\\/?#:\[\]@!$&'()*+,;=]/)]){if(!part||seeds.has(part))continue;if(depth>=8||seeds.size>=1024)throw Error('Browser private normalization bound exceeded');seeds.add(part);queue.push({value:part,depth:depth+1});}
  }
  return [...seeds];
 }

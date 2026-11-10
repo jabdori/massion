@@ -22,6 +22,7 @@
   "hexReflection": true,
   "decodedPrivateSeed": true,
   "structuredDecodedSeed": true,
+  "backslashDecodedSeed": true,
   "base64UrlReflection": true,
   "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,
