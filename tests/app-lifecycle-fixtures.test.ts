@@ -18,7 +18,8 @@ test('app lifecycle fixtures derive binding and credential reads from commands a
   assert.deepEqual(github.members,[{id:'member-juno',name:'주노'},{id:'member-quill',name:'퀼'}]);
   assert.deepEqual(github.memberIds,['member-juno','member-quill']);
   assert.equal(github.credential.state,screen==='B23-github-expired'?'expired':'saved');assert.equal(github.credential.slot,'github-token');assert.ok(github.credential.connectionId);
-  assert.deepEqual(read.catalog.map((c:any)=>[c.id,c.installed]),[['github',true]]);
+  assert.deepEqual(read.catalog.filter((c:any)=>c.available).map((c:any)=>[c.id,c.installed]),[['github',true]]);
+  const unavailable=read.catalog.filter((c:any)=>!c.available);assert.equal(unavailable.length,6);assert.ok(unavailable.every((c:any)=>c.installed===false));
   for(const [path,response] of Object.entries(before.routes))if(path!=='/assistant/apps'&&!path.startsWith('/assistant/conversation'))assert.deepEqual(fixture.routes[path],response,path);
   for(const [path,response] of Object.entries(before.routes))if(path.startsWith('/assistant/conversation')){
    const {apps:oldApps,...oldBody}=response.body as any,{apps:newApps,...newBody}=fixture.routes[path]!.body as any;assert.deepEqual(newBody,oldBody,path);assert.ok(newApps.some((a:any)=>a.id===github.id));

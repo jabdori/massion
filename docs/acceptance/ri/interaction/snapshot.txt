@@ -1,0 +1,85 @@
+- generic
+  - navigation "주 메뉴" [ref=e2]
+    - button "하나" [ref=e4]
+    - button "결과물" [ref=e5]
+    - button "예약" [ref=e6]
+    - group "앱"
+      - button "GitHub" [ref=e8]
+    - generic
+      - button "내 계정" [expanded=false, ref=e9]
+  - complementary "구성원과 작업"
+    - navigation "설정" [ref=e7]
+      - button "설정" [ref=e10]
+      - LabelText
+        - searchbox "설정 검색" [ref=e21]
+      - button "일반" [ref=e11]
+        - StaticText "일반"
+      - button "기억" [ref=e12]
+        - StaticText "기억"
+      - button "구성원" [ref=e13]
+        - StaticText "구성원"
+      - button "기기" [ref=e14]
+        - StaticText "기기"
+      - button "연결" [ref=e15]
+        - StaticText "연결"
+      - button "사용량" [ref=e16]
+        - StaticText "사용량"
+      - button "앱" [ref=e17]
+        - StaticText "앱"
+      - button "개선" [ref=e18]
+        - StaticText "개선"
+      - button "권한" [ref=e19]
+        - StaticText "권한"
+  - main "설정" [ref=e3]
+    - region "앱" [ref=e20]
+      - generic
+        - heading "앱" [level=2, ref=e22]
+        - searchbox "앱 검색" [ref=e23]
+        - heading "설치됨 1" [level=3, ref=e24]
+          - StaticText "설치됨"
+          - StaticText "1"
+        - button "GitHub 1.4.0 · 주노, 퀼 켜짐" [ref=e25]
+          - strong
+            - StaticText "GitHub"
+          - StaticText "1.4.0 · 주노, 퀼"
+          - StaticText "켜짐"
+        - heading "직접 만든 앱 1" [level=3, ref=e26]
+          - StaticText "직접 만든 앱"
+          - StaticText "1"
+        - generic
+          - button "PR 목록 가져오기" [ref=e34]
+          - StaticText "0.1.0 · 주노가 만듦"
+          - StaticText " · "
+          - button "PR #84 검토 ›" [ref=e35]
+          - StaticText "켜짐"
+        - heading "추천" [level=3, ref=e27]
+        - strong
+          - StaticText "Slack"
+        - StaticText "메시지"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e28]
+        - strong
+          - StaticText "Linear"
+        - StaticText "이슈"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e29]
+        - strong
+          - StaticText "Google 캘린더"
+        - StaticText "일정"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e30]
+        - strong
+          - StaticText "Notion"
+        - StaticText "문서"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e31]
+        - strong
+          - StaticText "Figma"
+        - StaticText "디자인"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e32]
+        - strong
+          - StaticText "Sentry"
+        - StaticText "오류"
+        - StaticText "패키지 없음"
+        - button "설치" [disabled, ref=e33]

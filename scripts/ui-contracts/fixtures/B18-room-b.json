@@ -17,7 +17,7 @@
     }
   ],
   "gaps": [
-    "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text."
+    "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
   ],
   "reuse": [
     "scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands"
@@ -1104,7 +1104,7 @@
                   {
                     "authority": "fixture-only",
                     "id": "assistant-6a2a6478f24797a3b996652d:step:3:effect",
-                    "receipt": "표 1개, 요금제 6개예요.",
+                    "receipt": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                     "status": "succeeded",
                     "target": "controlled fixture units",
                     "taskId": "assistant-6a2a6478f24797a3b996652d:step:3"
@@ -1210,7 +1210,7 @@
                       "done": 1,
                       "total": 1
                     },
-                    "result": "표 1개, 요금제 6개예요.",
+                    "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                     "startedAt": 1793854920000,
                     "status": "settled",
                     "step": {
@@ -1945,7 +1945,7 @@
                 {
                   "authority": "fixture-only",
                   "id": "assistant-6a2a6478f24797a3b996652d:step:3:effect",
-                  "receipt": "표 1개, 요금제 6개예요.",
+                  "receipt": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                   "status": "succeeded",
                   "target": "controlled fixture units",
                   "taskId": "assistant-6a2a6478f24797a3b996652d:step:3"
@@ -2051,7 +2051,7 @@
                     "done": 1,
                     "total": 1
                   },
-                  "result": "표 1개, 요금제 6개예요.",
+                  "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                   "startedAt": 1793854920000,
                   "status": "settled",
                   "step": {

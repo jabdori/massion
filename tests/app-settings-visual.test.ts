@@ -14,7 +14,12 @@ for(const screen of ['B23-github','B23-github-expired'])test(screen+' renders pr
  await settle();await app.node('me-settings').fire('click');await settle();
  await app.node('settings-nav-apps').fire('click');await settle();
  const body=app.node('settings-apps-body');
- assert.equal(body.children.some(n=>n.tagName==='H3'&&n.textContent===copy('settings.heading.13')),false,'the installed host catalog leaves nothing to recommend');
+ assert.equal(body.children.some(n=>n.tagName==='H3'&&n.textContent===copy('settings.heading.13')),true,'unavailable recommendations remain visible after GitHub is installed');
+ const recommendations=app.all().find(n=>n.className.split(' ').includes('set-app-recommendations'))!;
+ assert.ok(recommendations);assert.equal(recommendations.children.length,6);
+ assert.equal(recommendations.children.every(row=>row.textContent.includes(copy('ui.apps.package-unavailable'))),true);
+ for(const row of recommendations.children){const install=row.children.at(-1)!;assert.equal(install.tagName,'BUTTON');assert.equal(install.disabled,true);assert.equal(install.attributes.get('title'),copy('ui.apps.package-unavailable'));await install.fire('click');}
+ assert.equal(posted.length,0,'unavailable packages offer no active install action');
  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
  assert.equal(body.children.some(n=>n.tagName==='H3'&&n.textContent===copy('settings.heading.04')),true);
  assert.deepEqual(app.all().filter(n=>n.className==='set-version').map(n=>n.textContent),['1.4.0','1.3.2']);

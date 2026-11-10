@@ -21,8 +21,8 @@
       "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
       "occurrence": 1,
       "category": "dependency",
-      "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b3-run-dark"
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B5",
@@ -61,8 +61,8 @@
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
-      "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B6-token",
@@ -561,8 +561,8 @@
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -571,8 +571,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -581,8 +581,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -591,8 +591,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -601,8 +601,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 4,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -721,8 +721,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "Actual accepted text remains visible (hard pane-budget violation remains). No typed-table schema/reader exists; do not hide exact bytes or relax the hard budget.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
+      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B11-quill",
@@ -998,91 +998,11 @@
       "screen": "B18-room-b",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{count}\"",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "region pane text \"기본\" (found in composer)",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 2,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 3,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 4,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 5,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 6,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "The typed table count now appears in the compound conversation card. The card still precedes the required business-message sequence in this retained fixture; R-G owns B18 composition and this slice does not reorder conversation messages.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B18-room-b",
@@ -1217,82 +1137,12 @@
     {
       "screen": "B23",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings heading \"추천\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 4,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 5,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 6,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "The host catalog contains only GitHub; the six other recommended apps have no installable packages.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
+      "ledger": "docs/acceptance/ri/README.md"
     },
     {
       "screen": "B2",
@@ -1311,8 +1161,8 @@
       "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
       "occurrence": 1,
       "category": "dependency",
-      "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b3-run-light"
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B5",
@@ -1351,8 +1201,8 @@
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
-      "reason": "The compound card requires named team roles, business-step progress or a typed table count. Current main has only executor/verifier tasks; Q13 is open. Accurate shared child counts are implemented.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
+      "reason": "The shared Work detail already displays pinned TeamStep dependencies. This legacy conversation-card fixture lacks the specific named business plan and progress required by the compound card; no role or step is inferred from executor/verifier task text.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B6-token",
@@ -1851,8 +1701,8 @@
       "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -1861,8 +1711,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -1871,8 +1721,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -1881,8 +1731,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -1891,8 +1741,8 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 4,
       "category": "check-time-and-predicates",
-      "reason": "The shared renderer displays retained checks and host check time. This legacy fixture has no structured independent checks report; no business predicates are inferred from its text evidence.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "B8-unknown has an unresolved external outcome and no independent verdict or payment/browser step receipts. These residuals require duplicate Record headings and ordered business activity times, not a fabricated check or report observation; unknown outcomes stay unchecked.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B8-unknown",
@@ -2011,8 +1861,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "Actual accepted text remains visible (hard pane-budget violation remains). No typed-table schema/reader exists; do not hide exact bytes or relax the hard budget.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
+      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B11-quill",
@@ -2288,91 +2138,11 @@
       "screen": "B18-room-b",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{count}\"",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "region pane text \"기본\" (found in composer)",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 1,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 2,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 3,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 4,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 5,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane text \"{amount}\"",
-      "occurrence": 6,
-      "category": "monthly-pricing-table",
-      "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "The typed table count now appears in the compound conversation card. The card still precedes the required business-message sequence in this retained fixture; R-G owns B18 composition and this slice does not reorder conversation messages.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B18-room-b",
@@ -2507,82 +2277,12 @@
     {
       "screen": "B23",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings heading \"추천\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 3,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 4,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 5,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings link \"설치\" (text exists without the required role)",
-      "occurrence": 6,
-      "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B23",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "The host catalog contains only GitHub; the six other recommended apps have no installable packages.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "The bundled GitHub package is already installed; the six other recommendations have no installable packages. Member bindings and token reconnect are implemented.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
+      "reason": "Recommendation metadata is now produced by AppsService.read(), including available=false. The executable CATALOG still contains only GitHub; no package, install decision, version or installed state is fabricated for the other six apps.",
+      "ledger": "docs/acceptance/ri/README.md"
     },
     {
       "screen": "B15",
@@ -2623,8 +2323,8 @@
       "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "unsupported active procedure-edit scenario",
-      "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
-      "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/assistant-service.ts:253",
         "src/domain.ts:316",
@@ -2639,8 +2339,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 1,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2655,8 +2355,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 2,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2671,8 +2371,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 3,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2687,8 +2387,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 4,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2703,8 +2403,8 @@
       "diagnostic": "missing pane status \"읽는 중\"",
       "occurrence": 1,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2734,8 +2434,8 @@
       "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "unsupported active procedure-edit scenario",
-      "reason": "The pending owner procedure note is rendered with its original time. No member acknowledgement is fabricated after it, so the prototype second reply and its Copy button remain absent.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction",
+      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/assistant-service.ts:253",
         "src/domain.ts:316",
@@ -2797,8 +2497,8 @@
       "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "unsupported active procedure-edit scenario",
-      "reason": "The room fixture has one stored member reply and one Copy control. The artboard requires a second reply confirming an in-flight procedure edit. Team procedures are pinned on admission; owner steering waits and settle-task refuses waiting Work. An ordinary stored reply is supported, but is not evidence of an active procedure edit or continued execution. No second confirming reply is fabricated.",
-      "ledger": "docs/acceptance/room-residuals/README.md#procedure-edit",
+      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/assistant-service.ts:253",
         "src/domain.ts:316",
@@ -2813,8 +2513,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 1,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2829,8 +2529,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 2,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2845,8 +2545,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 3,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2861,8 +2561,8 @@
       "diagnostic": "missing pane status \"읽음\"",
       "occurrence": 4,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2877,8 +2577,8 @@
       "diagnostic": "missing pane status \"읽는 중\"",
       "occurrence": 1,
       "category": "unsupported file-read telemetry",
-      "reason": "The app view has file rows, diff counts and generic state strings, but no host-owned per-member file-read event, count, or in-progress read receipt. Task status and model text do not prove that four specific files were read or a fifth is being read. The five ordered status occurrences remain unproduced.",
-      "ledger": "docs/acceptance/room-residuals/README.md#file-read-telemetry",
+      "reason": "The GitHub item handler returns file names and diff counts, and the Work source pins PR/head identity only. The bounded text runtime has no file-reading tool or per-file delivery/read event. Listing a file, task progress or model prose cannot establish its read status.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/apps.ts:18",
         "src/domain.ts:31",
@@ -2908,8 +2608,8 @@
       "diagnostic": "order conversation button \"복사\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "unsupported active procedure-edit scenario",
-      "reason": "The pending owner procedure note is rendered with its original time. No member acknowledgement is fabricated after it, so the prototype second reply and its Copy button remain absent.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction",
+      "reason": "The owner step note is durable proposed discussion. Procedures remain admission-pinned; no in-flight procedure mutation or member acknowledgement is produced here. Steering continuation is R-F and business scenario composition is R-G.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/assistant-service.ts:253",
         "src/domain.ts:316",
@@ -2939,8 +2639,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 1,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2958,8 +2658,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 2,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2977,8 +2677,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 3,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -2996,8 +2696,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 4,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3015,8 +2715,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 5,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3034,8 +2734,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 1,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3053,8 +2753,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 2,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3072,8 +2772,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 3,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3091,8 +2791,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 4,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3110,8 +2810,8 @@
       "diagnostic": "region pane text \"{time}\" (found in conversation)",
       "occurrence": 5,
       "category": "unrecorded step timestamp",
-      "reason": "Q13 TeamStep and Task retain role/title/dependencies/skip reason, status and result but no per-step timestamp. Delegation, effect admission and settlement do not record one. Work-level start/end and conversation message times are not step times; no step clock is inferred.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#unrecorded-step-times",
+      "reason": "Actual effect admission and task settlement already retain host start/end times. B7-done lacks the five named business steps whose ordered clocks the contract requires; R-G owns that scenario composition. Existing Work/message times cannot fill missing step events.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
         "src/internal-teams.ts:36",
@@ -3416,11 +3116,11 @@
       "screen": "B18-room-b",
       "theme": "dark",
       "kind": "gap",
-      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
       "occurrence": 1,
       "category": "pricing-table-and-memory-proposal",
-      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B7",
@@ -3516,11 +3216,11 @@
       "screen": "B18-room-b",
       "theme": "light",
       "kind": "gap",
-      "diagnostic": "The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.",
+      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
       "occurrence": 1,
       "category": "pricing-table-and-memory-proposal",
-      "reason": "The selected Work now has recorded step counts, times, notes and direction-labelled worker exchanges. A typed monthly pricing table is still unavailable; the memory-candidate row is R-D, explicitly outside this visual correction.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#visual-gate-correction"
+      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
+      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B7-unknown",
