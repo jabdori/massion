@@ -81,3 +81,9 @@ test('a feed read overtaking create readback still exits the form and selects th
  releaseRead();await settle();newest();await settle();
  assert.equal(app.node('schedule-create').hidden,true);assert.equal(app.node('schedule-detail').hidden,false);assert.equal(rows(app).at(-1)!.attributes.get('aria-current'),'page');
 });
+
+test('a member-bound schedule retains the explicit owner title without adding a review suffix',async()=>{
+ const {app,state}=fixture();state.schedules.push({...expenses,id:'member-review',kind:'weekly-review',memberId:'quill',title:'Competitor review'});
+ await settle();await app.node('rail-schedules').fire('click');await settle();const text=rows(app).at(-1)!.textContent;
+ assert.ok(text.includes('Competitor review'));assert.ok(!text.includes(copy('settings.switch.01',{work_title:'Competitor review'})));
+});

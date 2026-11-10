@@ -5,6 +5,8 @@ export interface ProviderDescriptor {
 }
 export interface ProviderRequest { invocationId:string; workId:string; instruction:string; inputReferences:readonly string[]; signal:AbortSignal; maxOutputTokens?:number }
 export interface ProviderOutcome {
+  credentialFailure?:import('./provider-credentials.ts').CredentialFailure;
+  credentialBinding?:{connectionId:string;configHash:string;generation:number};
   status:'completed'|'failed'|'cancelled'|'unknown';
   output:string|null; usage:{inputTokens:number|null;outputTokens:number|null};
   reason:string;

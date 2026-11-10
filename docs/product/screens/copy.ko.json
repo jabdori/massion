@@ -18393,5 +18393,93 @@
    "B13-general-restart:settings"
   ],
   "provenance": "Device-local notification delivery preference"
+ },
+ "ui.apps.credential-invalid": {
+  "ko": "인증 실패",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B6-token:conversation",
+   "B14-expired:settings",
+   "B23-github-expired:settings"
+  ],
+  "provenance": "Typed provider credential rejection; expiry is not inferred"
+ },
+ "ui.builtin.read-sources": {
+  "ko": "출처 찾아 읽기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings",
+   "B19-juno:settings"
+  ]
+ },
+ "ui.builtin.summarize-evidence": {
+  "ko": "근거 붙여 요약",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings",
+   "B19-juno:settings"
+  ]
+ },
+ "ui.builtin.read-code": {
+  "ko": "코드 읽기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings",
+   "B19-juno:settings"
+  ]
+ },
+ "ui.builtin.run-tests": {
+  "ko": "테스트 돌리기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings",
+   "B19-juno:settings"
+  ]
+ },
+ "ui.member-memory-source": {
+  "ko": "{member}과의 대화 ›",
+  "roles": [
+   "link"
+  ],
+  "used_in": [
+   "B19:settings"
+  ]
+ },
+ "ui.member-fixture.memory": {
+  "ko": "출처 링크는 표 마지막 열에 붙이기",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings"
+  ]
+ },
+ "ui.member-fixture.reply": {
+  "ko": "기억 후보를 남겼어요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:conversation"
+  ]
+ },
+ "ui.member-fixture.work": {
+  "ko": "경쟁사 가격",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B19:settings"
+  ]
  }
 }

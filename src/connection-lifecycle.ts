@@ -10,9 +10,9 @@ import type {ConnectionWorkbench} from './connection-workbench.ts';
 import type {LoginConnections} from './connection-logins.ts';
 
 export interface ConnectionFacts {
- status:'unverified'|'detected'|'absent'|'expired'|'unavailable'|'unknown';
+ status:'unverified'|'detected'|'absent'|'expired'|'invalid'|'unavailable'|'unknown';
  update:'unknown'|'available'|'current';restart:'unknown'|'required'|'not-required';
- source:'cli-status'|'model-discovery'|'host';
+ source:'cli-status'|'model-discovery'|'provider-response'|'host';
 }
 export interface ConnectionObservation extends ConnectionFacts {observedAt:number}
 export interface LifecycleCommand {commandId:string;connectionId:string;expectedConfigHash:string}
@@ -39,7 +39,7 @@ function exact(value:unknown,keys:string[]):asserts value is Record<string,any>{
 const id=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
 const digest=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 function facts(value:unknown):ConnectionFacts {
- exact(value,['status','update','restart','source']);ensure(['unverified','detected','absent','expired','unavailable','unknown'].includes(value.status)&&['unknown','available','current'].includes(value.update)&&['unknown','required','not-required'].includes(value.restart)&&['cli-status','model-discovery','host'].includes(value.source),'Invalid host connection observation');
+ exact(value,['status','update','restart','source']);ensure(['unverified','detected','absent','expired','invalid','unavailable','unknown'].includes(value.status)&&['unknown','available','current'].includes(value.update)&&['unknown','required','not-required'].includes(value.restart)&&['cli-status','model-discovery','provider-response','host'].includes(value.source),'Invalid host connection observation');
  return {status:value.status,update:value.update,restart:value.restart,source:value.source};
 }
 function state(value:unknown):State {
@@ -86,11 +86,19 @@ export class ConnectionLifecycle {
   const read=await this.#store.readState(CONNECTION_LIFECYCLE_ID),attempt=state(read.snapshot?.value).attempts.find(a=>a.commandId===input.commandId);
   return {feedId:read.feedId,commandId:input.commandId,status:!attempt?'unknown':attempt.connectionId!==input.connectionId||attempt.configHash!==input.expectedConfigHash||attempt.kind!==input.kind?'conflict':attempt.status==='pending'||attempt.kind==='replace-key'&&attempt.status==='unknown'?'unknown':'settled'};
  }
+ async retry(input:unknown){
+  try{exact(input,['commandId','missionId','workId','expectedRevision','connectionId','expectedConfigHash','effectId','replacementCommandId']);const request=structuredClone(input);
+   await this.#admit();return await this.#connections.retryCredential(request,this.#store,async()=>{
+    const current=await this.#state(),key=current.value.attempts.findLast(a=>a.connectionId===request.connectionId&&a.kind==='replace-key'&&a.status!=='rejected');
+    ensure(key&&key.commandId===request.replacementCommandId&&key.configHash===request.expectedConfigHash&&key.status==='completed','Exact completed credential replacement required');await this.#admit();
+   });
+  }catch(error){if(error instanceof DomainError)throw new ConnectionLifecycleRefusedError(error.message,error.code);throw error;}
+ }
  async read(){
   const feedId=(await this.#store.readState()).feedId,s=await this.#state();
   const connections=await Promise.all(this.#connections.list().connections.map(async c=>{
    const attempts=s.value.attempts.filter(a=>a.connectionId===c.id&&a.configHash===c.configHash),latest=attempts.at(-1),key=attempts.findLast(a=>a.kind==='replace-key'&&a.status!=='rejected');
-   return {connectionId:c.id,configHash:c.configHash,canReplaceKey:this.#connections.canReplaceKey(c.id),credentialStorage:await this.#connections.credentialStored(c.id,c.configHash),credentialWriteStatus:key?(key.status==='completed'?'stored' as const:'unknown' as const):'idle' as const,observation:latest?.kind==='recheck'&&latest.status==='completed'?latest.observation:null};
+   const fault=this.#connections.credentialFault(c.id,c.configHash);return {connectionId:c.id,configHash:c.configHash,canReplaceKey:this.#connections.canReplaceKey(c.id),credentialStorage:await this.#connections.credentialStored(c.id,c.configHash),credentialWriteStatus:key?(key.status==='completed'?'stored' as const:'unknown' as const):'idle' as const,observation:fault?{status:fault.kind==='expired'?'expired' as const:'invalid' as const,update:'unknown' as const,restart:'unknown' as const,source:'provider-response' as const,observedAt:fault.observedAt}:latest?.kind==='recheck'&&latest.status==='completed'?latest.observation:null,replacementCommandId:key?.status==='completed'?key.commandId:null};
   }));
   ensure((await this.#store.readState()).feedId===feedId,'Database feed changed during lifecycle read','conflict');return {feedId,revision:s.revision,connections};
  }
@@ -141,7 +149,7 @@ export class ConnectionLifecycle {
   if(isCliProvider(target.providerType)){
    const login=await this.#options.logins?.recheck(target.providerType,signal);return {...unknownFacts,status:login?.status??'unknown',source:'cli-status'};
   }
-  const result=await this.#connections.discover(target.id,target.configHash,signal);return {...unknownFacts,status:result.status==='listed'?'unverified':result.status==='stale'?'unknown':'unavailable',source:'model-discovery'};
+  const result=await this.#connections.discover(target.id,target.configHash,signal);return {...unknownFacts,status:result.credentialFailure?.kind==='expired'?'expired':result.credentialFailure?'invalid':result.status==='listed'?'unverified':result.status==='stale'?'unknown':'unavailable',source:result.credentialFailure?'provider-response':'model-discovery'};
  }
  beginDrain(){this.#stop.abort();}
  async drain(){this.beginDrain();await Promise.allSettled([...this.#active]);}

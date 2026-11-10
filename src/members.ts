@@ -1,6 +1,10 @@
 /** Named members and their admission decisions (docs/architecture/members.md, ADR 0003 §1, §2, §8). Identity lives here; Work context never does. */
 import {DomainError,hash} from './domain.ts';
 import type {Actor,Mission,Work} from './domain.ts';
+import {candidateMemory} from './memory-candidates.ts';
+import type {MemoryCandidate} from './memory-candidates.ts';
+import type {SkillsState} from './skills.ts';
+import type {SchedulesState} from './schedules.ts';
 import {ASSISTANT_ACTOR_ID,ASSISTANT_CONVERSATION_PREFIX,TITLE_BYTES,headSegment,segmentId} from './assistant-conversation.ts';
 import type {AssistantSegment} from './assistant-conversation.ts';
 import type {ConnectionWorkbench} from './connection-workbench.ts';
@@ -12,7 +16,9 @@ import {representativeName} from './surface-shell.ts';
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const MEMBERS_ID=ASSISTANT_CONVERSATION_PREFIX+'members',MEMBER_SHAPES=['round','square','drop','hex','diamond','cloud','clover','tri'] as const,MAX_MEMBERS=32,MAX_DECISIONS=32,LATER_MS=30*86400000;
 export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number;archivedAt?:number}
-export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;completedWorkCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number}
+export interface MemberBuiltinSkill {id:string;name:string;version:number;hash:string;builtin:{id:string;version:number}}
+export interface MemberMemoryRead {id:string;version:number;name?:string;content:string;missionId:string;missionRevision:number;sourceSegment:number;sourceTurnId:string;at:number}
+export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;completedWorkCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number;builtinSkills:MemberBuiltinSkill[];memories:MemberMemoryRead[];schedules:{id:string;title:string;active:boolean;nextAt:number}[]}
 export interface MemberDecision {id:string;at:number;topic:string;works:{title:string}[];count:number;handoff?:string;modelGroup:'default';state:'open'|'later'|'done';answeredAt?:number;memberId?:string}
 export interface MembersState {kind:'members';id:string;members:Member[];decisions:MemberDecision[]}
 export type MembersCommand =
@@ -107,6 +113,7 @@ export class MembersService {
    try{
     const missionIds=new Set<string>(),intake=this.#intake();if(intake&&!intake.startsWith(ASSISTANT_CONVERSATION_PREFIX))missionIds.add(intake);
     const remember=(id:string|undefined)=>{if(id&&!id.startsWith(ASSISTANT_CONVERSATION_PREFIX))missionIds.add(id);};
+    const candidates=new Map<string,{candidate:MemoryCandidate;segment:number;at:number}[]>();
     const conversation=async(thread:string)=>{
      let messageCount=0,lastActiveAt:number|null=null;
      const activity=(at:number|undefined)=>{if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);};
@@ -114,19 +121,27 @@ export class MembersService {
      for(let n=1;n<=head;n++){
       const segment=(await load(segmentId(n,thread)))?.value as AssistantSegment|undefined;
       for(const message of segment?.messages??[]){messageCount++;activity(message.at);}
-      for(const turn of segment?.turns??[]){activity(turn.ownership?.startedAt);remember(turn.outcome?.missionId);remember(turn.steer?.missionId);}
+      for(const turn of segment?.turns??[]){activity(turn.ownership?.startedAt);remember(turn.outcome?.missionId);remember(turn.steer?.missionId);const c=turn.memoryCandidate;if(c?.state==='saving'&&thread===memberThread(c.memberId)){remember(c.missionId);const rows=candidates.get(c.memberId)??[];rows.push({candidate:c,segment:n,at:segment!.messages.find(m=>m.id===turn.messageId)?.at??0});candidates.set(c.memberId,rows);}}
      }
      return {messageCount,lastActiveAt};
     };
     // Follow every retained Mission pin, including old intake Missions; the UI Work list is truncated.
     await conversation('');const activity=new Map<string,Awaited<ReturnType<typeof conversation>>>();
     for(const m of v?.members??[])activity.set(m.id,await conversation(memberThread(m.id)));
-    const works:Work[]=[];for(const missionId of missionIds){const mission=(await load(missionId))?.value as Mission|undefined;works.push(...mission?.works??[]);}
+    const works:Work[]=[],missions=new Map<string,Snapshot<Mission>>();for(const missionId of missionIds){const snapshot=await load(missionId) as Snapshot<Mission>|null;if(snapshot){missions.set(missionId,snapshot);works.push(...snapshot.value.works??[]);}}
+    const skills=(await load(ASSISTANT_CONVERSATION_PREFIX+'skills'))?.value as SkillsState|undefined,schedules=(await load(ASSISTANT_CONVERSATION_PREFIX+'schedules'))?.value as SchedulesState|undefined,memories=new Map<string,MemberMemoryRead[]>();
+    for(const [memberId,rows] of candidates)for(const {candidate:c,segment,at} of rows){
+     const mission=missions.get(c.missionId),memory=mission?.value.memories.find(m=>m.id===c.id&&m.version===c.version&&m.effective),command={type:'save-memory',memory:candidateMemory(c)};
+     if(!memory||hash(memory)!==hash(command.memory))continue;
+     const saved=await this.#store.lookupOperation({id:c.missionId,commandId:'assistant-memory-save:'+c.turnId,fingerprint:hash({actorId:OWNER,command,expectedRevision:c.missionRevision})});
+     if(saved.status!=='committed'&&saved.status!=='replayed')continue;
+     const own=memories.get(memberId)??[];own.push({id:memory.id,version:memory.version,...(memory.name?{name:memory.name}:{}),content:memory.content,missionId:c.missionId,missionRevision:mission!.revision,sourceSegment:segment,sourceTurnId:c.turnId,at});memories.set(memberId,own);
+    }
     const members:MemberRead[]=(v?.members??[]).map(m=>{
      const own=works.filter(w=>w.assistantSource?.memberId===m.id),chat=activity.get(m.id)!;let lastActiveAt:number|null=chat.lastActiveAt;
      for(const work of own)for(const at of [work.runtimeRun?.ownership?.startedAt,work.endedAt])if(at!==undefined)lastActiveAt=Math.max(lastActiveAt??0,at);
-     // Schedules dispatch through the Representative, without a member binding.
-     return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,completedWorkCount:own.filter(w=>w.acceptance==='accepted').length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:0};
+     const bound=(schedules?.schedules??[]).filter(s=>s.memberId===m.id).map(s=>({id:s.id,title:s.title??copy('ui.schedules.'+s.kind+'-title'),active:s.active,nextAt:s.nextAt})),builtinSkills=(skills?.skills??[]).filter(s=>s.memberId===m.id&&s.current!==null&&s.archivedAt===undefined).flatMap(s=>{const v=s.versions[s.current!-1]!;return v.builtin&&v.hash===hash(v.body)?[{id:s.id,name:s.name,version:v.version,hash:v.hash,builtin:structuredClone(v.builtin)}]:[];});
+     return {id:m.id,name:m.name,look:structuredClone(m.look),modelGroup:m.modelGroup,admittedAt:m.admittedAt,archivedAt:m.archivedAt??null,lastActiveAt,workCount:own.length,completedWorkCount:own.filter(w=>w.acceptance==='accepted').length,openWorkCount:own.filter(w=>w.acceptance!=='accepted'&&w.execution!=='cancelled'&&w.execution!=='settled').length,unknownWorkCount:own.filter(w=>!w.runtimeRecovery&&w.effects.some(e=>e.status==='unknown')).length,messageCount:chat.messageCount,scheduleCount:bound.length,builtinSkills,memories:memories.get(m.id)??[],schedules:bound};
     });
     await load(MEMBERS_ID);
     return {feedId,revision:s?.revision??0,members:members.filter(m=>m.archivedAt===null),archived:members.filter(m=>m.archivedAt!==null),decisions:v?v.decisions.map(d=>card(v,d)):[]};

@@ -51,8 +51,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -61,8 +61,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -71,8 +71,8 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -81,18 +81,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-dark"
-    },
-    {
-      "screen": "B6-token",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B7",
@@ -695,116 +685,6 @@
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
     },
     {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"퀼과의 대화 ›\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order settings heading \"최근 개선\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings switch \"{work_title} 다시 보기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings switch \"해지 사유 모아 보기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19-juno",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19-juno",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
       "screen": "B21-done-hana",
       "theme": "dark",
       "kind": "contract",
@@ -881,8 +761,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -891,8 +771,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -901,8 +781,8 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B6-token",
@@ -911,18 +791,8 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "Typed token expiry is unavailable. The exact-source generic failure fallback contains failed, waiting and accepted Works; these ancillary sidebar statuses differ from the artboard. Active unrelated Works are supported; their absence here is a fallback-data limitation, not an absent runtime feature.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-token-light"
-    },
-    {
-      "screen": "B6-token",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "No typed token-expiry fact or identity-bound connection repair/retry path exists. Generic known failure is shown, without fabricating an expired credential or performing a retry.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
+      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
       "screen": "B7",
@@ -1523,116 +1393,6 @@
       "category": "composition",
       "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings heading \"기억\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"퀼과의 대화 ›\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"지우기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order settings heading \"최근 개선\" (occurrence already consumed or found earlier)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "role settings heading \"예약\" (text exists without the required role)",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The member read model has no member memory binding and schedules are Representative-only. Unsupported placeholder cards were removed; unrelated Mission memory is not attributed to this member.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings switch \"{work_title} 다시 보기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings switch \"해지 사유 모아 보기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19-juno",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B19-juno",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings text \"기본\"",
-      "occurrence": 2,
-      "category": "capability",
-      "reason": "Member app bindings and archive are implemented. Builtin skill provenance, member memory and member-bound schedules are absent; earlier missing memory occurrences also cause the retained ordering diagnostic.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
       "screen": "B21-done-hana",

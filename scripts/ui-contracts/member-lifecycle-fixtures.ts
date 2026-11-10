@@ -10,6 +10,7 @@ import {MEMBERS_ID,MembersService,applyMembers,admittedMemberId,proposalDecision
 import type {Member,MembersState,MembersCommand} from '../../src/members.ts';
 import {validateMissionJournalLineage} from '../../src/backup-lineage.ts';
 import type {ScreenFixture} from './fixture-host.ts';
+import {produceMemberPage} from './member-page-fixtures.ts';
 
 /** Preserve recorded background routes; new member metadata comes only from production transitions and reads. */
 export async function memberLifecycleFixture(template:ScreenFixture):Promise<ScreenFixture>{
@@ -30,6 +31,7 @@ export async function memberLifecycleFixture(template:ScreenFixture):Promise<Scr
   if(member.modelGroup!=='default')await dispatch('fixture-group-'+member.id,{type:'set-member-group',memberId,modelGroup:member.modelGroup},owner);
  }
  now=source.now;assert.equal((await service.act({commandId:'fixture-archive-member',action:'archive',memberId:mapping.get(archived.id)!})).status,'committed');
+ const page=['B19','B19-juno'].includes(source.screen)?await produceMemberPage(store,service,now,mapping.get(source.screen==='B19'?'member-quill':'member-juno')!,source.screen==='B19-juno'):undefined;
  validateMissionJournalLineage(store.inspect());
  // IDs occur in route keys, setup selectors, skill IDs and Work member references.
  let serialized=JSON.stringify(source);for(const [before,after] of mapping)serialized=serialized.replaceAll(before,after);const fixture=JSON.parse(serialized) as ScreenFixture;
@@ -37,8 +39,14 @@ export async function memberLifecycleFixture(template:ScreenFixture):Promise<Scr
  if(mission)await store.commit({id:mission.id,expectedRevision:0,commandId:'fixture-recorded-intake',fingerprint:hash(mission),value:mission,events:[],outbox:[]});
  // Fixture transport keeps its existing feed envelope; every member field is the service projection.
  const read={...await service.read(),feedId:conversation.feedId};fixture.routes['/assistant/members']={status:200,body:read};
+ if(page){
+  const prior=fixture.routes['/assistant/skills']!.body as typeof page.skills,added=page.skills.skills;
+  fixture.routes['/assistant/skills']={status:200,body:{...prior,skills:[...added,...prior.skills.filter(s=>!added.some(b=>b.memberId===s.memberId&&b.name===s.name))]}};
+  fixture.routes['/assistant/schedules']={status:200,body:{...page.schedules,feedId:conversation.feedId}};
+  if(page.conversation){const memberId=mapping.get('member-quill')!,body={...page.conversation,feedId:conversation.feedId,members:read.members,member:{id:memberId,name:read.members.find(m=>m.id===memberId)!.name},decisions:[]};fixture.routes['/assistant/conversation?member='+memberId]={status:200,body};fixture.routes['/assistant/conversation?segment=1&member='+memberId]={status:200,body};}
+ }
  for(const [path,response] of Object.entries(fixture.routes))if(path==='/assistant/conversation'||path.startsWith('/assistant/conversation?'))(response.body as {members:typeof read.members}).members=structuredClone(read.members);
  let appSource=await readFile(new URL('./fixtures/B23.json',import.meta.url),'utf8');for(const [before,after] of mapping)appSource=appSource.replaceAll(before,after);const appTemplate=JSON.parse(appSource) as ScreenFixture;appTemplate.routes['/assistant/conversation']=structuredClone(fixture.routes['/assistant/conversation']!);const apps=await appLifecycleFixture(appTemplate);fixture.routes['/assistant/apps']=apps.routes['/assistant/apps']!;
- fixture.reuse.push('scripts/ui-contracts/member-lifecycle-fixtures.ts: production member admission/archive, validated member journal and MembersService.read; no member memory or schedules');
+ fixture.reuse.push('scripts/ui-contracts/member-lifecycle-fixtures.ts: production member admission/archive and MembersService.read; member-page-fixtures.ts adds journal-validated builtin assignments, exact saved candidate memory and member schedules');
  return fixture;
 }
