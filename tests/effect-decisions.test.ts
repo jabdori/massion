@@ -217,3 +217,16 @@ test('minor-unit display preserves safe integer precision for zero, three and fo
  const {paymentAmount}=await import('../src/payment-intent.ts');
  for(const [currency,amountMinor,expected] of [['USD',Number.MAX_SAFE_INTEGER,'90,071,992,547,409.91 USD'],['KRW',34000,'34,000원'],['JPY',1,'1 JPY'],['KWD',1,'0.001 KWD'],['CLF',1,'0.0001 CLF']] as const)assert.equal(paymentAmount({...intent,kind:'payment-intent',currency,amountMinor}),expected);
 });
+
+test('typed terminal decisions name their payee and amount at the actual owner answer time',async()=>{
+ for(const answer of ['act','reject']){
+  const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!;s.advance(60000);await s.service.decide(intentAnswer(e,'answer',answer));
+  const d=(await s.service.decisions())[0]!;assert.match(d.line,/Example supplier/);assert.match(d.line,/123.45 USD/);assert.match(d.line,answer==='act'?/승인됨 · Massion 미실행/:/거절됨/);assert.equal(d.at,NOW+60000);assert.equal((d as any).answeredAt,NOW+60000);
+ }
+});
+test('typed source rows label only the declared reference kind without exposing internal identifiers',async()=>{
+ for(const [sourceReference,label] of [['document:quote','문서 참조'],['record:private-id','기록 참조'],['work:private-id','작업 참조'],['https://example.com/private','웹 주소'],['opaque-private-id','출처 참조']]){
+  const s=await setup();await s.propose({...intent,sourceReference} as any);const d=(await s.service.decisions())[0]!;
+  assert.equal(d.rows.find(row=>row[0]==='출처')?.[1],label);assert.ok(!JSON.stringify(d.rows).includes(sourceReference!));assert.equal((d.effect.request as any).sourceReference,sourceReference);
+ }
+});

@@ -1,4 +1,10 @@
 {
+ "ui.payment-intent.decision-line": {"ko":"{payee} · {amount} · {state}","roles":["text"],"used_in":[]},
+ "ui.payment-intent.source-document": {"ko":"문서 참조","roles":["text"],"used_in":[]},
+ "ui.payment-intent.source-record": {"ko":"기록 참조","roles":["text"],"used_in":[]},
+ "ui.payment-intent.source-work": {"ko":"작업 참조","roles":["text"],"used_in":[]},
+ "ui.payment-intent.source-web": {"ko":"웹 주소","roles":["text"],"used_in":[]},
+ "ui.payment-intent.source-reference": {"ko":"출처 참조","roles":["text"],"used_in":[]},
  "ui.payment-intent.question": {"ko":"{amount} 결제 승인할까요?","roles":["text"],"used_in":[]},
  "ui.payment-intent.payee": {"ko":"받는 곳","roles":["text"],"used_in":[]},
  "ui.payment-intent.purpose": {"ko":"용도","roles":["text"],"used_in":[]},

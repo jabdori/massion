@@ -29,3 +29,11 @@ B8/B15 browser/form or real execution rows are not evidence of this intent gate.
 ## Limits
 
 One unresolved intent per Work; multiple simultaneous worker intents fail closed rather than dropping one or approving several. Approved and declined Works remain paused; no automatic continuation, actual payment integration or replay is added. The source reference is never fetched. The normal effect decision surface remains scoped to the current intake Mission. Restart tests validate retained fixture state and journal replay; they do not claim a live payment or real-database run.
+
+## Lead review correction (R-S fix round 1)
+
+- Typed payment decisions no longer arm or honor the browser's external-effect receipt lock. A refused or lost answer can be explicitly attempted again when durable readback still says open; the existing single-use reducer rejects any second consumption. Executable payments retain their no-resend guard.
+- Regression tests reproduce 500, host drain/contention 503 and a rejected network/timeout response, then exercise another answer. A retained lock from the earlier client no longer hides or blocks the typed decision.
+- Approved/declined lines now identify the payee and amount/currency and use the recorded owner-answer time, including chronological placement. Work detail keeps the same identity in its timeline.
+- The source row shows the declared reference kind (document, Record, Work, web address or generic reference). The internal reference remains immutable in the intent but is never rendered as the row label; no source is fetched or verified.
+- Related effect/client/Work-pane tests: 88 passed. Typecheck passed. The browser verification regenerated all listed screenshots and snapshots, and asserts the human source label plus the exact payee/amount/answer/time in both themes and after mobile reload.

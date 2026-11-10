@@ -12,7 +12,7 @@
     "reused": true,
     "saveStatus": "not_attempted"
   },
-  "origin": "http://127.0.0.1:54536/",
+  "origin": "http://127.0.0.1:50528/",
   "refs": {
     "e25": {
       "name": "주 메뉴",
@@ -76,5 +76,5 @@
     }
   },
   "removedRefs": [],
-  "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e25]\n    - button \"하나\" [ref=e27]\n    - button \"결과물\" [ref=e28]\n    - button \"예약\" [ref=e29]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e30]\n  - main \"하나\" [ref=e26]\n    - sectionheader\n      - button \"사이드바 보기\" [expanded=false, ref=e31]\n      - heading \"하나\" [level=1, ref=e32]\n        - button \"하나\" [ref=e35]\n      - button \"더 보기\" [expanded=false, ref=e33]\n    - region \"대화\" [ref=e34]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 10일 (화)\"\n          - paragraph\n            - StaticText \"승인됨 · Massion 미실행\"\n          - paragraph\n            - StaticText \"거절됨\"\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e36]\n          - button \"파일 추가\" [disabled, ref=e37]\n          - button \"기본 권한\" [ref=e38]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e39]"
+  "snapshot": "- generic\n  - navigation \"주 메뉴\" [ref=e25]\n    - button \"하나\" [ref=e27]\n    - button \"결과물\" [ref=e28]\n    - button \"예약\" [ref=e29]\n    - generic\n      - button \"내 계정\" [expanded=false, ref=e30]\n  - main \"하나\" [ref=e26]\n    - sectionheader\n      - button \"사이드바 보기\" [expanded=false, ref=e31]\n      - heading \"하나\" [level=1, ref=e32]\n        - button \"하나\" [ref=e35]\n      - button \"더 보기\" [expanded=false, ref=e33]\n    - region \"대화\" [ref=e34]\n      - generic\n        - log\n          - paragraph\n            - StaticText \"11월 10일 (화)\"\n          - paragraph\n            - StaticText \"공급처 · 34,000원 · 승인됨 · Massion 미실행 · 18:48\"\n          - paragraph\n            - StaticText \"공급처 · 12,000원 · 거절됨 · 18:48\"\n      - generic\n        - form\n          - textbox \"하나에게 메시지 보내기\" [ref=e36]\n          - button \"파일 추가\" [disabled, ref=e37]\n          - button \"기본 권한\" [ref=e38]\n            - StaticText \"기본 권한\"\n          - button \"보내기\" [ref=e39]"
 }

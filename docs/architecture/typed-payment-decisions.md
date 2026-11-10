@@ -21,3 +21,7 @@ Tests cover malformed/oversized amounts and currencies, tampered intent and inpu
 Real receipts, order history, merchant/browser observations, subscription CLI proof, multi-stage shopping timestamps and payment execution remain unavailable. Keep their exceptions with precise reasons; add no scenario-specific product logic. Fixture declarations prove only typed approval, never real payment or browser observation.
 
 Currency source: [SIX ISO 4217 maintenance agency](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html), current List One checked 2026-11-10. Persist a fixed minor-unit mapping so later ICU upgrades do not change journal validation.
+
+## Lead review correction and delivery
+
+R-S fix round 1 authorizes completing the three lead findings, then merging current `origin/main` and PR #150 after CI and Codex are clean. This supersedes the initial do-not-merge delivery instruction. Typed owner-answer requests have no execution receipt lock; persisted single-use decision state governs any explicit attempt after a lost/refused response. Displayed terminal lines carry the declared payee/amount and recorded answer time. Source rows label only the declared reference kind, retaining the exact original reference in the hashed intent without fetching it.
