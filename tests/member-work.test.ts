@@ -174,20 +174,20 @@ test('set-member-group: a racing identical answer replays; after drain starts th
 
 test('member 1:1 conversation: a remark about its open Work is recorded as that Work\'s steering, the owner\'s exact words, once',async t=>{
  const f=await setup(t),quill=await f.admit();
- const {work}=await runningWork(f,t);
+ const {work,release}=await runningWork(f,t);
  const chat=f.chatFor(quill),text='Only annual plan customers for the churn work.',commandId='m-steer';
  f.script.push(steer('Annual plans only, then.',work.id));
  const [a,b]=await Promise.all([f.say(chat,text,commandId),f.say(chat,text,commandId)]);
  const prompt=f.prompts.at(-1)!.prompt;assert.deepEqual(prompt.works,[{id:work.id,title:'Churn causes'}]);assert.deepEqual(prompt.member,{name:'Quill'});
  assert.equal(f.prompts.filter(p=>p.prompt.currentMessage===text).length,1,'one model call for the same command');
  assert.deepEqual([a.message.status,b.message.status].sort(),['committed','replayed']);
- await confirmLast(chat);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.deepEqual(after.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text}]);assert.equal(after.execution,work.blocker?'blocked':'waiting','steering preserves an existing runtime blocker');
+ await confirmLast(chat);const after=(await f.intake()).works.find(w=>w.id===work.id)!;assert.deepEqual(after.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text}]);assert.equal(after.execution,work.blocker?'blocked':'active','steering preserves an existing runtime blocker');
  const read=await chat.read();assert.deepEqual(read.turns[0]!.steer,{missionId:'intake',workId:work.id,status:'recorded',title:'Churn causes'});
  // A Work not in this member's list is never steered.
  f.script.push(steer('Sure.','assistant-000000000000000000000000'));const other=await f.say(chat,'And the other thing.');
  assert.equal((await chat.read()).turns.find(x=>x.id===other.turn!.id)!.steer,undefined);
  assert.equal((await f.intake()).works.find(w=>w.id===work.id)!.instructions!.length,1);
- await f.assistant.idle();validateMissionJournalLineage(f.store.inspect() as any);
+ release();await f.assistant.idle();validateMissionJournalLineage(f.store.inspect() as any);
 });
 
 test('a steer resuming after drain starts goes through the owner store, is refused and settles not recorded; nothing is resent',async t=>{
@@ -261,7 +261,7 @@ test('an ambiguous steering commit is not resent even when the same owner messag
  const running=await runningWork(f,t),work=running.work;
  let commits=0;const ownerStore=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events[0].type==='steer'){commits++;throw new CommitOutcomeUnknownError(input,new Error('Lost reply'));}return result;};const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}});
  const chat=f.chatFor(quill,ownerStore);f.script.push(steer('Annual plans only.',work.id));await f.say(chat,'Annual plans only.','ambiguous-steer');await confirmLast(chat);await f.say(chat,'Annual plans only.','ambiguous-steer');await confirmLast(chat);
- assert.equal(commits,1);assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans only.'}]);
+ assert.equal(commits,1);assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,false);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans only.'}]);
 });
 
 test('a duplicate message committed after its replay lookup returns the stored result',async t=>{
@@ -272,16 +272,16 @@ test('a duplicate message committed after its replay lookup returns the stored r
 });
 
 
-test('a member steering message interrupts the active provider call after recording the owner instruction',async t=>{
+test('a member steering message preserves the admitted assembly and stops if its remaining budget cannot fund a revision',async t=>{
  const f=await setup(t),quill=await f.admit();let entered=()=>{},release=()=>{},signal:AbortSignal|undefined;
  const started=new Promise<void>(r=>{entered=r;}),pending=new Promise<void>(r=>{release=r;});
  f.setWorker(async()=> 'Answer bounded worker evidence');
  f.setExecutionHook(async s=>{signal=s;entered();s.addEventListener('abort',release,{once:true});await pending;});t.after(async()=>{release();await f.assistant.idle();});
  f.script.push(v2('On it.','Churn causes','Quill'));await f.say(f.assistant,'Find churn causes');await started;
- const work=(await f.intake()).works.at(-1)!;f.script.push(steer('Annual plans only.',work.id));const chat=f.chatFor(quill);await f.say(chat,'Annual plans only.');await confirmLast(chat);
- assert.equal(signal?.aborted,true,'the stored steer must interrupt the already running call');
+ const work=(await f.intake()).works.at(-1)!;f.setNow(Date.now());f.script.push(steer('Annual plans only.',work.id));const chat=f.chatFor(quill);await f.say(chat,'Annual plans only.');await confirmLast(chat);
+ assert.equal(signal?.aborted,false,'the admitted call finishes once');release();
  await f.assistant.idle();const server=createWorkbench(f.store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
- const listed=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/works').then(r=>r.json()) as any;const stopped=listed.works.find((w:any)=>w.workId===work.id);assert.equal(stopped.execution,'waiting');assert.ok(Number.isSafeInteger(stopped.endedAt));
+ const listed=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/works').then(r=>r.json()) as any;const stopped=listed.works.find((w:any)=>w.workId===work.id);assert.equal(stopped.execution,'blocked');assert.ok(Number.isSafeInteger(stopped.endedAt));
  assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'Annual plans only.'}]);
 });
 
@@ -316,7 +316,7 @@ test('review 3: an unconfirmed steering write stays unknown and is never resent'
 });
 
 test('review 6: another host changes intake while the earlier member Work is still active',async t=>{
- const f=await setup(t);await f.admit();const {work}=await runningWork(f,t);
+ const f=await setup(t);await f.admit();const {work,release}=await runningWork(f,t);
  await f.product.create({id:'next-intake',purpose:'Next',scope:'local',constraints:[],criteria:{version:1,description:'Check',oracle:'bounded-text-review/v1'}},'next-intake');
  const connections=createHostConnections(f.store,f.artifacts,{manifest,allowLiveExecution:false},{transport:f.transport,settings:f.settings,readEnvironment:()=>undefined});await connections.restoreSettings();const other=new AssistantService(f.store,f.product,connections);
  await other.setSettings({profileId:f.profile('openai/gpt-rep'),outputTokenCap:64,intakeMissionId:'next-intake',expectedConfigHash:connections.list().configHash});
@@ -370,7 +370,7 @@ test('review 8: legacy end-time journals replay their original overwrite rule',a
  assert.equal((await store.load('legacy'))!.value.works[0]!.endedAt,200);validateMissionJournalLineage(store.inspect());
 });
 
-test('review 3: a later confirmed steering receipt interrupts the still-owned local run',async t=>{
+test('review 3: a later confirmed steering receipt preserves the continuing local run',async t=>{
  const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let confirmed=false,writes=0;
  const store=new Proxy(f.store,{get(target,key){
   if(key==='commit')return async(input:any)=>{const result=await target.commit(input);if(input.events[0].type==='steer'){writes++;throw new CommitOutcomeUnknownError(input,new Error('Lost reply'));}return result;};
@@ -379,7 +379,7 @@ test('review 3: a later confirmed steering receipt interrupts the still-owned lo
  }});
  const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('Sure.',running.work.id));await f.say(chat,'Annual plans');await confirmLast(chat);
  assert.equal((await chat.read()).turns[0]!.steer?.status,'unknown');assert.equal(running.signal().aborted,false);
- confirmed=true;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,true);assert.equal(writes,1);
+ confirmed=true;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');assert.equal(running.signal().aborted,false);assert.equal(writes,1);
  confirmed=false;assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded','a later unavailable receipt read cannot erase the confirmed outcome');
 });
 
@@ -419,7 +419,7 @@ test('a model-selected steering target is only proposed until the owner explicit
  const server=createWorkbench(f.store,f.root,{connections:f.m,artifacts:f.artifacts,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());const url='http://127.0.0.1:'+(server.address() as {port:number}).port,feed=(await chat.read()).feedId,body={member:quill.id,segment:1,turnId:sent.turn!.id};
  const post=(data:any,feedId=feed)=>fetch(url+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json','x-massion-feed':feedId},body:JSON.stringify(data)});
  assert.equal((await post({...body,text:'Injected text'})).status,400);assert.equal((await post({...body,workId:'other'})).status,400);assert.equal((await post(body,'old-feed')).status,409);assert.equal(running.signal().aborted,false);
- const replies=await Promise.all([post(body),post(body)]);assert.ok(replies.every(r=>r.status===200));assert.equal(running.signal().aborted,true);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'An unrelated greeting'}]);
+ const replies=await Promise.all([post(body),post(body)]);assert.ok(replies.every(r=>r.status===200));assert.equal(running.signal().aborted,false);assert.deepEqual((await f.intake()).works.at(-1)!.instructions?.map(({at,...value})=>{assert.ok(Number.isSafeInteger(at));return value;}),[{actorId:'local-owner',text:'An unrelated greeting'}]);
  assert.equal((await chat.read()).turns[0]!.steer?.status,'recorded');validateMissionJournalLineage(f.store.inspect() as any);
 });
 
@@ -492,7 +492,7 @@ for(const outcomeFails of [false,true])test(`confirmation audit: a definite Work
 test('confirmation audit: a replayed Work receipt is recorded without a second instruction',async t=>{
  const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let writes=0;
  const ownerStore=intercepted(f.store,{commit:async(input:any)=>{const result=await f.store.commit(input);if(input.events[0].type==='steer'){writes++;return {...result,status:'replayed'};}return result;}}),chat=f.chatFor(quill,ownerStore);f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
- assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(writes,1);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);assert.equal(running.signal().aborted,true);
+ assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(writes,1);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);assert.equal(running.signal().aborted,false);
 });
 
 test('confirmation audit: a definite reconciliation conflict is not an unknown Work outcome',async t=>{
@@ -505,7 +505,7 @@ test('confirmation audit: a definite reconciliation conflict is not an unknown W
 for(const stage of ['confirm-assistant-steer','steer'] as const)test(`confirmation audit: an unclassified ${stage} commit error is reconciled, never called a definite refusal`,async t=>{
  const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t);let writes=0;
  const ownerStore=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type===stage){writes++;if(stage==='steer')await f.store.commit(input);throw new Error('Unclassified lost acknowledgment');}return f.store.commit(input);}}),chat=f.chatFor(quill,ownerStore);
- f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');assert.equal((await confirmLast(chat)).status,stage==='steer'?'recorded':'unknown');await confirmLast(chat);assert.equal(writes,1);assert.equal(running.signal().aborted,stage==='steer');
+ f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');assert.equal((await confirmLast(chat)).status,stage==='steer'?'recorded':'unknown');await confirmLast(chat);assert.equal(writes,1);assert.equal(running.signal().aborted,false);
 });
 
 for(const stage of ['confirm-assistant-steer','steer'] as const)test(`confirmation audit: a proven transaction rollback at ${stage} is a definite HTTP refusal`,async t=>{
@@ -520,7 +520,7 @@ for(const stage of ['confirm-assistant-steer','steer'] as const)test(`confirmati
 for(const uncertain of [false,true])test(`confirmation audit: outcome-record ${uncertain?'uncertainty':'rollback'} preserves the known Work result and correct drain status`,async t=>{
  const f=await setup(t),quill=await f.admit(),running=await runningWork(f,t),{StorageQueryError}=await import('../src/storage.ts');
  const store=intercepted(f.store,{commit:async(input:any)=>{if(input.events[0].type==='record-assistant-steer')throw uncertain?new CommitOutcomeUnknownError(input,new Error('Lost outcome receipt')):new StorageQueryError('Outcome rolled back');return f.store.commit(input);}}),chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('A proposal.',running.work.id));await f.say(chat,'Annual plans');
- assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(running.signal().aborted,true);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);
+ assert.equal((await confirmLast(chat)).status,'recorded');assert.equal(running.signal().aborted,false);assert.equal((await f.intake()).works.at(-1)!.instructions!.length,1);
  if(uncertain)await assert.rejects(chat.drain(),/unsettled/);else await chat.drain();
 });
 
@@ -538,7 +538,7 @@ for(const uncertain of [false,true])test(`confirmation audit: a final snapshot r
  const chat=new AssistantService(store,f.product,f.m,{member:quill});f.script.push(steer('A proposal.',running.work.id));const sent=await f.say(chat,'Annual plans');
  const server=createWorkbench(store,f.root,{connections:f.m,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const response=await fetch('http://127.0.0.1:'+(server.address() as {port:number}).port+'/assistant/steering',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({member:quill.id,segment:1,turnId:sent.turn!.id})}),body=await response.json() as any;
- assert.equal(response.status,200);assert.equal(body.status,uncertain?'unknown':'recorded');assert.notEqual(body.outcome,'rejected');assert.equal(running.signal().aborted,!uncertain);
+ assert.equal(response.status,200);assert.equal(body.status,uncertain?'unknown':'recorded');assert.notEqual(body.outcome,'rejected');assert.equal(running.signal().aborted,false);
 });
 
 test('Q13 member procedure becomes nested workers with retained skips and independent evidence',async t=>{
@@ -818,7 +818,7 @@ test('continued steering retains restart no-replay and refuses unsafe or legacy 
  f.setWorker(async(_p,signal)=>{entered();signal.addEventListener('abort',release,{once:true});await gate;return 'Answer bounded evidence';});
  t.after(async()=>{release();await f.assistant.idle();});f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await started;
  const before=(await f.store.load('intake'))!,w=before.value.works.at(-1)!,command:Command={type:'steer',workId:w.id,instruction:'Enterprise customers'},owner={id:'local-owner',roles:['owner'] as const},time={observedAt:Date.now(),telemetryVersion:1 as const,workEndVersion:2 as const};
- for(const mutate of [(x:any)=>delete x.runtimeRun.steeringVersion,(x:any)=>{x.effects.at(-1).status='unknown';},(x:any)=>{x.artifact={id:'a',version:1,sha256:'a'.repeat(64),path:'a',kind:'text'};},(x:any)=>{x.runtimeRun.ownership.deadlineAt=time.observedAt;}]){
+ for(const mutate of [(x:any)=>delete x.runtimeRun.steeringVersion,(x:any)=>{x.effects.at(-1).status='unknown';},(x:any)=>{delete x.runtimeRun.continuationVersion;delete x.runtimeRun.continuationConfig;x.artifact={id:'a',version:1,sha256:'a'.repeat(64),path:'a',kind:'text'};},(x:any)=>{x.runtimeRun.ownership.deadlineAt=time.observedAt;}]){
   const state=structuredClone(before.value);mutate(state.works.at(-1));assert.equal(apply(state,command,owner,time).value.works.at(-1)!.execution,'waiting');
  }
  const reply=await f.product.intervene('intake',{commandId:'before-restart',expectedRevision:before.revision,command});assert.notEqual(reply.status,'conflict');
@@ -889,4 +889,15 @@ test('file workers receive exact selected bytes and acknowledge future-step note
  const inputs=w.effects.filter(e=>e.providerDispatch?.fileInputs).flatMap(e=>e.providerDispatch!.fileInputs!);assert.deepEqual(inputs.map(i=>i.path),['src/a.ts','src/b.ts']);assert.deepEqual(inputs.map(i=>i.sha256),[documentContentHash('const a = 1;'),documentContentHash('const b = 2;')]);
  validateMissionJournalLineage(f.store.inspect());
  const {readRecordArtifact}=await import('../src/record-artifact.ts');assert.ok(await readRecordArtifact(f.store,f.artifacts,'intake',w.id,{recordId:w.record!.id,artifactVersion:w.artifact!.version,artifactSha256:w.artifact!.sha256}));
+});
+
+test('late confirmed steering and resumed checkpoints retain complete portable journal provenance',async t=>{
+ const f=await setup(t),quill=await f.admit();
+ const run=f.m.run.bind(f.m);f.m.run=async(missionId,workId,runId,revision,choice,actor)=>{await f.product.reviseBudget(missionId,{commandId:'continuation-budget',expectedRevision:revision,workId,limit:100,reason:'Bounded revision fixture'});return run(missionId,workId,runId,revision+1,choice,actor);};
+ const running=await runningWork(f,t),chat=f.chatFor(quill);f.script.push(steer('Annual plans only.',running.work.id));await f.say(chat,'Annual plans only.');await confirmLast(chat);
+ let crashed=false;const commit=f.store.commit.bind(f.store);f.store.commit=async input=>{const e=input.events[0] as any,result=await commit(input);if(!crashed&&e?.type==='receipt'&&e.command.effectId.includes(':executor:revision:2')){crashed=true;throw Error('Crash after revised assembly receipt');}return result;};
+ running.release();await f.assistant.idle();assert.ok(crashed);f.store.commit=commit;
+ const connections=createHostConnections(f.store,f.artifacts,{manifest,allowLiveExecution:false},{transport:f.transport,settings:f.settings,readEnvironment:()=>undefined});await connections.restoreSettings();
+ assert.equal((await connections.resume('intake',running.work.id)).status,'settled');const w=(await f.intake()).works.at(-1)!;
+ assert.equal(w.artifact!.version,2);assert.equal(w.runtimeRun!.resumptions!.length,1);assert.equal(w.instructions![0]!.text,'Annual plans only.');validateMissionJournalLineage(f.store.inspect());
 });

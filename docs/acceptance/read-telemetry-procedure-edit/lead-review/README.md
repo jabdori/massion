@@ -58,9 +58,8 @@ Separate mobile card captures prove the Record section itself is fully reachable
 - Seven contract screens in both themes: zero new, stale or infrastructure
   diagnostics. Existing unrelated allowances remain unchanged.
 - All eight browser state/theme runs passed; [measured results](report.json).
-- `rg -n -i 'churn|pricing|toner|member-(quill|juno)|test step example' src desktop`
-  finds no scenario-specific product code (the actual check also includes the
-  prototype's Korean step title).
+- `rg -n -i 'churn|pricing|toner|member-(quill|juno)|테스트 먼저 돌리기' src desktop`
+  finds no scenario-specific product code.
 - Removed the pre-existing worker-role string comparison for reading state. The
   generic query now uses pending file-delivery claims. The fixture was extended
   through actual source capture, dispatch and receipt commands so its reading
@@ -69,3 +68,11 @@ Separate mobile card captures prove the Record section itself is fully reachable
 No real provider, payment or GitHub-account calls were made. Main integration,
 CI and current-head Codex evidence are recorded on PR #147 before its authorized
 merge; these local test counts are not added together with CI counts.
+
+## Main integration
+
+Merged the safe restart/assembly continuation changes from main, preserving both
+the continuation fences and R-N's timestamps, note acknowledgement and exact file
+inputs. Related member/runtime/credential/telemetry tests: 138 passed, no failures
+or skips; typecheck passed. The file-claim boundary also checks retained original
+ownership, resumed ownership and refusal of an unbound host.

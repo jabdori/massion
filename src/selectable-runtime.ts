@@ -75,6 +75,15 @@ export class SelectableTextRuntime implements WorkRuntime {
   if(!prepared.runtime)return {status:'blocked',snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
   const key=`${missionId}\0${workId}`;this.#active.set(key,prepared.runtime);return prepared.runtime.run(missionId,workId,runId,expectedRevision,choice,activationActorId);
  }
+ resume(missionId:string,workId:string):Promise<RuntimeResult>{
+  const key=`${missionId}\0${workId}`,owned=this.#active.size===0;if(owned)this.#active.set(key,undefined);
+  const task=(async()=>{const snapshot=await this.#store.load(missionId);if(!snapshot)throw new Error('Unknown Mission');const run=snapshot.value.works.find(w=>w.id===workId)?.runtimeRun,bindings=run?.connectionBindings;
+   if(!owned||this.#draining||!bindings)return {status:'blocked' as const,snapshot,reason:'No original available runtime'};
+   const prepared=this.prepare({...snapshot.value,criteria:snapshot.value.works.find(w=>w.id===workId)!.criteria},{executorProfileId:bindings.executor.profileId,verifierProfileId:bindings.verifier.profileId,authorizationId:run!.authorizationId,outputTokenCap:run!.outputTokenCap});
+   if(!prepared.runtime)return {status:'blocked' as const,snapshot,reason:prepared.diagnostics.map(d=>d.message).join(' ')};
+   this.#active.set(key,prepared.runtime);return prepared.runtime.resume(missionId,workId);
+  })();this.#runs.add(task);void task.finally(()=>{if(owned)this.#active.delete(key);this.#runs.delete(task);}).catch(()=>{});return task;
+ }
  owns(missionId:string,workId:string,runId:string){return this.#active.get(`${missionId}\0${workId}`)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(`${missionId}\0${workId}`)?.interrupt(missionId,workId);}
 }

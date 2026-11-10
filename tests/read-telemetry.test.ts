@@ -18,6 +18,10 @@ test('file delivery claims bind exact pinned bytes, assigned effect and original
  const work={id:'w',sourceDocuments:[{document,actorId:'owner',reason:'Review'}],runtimeRun:{id:'run',authorizationId:'grant',ownership:{hostSessionId:'host',dispatchId:'dispatch',startedAt:100,deadlineAt:200}},tasks:[{id:'step',parentId:'executor',status:'active',step:{title:'Read',role:'Read',dependsOn:[]}}],assignments:[{id:'assignment',actorId:'worker',taskId:'step',model:{provider:'fixture',model:'fixture',configVersion:'v1'}}]} as unknown as Work;
  const effect={id:'effect',taskId:'step',status:'pending' as const,target:'fixture/fixture',authority:'grant'},claim={id:'claim',runId:'run',hostSessionId:'host',dispatchId:'dispatch',actorId:'worker',assignmentId:'assignment',provider:'fixture',model:'fixture',configVersion:'v1',requestHash:'b'.repeat(64),claimedAt:120,fileInputs:[{documentId:'source',path:'src/a.ts',sha256:documentContentHash('const value = 1;')}]} as unknown as ProviderDispatchClaim;
  assert.doesNotThrow(()=>validateProviderDispatch(work,effect,claim));
+ work.runtimeRun!.resumptions=[{hostSessionId:'resumed-host',dispatchId:'resumed-dispatch',startedAt:100,deadlineAt:200}];
+ assert.doesNotThrow(()=>validateProviderDispatch(work,effect,claim));
+ assert.doesNotThrow(()=>validateProviderDispatch(work,effect,{...claim,id:'resumed-claim',hostSessionId:'resumed-host',dispatchId:'resumed-dispatch'}));
+ assert.throws(()=>validateProviderDispatch(work,effect,{...claim,hostSessionId:'unbound-host',dispatchId:'resumed-dispatch'}),/claim/i);
  for(const files of [[{documentId:'source',path:'src/missing.ts',sha256:'b'.repeat(64)}],[{documentId:'source',path:'src/a.ts',sha256:'b'.repeat(64)}],[],[null],[...(claim as any).fileInputs,...(claim as any).fileInputs]])assert.throws(()=>validateProviderDispatch(work,effect,{...claim,fileInputs:files} as any),/file|claim/i);
 });
 
