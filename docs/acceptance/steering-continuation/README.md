@@ -86,3 +86,24 @@ now uses the existing bounded journal-only revision retry, preserving the failed
 receipt and owner instruction with exactly one planning and one worker call.
 The affected 21-test steering/unknown-outcome batch and typecheck passed; provider
 invocation, ambiguity and legacy handling remain unchanged.
+
+## Final approved integration
+
+Merge main `857ffcb` (PR #141 procedure screens and PR #139) without rebase or
+force push. Preserve the complete procedure tests and named worker summaries.
+The steering fixture now consumes the new multi-step source without admitting
+already-regenerated worker effects again; ready workers start before their
+results, dependencies/skips/results stay pinned, and summaries use the shared
+`workCardFacts` projection. Existing fixture tests first exposed the duplicate
+settled-task admission, then passed with exact step/result/status assertions.
+
+Related tests: 239 passed, zero failures/skips; typecheck passed. Both themes'
+steering and table interactions passed. Ten scoped screen/theme captures have
+zero new, stale or infrastructure diagnostics after removing the two obsolete
+Record-row allowances: [gate](main141-gate.json). Main has 308 allowances; this
+branch has 294, retaining the 14 steering removals. Earlier 20-count evidence
+uses its earlier base; six of those removals are now already present in main.
+
+The lead explicitly authorized merge after all six current-head CI checks pass
+and GitHub reports mergeable. This integration does not request another Codex
+receipt. The merge outcome remains recorded in PR #137.

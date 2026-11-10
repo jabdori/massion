@@ -20,7 +20,7 @@ function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'&&path==='/assistant/apps/view'){const b=JSON.parse(options.body);if(view)return reply(await view(b,options.headers??{}));return reply(b.app==='app-github'&&b.handler==='page'&&b.ref===undefined?page:b.handler==='item'&&b.ref==='84'?item:{error:'x'});}
   if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});if(loseReply)await loseReply();return reply({status:'committed',revision:2});}
-  if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[installedApp,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'Pull requests',installed}]});
+  if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[installedApp,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'Pull requests',available:true,installed}]});
   if(path==='/missions/intake')return reply(structuredClone(sourceFixture.routes[path]!.body));
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?rail:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});

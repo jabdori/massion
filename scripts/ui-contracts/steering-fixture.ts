@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {Application} from '../../src/application.ts';
 import {AssistantConversation,ASSISTANT_ACTOR_ID,ownerMessageId,assistantTurnId,segmentId} from '../../src/assistant-conversation.ts';
-import {AssistantService} from '../../src/assistant-service.ts';
+import {AssistantService,workCardFacts} from '../../src/assistant-service.ts';
 import {hash,workInputHash} from '../../src/domain.ts';
 import type {Actor,Command,Mission,Work} from '../../src/domain.ts';
 import {InMemoryStore} from '../../src/storage.ts';
@@ -46,17 +46,21 @@ export async function steeringFixture(template:ScreenFixture){
  const turnId=await exchange('rf-direction',owner.text,reply.text,true);
  const chat=new AssistantService(store,new ProductService(store),undefined,{member:{id:'member-quill',name:'퀼',modelGroup:'default'},clock:()=>now});
  assert.equal((await chat.confirmSteer({segment:1,turnId})).status,'recorded');assert.equal((await work()).execution,'active');
- for(const task of steps){
-  now+=1000;const a=actor(task.id);
-  if(task.step!.skipReason){await send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},a.actorId);continue;}
-  if(task.status==='queued')continue;
-  const effect=task===first?firstEffect:{id:run.id+':'+task.id,taskId:task.id,status:'pending' as const,target:a.model.provider+'/'+a.model.model,authority:run.authorizationId};
-  if(task!==first)await send({type:'admit-effect',workId:original.id,effect,reserve:0,inputHash:workInputHash(await work())},a.actorId);
-  await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:'succeeded',receipt:task.result??'Fixture worker text; no external research',usage:0},a.actorId);
-  if(task.status==='settled')await send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},a.actorId);
+ const effectFor=(task:Work['tasks'][number])=>{const a=actor(task.id);return task===first?firstEffect:{id:run.id+':'+task.id,taskId:task.id,status:'pending' as const,target:a.model.provider+'/'+a.model.model,authority:run.authorizationId};};
+ const pending=steps.filter(t=>t.status!=='queued');
+ while(pending.length){
+  const current=await work(),ready=pending.filter(t=>t.step!.dependsOn.every(id=>current.tasks.find(x=>x.id===id)?.status==='settled'));assert.ok(ready.length,'Unresolved fixture dependencies');
+  for(const task of ready)if(!task.step!.skipReason&&task!==first){now++;await send({type:'admit-effect',workId:original.id,effect:effectFor(task),reserve:0,inputHash:workInputHash(await work())},actor(task.id).actorId);}
+  for(const task of ready){
+   now++;const a=actor(task.id);
+   if(!task.step!.skipReason)await send({type:'receipt',workId:original.id,effectId:effectFor(task).id,outcome:'succeeded',receipt:task.result??'Fixture worker text; no external research',usage:0},a.actorId);
+   if(task.status==='settled')await send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},a.actorId);
+   if(task.progress&&!task.step!.skipReason){const {at,...progress}=task.progress;await send({type:'record-step-progress',workId:original.id,taskId:task.id,progress},a.actorId);}
+   pending.splice(pending.indexOf(task),1);
+  }
  }
  if(original.execution==='settled'){
-  for(const effect of original.effects){await send({type:'admit-effect',workId:original.id,inputHash:workInputHash(await work()),effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:0},actor(effect.taskId).actorId);await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:'succeeded',receipt:effect.receipt!,usage:0},actor(effect.taskId).actorId);}
+  for(const effect of original.effects.filter(e=>!steps.some(t=>t.id===e.taskId))){await send({type:'admit-effect',workId:original.id,inputHash:workInputHash(await work()),effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:0},actor(effect.taskId).actorId);await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:'succeeded',receipt:effect.receipt!,usage:0},actor(effect.taskId).actorId);}
   await send({type:'publish-artifact',workId:original.id,artifact:original.artifact!},executor.actorId);
   const {checkedAt,...verdict}=original.verdict!;await send({type:'verify',workId:original.id,verdict},actor(original.id+':verifier').actorId);
   for(const task of tasks.filter(t=>!t.step&&t.parentId))await send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},actor(task.id).actorId);
@@ -65,7 +69,7 @@ export async function steeringFixture(template:ScreenFixture){
  const final=await work(),generated=await chat.read();assert.equal(final.execution,original.execution);
  for(const [path,response] of Object.entries(fixture.routes)){
   const body=response.body as any;
-  for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===final.id){row.startedAt=final.runtimeRun!.ownership!.startedAt;row.endedAt=final.endedAt??null;row.execution=final.execution;row.acceptance=final.acceptance;row.steps={done:final.tasks.filter(t=>t.step&&t.status==='settled').length,total:final.tasks.filter(t=>t.step).length};}
+  for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===final.id){row.startedAt=final.runtimeRun!.ownership!.startedAt;row.endedAt=final.endedAt??null;row.execution=final.execution;row.acceptance=final.acceptance;Object.assign(row,workCardFacts(final));}
   for(const value of [body?.value,body?.snapshot?.value])if(value?.id===mission.id){const index=value.works.findIndex((w:Work)=>w.id===final.id);if(index>=0)value.works[index]=structuredClone(final);}
   if(path.startsWith(memberPath)&&body.segment){const index=body.segment.messages.findIndex((m:any)=>m.id===firstMessage.id);if(index>=0){body.segment.messages.splice(index,4,...structuredClone(generated.segment!.messages));body.turns=body.turns.filter((t:any)=>![firstMessage.id,owner.id].includes(t.messageId));body.turns.push(...structuredClone(generated.turns));}}
   if(path.includes('/rejected-artifact?')&&body.workId===final.id){const value=await readRejectedText(store,{read:async()=>body.content},mission.id,final.id,{binding:hash(final),artifactVersion:final.artifact!.version,artifactSha256:final.artifact!.sha256});delete fixture.routes[path];const url=new URL(path,'http://fixture');url.searchParams.set('binding',hash(final));fixture.routes[url.pathname+url.search]={status:200,body:{...body,...value}};}

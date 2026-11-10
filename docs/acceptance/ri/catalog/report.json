@@ -1,0 +1,33 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B23",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "light",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23.png"
+    }
+  ]
+}

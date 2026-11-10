@@ -1,0 +1,102 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 5,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "dark",
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 6,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "steps": [
+      "출처 고르기",
+      "가격 모으기",
+      "요약",
+      "표 만들기",
+      "확인",
+      "기록"
+    ],
+    "copies": 4,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 5,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "steps": [
+      "범위 정하기",
+      "자료 모으기",
+      "나누기",
+      "설문 다시 보내기",
+      "원인 정리",
+      "확인",
+      "기록"
+    ],
+    "copies": 6,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "steps": [
+      "출처 고르기",
+      "가격 모으기",
+      "요약",
+      "표 만들기",
+      "확인",
+      "기록"
+    ],
+    "copies": 4,
+    "expanded": true,
+    "mobile": true,
+    "commands": 0
+  }
+]
