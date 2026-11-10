@@ -103,3 +103,7 @@ Integrated main through PR #146 without replacing browser observations or R-A pr
 Main PR #147 was subsequently integrated: file-read/procedure-edit observations coexist with browser-only authority and opaque navigation IDs. The merge validation passes 368 related tests, typecheck and the eight scoped screen/theme contracts without allowance deltas.
 
 The security review also reproduced a multiply encoded capability path reflected after server decoding. URL-secret collection now decodes to a bounded fixed point and re-splits every decoded component. Depths 2, 4 and 8 are checked through live query/journal/portable backup; excessive nesting and malformed decoding are refused. All four new regressions failed before the fix; the 163-test browser/privacy/lineage batch passes afterward.
+
+## Encoded structural text
+
+The follow-up security review reproduced percent-encoded reflections of a masked recovery code. Capture now refuses retained percent-encoded text before dispatch (including nested/fullwidth forms), and durable schema validation applies the same boundary. The four regressions failed before this fix; all 170 affected browser/privacy/lineage tests and typecheck pass afterward. This deliberately conservative behavior can make a page with legitimate percent-encoded display text unavailable; it adds no decoder or image persistence path.
