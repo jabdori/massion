@@ -46,11 +46,15 @@ function browserOperation(request:any){
   const index=config.elements.findIndex((e:any)=>e.id===action.element),declaration=config.elements[index],node=targets[index] as HTMLElement;
   if(!declaration.operations.includes(action.input.kind)||declaration.ownerOnly||action.gates.some((g:any)=>g.kind==='payment'))throw Error('Browser action denied');
   const input=action.input;
-  const form=node instanceof HTMLFormElement?node:(node as HTMLInputElement).form;
+  let activator:HTMLElement=node;
+  if(input.kind==='click')for(let candidate:HTMLElement|null=node;candidate;candidate=candidate.parentElement){if(candidate instanceof HTMLLabelElement&&candidate.control){activator=candidate.control;break;}if(candidate.matches('a[href],button,input')){activator=candidate;break;}}
+  else if(activator instanceof HTMLLabelElement&&activator.control)activator=activator.control;
+  if(ownerActivation(activator)||activator.matches(':disabled,[aria-disabled="true"],[inert]')||activator.closest('[inert]'))throw Error('Browser activator unavailable');
+  const form=activator instanceof HTMLFormElement?activator:(activator as HTMLInputElement).form;
   const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
-  if(node instanceof HTMLAnchorElement)route(node.href,node.target);
-  if(form){let address=form.action,target=form.target;if(node instanceof HTMLInputElement||node instanceof HTMLButtonElement){if(node.hasAttribute('formaction'))address=node.formAction;if(node.hasAttribute('formtarget'))target=node.formTarget;}route(address,target);
-   if(state.private&&['click','submit','key'].includes(input.kind)&&(form.method.toLowerCase()!=='post'||node.hasAttribute('formmethod')&&node.getAttribute('formmethod')?.toLowerCase()!=='post'))throw Error('Private form requires POST');
+  const anchor=input.kind==='click'?node.closest<HTMLAnchorElement>('a[href]'):null;if(anchor)route(anchor.href,anchor.target);
+  if(form){let address=form.action,target=form.target,method=form.method;if(activator instanceof HTMLInputElement||activator instanceof HTMLButtonElement){if(activator.hasAttribute('formaction'))address=activator.formAction;if(activator.hasAttribute('formtarget'))target=activator.formTarget;if(activator.hasAttribute('formmethod'))method=activator.formMethod;}route(address,target);
+   if(state.private&&['click','submit'].includes(input.kind)&&method.toLowerCase()!=='post')throw Error('Private form requires POST');
   }
   switch(input.kind){
    case 'type':{
@@ -62,7 +66,7 @@ function browserOperation(request:any){
    }
    case 'scroll':node.scrollBy({left:input.x,top:input.y,behavior:'instant'});break;
    case 'click':node.click();break;
-   case 'submit':if(!form)throw Error('Browser form unavailable');form.requestSubmit(node instanceof HTMLButtonElement&&node.type==='submit'||node instanceof HTMLInputElement&&['submit','image'].includes(node.type)?node:undefined);break;
+   case 'submit':if(!form)throw Error('Browser form unavailable');form.requestSubmit(activator instanceof HTMLButtonElement&&activator.type==='submit'||activator instanceof HTMLInputElement&&['submit','image'].includes(activator.type)?activator:undefined);break;
    default:throw Error('Browser operation unavailable');
   }
   return {delivered:true};
