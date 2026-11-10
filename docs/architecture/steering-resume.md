@@ -97,3 +97,9 @@ Combined steering/restart/credential tests passed 158 cases with five gated skip
 typecheck passed. A separate regression proves that clean checkpoint reservations
 remain held while resumable and settle to measured usage after the original
 deadline makes resumption impossible.
+
+The integrated-head review found steering during assembly-revision admission.
+Two regressions cover a change before the admission read and a CAS loss at
+commit. Both now refresh the revision input before any provider intent; unrelated
+journal conflicts retain the existing bounded retry. The affected 119 tests and
+typecheck passed.

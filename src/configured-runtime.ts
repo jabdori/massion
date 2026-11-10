@@ -200,6 +200,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   const workId='workId' in command?command.workId:undefined,owned=workId?this.controllers.get(`${missionId}\0${workId}`):undefined;
   const work=workId?s.value.works.find(w=>w.id===workId):undefined,ownership=work?currentOwnership(work):undefined;
   if(owned&&ownership?.dispatchId!==owned.dispatchId)throw new DomainError('Runtime dispatch ownership changed');
+  if(command.type==='begin-runtime-assembly'&&work&&command.inputHash!==workInputHash(work))throw new SteeringChanged();
   const observationCommand=['receipt','claim-provider-dispatch','block-work','begin-runtime-assembly'].includes(command.type);
   if(owned?.inputHash&&!observationCommand&&work&&owned.inputHash!==workInputHash(work))throw new SteeringChanged();
   if(work?.runtimeRun?.continuationVersion===1){
@@ -222,9 +223,9 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private async send(missionId:string,command:Command,actorId:string,commandId:string=randomUUID()){
   for(let attempt=0;;attempt++){
    const result=await this.dispatch(missionId,command,actorId,commandId);if(result.status!=='conflict')return result.value;
-   if(result.reason==='revision'&&'workId' in command){const work=(await this.current(missionId,command.workId)).work,owned=this.controllers.get(`${missionId}\0${command.workId}`);if(owned?.inputHash&&owned.dispatchId===currentOwnership(work)?.dispatchId&&owned.inputHash!==workInputHash(work)&&command.type!=='receipt')throw new SteeringChanged();}
+   if(result.reason==='revision'&&'workId' in command){const work=(await this.current(missionId,command.workId)).work,owned=this.controllers.get(`${missionId}\0${command.workId}`);if(owned&&owned.dispatchId===currentOwnership(work)?.dispatchId&&(command.type==='begin-runtime-assembly'?command.inputHash!==workInputHash(work):owned.inputHash&&owned.inputHash!==workInputHash(work)&&command.type!=='receipt'))throw new SteeringChanged();}
    // A definite revision refusal can retry journal-only progression, never the call.
-   if(result.reason==='revision'&&attempt<2&&['receipt','settle-task','record-step-progress','assign','delegate','block-work'].includes(command.type)&&'workId' in command&&(await this.current(missionId,command.workId)).work.runtimeRun?.steeringVersion===1)continue;
+   if(result.reason==='revision'&&attempt<2&&['receipt','settle-task','record-step-progress','assign','delegate','block-work','begin-runtime-assembly'].includes(command.type)&&'workId' in command&&(await this.current(missionId,command.workId)).work.runtimeRun?.steeringVersion===1)continue;
    throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');
   }
  }

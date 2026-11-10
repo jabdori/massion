@@ -155,3 +155,10 @@ for(const mode of ['steer','restart'])test('completed credential repair is reuse
  else assert.equal((await runtime.run('mission',workId,'run',(await f.read()).revision)).status,'settled');
  assert.equal(repairs,1);assert.equal(ids.filter(id=>id==='run:planning').length,1);assert.equal(ids.filter(id=>id==='run:planning:repair').length,1);assert.equal((await f.work()).acceptance,'accepted');validateMissionLineage((await f.read()).value);
 });
+
+for(const phase of ['load','commit'])test('steering during assembly revision '+phase+' refreshes the binding without restarting the daemon',async t=>{
+ const f=await fixture(t);let changed=false;
+ if(phase==='commit'){const commit=f.store.commit.bind(f.store);f.store.commit=async input=>{if(!changed&&(input.events[0] as any)?.type==='begin-runtime-assembly'){changed=true;await f.steer();}return commit(input);};}
+ else{const runtime=f.runtime as any,dispatch=runtime.dispatch.bind(runtime);runtime.dispatch=async(missionId:string,command:any,...args:any[])=>{if(!changed&&command.type==='begin-runtime-assembly'){changed=true;await f.steer();}return dispatch(missionId,command,...args);};}
+ assert.equal((await f.runtime.run('mission',workId,'run',(await f.read()).revision)).status,'settled');assert.ok(changed);const w=await f.work();assert.equal(await f.artifacts.read(w.artifact),'Answer enterprise');assert.equal(w.artifact.version,1);assert.equal(f.calls.filter(c=>c.prompt.step).length,2);assert.equal(f.calls.filter(c=>c.prompt.stepResults).length,1);validateMissionLineage((await f.read()).value);
+});
