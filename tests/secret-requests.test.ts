@@ -33,6 +33,7 @@ test('a typed member request pauses Work; one owner provision grants only its Wo
  const both=await Promise.all([f.service.answer(f.answer),f.service.answer(f.answer)]);assert.ok(both.some(r=>r.status==='provided'));assert.equal((await f.service.read('mission','work')).requests[0]!.state,'provided');
  const slot=requestSecretSlot('mission','work','request-one','password'),access=f.service.slots('mission','work','request-one','member-one',declaration.purpose);
  assert.equal(await access.read(slot),'fixture-password');
+ const mutable={...slot},reading=access.read(mutable);mutable.owner='ungranted';assert.equal(await reading,'fixture-password');
  await assert.rejects(f.service.slots('mission','work','request-one','other',declaration.purpose).read(slot));
  await assert.rejects(f.service.slots('mission','work','request-one','member-one','Other purpose').read(slot));
  assert.doesNotMatch(JSON.stringify([f.store.inspect(),both,await f.service.read('mission','work')]),/fixture-password|fixture-id/);

@@ -82,7 +82,7 @@ export class SecretRequestsService {
    const selection=request.selections?.find(s=>s.slot===secret.slot);if(!selection||expected&&(read.feedId!==expected.feedId||request.requestHash!==expected.requestHash||request.provisionId!==expected.provisionId))throw new SecretSourceError('grant-required');
    return {feedId:read.feedId,requestHash:request.requestHash,provisionId:request.provisionId!,selection};
   };
-  return {read:async(secret,signal)=>{try{return await callTool(async bounded=>{
+  return {read:async(secret,signal)=>{secret=structuredClone(secret);try{return await callTool(async bounded=>{
    const binding=await authorize(secret),source=binding.selection.source;let value:string|undefined;
    if(source.kind==='external-ref'){const adapter=this.#vaults[source.vendor];if(!adapter)throw new SecretSourceError('cli-missing');value=await adapter.read(source.reference,bounded);}else value=await this.#own.read(secret,bounded);
    await authorize(secret,binding);bounded.throwIfAborted();validateSecretValue(value);return value;

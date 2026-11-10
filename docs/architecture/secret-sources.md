@@ -47,6 +47,13 @@ after asynchronous resolution against the original database feed and current
 grant. The server continues to pass its drain-aware `ownerStore` for writes.
 Existing work execution grants are still required independently.
 
+Own-vault writes also claim durable intent in the permissions aggregate before
+touching the vault. Pending or uncertain writes prevent both replacement writes
+and a different source taking over the physical slot. Completed import receipts
+are marked superseded when the owner changes sources, so restoring an old grant
+cannot read a newer source's value. Slot arguments are copied before asynchronous
+authorization; reads, metadata checks and writes use that captured identity.
+
 ## 1Password adapter
 
 Official documentation checked on 2026-11-10 through Context7:

@@ -4,6 +4,7 @@ import {SecretSourceError,sourceHash,validateSecretSource,validateSecretValue} f
 import type {SecretSource,ExternalVault,SecretSourceCode} from './secret-sources.ts';
 import type {PermissionsService,SecretConsumer} from './permissions.ts';
 import {callTool,ToolCallError} from './tool-call.ts';
+import {randomUUID} from 'node:crypto';
 
 export interface SecretBinding {secret:SecretSlot;source:SecretSource}
 /** Each instance belongs to a host-selected consumer/purpose; values never enter its state. */
@@ -20,7 +21,7 @@ export class SourceSecretSlots implements SecretSlots {
  describe(secret:SecretSlot){const b=this.#binding(secret);return {kind:b.source.kind,state:this.#states.get(JSON.stringify([secret.owner,secret.slot]))??'unverified',secret:structuredClone(secret),sourceHash:sourceHash(b.source),consumer:structuredClone(this.#consumer),purpose:this.#purpose};}
  async #authorize(b:SecretBinding,expected?:{feedId:string;grantId:string}){const result=await this.#permissions.authorizeSecret(b.secret,sourceHash(b.source),this.#consumer,this.#purpose,expected);if(this.#stop.signal.aborted)throw new SecretSourceError('cancelled');return result;}
  async read(secret:SecretSlot,signal?:AbortSignal):Promise<string|undefined>{
-  this.#binding(secret);const key=JSON.stringify([secret.owner,secret.slot]),generation=(this.#generations.get(key)??0)+1;this.#generations.set(key,generation);
+  secret=structuredClone(this.#binding(secret).secret);const key=JSON.stringify([secret.owner,secret.slot]),generation=(this.#generations.get(key)??0)+1;this.#generations.set(key,generation);
   try{const value=await callTool(bounded=>this.#read(secret,bounded),{readOnly:true,signal:AbortSignal.any([this.#stop.signal,...(signal?[signal]:[])]),timeoutMs:5000});if(this.#generations.get(key)===generation)this.#states.set(key,'ready');return value;}
   catch(error){const safe=error instanceof SecretSourceError?error:error instanceof ToolCallError?new SecretSourceError(error.timedOut?'timeout':'cancelled'):new SecretSourceError('unavailable');if(this.#generations.get(key)===generation)this.#states.set(key,safe.code);throw safe;}
  }
@@ -42,9 +43,14 @@ export class SourceSecretSlots implements SecretSlots {
   }catch(error){throw error instanceof SecretSourceError?error:new SecretSourceError('unavailable');}
  }
  async #external(source:Exclude<SecretSource,{kind:'own'}>,signal?:AbortSignal){const adapter=this.#vaults[source.vendor];if(!adapter)throw new SecretSourceError('cli-missing');const value=await adapter.read(source.reference,signal);validateSecretValue(value);return value;}
- async has(secret:SecretSlot,signal?:AbortSignal){const b=this.#binding(secret),grant=await this.#authorize(b);if(b.source.kind==='external-ref')throw new SecretSourceError('unavailable');if(b.source.kind==='import'&&(await this.#permissions.imported(secret,sourceHash(b.source)))?.status!=='completed')return false;const result=await this.#own.has?.(secret,signal);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');if(typeof result!=='boolean')throw new SecretSourceError('unavailable');return result;}
+ async has(secret:SecretSlot,signal?:AbortSignal){const b=this.#binding(secret);secret=structuredClone(b.secret);const grant=await this.#authorize(b);if(b.source.kind==='external-ref')throw new SecretSourceError('unavailable');if(b.source.kind==='import'&&(await this.#permissions.imported(secret,sourceHash(b.source)))?.status!=='completed')return false;const result=await this.#own.has?.(secret,signal);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');if(typeof result!=='boolean')throw new SecretSourceError('unavailable');return result;}
  async #write(secret:SecretSlot,value:string){if(this.#stop.signal.aborted)throw new SecretSourceError('cancelled');const write=this.#own.set(secret,value);this.#writes.add(write);try{await write;}catch{this.#uncertainWrite=true;throw new SecretSourceError('import-unavailable');}finally{this.#writes.delete(write);}}
- async set(secret:SecretSlot,value:string){const b=this.#binding(secret);if(b.source.kind!=='own')throw new SecretSourceError('permission-denied');validateSecretValue(value);await this.#authorize(b);await this.#write(secret,value);}
+ async set(secret:SecretSlot,value:string){
+  const b=this.#binding(secret);secret=structuredClone(b.secret);if(b.source.kind!=='own')throw new SecretSourceError('permission-denied');validateSecretValue(value);const grant=await this.#authorize(b),writeId='write-'+randomUUID();
+  const claim=await this.#permissions.claimWrite(writeId,grant);if(claim.status!=='committed')throw new SecretSourceError('unavailable');this.#imports.add(writeId);
+  try{await this.#authorize(b,grant);await this.#write(secret,value);const settled=await this.#permissions.settleWrite(writeId,grant.feedId,'completed');if(settled.status==='conflict')throw new SecretSourceError('unavailable');this.#imports.delete(writeId);}
+  catch(error){try{const settled=await this.#permissions.settleWrite(writeId,grant.feedId,'unavailable');if(settled.status!=='conflict')this.#imports.delete(writeId);}catch{}throw error instanceof SecretSourceError?error:new SecretSourceError('unavailable');}
+ }
  async delete(_secret:SecretSlot):Promise<void>{throw new SecretSourceError('permission-denied');}
  beginDrain(){this.#stop.abort();}
  async drain(){this.beginDrain();if(this.#writes.size||this.#imports.size||this.#uncertainWrite)throw new Error('Secret source write is unsettled');}

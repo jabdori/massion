@@ -107,3 +107,27 @@ test('a superseded import never returns a newer source value when the owner gran
   await assert.rejects(make(a).read(secret),error('import-unavailable'));validateMissionJournalLineage(store.inspect());
  }
 });
+
+test('unresolved own writes fence source changes and replacement writes durably',async()=>{
+ for(const fail of [false,true]){
+  const store=new InMemoryStore<any>(),permissions=new PermissionsService(store),own=new InMemorySecretSlots(),source={kind:'own' as const},imported={kind:'import' as const,vendor:'onepassword' as const,reference:'op://v/new/f'};
+  await grant(permissions,source);let reached!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{reached=r;}),held=new Promise<void>(r=>{release=r;}),set=own.set.bind(own);
+  own.set=async(s,v)=>{reached();await held;await set(s,v);if(fail)throw Error('Ambiguous fixture write');};
+  const slots=new SourceSecretSlots(own,[{secret,source}],permissions,consumer,purpose),write=slots.set(secret,'old-own-value');void write.catch(()=>{});await started;
+  await assert.rejects(slots.set(secret,'overlapping-value'),/Unresolved/);
+  await permissions.act({commandId:'revoke-own',action:'revoke-secret',grantId:(await permissions.read()).secrets![0]!.id});
+  try{await assert.rejects(grant(new PermissionsService(store),imported,'grant-import'),/Unresolved/);}finally{release();}
+  if(fail){await assert.rejects(write);await assert.rejects(grant(new PermissionsService(store),imported,'grant-import-after'),/Unresolved/);}
+  else {await write;await grant(permissions,imported,'grant-import-after');const next=new SourceSecretSlots(own,[{secret,source:imported}],permissions,consumer,purpose,{onepassword:{read:async()=> 'new-import-value'}});assert.equal(await next.read(secret),'new-import-value');}
+  validateMissionJournalLineage(store.inspect());assert.doesNotMatch(JSON.stringify(store.inspect()),/old-own-value|new-import-value/);
+ }
+});
+
+test('slot arguments are pinned before asynchronous read, metadata and write authorization',async()=>{
+ const store=new InMemoryStore<any>(),permissions=new PermissionsService(store),own=new InMemorySecretSlots(),source={kind:'own' as const},other={...secret,owner:'ungranted'};
+ await own.set(secret,'authorized-value');await own.set(other,'other-value');await grant(permissions,source);
+ const slots=new SourceSecretSlots(own,[{secret,source}],permissions,consumer,purpose);
+ const readSlot={...secret},read=slots.read(readSlot);readSlot.owner=other.owner;assert.equal(await read,'authorized-value');
+ await own.delete(other);const hasSlot={...secret},present=slots.has(hasSlot);hasSlot.owner=other.owner;assert.equal(await present,true);
+ const writeSlot={...secret},write=slots.set(writeSlot,'rotated-value');writeSlot.owner=other.owner;await write;assert.equal(await own.read(secret),'rotated-value');assert.equal(await own.read(other),undefined);
+});

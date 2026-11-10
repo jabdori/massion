@@ -19,10 +19,12 @@ export interface PermissionRule {id:string;what:string;kind:AllowKind;at:number}
 export interface SecretConsumer {kind:'connection'|'member';id:string}
 export interface SecretGrant {id:string;secret:SecretSlot;sourceHash:string;consumer:SecretConsumer;purpose:string;at:number}
 export interface SecretImport {id:string;secret:SecretSlot;sourceHash:string;grantId:string;at:number;status:'pending'|'completed'|'unavailable'|'superseded'}
-export interface PermissionsState {kind:'permissions';id:string;rules:PermissionRule[];secretGrants?:SecretGrant[];secretImports?:SecretImport[]}
+export type SecretWrite=Omit<SecretImport,'status'>&{status:'pending'|'completed'|'unavailable'};
+export interface PermissionsState {kind:'permissions';id:string;rules:PermissionRule[];secretGrants?:SecretGrant[];secretImports?:SecretImport[];secretWrites?:SecretWrite[]}
 export type PermissionsCommand = {type:'allow-rule';ruleId:string;what:string;kind:AllowKind} | {type:'remove-rule';ruleId:string}
  | ({type:'grant-secret'}&Omit<SecretGrant,'at'>) | {type:'revoke-secret';grantId:string}
- | {type:'claim-secret-import';importId:string;grantId:string} | {type:'settle-secret-import';importId:string;status:'completed'|'unavailable'};
+ | {type:'claim-secret-import';importId:string;grantId:string} | {type:'settle-secret-import';importId:string;status:'completed'|'unavailable'}
+ | {type:'claim-secret-write';writeId:string;grantId:string} | {type:'settle-secret-write';writeId:string;status:'completed'|'unavailable'};
 export const isPermissionsState=(value:unknown):value is PermissionsState=>!!value&&typeof value==='object'&&(value as {kind?:unknown}).kind==='permissions';
 export const ruleId=(commandId:string)=>'rule-'+hash(commandId).slice(0,16);
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
@@ -31,7 +33,7 @@ const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/
 const line=(v:unknown):v is string=>typeof v==='string'&&v.trim()===v&&v.length>0&&[...v].length<=120&&v.isWellFormed()&&!/[\u0000-\u001f\u007f]/.test(v);
 
 export function applyPermissions(current:PermissionsState|null,command:PermissionsCommand,actor:Actor,time:TimeObservation):{value:PermissionsState;events:unknown[]} {
- const host=command?.type==='claim-secret-import'||command?.type==='settle-secret-import';
+ const host=commandActor(command)==='secret-host';
  ensure(actor&&id(actor.id)&&(host?actor.id==='secret-host'&&actor.roles.includes('representative'):actor.roles.includes('owner')),'Actor lacks required role','denied');ensure(exact(time,['observedAt'])&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host clock observation unavailable');
  const state:PermissionsState=current?structuredClone(current):{kind:'permissions',id:PERMISSIONS_ID,rules:[]};
  switch(command?.type){
@@ -41,13 +43,23 @@ export function applyPermissions(current:PermissionsState|null,command:Permissio
    ensure(!grants.some(g=>hash(g.secret)===hash(command.secret)&&g.sourceHash!==command.sourceHash),'Revoke the previous source before changing a shared secret slot','conflict');
    const imports=(state.secretImports??[]).filter(i=>hash(i.secret)===hash(command.secret));
    ensure(!imports.some(i=>i.sourceHash!==command.sourceHash&&['pending','unavailable'].includes(i.status)),'Unresolved import prevents reuse of this slot','conflict');
+   ensure(!(state.secretWrites??[]).some(w=>hash(w.secret)===hash(command.secret)&&w.sourceHash!==command.sourceHash&&w.status!=='completed'),'Unresolved own write prevents reuse of this slot','conflict');
    for(const imported of imports)if(imported.sourceHash!==command.sourceHash&&imported.status==='completed')imported.status='superseded';
    const {type,...grant}=command;grants.push({...structuredClone(grant),at:time.observedAt});break;
   }
   case 'revoke-secret': {ensure(exact(command,['type','grantId'])&&id(command.grantId),'Exact secret revocation required');const at=(state.secretGrants??[]).findIndex(g=>g.id===command.grantId);ensure(at>=0,'Unknown secret grant','conflict');state.secretGrants!.splice(at,1);break;}
+  case 'claim-secret-write': {
+   ensure(exact(command,['type','writeId','grantId'])&&id(command.writeId)&&id(command.grantId),'Exact own write claim required');const grant=state.secretGrants?.find(g=>g.id===command.grantId);ensure(grant&&grant.sourceHash===hash({kind:'own'}),'Own secret grant required','denied');
+   const writes=state.secretWrites??=[];ensure(writes.length<128&&!writes.some(w=>w.id===command.writeId||hash(w.secret)===hash(grant.secret)&&w.status!=='completed')&&!(state.secretImports??[]).some(i=>hash(i.secret)===hash(grant.secret)&&['pending','unavailable'].includes(i.status)),'Unresolved write prevents reuse of this slot','conflict');
+   writes.push({id:command.writeId,secret:structuredClone(grant.secret),sourceHash:grant.sourceHash,grantId:grant.id,at:time.observedAt,status:'pending'});break;
+  }
+  case 'settle-secret-write': {
+   ensure(exact(command,['type','writeId','status'])&&['completed','unavailable'].includes(command.status),'Exact own write settlement required');const write=state.secretWrites?.find(w=>w.id===command.writeId);ensure(write?.status==='pending','Own write already settled','conflict');write.status=command.status;break;
+  }
   case 'claim-secret-import': {
    ensure(exact(command,['type','importId','grantId'])&&id(command.importId)&&id(command.grantId),'Exact import claim required');const grant=state.secretGrants?.find(g=>g.id===command.grantId);ensure(grant,'Secret grant required','denied');
    const imports=state.secretImports??=[];ensure(imports.length<128&&!imports.some(i=>i.id===command.importId||hash(i.secret)===hash(grant.secret)&&['pending','unavailable'].includes(i.status)),'Import already claimed; never resend','conflict');
+   ensure(!(state.secretWrites??[]).some(w=>hash(w.secret)===hash(grant.secret)&&w.status!=='completed'),'Unresolved own write prevents import','conflict');
    ensure(command.importId===secretImportId(grant.secret,grant.sourceHash),'Import identity mismatch');imports.push({id:command.importId,secret:structuredClone(grant.secret),sourceHash:grant.sourceHash,grantId:grant.id,at:time.observedAt,status:'pending'});break;
   }
   case 'settle-secret-import': {
@@ -63,7 +75,7 @@ export function applyPermissions(current:PermissionsState|null,command:Permissio
  }
  return {value:state,events:[{type:command.type,actor:actor.id,command:structuredClone(command),time:structuredClone(time)}]};
 }
-const commandActor=(command:PermissionsCommand)=>command.type==='claim-secret-import'||command.type==='settle-secret-import'?'secret-host':'local-owner';
+const commandActor=(command:PermissionsCommand)=>['claim-secret-import','settle-secret-import','claim-secret-write','settle-secret-write'].includes(command?.type)?'secret-host':'local-owner';
 const fingerprint=(actorId:string,command:PermissionsCommand)=>hash({actorId,command});
 export const secretImportId=(secret:SecretSlot,sourceHash:string)=>'import-'+hash({secret,sourceHash}).slice(0,32);
 const importCommandId=(command:PermissionsCommand)=>'assistant-secret-'+hash(command).slice(0,32);
@@ -107,6 +119,14 @@ export class PermissionsService {
  }
  async settleImport(secret:SecretSlot,sourceHash:string,feedId:string,status:'completed'|'unavailable'){
   const command:PermissionsCommand={type:'settle-secret-import',importId:secretImportId(secret,sourceHash),status};
+  return withAdmissionFeed(feedId,()=>this.#dispatch(importCommandId(command),command));
+ }
+ async claimWrite(writeId:string,grant:{feedId:string;grantId:string}){
+  const command:PermissionsCommand={type:'claim-secret-write',writeId,grantId:grant.grantId};
+  return withAdmissionFeed(grant.feedId,()=>this.#dispatch(importCommandId(command),command));
+ }
+ async settleWrite(writeId:string,feedId:string,status:'completed'|'unavailable'){
+  const command:PermissionsCommand={type:'settle-secret-write',writeId,status};
   return withAdmissionFeed(feedId,()=>this.#dispatch(importCommandId(command),command));
  }
  /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
