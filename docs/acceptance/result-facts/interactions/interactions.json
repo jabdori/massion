@@ -2,7 +2,52 @@
   {
     "screen": "B9",
     "theme": "dark",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n읽지 않음\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n읽지 않음\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,
@@ -12,7 +57,31 @@
   {
     "screen": "B7-done",
     "theme": "dark",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개를 표 1개로 정리했어요. 확인 대기예요.\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.\n프린터 토너 주문\n하\n완료\nPR #84 검토\n주\n읽지 않음\n완료",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개 · 표 1개 · 확인 대기\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중\n프린터 토너 주문\n하\n완료\nPR #84 검토\n주\n읽지 않음\n완료",
+    "flow": {
+      "alignment": [],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,
@@ -22,7 +91,189 @@
   {
     "screen": "B7-fail",
     "theme": "dark",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n이탈 원인 조사\n퀼\n기업 고객 원인 1개 · 근거 2건 · 확인 실패\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개를 표 1개로 정리했어요. 확인 대기예요.\nPR #84 검토\n주\n읽지 않음\n완료",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n이탈 원인 조사\n퀼\n기업 고객 원인 1개 · 근거 2건 · 확인 실패\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개 · 표 1개 · 확인 대기\nPR #84 검토\n주\n읽지 않음\n완료",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
+    "desktop": true,
+    "expanded": true,
+    "mobile": true,
+    "closed": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "dark",
+    "summary": "경쟁사 가격퀼읽지 않음요금제 6개 · 표 1개 · 확인 대기이탈 원인 조사퀼읽지 않음해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중프린터 토너 주문하완료PR #84 검토주읽지 않음완료",
+    "flow": {
+      "alignment": [],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
+    "desktop": true,
+    "expanded": true,
+    "mobile": true,
+    "closed": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "dark",
+    "summary": "이탈 원인 조사퀼기업 고객 원인 1개 · 근거 2건 · 확인 실패경쟁사 가격퀼읽지 않음요금제 6개 · 표 1개 · 확인 대기PR #84 검토주읽지 않음완료",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,
@@ -32,7 +283,52 @@
   {
     "screen": "B9",
     "theme": "light",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n읽지 않음\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n읽지 않음\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,
@@ -42,7 +338,31 @@
   {
     "screen": "B7-done",
     "theme": "light",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개를 표 1개로 정리했어요. 확인 대기예요.\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.\n프린터 토너 주문\n하\n완료\nPR #84 검토\n주\n읽지 않음\n완료",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개 · 표 1개 · 확인 대기\n이탈 원인 조사\n퀼\n읽지 않음\n해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중\n프린터 토너 주문\n하\n완료\nPR #84 검토\n주\n읽지 않음\n완료",
+    "flow": {
+      "alignment": [],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,
@@ -52,7 +372,189 @@
   {
     "screen": "B7-fail",
     "theme": "light",
-    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n이탈 원인 조사\n퀼\n기업 고객 원인 1개 · 근거 2건 · 확인 실패\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개를 표 1개로 정리했어요. 확인 대기예요.\nPR #84 검토\n주\n읽지 않음\n완료",
+    "summary": "반올림 규칙 바꾸기\n합계에서 한 번 반올림으로 바꿀까요? 지금 규칙 1/3, 새 규칙 3/3.\n하\n이탈 원인 조사\n퀼\n기업 고객 원인 1개 · 근거 2건 · 확인 실패\n경쟁사 가격\n퀼\n읽지 않음\n요금제 6개 · 표 1개 · 확인 대기\nPR #84 검토\n주\n읽지 않음\n완료",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
+    "desktop": true,
+    "expanded": true,
+    "mobile": true,
+    "closed": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-done",
+    "theme": "light",
+    "summary": "경쟁사 가격퀼읽지 않음요금제 6개 · 표 1개 · 확인 대기이탈 원인 조사퀼읽지 않음해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중프린터 토너 주문하완료PR #84 검토주읽지 않음완료",
+    "flow": {
+      "alignment": [],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
+    "desktop": true,
+    "expanded": true,
+    "mobile": true,
+    "closed": true,
+    "commands": 0
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "light",
+    "summary": "이탈 원인 조사퀼기업 고객 원인 1개 · 근거 2건 · 확인 실패경쟁사 가격퀼읽지 않음요금제 6개 · 표 1개 · 확인 대기PR #84 검토주읽지 않음완료",
+    "flow": {
+      "alignment": [
+        {
+          "delta": 0,
+          "title": "범위 정하기"
+        },
+        {
+          "delta": 0,
+          "title": "자료 모으기"
+        },
+        {
+          "delta": 0,
+          "title": "나누기"
+        },
+        {
+          "delta": 0,
+          "title": "설문 다시 보내기"
+        },
+        {
+          "delta": 0,
+          "title": "원인 정리"
+        }
+      ],
+      "first": 3,
+      "summaries": [
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "결과 보기"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "전체 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "작성 결과"
+        },
+        {
+          "chevron": 14,
+          "marker": "none",
+          "nativeMarker": "flex",
+          "text": "확인 결과"
+        }
+      ]
+    },
     "desktop": true,
     "expanded": true,
     "mobile": true,

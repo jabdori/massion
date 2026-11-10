@@ -1,118 +1,87 @@
-# R-M: typed business-result facts
+# R-M: generic ordered result facts
 
-The Work-list and conversation reads now project explicit `massion-facts/v1`
-observations and validated table counts before a Work pane is opened. Churn,
-pricing and cause/evidence counts are bounded and never parsed from prose.
-Worker observations do not accept Work. Final assembly retains its original
-JSON bytes as both the immutable artifact and the executor result; a separate
-checker still checks those bytes.
+The product understands ordered declared items, not business scenarios. A worker
+or final assembly can return exactly
+`{"format":"massion-facts/v1","items":[{"label":"Files","value":3,"unit":"items"},{"label":"Phase","value":"Ready"}]}`.
+There are 1–8 items: labels up to 64 characters, integer values from zero through
+one billion or text up to 96 characters, optional units up to 16 characters, and
+4096 UTF-8 bytes total. Keys are exact; strings are trimmed, well-formed single
+lines without control/format characters. No scenario kind or migration remains.
 
-The original R-M scope is in [the design note](../../architecture/result-facts.md).
-No new command, persistence field, backup shape or dependency was needed.
-Result renderers retain exact Copy/Original bytes and show counts as inert text.
-Checking-seat task text cannot override producer observations.
+The same inert renderer joins items in their declared order. State comes from
+actual Work/step status and the original step titles. Neither labels nor titles
+are interpreted. Final facts preserve their original artifact/checking bytes and
+replace worker declarations in the read projection. Generic tables retain the
+original four-key protocol and worker-table count; table rows never invent fact
+items. Scenario labels exist only in fixture producer inputs.
 
 ## Verification
 
-- Node 24.21.0: 142 related tests passed, zero failures or skips. This includes
-  explicit red/green regressions for malformed worker/assembly counts, missing
-  list projections, checking-seat contamination and the card's accessible status.
-- Runtime tests retain immutable checking bytes and validate a real application
-  journal. Task-command tests reject invalid facts, overlap identical settlements
-  and retain one original result without manufacturing acceptance.
-- Client tests cover newer list replacement, late responses, feed replacement,
-  exception priority and rendering before any Mission/pane read. Existing drain,
-  deadline and thread-selection regressions remain in the related test batch.
-- `npm run typecheck`, `node scripts/check.mjs` and copy lint passed.
-- [Scoped capture](report.json): 20 affected screens in both themes. The final
-  printer captures also verify that the invisible status stays inside its card's
-  containing block and does not shift the composer. Browser screenshots/checks
-  retain observed output; gap metadata is refreshed from the final fixture
-  producer because it is source metadata rather than rendered content.
-- [Scoped diagnostic gate](scoped-gate.json): no new/stale/infrastructure
-  diagnostics after removing **28** resolved occurrences. [Remappings](remapped.json)
-  preserve ten pricing-label order diagnostics and sixteen corrected fixture-gap
-  identities. The total allow-list shrinks from **264 to 236**.
-- `node scripts/ui-contracts/verify-result-facts.mjs`: B9, B7-done and B7-fail in
-  dark/light, 1440px/390px, pane open/widen/narrow/close, retained failed check and
-  no horizontal overflow. [Interaction report](interactions/interactions.json)
-  records zero product commands. Screenshots are
-  `interactions/{B9,B7-done,B7-fail}-{dark,light}-{compact,expanded,mobile}.png`;
-  matching `.snapshot.txt` files retain names and roles.
-- The procedure generator was run from source. Its four generated fixtures keep
-  synchronized list projections. Read-time producers extend legacy B2/B3/B5,
-  B7-done/B8/activity and member screens using actual procedure, assigned effect,
-  receipt and settlement commands. Failed checks retain no accepted Record.
+- The new generic parser and final-assembly cases first failed against the old
+  scenario implementation, then passed. Arbitrary labels, numbers/text, declared
+  order, invalid keys/bounds/Unicode, literal markup, producer/checker separation,
+  overlapping commands and original journal bytes are covered.
+- Before main integration: 176 related tests passed. After merging main at
+  `8ec8849f5513974b0b36872e800e6c1ab4d5167d`: 192 related result/credential/steering/conversation/fixture
+  tests passed with zero failures/skips. These batches overlap and are not summed.
+- Typecheck and runtime syntax checks passed; copy lint found zero issues. CI owns
+  the full unit/real-database suite and all 75 screen contracts.
+- [Scoped capture](report.json): 20 screens in both themes, 216
+  retained diagnostics. [Scoped gate](scoped-gate.json) has zero new/stale or
+  infrastructure diagnostics after the explicit presentation allowances below.
+- `node scripts/ui-contracts/verify-result-facts.mjs`: ten B9/B7-done/B7-fail/
+  B8-done/B8-fail flows across dark/light, 1440px and 390px, widen/narrow/close,
+  mouse and Enter disclosure toggles, no horizontal overflow and zero product
+  commands. [Measurements](interactions/interactions.json) retain actual rendered
+  item labels, status, alignment and chevron sizes.
+- Screenshots: `interactions/{B9,B7-done,B7-fail,B8-done,B8-fail}-{dark,light}-`
+  `{compact,expanded,mobile}.png`. B8 variants additionally have `-flow.png` and
+  `-mobile-flow.png`; their snapshots retain actual names and roles.
+- Fixtures were regenerated from source. Their scenario data is declared through
+  procedure, assigned effect/receipt and settlement commands. The table fixture's
+  assembly separately declares its summary after its workers settle. No real
+  model/provider, customer data, browser purchase or deployment was exercised.
 
-All business inputs are controlled fixtures. No real providers, customer data,
-market research, browser purchases or deployment were exercised. CI owns the
-full test suite and all 75 screen contracts; final-head receipts are on the PR.
+## Allow-list accounting
+
+[Machine-generated counts](counts.json) compare main `8ec8849f5513974b0b36872e800e6c1ab4d5167d`
+(**262 entries**) with the redesign (**266 entries**), a net
+**+4**. There is no remaining claim of removing 28 exceptions.
+
+The redesign restores 46 currently observed sentence/card
+occurrences with `generic result presentation` reasons and replaces
+14 stale ordering identities. Relative to main,
+20 diagnostic identities are removed and 24 added;
+these include retained gap renames and presentation changes, not a net reduction.
+[Exact identities and reasons](remapped.json) and [removed identities](removed.json)
+make the accounting reviewable. Every restored allowance corresponds to an actual
+capture failure; no contract is weakened or rewritten to fit the renderer.
+
+## Flow visual review
+
+Compared `src/work-room-panel.ts` directly with main `8ec8849f5513974b0b36872e800e6c1ab4d5167d`.
+Main already repeats the Work/production/check names in native result disclosures,
+and centers the timestamp next to a multiline worker body. This PR touches those
+result renderers, so both were fixed here instead of being deferred as polish.
+
+Flow disclosures now say "전체 결과", "작성 결과", "확인 결과" or "결과 보기" and
+use the existing chevron icon with native markers hidden. Worker title, member,
+role and state share one header aligned with the timestamp. In both themes the
+measured maximum worker-title/time top offset is **0px**. B8-done's three
+result summaries no longer repeat the Work title or bare step names. Closed/open
+and keyboard operation were checked; mobile expanded flow screenshots show the
+same layout without horizontal overflow.
 
 ## Remaining
 
-- The prototype's five printer step clocks in B7-done depend on browser/payment
-  observations owned by PR #127. The printer is a Representative-authored Work
-  without a named member procedure pin; existing team admission requires
-  `assistantSource.memberId`. Assigning it a fabricated member or copying churn
-  timestamps would change provenance. Its background churn/pricing Works now
-  have actual procedures; the printer clocks remain explicitly unsupported.
-- Page-read counts and order-history evidence also belong to PR #127. Typed
-  business-result counts cannot establish that a page was read or a payment
-  succeeded. File-read counts/completion belong to the parallel read-telemetry
-  slice. Their allow-list reasons are narrowed accordingly.
-- Cause/evidence counts (one/two in the fixture) are displayed beside the actual
-  failed check. The retained criterion/verdict does not establish the prototype's
-  threshold of three grounds. A producer count cannot invent that checking rule.
-- Pricing labels now exist in the activity list and conversation. Ten diagnostic
-  occurrences concern their existing order rather than missing facts. Unrelated
-  layout, connection, memory, procedure-edit, Record-event and steering/restart
-  residuals remain with their owners.
+The generic output deliberately does not reproduce business-specific prototype
+sentences or fixed compound card captions. Literal item values and real state are
+available; their presentation differences remain honestly allowed. Producer
+observations are never independent checking evidence or an acceptance rule.
 
-No merge, release or deployment is part of this delivery.
-
-Additional runtime/conversation/telemetry regression batch: 79 tests, 76 passed,
-three existing environment-gated skips, zero failures. This batch does not overlap
-the 142-test batch above. The skips are disposable real-SurrealDB tests; no live
-provider or existing database was used.
-
-## Review corrections
-
-Codex identified that generic table rows could be mislabeled as pricing plans.
-The red/green regression now retains their generic table count with no business
-facts. Only an explicit, validated `business:"pricing"` table discriminator or
-an explicit facts envelope supplies pricing meaning. Controlled pricing producers
-were updated at source and their fixtures regenerated.
-
-The first CI suite also caught two older visual-test assumptions: structured
-facts render semantically inside the existing disclosure, and authoritative list
-facts remain usable when an unrelated pane revision changes. The updated tests
-still require closed disclosures and reject stale pane fallbacks. Accepted
-results retain their counts while unknown/stopped status takes priority.
-
-The review-fix batch passed 124 tests with no failures/skips; it overlaps earlier
-batches and is not an additional aggregate count. Typecheck passed. Final-head
-full-suite and screen evidence is reported by CI on the PR.
-
-## Main integration
-
-Merged `origin/main` at `486b422` (credential repair, PR #142) without rebase or
-force-push. The conversation slot retains both newer result facts and the typed
-credential exception. The allow-list identity union preserves all removals from
-both branches: current main has 262 entries; this branch has 234 (the same 28 R-M
-removals). B6-token was recaptured in both themes against its current production
-credential fixture and the combined scoped gate remains clean.
-
-The merged result/credential/conversation/fixture batch passed 187 tests, zero
-failures/skips; typecheck passed. The final pricing table discriminator was also
-checked through both themes' real headless table interactions, including exact
-Copy/Original data, expansion and mobile visibility.
-
-The second Codex P2 covered final marked pricing tables. Runtime now stores their
-bounded count envelope in the existing executor result, derived from the exact
-artifact text sent to independent checking. Final assembly facts replace worker
-counts and their table count is not added to earlier worker tables. Red/green
-cases cover a standalone final table and a three-row worker table assembled into
-a two-row final table, preserving exact checking bytes and canonical journal
-validation. The affected runtime/table/room batch passed 94 tests with three
-existing disposable-DB skips, zero failures; typecheck passed. No screen output
-or fixture projection changed in this correction.
+Printer browser/payment step clocks and page/order evidence still depend on the
+browser producer; file-read evidence belongs to its separate producer. Nothing
+copies another Work's timestamps or invents a member/procedure pin. Missing
+business-specific checking thresholds remain missing instead of being supplied
+by a producer count. Existing unrelated layout and other owners' residuals stay
+explicit. The PR remains open for lead re-review; it is not approved or merged.

@@ -1,4 +1,4 @@
-contract B8-unknown (B8 자세히 보기 · 프린터 토너 주문 결과 모름) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-head/snapshots/dark/B8-unknown.json
+contract B8-unknown (B8 자세히 보기 · 프린터 토너 주문 결과 모름) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-generic/snapshots/dark/B8-unknown.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -31,15 +31,16 @@ contract B8-unknown (B8 자세히 보기 · 프린터 토너 주문 결과 모�
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
-  budget conversation app {"chars":339,"strings":36,"sentences":6,"longest":36} proto {"chars":169,"strings":15,"sentences":2,"longest":30} source visibleTextBudget
+  budget conversation app {"chars":381,"strings":36,"sentences":6,"longest":46} proto {"chars":169,"strings":15,"sentences":2,"longest":30} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   budget pane         app {"chars":176,"strings":32,"sentences":0,"longest":13} proto {"chars":389,"strings":53,"sentences":0,"longest":23} source visibleTextBudget
   warn  budget conversation sentences 6 > 2: "경쟁사 가격도 확인해 줘."
-  warn  budget conversation chars 339 > 240
+  warn  budget conversation longest string 46 > 38 chars
+  warn  budget conversation chars 381 > 240
   FAIL  missing conversation link     "{duration} 동안 작업 · 페이지 {count} 읽음"
   FAIL  order  pane         text     "기록" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
   FAIL  order  pane         text     "{time}" (occurrence already consumed or found earlier)
-FAIL: 6 failures, 2 warnings, 36 required elements
+FAIL: 6 failures, 3 warnings, 36 required elements

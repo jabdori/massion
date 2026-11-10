@@ -4,8 +4,8 @@
     {
       "screen": "B2",
       "theme": "dark",
-      "passed": 31,
-      "failed": 0,
+      "passed": 30,
+      "failed": 1,
       "warnings": 0,
       "required": 31,
       "visualFailures": [],
@@ -16,9 +16,9 @@
     {
       "screen": "B3-run",
       "theme": "dark",
-      "passed": 23,
-      "failed": 0,
-      "warnings": 1,
+      "passed": 22,
+      "failed": 1,
+      "warnings": 2,
       "required": 23,
       "visualFailures": [],
       "gaps": [],
@@ -40,8 +40,8 @@
     {
       "screen": "B6",
       "theme": "dark",
-      "passed": 33,
-      "failed": 1,
+      "passed": 32,
+      "failed": 2,
       "warnings": 2,
       "required": 34,
       "visualFailures": [],
@@ -68,7 +68,7 @@
       "theme": "dark",
       "passed": 39,
       "failed": 1,
-      "warnings": 2,
+      "warnings": 3,
       "required": 40,
       "visualFailures": [],
       "gaps": [
@@ -81,8 +81,8 @@
     {
       "screen": "B7-churn",
       "theme": "dark",
-      "passed": 72,
-      "failed": 2,
+      "passed": 71,
+      "failed": 3,
       "warnings": 2,
       "required": 74,
       "visualFailures": [],
@@ -96,9 +96,9 @@
     {
       "screen": "B7-done",
       "theme": "dark",
-      "passed": 36,
-      "failed": 11,
-      "warnings": 2,
+      "passed": 35,
+      "failed": 12,
+      "warnings": 3,
       "required": 47,
       "visualFailures": [],
       "gaps": [
@@ -111,8 +111,8 @@
     {
       "screen": "B7-fail",
       "theme": "dark",
-      "passed": 73,
-      "failed": 5,
+      "passed": 72,
+      "failed": 6,
       "warnings": 2,
       "required": 78,
       "visualFailures": [],
@@ -126,9 +126,9 @@
     {
       "screen": "B7-unknown",
       "theme": "dark",
-      "passed": 37,
-      "failed": 9,
-      "warnings": 2,
+      "passed": 36,
+      "failed": 10,
+      "warnings": 3,
       "required": 46,
       "visualFailures": [],
       "gaps": [
@@ -143,7 +143,7 @@
       "theme": "dark",
       "passed": 28,
       "failed": 3,
-      "warnings": 2,
+      "warnings": 3,
       "required": 31,
       "visualFailures": [],
       "gaps": [
@@ -158,7 +158,7 @@
       "theme": "dark",
       "passed": 33,
       "failed": 3,
-      "warnings": 2,
+      "warnings": 3,
       "required": 36,
       "visualFailures": [],
       "gaps": [
@@ -188,7 +188,7 @@
       "theme": "dark",
       "passed": 30,
       "failed": 6,
-      "warnings": 2,
+      "warnings": 3,
       "required": 36,
       "visualFailures": [],
       "gaps": [
@@ -201,8 +201,8 @@
     {
       "screen": "B9",
       "theme": "dark",
-      "passed": 37,
-      "failed": 0,
+      "passed": 35,
+      "failed": 2,
       "warnings": 0,
       "required": 37,
       "visualFailures": [],
@@ -213,8 +213,8 @@
     {
       "screen": "B9-restart",
       "theme": "dark",
-      "passed": 38,
-      "failed": 0,
+      "passed": 36,
+      "failed": 2,
       "warnings": 0,
       "required": 38,
       "visualFailures": [],
@@ -225,8 +225,8 @@
     {
       "screen": "B9-update",
       "theme": "dark",
-      "passed": 37,
-      "failed": 0,
+      "passed": 35,
+      "failed": 2,
       "warnings": 0,
       "required": 37,
       "visualFailures": [],
@@ -256,9 +256,9 @@
     {
       "screen": "B18",
       "theme": "dark",
-      "passed": 34,
-      "failed": 0,
-      "warnings": 2,
+      "passed": 32,
+      "failed": 2,
+      "warnings": 3,
       "required": 34,
       "visualFailures": [],
       "gaps": [],
@@ -268,8 +268,8 @@
     {
       "screen": "B18-room-b",
       "theme": "dark",
-      "passed": 68,
-      "failed": 1,
+      "passed": 67,
+      "failed": 2,
       "warnings": 2,
       "required": 69,
       "visualFailures": [
@@ -285,8 +285,8 @@
     {
       "screen": "B2",
       "theme": "light",
-      "passed": 31,
-      "failed": 0,
+      "passed": 30,
+      "failed": 1,
       "warnings": 0,
       "required": 31,
       "visualFailures": [],
@@ -297,9 +297,9 @@
     {
       "screen": "B3-run",
       "theme": "light",
-      "passed": 23,
-      "failed": 0,
-      "warnings": 1,
+      "passed": 22,
+      "failed": 1,
+      "warnings": 2,
       "required": 23,
       "visualFailures": [],
       "gaps": [],
@@ -321,8 +321,8 @@
     {
       "screen": "B6",
       "theme": "light",
-      "passed": 33,
-      "failed": 1,
+      "passed": 32,
+      "failed": 2,
       "warnings": 2,
       "required": 34,
       "visualFailures": [],
@@ -349,7 +349,7 @@
       "theme": "light",
       "passed": 39,
       "failed": 1,
-      "warnings": 2,
+      "warnings": 3,
       "required": 40,
       "visualFailures": [],
       "gaps": [
@@ -362,8 +362,8 @@
     {
       "screen": "B7-churn",
       "theme": "light",
-      "passed": 72,
-      "failed": 2,
+      "passed": 71,
+      "failed": 3,
       "warnings": 2,
       "required": 74,
       "visualFailures": [],
@@ -377,9 +377,9 @@
     {
       "screen": "B7-done",
       "theme": "light",
-      "passed": 36,
-      "failed": 11,
-      "warnings": 2,
+      "passed": 35,
+      "failed": 12,
+      "warnings": 3,
       "required": 47,
       "visualFailures": [],
       "gaps": [
@@ -392,8 +392,8 @@
     {
       "screen": "B7-fail",
       "theme": "light",
-      "passed": 73,
-      "failed": 5,
+      "passed": 72,
+      "failed": 6,
       "warnings": 2,
       "required": 78,
       "visualFailures": [],
@@ -407,9 +407,9 @@
     {
       "screen": "B7-unknown",
       "theme": "light",
-      "passed": 37,
-      "failed": 9,
-      "warnings": 2,
+      "passed": 36,
+      "failed": 10,
+      "warnings": 3,
       "required": 46,
       "visualFailures": [],
       "gaps": [
@@ -424,7 +424,7 @@
       "theme": "light",
       "passed": 28,
       "failed": 3,
-      "warnings": 2,
+      "warnings": 3,
       "required": 31,
       "visualFailures": [],
       "gaps": [
@@ -439,7 +439,7 @@
       "theme": "light",
       "passed": 33,
       "failed": 3,
-      "warnings": 2,
+      "warnings": 3,
       "required": 36,
       "visualFailures": [],
       "gaps": [
@@ -469,7 +469,7 @@
       "theme": "light",
       "passed": 30,
       "failed": 6,
-      "warnings": 2,
+      "warnings": 3,
       "required": 36,
       "visualFailures": [],
       "gaps": [
@@ -482,8 +482,8 @@
     {
       "screen": "B9",
       "theme": "light",
-      "passed": 37,
-      "failed": 0,
+      "passed": 35,
+      "failed": 2,
       "warnings": 0,
       "required": 37,
       "visualFailures": [],
@@ -494,8 +494,8 @@
     {
       "screen": "B9-restart",
       "theme": "light",
-      "passed": 38,
-      "failed": 0,
+      "passed": 36,
+      "failed": 2,
       "warnings": 0,
       "required": 38,
       "visualFailures": [],
@@ -506,8 +506,8 @@
     {
       "screen": "B9-update",
       "theme": "light",
-      "passed": 37,
-      "failed": 0,
+      "passed": 35,
+      "failed": 2,
       "warnings": 0,
       "required": 37,
       "visualFailures": [],
@@ -537,9 +537,9 @@
     {
       "screen": "B18",
       "theme": "light",
-      "passed": 34,
-      "failed": 0,
-      "warnings": 2,
+      "passed": 32,
+      "failed": 2,
+      "warnings": 3,
       "required": 34,
       "visualFailures": [],
       "gaps": [],
@@ -549,8 +549,8 @@
     {
       "screen": "B18-room-b",
       "theme": "light",
-      "passed": 68,
-      "failed": 1,
+      "passed": 67,
+      "failed": 2,
       "warnings": 2,
       "required": 69,
       "visualFailures": [

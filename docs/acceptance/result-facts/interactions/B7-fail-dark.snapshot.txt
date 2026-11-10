@@ -41,13 +41,13 @@
               - StaticText "이탈 원인 조사"
             - StaticText "기업 고객 원인 1개 · 근거 2건 · 확인 실패"
         - listitem [level=1]
-          - button "경쟁사 가격 작업 중 읽지 않음 요금제 6개를 표 1개로 정리했어요. 확인 대기예요." [ref=e29]
+          - button "경쟁사 가격 작업 중 읽지 않음 요금제 6개 · 표 1개 · 확인 대기" [ref=e29]
             - strong
               - StaticText "경쟁사 가격"
             - status "작업 중"
               - StaticText "퀼"
             - StaticText "읽지 않음"
-            - StaticText "요금제 6개를 표 1개로 정리했어요. 확인 대기예요."
+            - StaticText "요금제 6개 · 표 1개 · 확인 대기"
         - listitem [level=1]
           - button "PR #84 검토 읽지 않음 완료" [ref=e30]
             - strong
@@ -71,7 +71,7 @@
           - paragraph
             - StaticText "하나가 넘김: 경쟁사 가격 · 14:08"
           - generic
-            - button "경쟁사 가격 확인 대기 4분 조사 표 정리 확인 표 1개 · 확인 대기" [ref=e36]
+            - button "경쟁사 가격 확인 대기 4분 조사 표 정리 확인 요금제 6개 · 표 1개 · 표 만들기 완료" [ref=e36]
               - strong
                 - StaticText "경쟁사 가격"
               - StaticText "확인 대기"
@@ -79,12 +79,12 @@
               - StaticText "조사"
               - StaticText "표 정리"
               - StaticText "확인"
-              - StaticText "표 1개 · 확인 대기"
+              - StaticText "요금제 6개 · 표 1개 · 표 만들기 완료"
             - status
               - StaticText "작업 중"
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 14:08"
-          - button "이탈 원인 조사 실패 14:09 – 14:09 조사 분류 요약 확인 확인 실패 · 근거 1건" [ref=e37]
+          - button "이탈 원인 조사 실패 14:09 – 14:09 조사 분류 요약 확인 기업 고객 원인 1개 · 근거 2건" [ref=e37]
             - strong
               - StaticText "이탈 원인 조사"
             - StaticText "실패"
@@ -93,7 +93,7 @@
             - StaticText "분류"
             - StaticText "요약"
             - StaticText "확인"
-            - StaticText "확인 실패 · 근거 1건"
+            - StaticText "기업 고객 원인 1개 · 근거 2건"
           - paragraph
             - StaticText "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
           - generic
@@ -249,7 +249,7 @@
               - time
                 - StaticText "14:09"
               - paragraph
-                - StaticText "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요."
+                - StaticText "해지 사유 41건 · 기업 9건 · 그 외 32건"
               - button "복사" [ref=e54]
             - article
               - strong

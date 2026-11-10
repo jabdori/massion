@@ -35,12 +35,12 @@
             - status
               - StaticText "읽지 않음"
         - listitem [level=1]
-          - button "이탈 원인 조사 작업 중 해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요." [ref=e27]
+          - button "이탈 원인 조사 작업 중 해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중" [ref=e27]
             - strong
               - StaticText "이탈 원인 조사"
             - status "작업 중"
               - StaticText "퀼"
-            - StaticText "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+            - StaticText "해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중"
   - main "하나" [ref=e2]
     - sectionheader
       - button "사이드바 숨기기" [expanded=true, ref=e12]
@@ -114,7 +114,7 @@
           - paragraph
             - StaticText "하나가 넘김: 이탈 원인 조사 · 09:40"
           - generic
-            - button "이탈 원인 조사 실행 중 퀼 271분 조사 분류 요약 확인 4/5 · 나누기 완료 · 원인 정리 중" [ref=e43]
+            - button "이탈 원인 조사 실행 중 퀼 271분 조사 분류 요약 확인 해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중" [ref=e43]
               - strong
                 - StaticText "이탈 원인 조사"
               - StaticText "실행 중"
@@ -124,7 +124,7 @@
               - StaticText "분류"
               - StaticText "요약"
               - StaticText "확인"
-              - StaticText "4/5 · 나누기 완료 · 원인 정리 중"
+              - StaticText "해지 사유 41건 · 기업 9건 · 그 외 32건 · 나누기 완료 · 원인 정리 중"
             - status
               - StaticText "작업 중"
       - generic

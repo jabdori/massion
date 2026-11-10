@@ -1,4 +1,4 @@
-contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-head/snapshots/light/B7-fail.json
+contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-generic/snapshots/light/B7-fail.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -20,7 +20,6 @@ contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/o
   ok    header       link     "작업 공간" -> button "작업 공간"
   ok    header       button   "더 보기" -> button "더 보기"
   ok    conversation text     "{date}" -> statictext "11월 5일 (목)"
-  ok    conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}" -> button "이탈 원인 조사 실패 14:09 – 14:09 조사 분류 요약 확인 확인 실패 · 근거 1건"
   ok    conversation button   "복사" -> button "복사"
   ok    conversation link     "방향 바꿈: {work_title} · {time}" -> button "방향 바꿈: 이탈 원인 조사 · 14:09"
   ok    conversation button   "복사" -> button "복사"
@@ -73,16 +72,17 @@ contract B7-fail (B7 업무 방 · 이탈 원인 조사 실패) vs /Users/code/o
   ok    composer     button   "기본 권한" -> button "기본 권한"
   ok    composer     button   "보내기" -> button "보내기"
   budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget sidebar      app {"chars":156,"strings":19,"sentences":2,"longest":41} proto {"chars":179,"strings":12,"sentences":4,"longest":42} source visibleTextBudget
+  budget sidebar      app {"chars":148,"strings":19,"sentences":1,"longest":41} proto {"chars":179,"strings":12,"sentences":4,"longest":42} source visibleTextBudget
   budget header       app {"chars":1,"strings":1,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
-  budget conversation app {"chars":380,"strings":45,"sentences":7,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
+  budget conversation app {"chars":398,"strings":45,"sentences":7,"longest":36} proto {"chars":342,"strings":44,"sentences":5,"longest":27} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
-  budget pane         app {"chars":362,"strings":67,"sentences":5,"longest":33} proto {"chars":392,"strings":61,"sentences":5,"longest":33} source visibleTextBudget
+  budget pane         app {"chars":356,"strings":67,"sentences":4,"longest":33} proto {"chars":392,"strings":61,"sentences":5,"longest":33} source visibleTextBudget
   warn  budget conversation sentences 7 > 5: "지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘."
   warn  budget conversation longest string 36 > 34 chars
   FAIL  missing sidebar      link     "{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요."
-  FAIL  order  sidebar      link     "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요." (occurrence already consumed or found earlier)
+  FAIL  missing sidebar      link     "{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요."
   FAIL  missing sidebar      link     "{work_title} 파일 {count}를 다 읽었어요. {time} 완료."
-  FAIL  order  conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기" (occurrence already consumed or found earlier)
+  FAIL  missing conversation link     "{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}"
+  FAIL  missing conversation link     "{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기"
   FAIL  missing pane         button   "확인 실패 근거 {count} 이상"
-FAIL: 5 failures, 2 warnings, 78 required elements
+FAIL: 6 failures, 2 warnings, 78 required elements

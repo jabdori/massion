@@ -1,4 +1,4 @@
-contract B7 (B7 업무 방 · 프린터 토너 주문 실행 중) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-head/snapshots/dark/B7.json
+contract B7 (B7 업무 방 · 프린터 토너 주문 실행 중) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-generic/snapshots/dark/B7.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
@@ -43,8 +43,9 @@ contract B7 (B7 업무 방 · 프린터 토너 주문 실행 중) vs /Users/code
   budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
   budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
   budget pane         app {"chars":51,"strings":15,"sentences":0,"longest":9} proto {"chars":140,"strings":22,"sentences":0,"longest":23} source visibleTextBudget
-  budget conversation app {"chars":321,"strings":36,"sentences":6,"longest":36} proto {"chars":60,"strings":4,"sentences":1,"longest":29} source visibleTextBudget
+  budget conversation app {"chars":363,"strings":36,"sentences":6,"longest":46} proto {"chars":60,"strings":4,"sentences":1,"longest":29} source visibleTextBudget
   warn  budget conversation sentences 6 > 1: "경쟁사 가격도 확인해 줘."
-  warn  budget conversation chars 321 > 98
+  warn  budget conversation longest string 46 > 36 chars
+  warn  budget conversation chars 363 > 98
   FAIL  missing pane         button   "확인 대기 주문 내역 {count}"
-FAIL: 1 failures, 2 warnings, 40 required elements
+FAIL: 1 failures, 3 warnings, 40 required elements

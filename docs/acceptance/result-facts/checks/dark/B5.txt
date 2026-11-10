@@ -1,4 +1,4 @@
-contract B5 (B5 결과 모름) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-head/snapshots/dark/B5.json
+contract B5 (B5 결과 모름) vs /Users/code/orca/workspaces/massion/result-facts/.runtime/result-facts-generic/snapshots/dark/B5.json
   ok    rail         link     "{member}" -> button "하나"
   ok    rail         link     "결과물" -> button "결과물"
   ok    rail         link     "예약" -> button "예약"
