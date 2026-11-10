@@ -157,3 +157,8 @@ test('a private capture rejected by revision conflict still records only its ori
  s.store.commit=async input=>{if(reject&&input.commandId.startsWith('assistant-browser:')){reject=false;return {status:'conflict',revision:input.expectedRevision,reason:'revision'};}return commit(input);};t.after(()=>s.service.drain());assert.equal((await s.service.capture(request)).status,'conflict');assert.equal((await s.service.read('intake','work')).session,null);await s.service.drain();
  const restarted=new BrowserSessions(s.store,s.store,{clock:()=>now,adapter:{async read(){return {...raw,title:'private-conflict-sentinel',fields:[]};}}});t.after(()=>restarted.drain());await restarted.capture({...request,readId:'after-conflict'});assert.equal((await restarted.read('intake','work')).session!.page.tainted,true);assert.doesNotMatch(JSON.stringify(s.store.inspect()),/private-conflict-sentinel/);validateMissionJournalLineage(s.store.inspect());
 });
+
+test('a private action session stays tainted on a later page without inventing private fields',()=>{
+ const page=sanitizePage({address:'https://fixture.example/',title:'Private session reflection',blocks:['Reflected private text'],fields:[],privateFields:0,privateSession:true});
+ assert.equal(page.tainted,true);if(page.tainted)assert.equal(page.summary.privateFields,0);assert.ok(!JSON.stringify(page).includes('Private session reflection'));assert.ok(!JSON.stringify(page).includes('Reflected private text'));
+});

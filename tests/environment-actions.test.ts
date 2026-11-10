@@ -22,9 +22,9 @@ class FakeEnvironment implements EnvironmentAdapter {
  change(patch:Partial<EnvironmentObservation>={}){this.observation={...this.observation,...patch,binding:{...this.observation.binding,...patch.binding,revision:this.observation.binding.revision+1}};}
 }
 const wait:OwnerWait={kind:'confirm-on-device',who:'Owner',what:'Confirm request',where:'Own device',fact:'confirmed',from:false,to:true,timeoutMs:10000,maxPolls:3,intervalMs:1000};
-function setup(gates:EnvironmentGate[]=[{kind:'irreversible-submit'}]){
- const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.structure[0]!.gates=gates;let now=1000;
- const create=(ownerStore=store)=>new EnvironmentActions(store,ownerStore,adapter,{owner:'local-owner',environment:'fixture',clock:()=>now,callTimeoutMs:20,resolveSecret:async()=>new TextEncoder().encode('fixture-private-value')});
+function setup(gates:EnvironmentGate[]=[{kind:'irreversible-submit'}],environment='fixture'){
+ const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.binding.environment=environment;adapter.observation.structure[0]!.gates=gates;let now=1000;
+ const create=(ownerStore=store)=>new EnvironmentActions(store,ownerStore,adapter,{owner:'local-owner',environment,clock:()=>now,callTimeoutMs:20,resolveSecret:async()=>new TextEncoder().encode('fixture-private-value')});
  const service=create();return {store,adapter,service,create,tick:(ms=1000)=>{now+=ms;},read:async()=>service.state(),propose:(input:ActionInput={kind:'click'})=>service.propose('step','control',input)};
 }
 
@@ -40,7 +40,7 @@ test('all sensitive gates require explicit answers, and payment intents remain n
 
 test('overlapping identical owner commands and execution claims replay without delivering twice',async()=>{
  const s=setup(),entry=await s.propose();await Promise.all([1,2].map(()=>s.service.answer('approve','step',entry.hash,'approve')));
- await Promise.all([1,2].map(()=>s.service.execute('step',entry.hash)));await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);
+ await Promise.all([s.service,s.service,s.create()].map(service=>service.execute('step',entry.hash)));await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);
  await assert.rejects(s.service.answer('approve','step',entry.hash,'decline'),/identity|conflict/i);validateMissionJournalLineage(s.store.inspect());
 });
 
@@ -103,15 +103,17 @@ test('secret boundary rechecks navigation after resolving; a lost action reply r
  const x=setup([]),action=await x.propose();let release!:()=>void,calls=0;x.adapter.act=async()=>{calls++;await new Promise<void>(r=>release=r);};await x.service.execute('step',action.hash);assert.equal((await x.read()).entries[0]!.status,'unknown');release();await x.create().execute('step',action.hash);assert.equal(calls,1);await assert.rejects(x.service.propose('next','control',{kind:'click'}),/unresolved/i);
 });
 
-test('a newer poll wins over an older response and parallel polls consume only one reservation',async()=>{
+test('a newer poll wins over an older response and parallel polls consume only one reservation',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
  const s=setup();await s.service.wait('step',wait);let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r);let first=true;
- s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};const older=s.service.poll('step');await ready;s.tick();s.adapter.change({facts:{confirmed:true}});await s.create().poll('step');release();await older;assert.equal((await s.read()).entries[0]!.status,'completed');assert.equal((await s.read()).entries[0]!.polls,2);
+ s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};const older=s.service.poll('step');await ready;s.tick();s.adapter.change({facts:{confirmed:true}});const newer=s.create().poll('step');
+ try{await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,2);}finally{release();}await Promise.all([older,newer]);assert.equal((await s.read()).entries[0]!.status,'completed');assert.equal((await s.read()).entries[0]!.polls,2);
  const x=setup();await x.service.wait('step',wait);await Promise.all([x.service.poll('step'),x.service.poll('step')]);assert.equal((await x.read()).entries[0]!.polls,1);assert.equal(x.adapter.reads,2);
 });
 
 test('out-of-order public observations are discarded and elapsed deadlines are visible without new events',async()=>{
  const s=setup();let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r);
- s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};const old=s.service.observe();await ready;s.adapter.change();await s.service.observe();release();await assert.rejects(old,/stale/i);
+ s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};const old=assert.rejects(s.service.observe(),/stale/i);await ready;s.adapter.change();const newer=s.service.observe();release();await old;await newer;
  const x=setup();await x.service.wait('step',wait);const count=x.store.inspect().length;x.tick(10001);assert.equal((await x.read()).entries[0]!.status,'timed-out');assert.equal(x.store.inspect().length,count);
 });
 
@@ -132,7 +134,7 @@ test('a pending owner wait exports and parses as inert portable history without 
 test('read-only polling is bounded by the remaining wait deadline, not a longer adapter timeout',async t=>{
  t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});
  const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();const service=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'fixture',callTimeoutMs:1000});
- await service.wait('step',{...wait,timeoutMs:30});let aborted=false,entered!:()=>void;const ready=new Promise<void>(r=>entered=r);adapter.observe=async signal=>{signal.addEventListener('abort',()=>{aborted=true;});entered();return new Promise(()=>{});};const polling=service.poll('step');await ready;t.mock.timers.tick(30);assert.equal(aborted,true);await polling;assert.equal((await service.state()).entries[0]!.status,'timed-out');
+ await service.wait('step',{...wait,timeoutMs:30});let aborted=false,entered!:()=>void,release!:()=>void;const ready=new Promise<void>(r=>entered=r);adapter.observe=async signal=>{signal.addEventListener('abort',()=>{aborted=true;});entered();await new Promise<void>(r=>release=r);return structuredClone(adapter.observation);};const polling=service.poll('step');await ready;t.mock.timers.tick(30);assert.equal(aborted,true);await polling;assert.equal((await service.state()).entries[0]!.status,'timed-out');release();
 });
 
 test('adapter observation errors cannot expose private page values through a public error',async()=>{
@@ -153,16 +155,91 @@ test('replacing a live environment with an empty feed cannot erase secret taint'
  const service=new EnvironmentActions(proxy,proxy,adapter,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>new TextEncoder().encode('private-fixture')});const entry=await service.propose('step','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});await service.execute('step',entry.hash);active=new InMemoryStore();const reads=adapter.reads;await assert.rejects(service.observe(),/feed/i);assert.equal(adapter.reads,reads);assert.equal(active.inspect().length,0);
 });
 
-test('an observation started before proposal invalidates an approval created while the adapter read is pending',async()=>{
- const s=setup();let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r),read=s.adapter.observe.bind(s.adapter);
- s.adapter.observe=async signal=>{if(!first)return read(signal);first=false;entered();await gate;return structuredClone(s.adapter.observation);};
- const observing=s.service.observe();await ready;const entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';release();await observing;s.adapter.observation.binding=original;
- await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+test('a proposal waits for an earlier observation and retains only its own current binding',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const s=setup(),original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r);
+ s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};const observing=s.service.observe();await ready;s.adapter.observation.binding=original;const proposing=s.propose();
+ try{await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,1);}finally{release();}await observing;const entry=await proposing;await s.service.answer('approve','step',entry.hash,'approve');
+ await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,1);assert.equal((await s.read()).entries[0]!.status,'delivered');validateMissionJournalLineage(s.store.inspect());
 });
 
-test('observation reconciliation retries against an approval committed during its store write',async()=>{
- const s=setup(),original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';let release!:()=>void,entered!:()=>void,held=false;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+test('observation reconciliation retries against an approval committed during its store write',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const s=setup(),entry=await s.propose(),original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';let release!:()=>void,entered!:()=>void,held=false;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
  const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(!held&&input.events[0].command.type==='observe'&&input.events[0].command.binding.surface==='other'){held=true;entered();await gate;}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
- const service=s.create(owner),observing=service.observe();await ready;s.adapter.observation.binding=original;const entry=await service.propose('step','control',{kind:'click'});await service.answer('approve','step',entry.hash,'approve');release();await observing;
+ const service=s.create(owner),observing=service.observe();await ready;s.adapter.observation.binding=original;await service.answer('approve','step',entry.hash,'approve');const executing=s.create().execute('step',entry.hash);await new Promise<void>(r=>setImmediate(r));release();await observing;await executing;
  await service.execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});
+
+test('a held observation of B fences execution approved on A across service and adapter instances',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';
+ let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r);s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};
+ const observing=s.service.observe();await ready;s.adapter.observation.binding=original;
+ const adapter:EnvironmentAdapter={observe:signal=>s.adapter.observe(signal),act:(action,context)=>s.adapter.act(action,context)},other=new EnvironmentActions(s.store,s.store,adapter,{owner:'local-owner',environment:'fixture',clock:()=>1000,callTimeoutMs:20});
+ const executing=other.execute('step',entry.hash);await new Promise<void>(r=>setImmediate(r));release();await observing;await executing;
+ assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});
+
+test('execution holds its environment through delivery while other environments remain available',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const s=setup([]),entry=await s.propose();let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r),act=s.adapter.act.bind(s.adapter);
+ s.adapter.act=async(action,context)=>{entered();await new Promise<void>(r=>release=r);await act(action,context);};const executing=s.service.execute('step',entry.hash);await ready;const reads=s.adapter.reads,observing=s.create().observe();
+ const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();adapter.observation.binding.environment='independent';const other=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'independent'});
+ try{await other.observe();await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,reads);}finally{release();}await executing;await observing;assert.equal(s.adapter.delivered.length,1);assert.equal((await s.read()).entries[0]!.status,'delivered');
+});
+
+test('timed-out reads and actions retain serialization until ignored-abort adapters settle',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ for(const kind of ['observe','act'] as const)for(const rejected of [false,true]){
+  const s=setup(),entry=await s.propose();if(kind==='act')await s.service.answer('approve','step',entry.hash,'approve');
+  let release!:()=>void,entered!:()=>void,calls=0;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r),hold=async()=>{calls++;entered();await gate;if(rejected)throw new Error('private-fixture');};
+  if(kind==='observe')s.adapter.holdRead=hold;else s.adapter.act=hold;
+  const pending=kind==='observe'?assert.rejects(s.service.observe(),/unavailable/i):s.service.execute('step',entry.hash);await ready;t.mock.timers.tick(20);await pending;
+  if(kind==='observe'){await s.create().answer('approve','step',entry.hash,'approve');await s.create().answer('cancel','step',entry.hash,'cancel');assert.equal((await s.read()).entries[0]!.status,'cancelled');}else assert.equal((await s.read()).entries[0]!.status,'unknown');
+  const reads=s.adapter.reads;s.adapter.holdRead=undefined;const next=s.create().observe();
+  try{await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,reads);}finally{release();}await next;
+  if(kind==='act'){assert.equal((await s.create().execute('step',entry.hash)).status,'unknown');assert.equal(calls,1);}validateMissionJournalLineage(s.store.inspect());
+ }
+});
+
+for(const outcome of ['binding','error','malformed'] as const)test(`a timed-out B read with ${outcome} cannot reuse approval for restored A`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';
+ let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r),read=s.adapter.observe.bind(s.adapter);
+ s.adapter.observe=async signal=>{if(!first)return read(signal);first=false;const observation=structuredClone(s.adapter.observation);entered();await gate;if(outcome==='error')throw new Error('private-fixture');if(outcome==='malformed')observation.binding.generation=0;return observation;};
+ const observing=assert.rejects(s.service.observe(),/unavailable/i);await ready;t.mock.timers.tick(20);await observing;s.adapter.observation.binding=original;
+ const executing=s.create().execute('step',entry.hash);release();await executing;
+ assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});
+
+test('a timed-out read retains serialization through its delayed reconciliation commit',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';
+ let releaseRead!:()=>void,enteredRead!:()=>void,releaseWrite!:()=>void,enteredWrite!:()=>void;const reading=new Promise<void>(r=>enteredRead=r),writing=new Promise<void>(r=>enteredWrite=r);
+ s.adapter.holdRead=async()=>{enteredRead();await new Promise<void>(r=>releaseRead=r);};
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events[0].command.type==='observe'&&input.events[0].command.binding.surface==='other'){enteredWrite();await new Promise<void>(r=>releaseWrite=r);}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const observing=assert.rejects(s.create(owner).observe(),/unavailable/i);await reading;t.mock.timers.tick(20);await observing;s.adapter.observation.binding=original;s.adapter.holdRead=undefined;
+ const reads=s.adapter.reads,executing=s.create().execute('step',entry.hash);releaseRead();await writing;
+ try{await new Promise<void>(r=>setImmediate(r));assert.equal(s.adapter.reads,reads);}finally{releaseWrite();}await executing;
+ assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+});
+
+for(const timedOut of [false,true])test(`failed bookkeeping after a read ${timedOut?'timeout':'failure'} rejects queued claims without blocking owner cancellation`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const s=setup(undefined,`failed-reconciliation-${timedOut}`),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';
+ let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r);s.adapter.holdRead=async()=>{if(first){first=false;entered();await new Promise<void>(r=>release=r);}};
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(['observe','invalidate'].includes(input.events[0].command.type))throw new Error('Fixture bookkeeping failed');return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const observing=assert.rejects(s.create(owner).observe(),/unavailable|bookkeeping/i);await ready;if(timedOut){t.mock.timers.tick(20);await observing;}s.adapter.observation.binding=original;
+ const executing=assert.rejects(s.create().execute('step',entry.hash),/observation.*unresolved/i);release();await observing;await executing;assert.equal(s.adapter.delivered.length,0);
+ await assert.rejects(s.create().execute('step',entry.hash),/observation.*unresolved/i);await s.create().answer('cancel','step',entry.hash,'cancel');assert.equal((await s.read()).entries[0]!.status,'cancelled');validateMissionJournalLineage(s.store.inspect());
+});
+
+for(const failure of ['adapter','malformed','reconciliation'] as const)test(`a non-timeout ${failure} failure invalidates pending approvals before returning to A`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ for(const approved of [true,false]){
+  const s=setup(),entry=await s.propose();if(approved)await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);s.adapter.observation.binding.surface='other';const read=s.adapter.observe.bind(s.adapter);
+  s.adapter.observe=async signal=>{if(failure==='adapter')throw new Error('private-fixture');const observation=await read(signal);if(failure==='malformed')observation.binding.generation=0;return observation;};
+  const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(failure==='reconciliation'&&input.events[0].command.type==='observe')throw new Error('Fixture bookkeeping failed');return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  await assert.rejects(s.create(owner).observe());s.adapter.observation.binding=original;s.adapter.observe=read;
+  if(!approved)await assert.rejects(s.service.answer('approve','step',entry.hash,'approve'),/no longer/i);
+  await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());
+ }
 });

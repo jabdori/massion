@@ -3,7 +3,7 @@ import {hash} from './domain.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 import {withAdmissionFeed} from './storage.ts';
 import type {Store,Operation,CommitResult} from './storage.ts';
-import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
+import {callTool,ToolCallError,TOOL_TIMEOUT_MS} from './tool-call.ts';
 import {environmentFields as exact,requireEnvironment as ensure,environmentId as id,environmentInteger as integer,validateBinding,validateActionInput,validateObservation,validateAction,validateOwnerWait} from './environment.ts';
 import type {EnvironmentAction,EnvironmentAdapter,EnvironmentBinding,EnvironmentObservation,ActionInput,OwnerWait} from './environment.ts';
 
@@ -20,6 +20,7 @@ type Command=
  |{type:'reserve-poll';stepId:string}
  |{type:'poll-result';stepId:string;poll:number;proof:{binding:EnvironmentBinding;fact:boolean|null}|null};
 const prefix='assistant-environment:',pending=(e:EnvironmentEntry)=>['waiting','ready','unknown'].includes(e.status);
+const environmentOperations=new Map<string,{tail:Promise<void>;blocked:boolean}>();
 const stateId=(c:Pick<Context,'owner'|'environment'>)=>'assistant-conversation:environment:'+hash([c.owner,c.environment]);
 const binding=(r:Request)=>r.type==='action'?r.action.binding:r.binding;
 const sameSurface=(a:EnvironmentBinding,b:EnvironmentBinding)=>a.environment===b.environment&&a.surface===b.surface&&a.origin===b.origin&&a.generation===b.generation;
@@ -92,18 +93,39 @@ export function replayEnvironment(operation:Operation<EnvironmentState>,prior?:O
 interface Options {owner:string;environment:string;clock?:()=>number;callTimeoutMs?:number;resolveSecret?:(reference:{owner:string;slot:string},signal:AbortSignal)=>Promise<Uint8Array>}
 /** Host-only library. Bind authenticated Work/owner authority before exposing any method to a client. */
 export class EnvironmentActions {
- readonly #store:Store<any>;readonly #owner:Store<any>;readonly #adapter:EnvironmentAdapter;readonly #options:Options;readonly #clock:()=>number;readonly #timeout:number;#readGeneration=0;#feedId?:string;
+ readonly #store:Store<any>;readonly #owner:Store<any>;readonly #adapter:EnvironmentAdapter;readonly #options:Options;readonly #clock:()=>number;readonly #timeout:number;#readGeneration=0;#feedId?:string;#settled=Promise.resolve();
  constructor(store:Store<any>,ownerStore:Store<any>,adapter:EnvironmentAdapter,options:Options){ensure(id(options.owner)&&id(options.environment),'Invalid environment owner');this.#store=store;this.#owner=ownerStore;this.#adapter=adapter;this.#options={...options};this.#clock=options.clock??Date.now;this.#timeout=options.callTimeoutMs??5000;ensure(integer(this.#timeout)&&this.#timeout>0&&this.#timeout<=TOOL_TIMEOUT_MS,'Invalid environment call timeout');}
+ async #serialize<T>(run:()=>Promise<T>):Promise<T>{
+  const key=this.#options.environment,lane=environmentOperations.get(key)??{tail:Promise.resolve(),blocked:false},previous=lane.tail;let release!:()=>void;const held=new Promise<void>(r=>release=r);lane.tail=held;environmentOperations.set(key,lane);
+  await previous;
+  try{ensure(!lane.blocked,'Environment observation unresolved','conflict');return await run();}finally{
+   // Settlement includes late observation reconciliation; timeout only requests abort.
+   void this.#settled.then(()=>{release();if(lane.tail===held&&!lane.blocked)environmentOperations.delete(key);});
+  }
+ }
+ #call<T>(invoke:(signal:AbortSignal)=>Promise<T>,readOnly=false,timeoutMs=this.#timeout):Promise<T>{
+  return callTool(signal=>{const operation=invoke(signal);this.#settled=operation.then(()=>{},()=>{});return operation;},{readOnly,timeoutMs});
+ }
  async #load(){const read=await this.#store.readState(stateId(this.#options));this.#feedId??=read.feedId;ensure(read.feedId===this.#feedId,'Environment database feed changed','conflict');const context:Context={owner:this.#options.owner,environment:this.#options.environment,feedId:read.feedId};const value:EnvironmentState=read.snapshot?.value??empty(context);validateState(value);ensure(value.feedId===read.feedId&&value.id===stateId(context),'Environment database feed changed','conflict');return {context,value,revision:read.snapshot?.revision??0};}
  async state(){const {value}=await this.#load(),at=this.#clock();for(const e of value.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline)e.status='timed-out';return value;}
  async #observe(timeoutMs=this.#timeout):Promise<EnvironmentObservation>{
   await this.#load();
-  let observation:EnvironmentObservation;try{observation=await callTool(signal=>this.#adapter.observe(signal),{readOnly:true,timeoutMs});}catch{throw new Error('Environment observation unavailable');}
-  validateObservation(observation);observation=structuredClone(observation);
-  const reconciled=await this.#dispatch({type:'observe',binding:observation.binding});ensure(reconciled.status!=='conflict','Environment observation conflict','conflict');
-  ensure(observation.binding.environment===this.#options.environment,'Environment observation identity changed');return observation;
+  try{return await this.#call(async signal=>{
+   try{
+    let observation:EnvironmentObservation;try{observation=await this.#adapter.observe(signal);}catch{throw new Error('Environment observation unavailable');}
+    validateObservation(observation);observation=structuredClone(observation);
+    const reconciled=await this.#dispatch({type:'observe',binding:observation.binding});ensure(reconciled.status!=='conflict','Environment observation conflict','conflict');
+    ensure(observation.binding.environment===this.#options.environment,'Environment observation identity changed');return observation;
+   }catch(error){
+    try{
+     const {value}=await this.#load(),e=value.entries.find(e=>e.status==='ready'||e.status==='waiting');
+     if(e)this.#entry(await this.#dispatch({type:'invalidate',stepId:e.id,hash:e.hash}),e.id);
+    }catch{environmentOperations.get(this.#options.environment)!.blocked=true;}
+    throw error;
+   }
+  },true,timeoutMs);}catch(error){if(error instanceof ToolCallError)throw new Error('Environment observation unavailable');throw error;}
  }
- async observe(){const generation=++this.#readGeneration,{context}=await this.#load(),observation=await this.#observe(),{value}=await this.#load();ensure(generation===this.#readGeneration&&context.feedId===value.feedId,'Stale environment observation','conflict');return value.tainted?{...observation,structure:[],facts:{},image:null}:{...observation,image:observation.image&&observation.image.expiresAt>this.#clock()?observation.image:null};}
+ async observe(){const generation=++this.#readGeneration;return this.#serialize(async()=>{const {context}=await this.#load(),observation=await this.#observe(),{value}=await this.#load();ensure(generation===this.#readGeneration&&context.feedId===value.feedId,'Stale environment observation','conflict');return value.tainted?{...observation,structure:[],facts:{},image:null}:{...observation,image:observation.image&&observation.image.expiresAt>this.#clock()?observation.image:null};});}
  async #dispatch(command:Command,commandId?:string,hostReceipt=false):Promise<CommitResult<EnvironmentState>>{
   boundedPlainJson(command);command=structuredClone(command);const initial=await this.#load(),c=initial.context;commandId??=hostCommand(c,command);ensure(id(commandId)&& (command.type==='answer'?!commandId.startsWith('assistant-'):commandId.startsWith(prefix)),'Invalid environment command identity');
   const identity={id:stateId(c),commandId,fingerprint:fingerprint(c,command)},store=hostReceipt?this.#store:this.#owner;
@@ -118,15 +140,19 @@ export class EnvironmentActions {
  #entry(result:CommitResult<EnvironmentState>,stepId:string){ensure(result.status!=='conflict','Environment command identity conflict','conflict');return structuredClone(result.value.entries.find(e=>e.id===stepId)!);}
  async propose(stepId:string,element:string,input:ActionInput){
   validateActionInput(input);input=structuredClone(input);ensure(id(stepId)&&id(element),'Invalid action identity');if(input.kind==='type')ensure(input.secret.owner===this.#options.owner,'Secret owner mismatch','denied');
+  return this.#serialize(async()=>{
   const o=await this.#observe(),node=o.structure.find(e=>e.id===element);ensure(node&&node.operations.includes(input.kind),'Action unavailable on this element');const gates=structuredClone(node.gates);if(input.kind==='submit'&&!gates.length)gates.push({kind:'irreversible-submit'});
   return this.#entry(await this.#dispatch({type:'propose',stepId,request:{type:'action',action:{binding:o.binding,element,input,gates}}}),stepId);
+  });
  }
  async wait(stepId:string,wait:OwnerWait){
-  validateOwnerWait(wait);wait=structuredClone(wait);const o=await this.#observe();ensure(wait.kind==='approve'||Object.hasOwn(o.facts,wait.fact)&&o.facts[wait.fact]===wait.from,'Wait requires its initial host-observed fact');
+  validateOwnerWait(wait);wait=structuredClone(wait);return this.#serialize(async()=>{const o=await this.#observe();ensure(wait.kind==='approve'||Object.hasOwn(o.facts,wait.fact)&&o.facts[wait.fact]===wait.from,'Wait requires its initial host-observed fact');
   return this.#entry(await this.#dispatch({type:'propose',stepId,request:{type:'wait',binding:o.binding,wait}}),stepId);
+  });
  }
  async answer(commandId:string,stepId:string,actionHash:string,answer:'approve'|'decline'|'cancel'){return this.#entry(await this.#dispatch({type:'answer',stepId,hash:actionHash,answer},commandId),stepId);}
  async execute(stepId:string,actionHash:string){
+  return this.#serialize(async()=>{
   const {value,context}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e&&e.hash===actionHash,'Action hash mismatch','conflict');if(!['ready','waiting'].includes(e.status))return structuredClone(e);ensure(e.request.type==='action'&&e.status==='ready','Action is waiting for owner approval','conflict');const action=e.request.action;
   ensure(!action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable','denied');ensure(action.input.kind!=='type'||this.#options.resolveSecret,'Secret resolver unavailable');
   const o=await this.#observe(),node=o.structure.find(n=>n.id===action.element),gates=node?structuredClone(node.gates):[];if(action.input.kind==='submit'&&node&&!gates.length)gates.push({kind:'irreversible-submit'});
@@ -134,16 +160,19 @@ export class EnvironmentActions {
   const claim=await this.#dispatch({type:'claim',stepId,hash:actionHash}),claimed=this.#entry(claim,stepId);if(claim.status!=='committed'||claimed.status!=='unknown')return claimed;
   ensure((await this.#load()).context.feedId===context.feedId,'Environment database feed changed','conflict');let secretUsed=false;
   try{
-   await callTool(signal=>this.#adapter.act(structuredClone(action),{signal,...(action.input.kind==='type'?{secret:async()=>{ensure(!secretUsed&&!signal.aborted,'Secret reference already consumed');secretUsed=true;return this.#options.resolveSecret!(structuredClone((action.input as Extract<ActionInput,{kind:'type'}>).secret),signal);}}:{})}),{timeoutMs:this.#timeout});
+   await this.#call(signal=>this.#adapter.act(structuredClone(action),{signal,...(action.input.kind==='type'?{secret:async()=>{ensure(!secretUsed&&!signal.aborted,'Secret reference already consumed');secretUsed=true;return this.#options.resolveSecret!(structuredClone((action.input as Extract<ActionInput,{kind:'type'}>).secret),signal);}}:{})}));
   }catch{return claimed;}
   return this.#entry(await this.#dispatch({type:'delivered',stepId,hash:actionHash},undefined,true),stepId);
+  });
  }
  async poll(stepId:string){
   const {value}=await this.#load(),e=value.entries.find(e=>e.id===stepId);ensure(e,'Unknown owner wait');if(e.status!=='waiting')return structuredClone(e);ensure(e.request.type==='wait'&&e.request.wait.kind!=='approve','Approval requires an owner answer');const wait=e.request.wait;
   const command:Command={type:'reserve-poll',stepId},reservation=await this.#dispatch(command,prefix+hash([value.id,stepId,'poll',e.polls+1])),reserved=this.#entry(reservation,stepId);if(reservation.status!=='committed'||reserved.status!=='waiting')return reserved;
+  return this.#serialize(async()=>{
   let proof:Extract<Command,{type:'poll-result'}>['proof']=null;
   try{const remaining=reserved.deadline-this.#clock();if(remaining>0){const o=await this.#observe(Math.min(this.#timeout,remaining));proof={binding:o.binding,fact:Object.hasOwn(o.facts,wait.fact)?o.facts[wait.fact]!:null};}}catch{}
   const latest=(await this.#load()).value.entries.find(x=>x.id===stepId)!;if(latest.status!=='waiting'||latest.polls!==reserved.polls)return structuredClone(latest);
   return this.#entry(await this.#dispatch({type:'poll-result',stepId,poll:reserved.polls,proof},undefined,true),stepId);
+  });
  }
 }
