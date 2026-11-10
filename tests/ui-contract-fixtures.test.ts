@@ -172,7 +172,7 @@ test('completed and deferred v2 decisions render the declared readiness node wit
   });
   await settle();
   assert.ok(app.all().some(n=>n.id===f.readySelector.slice(1)),screen+' readiness node must be rendered');
-  if(screen==='B21-done-hana')assert.ok(app.all().some(n=>n.id==='side-member-member-sem'),'admitted member must appear in the sidebar');
+  if(screen==='B21-done-hana'){const memberId=(f.routes['/assistant/conversation']!.body as {decisions:{memberId:string}[]}).decisions[0]!.memberId;assert.ok(app.all().some(n=>n.id==='side-member-'+memberId),'the actually admitted member must appear in the sidebar');}
   for(const d of (f.routes['/assistant/conversation']!.body as {decisions:{id:string}[]}).decisions)
    assert.ok(app.all().some(n=>n.id==='chat-system-'+d.id),screen+' completed/deferred decision must not be discarded');
  }

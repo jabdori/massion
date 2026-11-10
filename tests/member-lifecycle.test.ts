@@ -12,12 +12,12 @@ import type {AssistantSegment} from '../src/assistant-conversation.ts';
 import {SCHEDULES_ID,applySchedules} from '../src/schedules.ts';
 
 const owner={id:'local-owner',roles:['owner' as const]},host={id:ASSISTANT_ACTOR_ID,roles:['assistant' as const]},T0=Date.UTC(2026,10,10);
-async function setup(store:Store<any>=new InMemoryStore<any>()){
+async function setup(store:Store<any>=new InMemoryStore<any>(),undoable=false){
  let now=T0;const service=new MembersService(store,()=>'intake',()=>now),proposalId=PROPOSAL_PREFIX+'lifecycle',decisionId=proposalDecisionId(proposalId),memberId=admittedMemberId('admit-lifecycle');
  let prior:MembersState|null=null,revision=0;
  const steps:[string,MembersCommand,Actor][]=[
   [proposalId,{type:'propose-member',decisionId,topic:'Analysis',works:[{title:'First'},{title:'Second'}],count:2},host],
-  ['admit-lifecycle',{type:'admit-member',decisionId,memberId,name:'River',shape:'drop'},owner],
+  ['admit-lifecycle',{type:'admit-member',decisionId,memberId,name:'River',shape:'drop',...(undoable?{undoable:true as const}:{})},owner],
  ];
  for(const [commandId,command,actor] of steps){const {value,events}=applyMembers(prior,command,actor,{observedAt:now});await store.commit({id:MEMBERS_ID,expectedRevision:revision++,commandId,fingerprint:hash({actorId:actor.id,command}),value,events,outbox:[]});prior=value;}
  return {store,service,memberId,setNow:(at:number)=>{now=at;}};
@@ -146,4 +146,65 @@ test('member screen fixtures use production lifecycle reads and consistently rem
   if(screen==='B13')assert.deepEqual(fixture.routes['/assistant/schedules'],source.routes['/assistant/schedules']);else assert.equal(view.members.find(m=>m.id===selected.id)!.builtinSkills.length,2);assert.ok(fixture.reuse.some(s=>s.includes('member-lifecycle-fixtures.ts')));
  }
  const unrelated=JSON.parse(await readFile(new URL('../scripts/ui-contracts/fixtures/B12.json',import.meta.url),'utf8'));assert.deepEqual(await memberLifecycleFixture(unrelated),unrelated);
+});
+
+test('new admission can be undone once without deleting identity; used members cannot be undone',async()=>{
+ const f=await setup();
+ // The service enables undo only on new admissions; historical commands stay unchanged.
+ await f.service.act(action(f.memberId));
+ const proposalId=PROPOSAL_PREFIX+'undo',decisionId=proposalDecisionId(proposalId);
+ const snapshot=(await f.store.load(MEMBERS_ID))!;
+ const proposed=applyMembers(snapshot.value,{type:'propose-member',decisionId,topic:'Writing',works:[{title:'One'},{title:'Two'}],count:2},host,{observedAt:T0});
+ await f.store.commit({id:MEMBERS_ID,expectedRevision:snapshot.revision,commandId:proposalId,fingerprint:hash({actorId:host.id,command:(proposed.events[0] as any).command}),...proposed,outbox:[]});
+ await f.service.decide({commandId:'admit-undo',decisionId,answer:'act',member:{name:'Lake',shape:'round'}});
+ const memberId=admittedMemberId('admit-undo'),input={commandId:'undo-admission',action:'undo',memberId};
+ assert.equal((await f.service.read()).decisions.at(-1)!.undoable,true);
+ assert.equal((await f.service.act(input)).status,'committed');
+ assert.equal((await f.service.act(input)).status,'replayed');
+ assert.equal((await f.service.member(memberId))!.archivedAt,T0);
+ assert.equal((await f.service.outcome(input)).status,'replayed');
+ await f.service.act(action(memberId,'unarchive','restore-undone'));
+ await assert.rejects(f.service.act({...input,commandId:'undo-again'}),/undo/i);
+ const ops=(f.store as InMemoryStore<any>).inspect().filter(o=>o.aggregateId===MEMBERS_ID);
+ for(let i=0;i<ops.length;i++)replayMembers(ops[i]!,ops[i-1]);
+});
+
+test('undo and first member use contend on one durable revision; the loser cannot reopen admission',async()=>{
+ const f=await setup(undefined,true);let armed=true;
+ const store=new Proxy(f.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(armed){armed=false;await f.service.use(f.memberId);}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const pending=new MembersService(store,()=>'intake',()=>T0).act({commandId:'racing-undo',action:'undo',memberId:f.memberId});
+ await assert.rejects(pending,/undo window/);assert.equal((await f.service.member(f.memberId))!.archivedAt,undefined);
+ const other=await setup(undefined,true);await other.service.act({commandId:'undo-first',action:'undo',memberId:other.memberId});await assert.rejects(other.service.use(other.memberId),/unavailable/);
+});
+
+test('overlapping undo replays after the load and ambiguous undo commits are reconciled without rewriting',async()=>{
+ const f=await setup(undefined,true),input={commandId:'overlap-undo',action:'undo',memberId:f.memberId};let armed=true;
+ const store=new Proxy(f.store,{get(target,key){if(key==='load')return async(id:string)=>{if(armed&&id===MEMBERS_ID){armed=false;await f.service.act(input);}return target.load(id);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ assert.equal((await new MembersService(store,()=>'intake',()=>T0).act(input)).status,'replayed');
+ const other=await setup(undefined,true);let commits=0;
+ const unknown=new Proxy(other.store,{get(target,key){if(key==='commit')return async(input:any)=>{commits++;await target.commit(input);throw new CommitOutcomeUnknownError(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const service=new MembersService(unknown,()=>'intake',()=>T0),undo={...input,memberId:other.memberId};await assert.rejects(service.act(undo),CommitOutcomeUnknownError);
+ assert.equal((await service.outcome(undo)).status,'replayed');assert.equal(commits,1);
+});
+
+test('undo through a draining owner store commits nothing; archive and restore permanently close its window',async()=>{
+ const f=await setup(undefined,true),ownerStore=new Proxy(f.store,{get(target,key){if(key==='commit')return ()=>{throw new Error('Host is draining');};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ await assert.rejects(new MembersService(ownerStore,()=>'intake',()=>T0).act({commandId:'drained-undo',action:'undo',memberId:f.memberId}),/draining/);
+ assert.equal((await f.service.read()).decisions[0]!.undoable,true);
+ await f.service.act(action(f.memberId));await f.service.act(action(f.memberId,'unarchive'));
+ await assert.rejects(f.service.act({commandId:'after-restore',action:'undo',memberId:f.memberId}),/undo window/);
+});
+
+test('admission screen fixtures expose actual undo eligibility and member-authored messages',async()=>{
+ const {loadFixture}=await import('../scripts/ui-contracts/fixture-host.ts');
+ for(const screen of ['B11-quill','B21-done-hana']){
+  const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation']!.body as any;assert.deepEqual(fixture.gaps,[]);
+  if(screen==='B11-quill'){assert.equal(view.segment.messages.at(-1).member.name,'퀼');assert.ok(view.members.some((m:any)=>m.id===view.segment.messages.at(-1).member.id));}
+  else {assert.equal(view.decisions[0].undoable,true);assert.ok(view.members.some((m:any)=>m.id===view.decisions[0].memberId));}
+ }
+});
+
+test('an admission accepted before undo existed still replays its original owner answer after upgrade',async()=>{
+ const f=await setup();assert.equal((await f.service.decide({commandId:'admit-lifecycle',decisionId:proposalDecisionId(PROPOSAL_PREFIX+'lifecycle'),answer:'act',member:{name:'River',shape:'drop'}})).status,'replayed');
+ assert.equal((await f.service.member(f.memberId))!.admissionOpen,undefined);
 });
