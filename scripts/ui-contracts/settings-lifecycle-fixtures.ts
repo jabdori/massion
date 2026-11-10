@@ -1,3 +1,4 @@
+import {CLI_RESTART_GAP} from './device-lifecycle-fixtures.ts';
 import {Application} from '../../src/application.ts';
 import {InMemoryStore} from '../../src/storage.ts';
 import {InMemorySecretSlots} from '../../src/secret-slots.ts';
@@ -25,7 +26,7 @@ export async function settingsLifecycleFixture(template:ScreenFixture):Promise<S
   for(const target of targets){const original=prior.connections.find((c:any)=>target.label===c.label);if(!isCliProvider(target.providerType)&&original?.credentialConfigured)await service.replaceKey({commandId:'fixture-key-'+original.id,connectionId:target.id,expectedConfigHash:target.configHash,apiKey:'fixture-secret'});await service.recheck({commandId:'fixture-check-'+original.id,connectionId:target.id,expectedConfigHash:target.configHash});}
   validateMissionJournalLineage(store.inspect());fixture.routes['/connections']={status:200,body:{...prior,connections:targets}};
   fixture.routes['/connections/lifecycle']={status:200,body:{...await service.read(),feedId}};
-  fixture.gaps=fixture.screen==='B14-restart'?['A trusted host produces restart-required state; no restart executor is installed.']:[];
+  fixture.gaps=fixture.screen==='B14-restart'?[CLI_RESTART_GAP]:[];
   return fixture;
  }
  if(fixture.screen!=='B13-devices')return fixture;

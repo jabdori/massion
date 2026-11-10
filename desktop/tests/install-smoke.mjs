@@ -42,7 +42,8 @@ try{
  }
  await browser('wait','--fn','typeof chatView!=="undefined"&&!!chatView?.feedId&&!reconnectRequired');
  assert.equal((await browser('get','url')).url,'massion://app/');
- assert.deepEqual((await browser('eval',"({node:typeof require,bridge:Object.keys(window.massionDesktop)})")).result,{node:'undefined',bridge:['onFocus']});
+ assert.deepEqual((await browser('eval',"({node:typeof require,bridge:Object.keys(window.massionDesktop)})")).result,{node:'undefined',bridge:['getSettings','saveNotifications','restart','onFocus']});
+ const native=(await browser('eval','window.massionDesktop.getSettings()')).result;assert.equal(native.installedVersion,JSON.parse(await readFile(new URL('../../package.json',import.meta.url),'utf8')).version);assert.equal(native.restartRequired,false);assert.equal(native.update,'unknown');
  const fixture=await loadFixture('B7-unknown'),work=fixture.routes['/assistant/works'].body.works.find(work=>work.unknown);
  const initial=(await browser('eval',`protocol.query('/assistant/works',{scope:'install-before'}).then(r=>r.body.works.find(w=>w.workId===${JSON.stringify(work.workId)}))`)).result;
  assert.equal(initial.unknown,true);

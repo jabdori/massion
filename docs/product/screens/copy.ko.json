@@ -17964,5 +17964,7 @@
    "R-C:settings"
   ],
   "provenance": "Settings lifecycle commands and authoritative read metadata"
- }
+ },
+ "ui.settings.notifications-on": {"ko":"켜짐","roles":["option"],"used_in":["B13-general:settings","B13-general-restart:settings"],"provenance":"Device-local notification delivery preference"},
+ "ui.settings.notifications-off": {"ko":"꺼짐","roles":["option"],"used_in":["B13-general:settings","B13-general-restart:settings"],"provenance":"Device-local notification delivery preference"}
 }

@@ -13,7 +13,11 @@ try{
  const prefs=contents.getLastWebPreferences();
  assert.equal(prefs.sandbox,true);assert.equal(prefs.contextIsolation,true);assert.equal(prefs.nodeIntegration,false);
  assert.equal(await contents.executeJavaScript('typeof require'), 'undefined');
- assert.deepEqual(await contents.executeJavaScript('Object.keys(window.massionDesktop)'),['onFocus']);
+ assert.deepEqual(await contents.executeJavaScript('Object.keys(window.massionDesktop)'),['getSettings','saveNotifications','restart','onFocus']);
+ const native=await contents.executeJavaScript('window.massionDesktop.getSettings()');assert.match(native.installedVersion,/^1\./);assert.equal(native.restartRequired,false);assert.equal(native.update,'unknown');
+ const saved=await contents.executeJavaScript('window.massionDesktop.saveNotifications(false)');assert.equal(saved.notifications,false);assert.equal(saved.restartRequired,true);
+ assert.equal(await contents.executeJavaScript('window.massionDesktop.saveNotifications("false").then(()=>false,()=>true)'),true);
+ assert.equal((await contents.executeJavaScript('window.massionDesktop.saveNotifications(true)')).restartRequired,false);
  for(let n=0;n<100;n++){if(await contents.executeJavaScript('typeof chatView!=="undefined"&&!!chatView?.feedId&&!reconnectRequired'))break;await delay(100);}
  assert.equal(await contents.executeJavaScript('protocol.connection().then(info=>info.state)'), 'ready');
  assert.equal(await contents.executeJavaScript('!!chatView?.feedId&&!reconnectRequired'),true,'Existing UI completed connection');
