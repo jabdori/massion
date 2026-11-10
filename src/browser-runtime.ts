@@ -30,8 +30,8 @@ export function sensitiveBrowserField(f:{label:string;name?:string;autocomplete?
 export function maskBrowserField(f:{label:string;type:string;autocomplete:string;name?:string}){
  if(f.type==='hidden'||f.type==='password'||sensitiveBrowserField(f))return true;
  const benign=/^(이름|성명|주소|배송지|도서|책|제목|수량|날짜|시간|방|인원|name|full.?name|given-name|family-name|street-address|address-line[123]|address|title|quantity|qty|count|guests|room|date|time|isbn)$/i;
- const meanings=[f.label,f.name??'',f.autocomplete].map(v=>v.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').trim()).filter(Boolean);
- return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||!meanings.length||!meanings.every(v=>benign.test(v));
+ const meanings=[f.label,f.name??'',f.autocomplete].map(v=>v.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').trim());
+ return !['text','number','date','time','select-one','select-multiple'].includes(f.type)||!meanings[0]||!meanings.filter(Boolean).every(v=>benign.test(v));
 }
 export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[number,number]>{
  const digits=(s:string)=>s.replace(/\p{Decimal_Number}/gu,d=>{if(d>='0'&&d<='9')return d;const code=d.codePointAt(0)!;let zero=code;while(zero>0&&/\p{Decimal_Number}/u.test(String.fromCodePoint(zero-1))){if(code-zero>=100)throw Error('Browser digit normalization bound exceeded');zero--;}return String((code-zero)%10);});
