@@ -221,7 +221,7 @@ test('minor-unit display preserves safe integer precision for zero, three and fo
 test('typed terminal decisions name their payee and amount at the actual owner answer time',async()=>{
  for(const answer of ['act','reject']){
   const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!;s.advance(60000);await s.service.decide(intentAnswer(e,'answer',answer));
-  const d=(await s.service.decisions())[0]!;assert.match(d.line,/Example supplier/);assert.match(d.line,/123.45 USD/);assert.match(d.line,answer==='act'?/승인됨 · Massion 미실행/:/거절됨/);assert.equal(d.at,NOW+60000);assert.equal((d as any).answeredAt,NOW+60000);
+  const d=(await s.service.decisions())[0]!;assert.match(d.line,/Example supplier/);assert.match(d.line,/123.45 USD/);assert.match(d.line,answer==='act'?/승인됨 · 미실행/:/거절됨/);assert.equal(d.at,NOW+60000);assert.equal((d as any).answeredAt,NOW+60000);
  }
 });
 test('typed source rows label only the declared reference kind without exposing internal identifiers',async()=>{

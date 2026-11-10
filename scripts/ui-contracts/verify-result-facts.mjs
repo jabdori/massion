@@ -23,11 +23,11 @@ for(const theme of ['dark','light'])for(const screen of ['B9','B7-done','B7-fail
   for(const step of host.fixture.steps){await browser('click',step.selector);if(step.readySelector)await browser('wait',step.readySelector);}
   const summary=await evaluate(`document.getElementById('activity-list').innerText`);
   if(screen==='B9'){
-   assert.match(summary,/해지 사유 41건 · 기업 9건 · 그 외 32건/);assert.match(await evaluate(`document.getElementById('chat-log').innerText`),/나누기 완료 · 원인 정리 중/);
+   assert.match(summary,/해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요/);assert.match(await evaluate(`document.getElementById('chat-log').innerText`),/나누기 완료 · 원인 정리 중/);
    await browser('click','#header-profile');const work=host.fixture.routes['/missions/intake'].body.value.works.find(w=>w.title==='이탈 원인 조사');await browser('click','[id="activity-row-intake/'+work.id+'"]');
-  }else assert.match(summary,/요금제 6개 · 표 1개 · 확인 대기/);
+  }else assert.match(summary,/요금제 6개를 표 1개로 정리했어요. 확인 대기예요./);
   if(['B7-fail','B8-fail'].includes(screen)){
-   assert.match(summary,/기업 고객 원인 1개 · 근거 2건 · 확인 실패/);assert.equal(host.fixture.routes['/missions/intake'].body.value.works.find(w=>w.title==='이탈 원인 조사').record,undefined);
+   assert.match(summary,/기업 고객 원인 1개가 근거 2건이에요/);assert.equal(host.fixture.routes['/missions/intake'].body.value.works.find(w=>w.title==='이탈 원인 조사').record,undefined);
    assert.doesNotMatch(await evaluate(`document.querySelector('.work-room:not([hidden])').innerText`),/massion-facts/);
   }
   if(await evaluate(`document.getElementById('app').classList.contains('wide')`))await browser('click','#pane-widen');

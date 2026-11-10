@@ -18741,7 +18741,7 @@
   "used_in": []
  },
  "ui.payment-intent.approved": {
-  "ko": "승인됨 · Massion 미실행",
+  "ko": "승인됨 · 미실행",
   "roles": [
    "text"
   ],

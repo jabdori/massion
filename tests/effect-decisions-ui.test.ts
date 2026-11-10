@@ -164,8 +164,8 @@ test('typed intent approval pins the shown hash and never displays payment succe
  const request={kind:'payment-intent',payee:'공급처',amountMinor:34000,currency:'KRW',purpose:'물품 구매',sourceReference:'document:quote'},d={...decision(request),question:'34,000원 결제 승인할까요?',rows:[['받는 곳',request.payee],['금액','34,000원']],action:'승인',effect:{...decision(request).effect,requestHash:'a'.repeat(64)}};
  const {app,state}=fixture(d);await settle();const card=find(app,'chat-decision-decision:1');assert.ok(button(card,'거절'));await button(card,'승인')!.fire('click');await settle();
  assert.equal(JSON.parse(posts(app)[0]!.options!.body as string).requestHash,'a'.repeat(64));
- state.decisions=[{...d,state:'done',line:'승인됨 · Massion 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
- assert.match(app.node('chat-log').textContent,/승인됨 · Massion 미실행/);assert.doesNotMatch(app.node('chat-log').textContent,/결제 완료|응답 없음/);assert.equal(posts(app).length,1);
+ state.decisions=[{...d,state:'done',line:'승인됨 · 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
+ assert.match(app.node('chat-log').textContent,/승인됨 · 미실행/);assert.doesNotMatch(app.node('chat-log').textContent,/결제 완료|응답 없음/);assert.equal(posts(app).length,1);
  assert.ok(find(app,'chat-system-decision:1').className.split(' ').includes('chat-payment-history'));
 });
 test('typed decline is explicit and detached controls cannot answer a changed intent or feed',async()=>{
@@ -186,8 +186,8 @@ for(const failure of ['drain','contention','server','timeout'])test('typed inten
  assert.ok(button(app.node('chat-log'),'승인'));assert.ok(button(app.node('chat-log'),'거절'));assert.doesNotMatch(app.node('chat-log').textContent,/결과 모름/);
  assert.equal(runInContext('storage.get(chatEffectReceiptKey(chatDecisions()[0]))',app.context),null);
  state.hold=null;state.answer=reply({status:'committed'});await button(app.node('chat-log'),'승인').fire('click');await settle();assert.equal(posts(app).length,2);
- state.decisions=[{...d,state:'done',answeredAt:at+60000,line:'공급처 · 34,000원 · 승인됨 · Massion 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
- assert.ok(app.node('chat-log').textContent.includes('공급처 · 34,000원 · 승인됨 · Massion 미실행 · '+new Date(at+60000).toTimeString().slice(0,5)));assert.equal(button(app.node('chat-log'),'승인'),undefined);
+ state.decisions=[{...d,state:'done',answeredAt:at+60000,line:'공급처 · 34,000원 · 승인됨 · 미실행',effect:{...d.effect,answer:'act'}}];await refresh(app);
+ assert.ok(app.node('chat-log').textContent.includes('공급처 · 34,000원 · 승인됨 · 미실행 · '+new Date(at+60000).toTimeString().slice(0,5)));assert.equal(button(app.node('chat-log'),'승인'),undefined);
 });
 test('an old receipt lock cannot hide or block a typed intent decision',async()=>{
  const request={kind:'payment-intent',item:'구매 요청'},d={...decision(request),action:'승인',effect:{...decision(request).effect,requestHash:'a'.repeat(64)}};

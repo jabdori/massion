@@ -147,7 +147,9 @@
               "evidenceCount": 1,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": null,
+              "fileReads": []
             }
           },
           {
@@ -206,7 +208,9 @@
               "evidenceCount": null,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": null,
+              "fileReads": []
             }
           },
           {
@@ -298,7 +302,11 @@
                     "title": "원인 정리",
                     "role": "요약"
                   },
-                  "status": "settled"
+                  "status": "settled",
+                  "progress": {
+                    "done": 1,
+                    "total": 1
+                  }
                 }
               ],
               "resultFacts": {
@@ -316,7 +324,13 @@
                   }
                 ]
               },
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": {
+                "summary": "기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요.",
+                "caption": "확인 실패 · 근거 2건",
+                "checkCaption": "근거 3건 이상"
+              },
+              "fileReads": []
             }
           }
         ],
@@ -427,7 +441,11 @@
                   "title": "원인 정리",
                   "role": "요약"
                 },
-                "status": "settled"
+                "status": "settled",
+                "progress": {
+                  "done": 1,
+                  "total": 1
+                }
               }
             ],
             "resultFacts": {
@@ -445,7 +463,13 @@
                 }
               ]
             },
-            "tableCount": 0
+            "tableCount": 0,
+            "progressNote": {
+              "summary": "기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요.",
+              "caption": "확인 실패 · 근거 2건",
+              "checkCaption": "근거 3건 이상"
+            },
+            "fileReads": []
           },
           {
             "missionId": "intake",
@@ -483,7 +507,9 @@
             "evidenceCount": null,
             "workerSteps": [],
             "resultFacts": null,
-            "tableCount": 0
+            "tableCount": 0,
+            "progressNote": null,
+            "fileReads": []
           },
           {
             "missionId": "intake",
@@ -521,7 +547,9 @@
             "evidenceCount": 1,
             "workerSteps": [],
             "resultFacts": null,
-            "tableCount": 0
+            "tableCount": 0,
+            "progressNote": null,
+            "fileReads": []
           }
         ]
       }
@@ -600,7 +628,7 @@
                 "messages": [
                   {
                     "actorId": "local-owner",
-                    "at": 1793855280018,
+                    "at": 1793855280026,
                     "id": "e3c-churn-discussion",
                     "ordinal": 1,
                     "replyTo": null,
@@ -893,7 +921,7 @@
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
                   }
                 ],
-                "endedAt": 1793855280017,
+                "endedAt": 1793855280025,
                 "execution": "settled",
                 "id": "assistant-236a368dfcf6f32eaeb68fb0",
                 "missionSnapshot": {
@@ -919,30 +947,30 @@
                 },
                 "tasks": [
                   {
-                    "endedAt": 1793855280016,
+                    "endedAt": 1793855280024,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "parentId": null,
                     "result": "Consumed separate executor and verifier results",
                     "status": "settled"
                   },
                   {
-                    "endedAt": 1793855280013,
+                    "endedAt": 1793855280020,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "result": "Text artifact 232aa6f7d8f34bba178f6cd787d3c5e8b39938290b194c829ca6f21a1c4ef022",
-                    "startedAt": 1793855280011,
+                    "startedAt": 1793855280016,
                     "status": "settled"
                   },
                   {
-                    "endedAt": 1793855280015,
+                    "endedAt": 1793855280023,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                     "result": "Independent review failed",
-                    "startedAt": 1793855280014,
+                    "startedAt": 1793855280021,
                     "status": "settled"
                   },
                   {
-                    "endedAt": 1793855280003,
+                    "endedAt": 1793855280004,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "지난 90일 해지",
@@ -955,11 +983,11 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280007,
+                    "endedAt": 1793855280009,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "해지 사유 41건 모았어요.",
-                    "startedAt": 1793855280005,
+                    "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
                       "dependsOn": [
@@ -971,11 +999,11 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280008,
+                    "endedAt": 1793855280011,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
-                    "startedAt": 1793855280006,
+                    "startedAt": 1793855280007,
                     "status": "settled",
                     "step": {
                       "dependsOn": [
@@ -987,7 +1015,7 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280004,
+                    "endedAt": 1793855280005,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "Skipped · 지난달 설문 있음",
@@ -1000,11 +1028,21 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280010,
+                    "endedAt": 1793855280014,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "progress": {
+                      "at": 1793855280015,
+                      "done": 1,
+                      "total": 1,
+                      "wording": {
+                        "caption": "확인 실패 · 근거 2건",
+                        "checkCaption": "근거 3건 이상",
+                        "summary": "기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요."
+                      }
+                    },
                     "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
-                    "startedAt": 1793855280009,
+                    "startedAt": 1793855280012,
                     "status": "settled",
                     "step": {
                       "dependsOn": [
@@ -1057,7 +1095,7 @@
                     ],
                     "relation": "same-family"
                   },
-                  "checkedAt": 1793855280017,
+                  "checkedAt": 1793855280025,
                   "criteriaVersion": 1,
                   "evidence": [
                     {
@@ -1608,7 +1646,7 @@
               "messages": [
                 {
                   "actorId": "local-owner",
-                  "at": 1793855280018,
+                  "at": 1793855280026,
                   "id": "e3c-churn-discussion",
                   "ordinal": 1,
                   "replyTo": null,
@@ -1901,7 +1939,7 @@
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:verifier"
                 }
               ],
-              "endedAt": 1793855280017,
+              "endedAt": 1793855280025,
               "execution": "settled",
               "id": "assistant-236a368dfcf6f32eaeb68fb0",
               "missionSnapshot": {
@@ -1927,30 +1965,30 @@
               },
               "tasks": [
                 {
-                  "endedAt": 1793855280016,
+                  "endedAt": 1793855280024,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "parentId": null,
                   "result": "Consumed separate executor and verifier results",
                   "status": "settled"
                 },
                 {
-                  "endedAt": 1793855280013,
+                  "endedAt": 1793855280020,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "result": "Text artifact 232aa6f7d8f34bba178f6cd787d3c5e8b39938290b194c829ca6f21a1c4ef022",
-                  "startedAt": 1793855280011,
+                  "startedAt": 1793855280016,
                   "status": "settled"
                 },
                 {
-                  "endedAt": 1793855280015,
+                  "endedAt": 1793855280023,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:verifier",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
                   "result": "Independent review failed",
-                  "startedAt": 1793855280014,
+                  "startedAt": 1793855280021,
                   "status": "settled"
                 },
                 {
-                  "endedAt": 1793855280003,
+                  "endedAt": 1793855280004,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "지난 90일 해지",
@@ -1963,11 +2001,11 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280007,
+                  "endedAt": 1793855280009,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "해지 사유 41건 모았어요.",
-                  "startedAt": 1793855280005,
+                  "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
                     "dependsOn": [
@@ -1979,11 +2017,11 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280008,
+                  "endedAt": 1793855280011,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
-                  "startedAt": 1793855280006,
+                  "startedAt": 1793855280007,
                   "status": "settled",
                   "step": {
                     "dependsOn": [
@@ -1995,7 +2033,7 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280004,
+                  "endedAt": 1793855280005,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "Skipped · 지난달 설문 있음",
@@ -2008,11 +2046,21 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280010,
+                  "endedAt": 1793855280014,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "progress": {
+                    "at": 1793855280015,
+                    "done": 1,
+                    "total": 1,
+                    "wording": {
+                      "caption": "확인 실패 · 근거 2건",
+                      "checkCaption": "근거 3건 이상",
+                      "summary": "기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요."
+                    }
+                  },
                   "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
-                  "startedAt": 1793855280009,
+                  "startedAt": 1793855280012,
                   "status": "settled",
                   "step": {
                     "dependsOn": [
@@ -2065,7 +2113,7 @@
                   ],
                   "relation": "same-family"
                 },
-                "checkedAt": 1793855280017,
+                "checkedAt": 1793855280025,
                 "criteriaVersion": 1,
                 "evidence": [
                   {
@@ -2709,7 +2757,9 @@
               "evidenceCount": 1,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": null,
+              "fileReads": []
             }
           },
           {
@@ -2768,7 +2818,9 @@
               "evidenceCount": null,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": null,
+              "fileReads": []
             }
           },
           {
@@ -2860,7 +2912,11 @@
                     "title": "원인 정리",
                     "role": "요약"
                   },
-                  "status": "settled"
+                  "status": "settled",
+                  "progress": {
+                    "done": 1,
+                    "total": 1
+                  }
                 }
               ],
               "resultFacts": {
@@ -2878,7 +2934,13 @@
                   }
                 ]
               },
-              "tableCount": 0
+              "tableCount": 0,
+              "progressNote": {
+                "summary": "기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요.",
+                "caption": "확인 실패 · 근거 2건",
+                "checkCaption": "근거 3건 이상"
+              },
+              "fileReads": []
             }
           }
         ],
@@ -3269,7 +3331,7 @@
               "role": "owner",
               "replyTo": null,
               "text": "기업 고객은 따로 봐 줘.",
-              "at": 1793855280018
+              "at": 1793855280026
             }
           ]
         }

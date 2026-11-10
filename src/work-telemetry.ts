@@ -1,3 +1,4 @@
+import {validateProgressNote} from './member-progress.ts';
 import {DomainError} from './domain.ts';
 import type {CheckPredicate,Criteria,Verdict,StepProgress} from './domain.ts';
 import {workFileInputs} from './github-review.ts';
@@ -24,7 +25,8 @@ export function validatePredicates(value:unknown,criteria:Criteria,status:Verdic
 export function validateStepProgress(value:unknown):asserts value is StepProgress {
  const p=value as StepProgress,keys=p&&typeof p==='object'?Object.keys(p):[];
  const line=(v:unknown)=>typeof v==='string'&&v.trim().length>0&&v.length<=500&&v.isWellFormed();
- if(!p||!keys.every(k=>['done','total','at','note'].includes(k))||!Number.isSafeInteger(p.at)||p.at<0||!Number.isSafeInteger(p.total)||p.total<1||p.total>10000||!Number.isSafeInteger(p.done)||p.done<0||p.done>p.total||Object.hasOwn(p,'note')&&(!p.note||Object.keys(p.note).length!==2||!line(p.note.label)||!line(p.note.text)))throw new DomainError('Invalid step progress');
+ if(!p||!keys.every(k=>['done','total','at','note','wording'].includes(k))||!Number.isSafeInteger(p.at)||p.at<0||!Number.isSafeInteger(p.total)||p.total<1||p.total>10000||!Number.isSafeInteger(p.done)||p.done<0||p.done>p.total||Object.hasOwn(p,'note')&&(!p.note||Object.keys(p.note).length!==2||!line(p.note.label)||!line(p.note.text)))throw new DomainError('Invalid step progress');
+ if(Object.hasOwn(p,'wording'))validateProgressNote(p.wording);
 }
 
 export function validateProcedureEdit(mission:import('./domain.ts').Mission,work:import('./domain.ts').Work,task:import('./domain.ts').Task):void {

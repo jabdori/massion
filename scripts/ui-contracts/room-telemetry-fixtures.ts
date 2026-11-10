@@ -67,7 +67,7 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn
    }
    send({type:'record-step-progress',workId,taskId,progress:{done:4,total:11}},actor,s.start);
   }else if(s.start){send({type:'admit-effect',workId,effect:{id:taskId+':effect',taskId,status:'pending',target:'controlled fixture units',authority:'fixture-only'},reserve:0},actor,s.start);
-   send({type:'record-step-progress',workId,taskId,progress:{done:s.done!,total:s.total!,...(s.note?{note:s.note}:{})}},actor,s.end??s.start);
+   send({type:'record-step-progress',workId,taskId,progress:{done:s.done!,total:s.total!,...(s.note?{note:s.note}:{}),...(index===spec.length-1&&kind==='pricing'?{wording:{summary:'요금제 6개를 표 1개로 정리했어요. 확인 대기예요.',caption:'표 1개 · 확인 대기',checkCaption:'표 1개'}}:index===spec.length-1&&kind==='churn'?{wording:{summary:'해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.',caption:'나누기 완료 · 원인 정리 중',checkCaption:'원인 정리 후 시작'}}:{})}},actor,s.end??s.start);
    if(s.end)send({type:'receipt',workId,effectId:taskId+':effect',outcome:'succeeded',receipt:s.result!,usage:0},actor,s.end);
   }
   if(s.end)send({type:'settle-task',workId,taskId,result:s.result!},actor,s.end);

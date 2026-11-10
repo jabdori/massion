@@ -2,6 +2,10 @@ import type {CliLauncher} from './cli-launcher.ts';
 import type {CliProtocol} from './cli-agent-providers.ts';
 import {KeychainSecretSlots,checkSlot} from './secret-slots.ts';
 import type {SecretSlots,SecretSlot} from './secret-slots.ts';
+import {OnePasswordVault,SecretSourceError,validateSecretSource,validateOnePasswordConfig} from './secret-sources.ts';
+import type {SecretSource,OnePasswordConfig,ExternalVault} from './secret-sources.ts';
+import {SourceSecretSlots} from './source-secret-slots.ts';
+import {PermissionsService} from './permissions.ts';
 import {validateRestoredSelection} from './restored-artifact-reader.ts';
 import type {RestoredArtifactSelection} from './restored-artifact-reader.ts';
 /** Explicit owner-selected host bindings. No credential search or startup sends; only non-secret manifest-scoped settings persist. */
@@ -20,9 +24,9 @@ import type {TextArtifactStore} from './text-artifacts.ts';
 
 interface HostConnection {
  id:string;label:string;providerType:ConnectionInput['providerType'];baseUrl:string;models:string[];
- credential?:{ref:string;environment:string;slot?:never}|{ref:string;slot:string;environment?:never};
+ credential?:{ref:string;environment:string;slot?:never;source?:never}|{ref:string;slot:string;environment?:never;source?:SecretSource};
 }
-export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[]}
+export interface HostManifest {version:1;revision:string;mode:ConnectionInput['mode'];connections:HostConnection[];onePassword?:OnePasswordConfig}
 export interface HostStartup {manifest?:HostManifest;allowLiveExecution:boolean;restoredArtifacts?:RestoredArtifactSelection}
 function requireHost(condition:unknown,message:string):asserts condition {if(!condition)throw new DomainError('Host configuration: '+message);}
 function fields(value:unknown,required:string[],optional:string[]=[]):asserts value is Record<string,unknown> {
@@ -34,7 +38,8 @@ function label(value:unknown):asserts value is string {requireHost(typeof value=
 
 /** Validate the entire non-secret schema before touching a database, network or value source. */
 export function parseHostManifest(value:unknown):HostManifest {
- boundedPlainJson(value);fields(value,['version','revision','mode','connections']);
+ boundedPlainJson(value);fields(value,['version','revision','mode','connections'],['onePassword']);
+ if(value.onePassword!==undefined)validateOnePasswordConfig(value.onePassword);
  requireHost(value.version===1,'unsupported version');identity(value.revision);
  requireHost(value.mode==='https'||value.mode==='local-http-mock','invalid transport mode');
  requireHost(Array.isArray(value.connections)&&value.connections.length>0&&value.connections.length<=32,'1 to 32 connections required');
@@ -53,8 +58,8 @@ export function parseHostManifest(value:unknown):HostManifest {
   modelCount+=models.size;requireHost(modelCount<=64,'at most 64 models allowed');requireHost(!ids.has(entry.id),'duplicate connection');ids.add(entry.id);
   if(value.mode==='https'&&!cli){
    const keychain=!!entry.credential&&typeof entry.credential==='object'&&Object.hasOwn(entry.credential,'slot');
-   fields(entry.credential,['ref',keychain?'slot':'environment']);identity(entry.credential.ref);
-   if(keychain)checkSlot({owner:entry.id,slot:entry.credential.slot as string});
+   fields(entry.credential,['ref',keychain?'slot':'environment'],keychain?['source']:[]);identity(entry.credential.ref);
+   if(keychain){checkSlot({owner:entry.id,slot:entry.credential.slot as string});validateSecretSource(entry.credential.source);}
    else requireHost(typeof entry.credential.environment==='string'&&/^[A-Z_][A-Z0-9_]{0,127}$/.test(entry.credential.environment),'explicit environment name required');
    requireHost(!references.has(entry.credential.ref),'duplicate credential reference');references.add(entry.credential.ref);
   }else requireHost(entry.credential===undefined,'fixture transport cannot carry credential bindings');
@@ -84,36 +89,39 @@ export async function loadHostStartup(args:readonly string[]):Promise<HostStartu
 }
 
 /** Compile immutable identity/destination bindings; construction never calls the supplied accessor. */
-export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false,secrets:SecretSlots=new KeychainSecretSlots()) {
+export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false,secrets:SecretSlots=new KeychainSecretSlots(),access?:{permissions:PermissionsService;vaults?:Partial<Record<'onepassword',ExternalVault>>}) {
  const snapshot=parseHostManifest(manifest),bindingHash=hash(snapshot);
  const entries:HostConnectionBindings['connections']=[];
- const permitted=new Map<string,string|SecretSlot>(),replacementSlots=new Map<string,SecretSlot>();
+ const permitted=new Map<string,string|{secret:SecretSlot;slots?:SourceSecretSlots}>(),replacementSlots=new Map<string,{secret:SecretSlot;slots?:SourceSecretSlots}>(),sources=new Map<string,{secret:SecretSlot;slots?:SourceSecretSlots}>();
+ const vaults=access?.vaults??(snapshot.onePassword?{onepassword:new OnePasswordVault(snapshot.onePassword,readEnvironment)}:{});
  const key=(ref:string,profileId:string,endpoint:string)=>JSON.stringify([ref,profileId,endpoint]);
  for(const entry of snapshot.connections){
   const id='host:'+entry.id+':'+bindingHash.slice(0,16);
   const input:ConnectionInput={id,label:entry.label,providerType:entry.providerType,baseUrl:entry.baseUrl,mode:snapshot.mode,...(entry.credential?{secretRef:entry.credential.ref}:{})};
   entries.push({input,models:[...entry.models]});
   if(!entry.credential)continue;
-  const source=entry.credential.slot!==undefined?{owner:entry.id,slot:entry.credential.slot}:entry.credential.environment;
-  if(typeof source!=='string')replacementSlots.set(id,source);
+  const secret=entry.credential.slot!==undefined?{owner:entry.id,slot:entry.credential.slot}:undefined,selected=validateSecretSource(entry.credential.source);
+  const source=secret?{secret,slots:access?new SourceSecretSlots(secrets,[{secret,source:selected}],access.permissions,{kind:'connection',id},'model-provider',vaults):undefined}:entry.credential.environment!;
+  if(typeof source!=='string'){sources.set(id,source);if(selected.kind==='own')replacementSlots.set(id,source);}
   permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),source);
   for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),source);if(input.providerType==='compatible'&&input.baseUrl.endsWith('/v1/'))permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),source);}
  }
  const resolveCredential:CredentialResolver=async request=>{
   request.signal.throwIfAborted();const source=permitted.get(key(request.secretRef,request.profileId,request.endpoint));
   if(!source||request.endpoint.endsWith('/systemone')&&!isDiscriminatorProfile(request.profileId))throw new Error('Host credential binding unavailable');
-  let secret:unknown;try{secret=typeof source==='string'?readEnvironment(source):await secrets.read(source,request.signal);}catch{throw new Error('Host credential unavailable');}
+  let secret:unknown;try{if(typeof source==='string')secret=readEnvironment(source);else {if(!source.slots)throw new SecretSourceError('grant-required');secret=await source.slots.read(source.secret,request.signal);}}catch(error){if(error instanceof SecretSourceError)throw error;throw new Error('Host credential unavailable');}
   request.signal.throwIfAborted();if(typeof secret!=='string'||!secret||secret.length>8192||/[^\x21-\x7e]/.test(secret))throw new Error('Host credential unavailable');return secret;
  };
- const replaceCredential=async(connectionId:string,apiKey:string)=>{const slot=replacementSlots.get(connectionId);requireHost(slot,'connection has no editable secret slot');await secrets.set(slot,apiKey);};
- const credentialStored=async(connectionId:string,signal:AbortSignal):Promise<CredentialStorage>=>{const slot=replacementSlots.get(connectionId);if(!slot||!secrets.has)return 'unknown';try{const present=await secrets.has(slot,signal);return typeof present==='boolean'?(present?'saved':'missing'):'unknown';}catch{return 'unknown';}};
- return {bindings:{revision:snapshot.revision,bindingHash,connections:entries},resolveCredential,replaceCredential,credentialStored,replaceableConnectionIds:[...replacementSlots.keys()]};
+ const replaceCredential=async(connectionId:string,apiKey:string)=>{const slot=replacementSlots.get(connectionId);requireHost(slot?.slots,'connection has no editable secret slot');await slot.slots.set(slot.secret,apiKey);};
+ const credentialStored=async(connectionId:string,signal:AbortSignal):Promise<CredentialStorage>=>{const slot=sources.get(connectionId);if(!slot?.slots)return 'unknown';try{const present=await slot.slots.has(slot.secret,signal);return present?'saved':'missing';}catch{return 'unknown';}};
+ const secretSource=(connectionId:string)=>{const source=sources.get(connectionId);return source?.slots?.describe(source.secret)??null;};
+ return {drainSecretSources:async()=>{await Promise.all([...sources.values()].map(source=>source.slots?.drain()));},stopSecretSources:()=>{for(const source of sources.values())source.slots?.beginDrain();},bindings:{revision:snapshot.revision,bindingHash,connections:entries},resolveCredential,replaceCredential,credentialStored,secretSource,replaceableConnectionIds:[...replacementSlots.keys()]};
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
-export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{discriminatorTimeoutMs?:number;transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
+export function createHostConnections(store:Store<Mission>,artifacts:TextArtifactStore,startup:HostStartup,options:{vaults?:Partial<Record<'onepassword',ExternalVault>>;discriminatorTimeoutMs?:number;transport:HttpProviderTransport;readEnvironment:(name:string)=>string|undefined;settings?:HostSettingsStore;secrets?:SecretSlots;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>}) {
  if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
- let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets);
- manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,replaceCredential:host.replaceCredential,credentialStored:host.credentialStored,replaceableConnectionIds:host.replaceableConnectionIds,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
+ let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets,{permissions:new PermissionsService(store),vaults:options.vaults});
+ manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,replaceCredential:host.replaceCredential,credentialStored:host.credentialStored,secretSource:host.secretSource,stopSecretSources:host.stopSecretSources,drainSecretSources:host.drainSecretSources,replaceableConnectionIds:host.replaceableConnectionIds,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }

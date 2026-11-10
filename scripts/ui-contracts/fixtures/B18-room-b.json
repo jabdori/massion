@@ -132,6 +132,7 @@
               "workerSteps": [],
               "resultFacts": null,
               "tableCount": 0,
+              "progressNote": null,
               "fileReads": []
             }
           },
@@ -248,8 +249,13 @@
                 ]
               },
               "tableCount": 1,
-              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013",
-              "fileReads": []
+              "progressNote": {
+                "summary": "요금제 6개를 표 1개로 정리했어요. 확인 대기예요.",
+                "caption": "표 1개 · 확인 대기",
+                "checkCaption": "표 1개"
+              },
+              "fileReads": [],
+              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
             }
           },
           {
@@ -341,7 +347,11 @@
                     "title": "원인 정리",
                     "role": "요약"
                   },
-                  "status": "active"
+                  "status": "active",
+                  "progress": {
+                    "done": 0,
+                    "total": 1
+                  }
                 }
               ],
               "resultFacts": {
@@ -365,6 +375,11 @@
                 ]
               },
               "tableCount": 0,
+              "progressNote": {
+                "caption": "나누기 완료 · 원인 정리 중",
+                "checkCaption": "원인 정리 후 시작",
+                "summary": "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+              },
               "fileReads": []
             }
           }
@@ -476,7 +491,11 @@
                   "title": "원인 정리",
                   "role": "요약"
                 },
-                "status": "active"
+                "status": "active",
+                "progress": {
+                  "done": 0,
+                  "total": 1
+                }
               }
             ],
             "resultFacts": {
@@ -500,6 +519,11 @@
               ]
             },
             "tableCount": 0,
+            "progressNote": {
+              "caption": "나누기 완료 · 원인 정리 중",
+              "checkCaption": "원인 정리 후 시작",
+              "summary": "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+            },
             "fileReads": []
           },
           {
@@ -595,6 +619,11 @@
               ]
             },
             "tableCount": 1,
+            "progressNote": {
+              "summary": "요금제 6개를 표 1개로 정리했어요. 확인 대기예요.",
+              "caption": "표 1개 · 확인 대기",
+              "checkCaption": "표 1개"
+            },
             "fileReads": []
           },
           {
@@ -634,6 +663,7 @@
             "workerSteps": [],
             "resultFacts": null,
             "tableCount": 0,
+            "progressNote": null,
             "fileReads": []
           }
         ]
@@ -652,7 +682,7 @@
                 "messages": [
                   {
                     "actorId": "local-owner",
-                    "at": 1793855280011,
+                    "at": 1793855280017,
                     "id": "e3c-churn-discussion",
                     "ordinal": 1,
                     "replyTo": null,
@@ -920,7 +950,7 @@
                   {
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
-                    "startedAt": 1793855280010,
+                    "startedAt": 1793855280015,
                     "status": "active"
                   },
                   {
@@ -929,7 +959,7 @@
                     "status": "queued"
                   },
                   {
-                    "endedAt": 1793855280003,
+                    "endedAt": 1793855280004,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "지난 90일 해지",
@@ -942,11 +972,11 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280007,
+                    "endedAt": 1793855280009,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "해지 사유 41건 모았어요.",
-                    "startedAt": 1793855280005,
+                    "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
                       "dependsOn": [
@@ -958,11 +988,11 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280008,
+                    "endedAt": 1793855280011,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
-                    "startedAt": 1793855280006,
+                    "startedAt": 1793855280007,
                     "status": "settled",
                     "step": {
                       "dependsOn": [
@@ -974,7 +1004,7 @@
                     }
                   },
                   {
-                    "endedAt": 1793855280004,
+                    "endedAt": 1793855280005,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "result": "Skipped · 지난달 설문 있음",
@@ -989,7 +1019,17 @@
                   {
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "startedAt": 1793855280009,
+                    "progress": {
+                      "at": 1793855280014,
+                      "done": 0,
+                      "total": 1,
+                      "wording": {
+                        "caption": "나누기 완료 · 원인 정리 중",
+                        "checkCaption": "원인 정리 후 시작",
+                        "summary": "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+                      }
+                    },
+                    "startedAt": 1793855280012,
                     "status": "active",
                     "step": {
                       "dependsOn": [
@@ -1292,7 +1332,12 @@
                     "progress": {
                       "at": 1793855220000,
                       "done": 1,
-                      "total": 1
+                      "total": 1,
+                      "wording": {
+                        "caption": "표 1개 · 확인 대기",
+                        "checkCaption": "표 1개",
+                        "summary": "요금제 6개를 표 1개로 정리했어요. 확인 대기예요."
+                      }
                     },
                     "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                     "startedAt": 1793854920000,
@@ -1495,7 +1540,7 @@
               "messages": [
                 {
                   "actorId": "local-owner",
-                  "at": 1793855280011,
+                  "at": 1793855280017,
                   "id": "e3c-churn-discussion",
                   "ordinal": 1,
                   "replyTo": null,
@@ -1763,7 +1808,7 @@
                 {
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
-                  "startedAt": 1793855280010,
+                  "startedAt": 1793855280015,
                   "status": "active"
                 },
                 {
@@ -1772,7 +1817,7 @@
                   "status": "queued"
                 },
                 {
-                  "endedAt": 1793855280003,
+                  "endedAt": 1793855280004,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "지난 90일 해지",
@@ -1785,11 +1830,11 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280007,
+                  "endedAt": 1793855280009,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "해지 사유 41건 모았어요.",
-                  "startedAt": 1793855280005,
+                  "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
                     "dependsOn": [
@@ -1801,11 +1846,11 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280008,
+                  "endedAt": 1793855280011,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
-                  "startedAt": 1793855280006,
+                  "startedAt": 1793855280007,
                   "status": "settled",
                   "step": {
                     "dependsOn": [
@@ -1817,7 +1862,7 @@
                   }
                 },
                 {
-                  "endedAt": 1793855280004,
+                  "endedAt": 1793855280005,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "result": "Skipped · 지난달 설문 있음",
@@ -1832,7 +1877,17 @@
                 {
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "startedAt": 1793855280009,
+                  "progress": {
+                    "at": 1793855280014,
+                    "done": 0,
+                    "total": 1,
+                    "wording": {
+                      "caption": "나누기 완료 · 원인 정리 중",
+                      "checkCaption": "원인 정리 후 시작",
+                      "summary": "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+                    }
+                  },
+                  "startedAt": 1793855280012,
                   "status": "active",
                   "step": {
                     "dependsOn": [
@@ -2135,7 +2190,12 @@
                   "progress": {
                     "at": 1793855220000,
                     "done": 1,
-                    "total": 1
+                    "total": 1,
+                    "wording": {
+                      "caption": "표 1개 · 확인 대기",
+                      "checkCaption": "표 1개",
+                      "summary": "요금제 6개를 표 1개로 정리했어요. 확인 대기예요."
+                    }
                   },
                   "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                   "startedAt": 1793854920000,
@@ -2434,6 +2494,7 @@
               "workerSteps": [],
               "resultFacts": null,
               "tableCount": 0,
+              "progressNote": null,
               "fileReads": []
             }
           },
@@ -2550,8 +2611,13 @@
                 ]
               },
               "tableCount": 1,
-              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013",
-              "fileReads": []
+              "progressNote": {
+                "summary": "요금제 6개를 표 1개로 정리했어요. 확인 대기예요.",
+                "caption": "표 1개 · 확인 대기",
+                "checkCaption": "표 1개"
+              },
+              "fileReads": [],
+              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
             }
           },
           {
@@ -2643,7 +2709,11 @@
                     "title": "원인 정리",
                     "role": "요약"
                   },
-                  "status": "active"
+                  "status": "active",
+                  "progress": {
+                    "done": 0,
+                    "total": 1
+                  }
                 }
               ],
               "resultFacts": {
@@ -2667,6 +2737,11 @@
                 ]
               },
               "tableCount": 0,
+              "progressNote": {
+                "caption": "나누기 완료 · 원인 정리 중",
+                "checkCaption": "원인 정리 후 시작",
+                "summary": "해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요."
+              },
               "fileReads": []
             }
           }

@@ -251,9 +251,9 @@ test('conversation table summaries retain authoritative list facts across unrela
  const {app,work,fixture}=await scene('B18-room-b'),summary=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id),table=JSON.stringify({format:'massion-table/v1',caption:'가격',columns:['요금'],rows:[['9,900원']]});
  const card=()=>runInContext('chatCard('+JSON.stringify({id:summary.turnId,work:summary})+')',app.context) as Node;
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step?.title==='표 만들기').result=${JSON.stringify(table)}}`,app.context);
- assert.match(card().textContent,/요금제 6개 · 표 1개/);
- runInContext('snapshot.revision++',app.context);assert.match(card().textContent,/요금제 6개 · 표 1개/);
- summary.missionRevision+=2;delete summary.resultFacts;delete summary.tableCount;assert.doesNotMatch(card().textContent,/표 1개 ·/);
+ assert.match(card().textContent,/표 1개 · 확인 대기/);
+ runInContext('snapshot.revision++',app.context);assert.match(card().textContent,/표 1개 · 확인 대기/);
+ summary.missionRevision+=2;delete summary.resultFacts;delete summary.tableCount;delete summary.progressNote;assert.doesNotMatch(card().textContent,/표 1개 ·/);
 });
 
 test('skipped steps use the skip glyph and carry no time',async()=>{
@@ -292,5 +292,25 @@ test('payment intent rows expose the declared amount and owner answer without fa
  const {app,work,nodes}=await scene('B7');
  const d={stepId:'payment-intent',at:1793855300000,request:{kind:'payment-intent',payee:'공급처',amountMinor:12345,currency:'USD',purpose:'물품 구매',sourceReference:'document:quote'},state:'approved',answers:[{answer:'act',at:1793855400000}]};
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.effects.push({id:'intent',taskId:w.id+':root',status:'pending',ownerDecision:${JSON.stringify(d)}});renderMission();}`,app.context);
- assert.match(nodes().find(n=>hasClass(n,'room-detail'))!.textContent,/123.45 USD/);assert.match(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/승인됨 · Massion 미실행/);assert.doesNotMatch(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/결제 완료/);
+ assert.match(nodes().find(n=>hasClass(n,'room-detail'))!.textContent,/123.45 USD/);assert.match(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/승인됨 · 미실행/);assert.doesNotMatch(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/결제 완료/);
+});
+
+test('member wording renders as inert text and disappears on unknown outcomes and replacement facts',async()=>{
+ const {app,work}=await scene('B7-churn'),row=()=>app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(work.title))!;
+ assert.match(row().textContent,/나누기 완료 · 원인 정리 중/);
+ runInContext(`{const w=shellWorks.find(w=>w.workId===${JSON.stringify(work.id)});w.progressNote={summary:'<script>inert</script>',caption:'<img src=x>',checkCaption:'Source evidence'};renderChat()}`,app.context);
+ assert.match(row().textContent,/<img src=x>/);assert.equal(descendants(row()).some(n=>n.tagName==='IMG'),false);
+ runInContext(`{const w=shellWorks.find(w=>w.workId===${JSON.stringify(work.id)});w.unknown=true;renderChat()}`,app.context);
+ assert.doesNotMatch(runInContext("$('chat-log').textContent",app.context),/<img src=x>/);
+});
+
+test('representative progress cards keep the host step counter beside member-authored captions',async()=>{
+ const {app}=await scene('B2'),card=app.all().find(n=>n.className==='chat-card'&&n.textContent.includes('나누기 완료 · 원인 정리 중'))!;
+ assert.match(descendants(card).find(n=>hasClass(n,'chat-steps'))!.textContent,/^\d+\/\d+ · 나누기 완료 · 원인 정리 중$/);
+});
+
+test('activity summaries retain the independent failed-check label beside pre-check member wording',async()=>{
+ const {app,work}=await scene('B7-fail');
+ const label=runInContext(`shellResultSummary({...shellWorks.find(w=>w.workId===${JSON.stringify(work.id)}),progressNote:{summary:'Prepared the draft. Waiting for checking.'}})`,app.context);
+ assert.match(label,/확인 실패/);assert.match(label,/Prepared the draft/);
 });
