@@ -81,6 +81,7 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
  return {work:work(),conversation:(state as Mission).conversations?.find(c=>c.workId===original.id)};
 }
 
+// Persist inherited sources; read-time overlays must not be serialized back into them.
 export async function regenerate(screen:string){
  const fixture=await loadFixture(screen,['regeneration-source']),inputs=await json(new URL('./work-telemetry-inputs.json',import.meta.url)),input=inputs[screen];
  for(const selected of [input,...(screen==='B7-churn'?[inputs['B18-room-b']]:[])]){
