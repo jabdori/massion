@@ -15,15 +15,16 @@ const perms={read:['Repositories','Pull requests','Check results'],write:[],netw
 const github={id:'app-github',name:'GitHub',origin:'catalog',memberId:null,version:'1.4.0',enabled:true,installedAt:T0,check:null,permissions:perms,contributes:{page:{title:'GitHub'},roomTab:{prefix:'PR #'},templates:['Code review'],skills:['PR summary'],procedures:['PR review'],tools:['gh']},versions:[{index:1,version:'1.3.2',at:T0-2*86400000,current:false},{index:2,version:'1.4.0',at:T0,current:true}]};
 const page={title:'GitHub',meta:'jabdori/massion',groups:[{title:'Open',rows:[{id:'84',title:'feat(assistant): answer the owner and start Representative Work',meta:'#84 · 2026-11-05 10:28',state:'Open'}]},{title:'Merged',rows:[{id:'83',title:'feat(assistant): store the continuing assistant conversation',meta:'#83',state:'Merged'}]}]};
 const item={title:'feat(assistant): answer the owner and start Representative Work #84',meta:'Open · jabdori · feat/assistant-conversation-turns → main',groups:[{title:'Files 2',rows:[{id:'src/assistant-service.ts',title:'src/assistant-service.ts',meta:'+206 −0'}]}],fields:[['Changes','+769 −39']]};
-function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=[],rail:any[]=[{id:'app-github',name:'GitHub',page:true,item:true,roomTab:'PR #'}],view?:(body:any,headers:Record<string,string>)=>unknown,installedApp=github){
+function fixture(installed=true,decisions:any[]=[],extra:any[]=[],members:any[]=[],rail:any[]=[{id:'app-github',name:'GitHub',page:true,item:true,roomTab:'PR #'}],view?:(body:any,headers:Record<string,string>)=>unknown,installedApp=github,loseReply?:()=>Promise<never>){
  const posted:{path:string;body:any}[]=[];
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'&&path==='/assistant/apps/view'){const b=JSON.parse(options.body);if(view)return reply(await view(b,options.headers??{}));return reply(b.app==='app-github'&&b.handler==='page'&&b.ref===undefined?page:b.handler==='item'&&b.ref==='84'?item:{error:'x'});}
-  if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});return reply({status:'committed',revision:2});}
+  if(options?.method==='POST'){posted.push({path,body:JSON.parse(options.body)});if(loseReply)await loseReply();return reply({status:'committed',revision:2});}
   if(path==='/assistant/apps')return reply({feedId:'feed:a',revision:3,apps:installed?[installedApp,...extra]:[],catalog:[{id:'github',name:'GitHub',description:'Pull requests',installed}]});
   if(path==='/missions/intake')return reply(structuredClone(sourceFixture.routes[path]!.body));
   if(path==='/assistant/schedules')return reply({feedId:'feed:a',revision:1,schedules:[]});
   if(path.startsWith('/assistant/conversation'))return reply({feedId:'feed:a',cursor:1,head:1,members,decisions,apps:installed?rail:[],segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[]},turns:[]});
+  if(path.startsWith('/read-state'))return reply({feedId:'feed:a',cursor:1,snapshot:path==='/read-state?mission=intake'?structuredClone(sourceFixture.routes['/missions/intake']!.body):null});
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:1,events:[]});
   return reply({error:'Not configured'},503);
  });
@@ -149,7 +150,7 @@ test('self-made apps are listed apart with their maker and source Work',async()=
  const headings=app.node('settings-apps-body').children.filter(n=>n.tagName==='H3');assert.deepEqual(headings.map(n=>n.textContent),['설치됨 1','직접 만든 앱 1']);assert.ok(headings.every(n=>n.children.length===1),'counts are separate spans for approved spacing');assert.deepEqual(headings.map(n=>n.children[0]!.textContent),['1','1']);
  const source=button(app.node('settings-apps-body'),'PR #84 review ›')[0];assert.ok(source,'the recorded source Work is navigable');
  for(let parent=source.parentElement;parent;parent=parent.parentElement)assert.notEqual(parent.tagName,'BUTTON','source actions are never nested in an app button');
- await source.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);
+ await source.fire('click');await settle();assert.equal(app.node('page-chat').hidden,false);assert.equal(app.calls.some(c=>c.path==='/read-state?mission=intake'),true);
  assert.equal(app.node('pane-tabs').children[0]!.children[0]!.textContent,'PR #84 review');
  assert.ok(app.all().find(n=>n.id==='work-card-pr84'),'the recorded source Work is loaded into the existing pane');
  assert.equal(app.calls.some(c=>c.options?.method==='POST'&&c.path!=='/assistant/apps/view'),false);
@@ -219,7 +220,7 @@ test('a self-made install card opens its exact source Work without installing',a
  const source={missionId:'intake',workId:'w-done',title:'PR #84 review'},card={id:'app-decision:source',at:T0,title:'PR list fetcher',question:'Install?',rows:[['Source',source.title]],source,action:'Install',state:'open'};
  const {app,posted}=fixture(false,[card]);await settle();
  const node=app.all().find(n=>n.id==='chat-decision-app-decision:source')!,link=button(node,'PR #84 review ›')[0];assert.ok(link);
- await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/missions/intake'));assert.equal(posted.length,0);
+ await link.fire('click');await settle();assert.equal(app.node('work-pane').hidden,false);assert.ok(app.calls.some(c=>c.path==='/read-state?mission=intake'));assert.equal(posted.length,0);
 });
 
 test('Settings app search filters loaded installed, self-made and recommended rows without a request or focus loss',async()=>{
@@ -265,18 +266,87 @@ test('Settings app detail never reveals secret values or claims an unproduced cr
 });
 
 test('overlapping Settings app commands send once and keep unknown outcomes read-only',async()=>{
- for(const action of ['install','disable','rollback']){
-  const {app,posted}=fixture(action!=='install');await settle();await open(app);
-  if(action!=='install'){await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();}
-  const original=(app.context as any).request;let release!:()=>void;
+ for(const action of ['install','disable','rollback','reconnect']){
+  let release!:()=>void;
   const gate=new Promise<void>(done=>{release=done;});
-  (app.context as any).request=async(path:string,options:any)=>{const result=await original(path,options);if(path==='/assistant/apps'&&options?.method==='POST'){await gate;throw Error('Response lost');}return result;};
-  const label=copy(action==='install'?'settings.link.04':action==='disable'?'settings.button.04':'settings.button.13');
+  const installed={...github,credential:{slot:'github-token',state:'expired'}};
+  const {app,posted}=fixture(action!=='install',[],[],[],undefined,undefined,installed,async()=>{await gate;throw Error('Response lost');});await settle();await open(app);
+  if(action!=='install'){await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();}
+  const label=copy(action==='install'?'settings.link.04':action==='disable'?'settings.button.04':action==='rollback'?'settings.button.13':'ui.apps.reconnect');
   const control=button(app.node('settings-apps-body'),label)[0]!;
   await control.fire('click');await control.fire('click');await settle();
   assert.equal(posted.length,1,action+' is admitted only once while busy');assert.equal(posted[0]!.body.action,action);assert.ok(posted[0]!.body.commandId);
   release();await settle();assert.equal(posted.length,1,'a lost response never triggers a resend');
+  if(action==='reconnect'){
+   runInContext('renderSettings()',app.context);
+   const reconnect=app.all().find(n=>n.id==='settings-app-reconnect')!;assert.equal(reconnect.disabled,true);
+   await reconnect.fire('click');await settle();assert.equal(posted.length,1,'an unknown reconnect remains locked after rendering');
+  }
  }
+});
+
+test('app settings retain binding metadata without an unsupported member checkbox editor',async()=>{
+ const installed={...github,memberIds:['member-a'],members:[{id:'member-a',name:'Member A'}],credential:{slot:'github-token',state:'saved',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);
+ await settle();await open(app);
+ runInContext("settingsApps.availableMembers=[{id:'member-a',name:'Member A'},{id:'member-b',name:'Member B'}]",app.context);
+ assert.ok(app.node('settings-apps-body').textContent.includes('Member A'));
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ assert.ok(app.node('settings-apps-body').textContent.includes(copy('ui.apps.credential-saved')));
+ const detail=app.node('settings-apps-body');
+ assert.ok(detail.textContent.includes('Member A'),'explicit contribution bindings remain visible');
+ assert.equal(app.all().some(n=>n.type==='checkbox'||n.id==='settings-app-bind-members'),false);
+ assert.equal(detail.children.some(n=>n.tagName==='H3'&&n.textContent===copy('ui.apps.members')),false);
+ assert.deepEqual(runInContext('settingsApps.apps[0].memberIds',app.context),['member-a']);
+ assert.equal(posted.length,0);
+});
+
+test('expired app reconnect opens the existing conversation decision without a settings token field',async()=>{
+ const installed={...github,memberIds:[],members:[],credential:{slot:'github-token',state:'expired',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);await settle();await open(app);
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ assert.ok(app.node('settings-apps-body').textContent.includes(copy('ui.apps.credential-expired')));
+ const reconnect=app.all().find(n=>n.id==='settings-app-reconnect')!;
+ assert.ok(reconnect.className.split(' ').includes('secondary'),'reconnect uses the shared theme-aware button palette');
+ await reconnect.fire('click');await settle();
+ assert.equal(posted.at(-1)!.path,'/assistant/apps');assert.equal(posted.at(-1)!.body.action,'reconnect');assert.equal(posted.at(-1)!.body.appId,'app-github');
+ assert.equal(app.node('page-chat').hidden,false);assert.equal(app.node('app-connect-token').value,'');
+ assert.ok(!app.node('settings-apps-body').children.some(n=>n.type==='password'));
+});
+
+test('a detached app reconnect control cannot mutate a different selection or a replaced database',async()=>{
+ const installed={...github,memberIds:[],members:[],credential:{slot:'github-token',state:'missing'}};
+ const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);await settle();await open(app);
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ const save=app.all().find(n=>n.id==='settings-app-reconnect')!;assert.ok(save);
+ runInContext("settingsApp='different-app'",app.context);await save.fire('click');assert.equal(posted.length,0);
+ runInContext("settingsApp='app-github';connectionEpoch++",app.context);await save.fire('click');assert.equal(posted.length,0);
+});
+
+test('app reconnect is offered only for missing or expired credentials',async()=>{
+ for(const [state,expected] of [['saved',false],['missing',true],['expired',true],['unknown',false]] as const){
+  const installed={...github,credential:{slot:'github-token',state}};
+  const {app,posted}=fixture(true,[],[],[],undefined,undefined,installed);await settle();await open(app);
+  await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+  assert.equal(app.all().some(n=>n.id==='settings-app-reconnect'),expected,state);
+  assert.equal(posted.length,0);
+ }
+});
+
+test('app versions are omitted when the host supplies no approved history',async()=>{
+ const {app}=fixture(true,[],[],[],undefined,undefined,{...github,versions:[]});await settle();await open(app);
+ await app.all().find(n=>n.id==='settings-app-app-github')!.fire('click');await settle();
+ const detail=app.node('settings-apps-body');
+ assert.equal(detail.children.some(n=>n.tagName==='H3'&&n.textContent===copy('settings.heading.04')),false);
+ assert.equal(button(detail,copy('settings.button.13')).length,0);
+});
+
+test('a self-made app reconnect opens its owning member conversation',async()=>{
+ const made={...github,id:'app-self',name:'Private notes',origin:'self-made',memberId:'member-juno',credential:{slot:'github-token',state:'expired',at:T0,connectionId:'saved'}};
+ const {app,posted}=fixture(true,[],[made],[{id:'member-juno',name:'주노'}]);await settle();await open(app);runInContext("settingsApp='app-self';renderSettings()",app.context);
+ await app.all().find(n=>n.id==='settings-app-reconnect')!.fire('click');await settle();
+ assert.equal(posted.at(-1)!.body.appId,'app-self');assert.ok(app.calls.some(c=>c.path==='/assistant/conversation?member=member-juno'));
+ assert.equal(runInContext('chatThread',app.context),'member-juno');
 });
 
 test('GitHub links use exact host review identities and show retained commits',async()=>{
@@ -292,7 +362,7 @@ test('GitHub links use exact host review identities and show retained commits',a
  assert.ok(busy);assert.equal(busy.attributes.get('aria-label'),copy('sidebar.status.05'));assert.equal(busy.attributes.get('data-busy'),'true');assert.equal(busy.textContent,'');
  assert.ok(app.all().some(n=>strip.contains(n)&&n.className==='page-glyph glyph-chevron'&&n.attributes.get('aria-hidden')==='true'));
  const link=app.all().find(n=>n.attributes.get('role')==='link'&&n.textContent.startsWith('PR #84 검토'));assert.ok(link);await link.fire('click');await settle();
- assert.equal(app.calls.some(c=>c.path==='/missions/intake'),true);assert.equal(posted.length,0);
+ assert.equal(app.calls.some(c=>c.path==='/read-state?mission=intake'),true);assert.equal(runInContext("paneTabs.some(tab=>tab.missionId==='intake'&&tab.workId==='pr84')",app.context),true);assert.equal(posted.length,0);
 });
 
 test('a replaced database invalidates pending GitHub reads and clears cached review context',async()=>{

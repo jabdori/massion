@@ -10,7 +10,7 @@ import {constants} from 'node:fs';
 import {DomainError,hash} from './domain.ts';
 import {boundedPlainJson} from './bounded-json.ts';
 import {ConnectionWorkbench,MODEL_PROVIDER_TYPES,isCliProvider} from './connection-workbench.ts';
-import type {ConnectionInput,HostConnectionBindings} from './connection-workbench.ts';
+import type {ConnectionInput,HostConnectionBindings,CredentialStorage} from './connection-workbench.ts';
 import type {CredentialResolver} from './chat-profile-factory.ts';
 import {validateModelEndpoint} from './native-model-providers.ts';
 import type {HttpProviderTransport} from './http-provider.ts';
@@ -87,7 +87,7 @@ export async function loadHostStartup(args:readonly string[]):Promise<HostStartu
 export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:string)=>string|undefined,isDiscriminatorProfile:(profileId:string)=>boolean=()=>false,secrets:SecretSlots=new KeychainSecretSlots()) {
  const snapshot=parseHostManifest(manifest),bindingHash=hash(snapshot);
  const entries:HostConnectionBindings['connections']=[];
- const permitted=new Map<string,string|SecretSlot>();
+ const permitted=new Map<string,string|SecretSlot>(),replacementSlots=new Map<string,SecretSlot>();
  const key=(ref:string,profileId:string,endpoint:string)=>JSON.stringify([ref,profileId,endpoint]);
  for(const entry of snapshot.connections){
   const id='host:'+entry.id+':'+bindingHash.slice(0,16);
@@ -95,6 +95,7 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
   entries.push({input,models:[...entry.models]});
   if(!entry.credential)continue;
   const source=entry.credential.slot!==undefined?{owner:entry.id,slot:entry.credential.slot}:entry.credential.environment;
+  if(typeof source!=='string')replacementSlots.set(id,source);
   permitted.set(key(entry.credential.ref,id,input.baseUrl+'models'),source);
   for(const model of entry.models){const profileId='profile:'+hash({connectionId:id,configHash:hash(input),model}).slice(0,32);const endpoint=input.baseUrl+(input.providerType==='anthropic'?'messages':input.providerType==='gemini'?'models/'+model+':generateContent':'chat/completions');permitted.set(key(entry.credential.ref,profileId,endpoint),source);if(input.providerType==='compatible'&&input.baseUrl.endsWith('/v1/'))permitted.set(key(entry.credential.ref,profileId,input.baseUrl+'systemone'),source);}
  }
@@ -104,7 +105,9 @@ export function compileHostBindings(manifest:HostManifest,readEnvironment:(name:
   let secret:unknown;try{secret=typeof source==='string'?readEnvironment(source):await secrets.read(source,request.signal);}catch{throw new Error('Host credential unavailable');}
   request.signal.throwIfAborted();if(typeof secret!=='string'||!secret||secret.length>8192||/[^\x21-\x7e]/.test(secret))throw new Error('Host credential unavailable');return secret;
  };
- return {bindings:{revision:snapshot.revision,bindingHash,connections:entries},resolveCredential};
+ const replaceCredential=async(connectionId:string,apiKey:string)=>{const slot=replacementSlots.get(connectionId);requireHost(slot,'connection has no editable secret slot');await secrets.set(slot,apiKey);};
+ const credentialStored=async(connectionId:string,signal:AbortSignal):Promise<CredentialStorage>=>{const slot=replacementSlots.get(connectionId);if(!slot||!secrets.has)return 'unknown';try{const present=await secrets.has(slot,signal);return typeof present==='boolean'?(present?'saved':'missing'):'unknown';}catch{return 'unknown';}};
+ return {bindings:{revision:snapshot.revision,bindingHash,connections:entries},resolveCredential,replaceCredential,credentialStored,replaceableConnectionIds:[...replacementSlots.keys()]};
 }
 
 /** Compose the same manager for CLI and tests; fixture mode is explicit and credential-free. */
@@ -112,5 +115,5 @@ export function createHostConnections(store:Store<Mission>,artifacts:TextArtifac
  if(!startup.manifest){requireHost(!startup.allowLiveExecution,'manifest required for live execution');return new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport});}
  const manifest=parseHostManifest(startup.manifest);requireHost(!startup.allowLiveExecution||manifest.mode==='https','live option requires an HTTPS manifest');
  let manager:ConnectionWorkbench|undefined;const host=compileHostBindings(manifest,options.readEnvironment,profileId=>manager?.allowsDiscriminatorCredential(profileId)===true,options.secrets);
- manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
+ manager=new ConnectionWorkbench(store,artifacts,{discriminatorTimeoutMs:options.discriminatorTimeoutMs,transport:options.transport,cliLaunchers:options.cliLaunchers,hostBindings:host.bindings,replaceCredential:host.replaceCredential,credentialStored:host.credentialStored,replaceableConnectionIds:host.replaceableConnectionIds,...(manifest.mode==='https'?{resolveCredential:host.resolveCredential}:{}),allowFixture:manifest.mode==='local-http-mock',allowLiveExecution:startup.allowLiveExecution,...(options.settings?{settings:options.settings}:{})});return manager;
 }

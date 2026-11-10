@@ -7,7 +7,7 @@ import {callTool,TOOL_TIMEOUT_MS} from './tool-call.ts';
 
 export interface McpTool {name:string;description:string;inputSchema:Record<string,unknown>;readOnly?:boolean}
 export type McpServer=({transport:'stdio';target:string}|{transport:'http';url:string})&{tools:McpTool[]};
-export type AppSecrets=Pick<SecretSlots,'set'>;
+export type AppSecrets=Pick<SecretSlots,'set'|'has'>;
 /** Host adapters own negotiation, pagination, secret attachment and the approved launcher; no raw spawn fallback. */
 export interface McpAdapter {
  list(request:{requestId:string;appId:string;server:McpServer;signal:AbortSignal}):Promise<unknown>;

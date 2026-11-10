@@ -1,0 +1,23 @@
+{
+  "main": "18c655864f4d18cf8a6df6c6646dfb10c7ab5c04",
+  "parent": "6e1dfdc7c735af6b7beff268d0d1aed8768cea26",
+  "mainResolvedExceptionsPreserved": 20,
+  "mergedAllowances": 684,
+  "budgetCapture": {
+    "runs": 6,
+    "passed": 176,
+    "required": 176,
+    "errors": 0,
+    "visualFailures": 0
+  },
+  "integrationTests": {
+    "passed": 70,
+    "failed": 0,
+    "skipped": 3
+  },
+  "runtimeDrainMemberTests": {
+    "passed": 134,
+    "failed": 0,
+    "skipped": 10
+  }
+}
