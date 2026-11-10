@@ -74,8 +74,8 @@ export const MEMBER_INSTRUCTION='You are a member of the owner\'s organization; 
 export interface MemberThread {id:string;name:string;modelGroup:string}
 /** The members the Representative may hand Work to (member-work.md), read at each turn and at admission. */
 export type MemberRoster=()=>Promise<readonly MemberThread[]>;
-type Head={instruction:string;member?:{name:string};members?:{name:string}[];works?:{id:string;title:string;missionId:string}[];memoryWorks?:{id:string;title:string}[]};
-type Call={request:ProviderRequest;controller:AbortController;adapter:ProviderAdapter;route:AssistantRoute;intakeMissionId:string;text:string;works:{id:string;missionId:string}[];memoryContext?:{missionId:string;scope:string;sources:MemorySourceWork[]}};
+type Head={instruction:string;scheduledMember?:{id:string;name:string};member?:{name:string};members?:{name:string}[];works?:{id:string;title:string;missionId:string}[];memoryWorks?:{id:string;title:string}[]};
+type Call={request:ProviderRequest;controller:AbortController;adapter:ProviderAdapter;route:AssistantRoute;intakeMissionId:string;text:string;works:{id:string;missionId:string}[];memoryContext?:{missionId:string;scope:string;sources:MemorySourceWork[]};scheduledMember?:MemberThread};
 export class AssistantService {
  readonly #store:Store<any>;readonly #product:ProductService;readonly #connections?:ConnectionWorkbench;readonly #conversation:AssistantConversation;readonly #admission:Application;readonly #clock:()=>number;readonly #timeoutMs:number;readonly #member?:MemberThread;readonly #thread:string;readonly #roster?:MemberRoster;readonly #ownerStore:Store<any>;readonly #ownerConversation:AssistantConversation;readonly #steeringResults=new Map<string,SteerResult>();
  readonly #memoryDeciding=new Map<string,Promise<{status:string}>>();
@@ -105,21 +105,21 @@ export class AssistantService {
  #note(error:unknown){if(error instanceof Error&&['RunUnsettledError','RunAdmissionUnknownError','CommitOutcomeUnknownError'].includes(error.name))this.#unsettled=true;}
  /** Waits for in-flight turns and the runs they started. */
  async idle(){while(this.#tasks.size)await Promise.allSettled([...this.#tasks]);}
- async send(input:unknown):Promise<AssistantSendResult>{
+ async send(input:unknown,scheduledMemberId?:string):Promise<AssistantSendResult>{
   if(!keysExactly(input,['commandId','segment','expectedRevision','text']))throw new DomainError('Exact conversation message fields required');
   const {commandId,segment,expectedRevision,text}=structuredClone(input);
   if(typeof commandId!=='string'||!/^[a-zA-Z0-9:_-]{1,128}$/.test(commandId)||commandId.startsWith('assistant-'))throw new DomainError('Invalid or reserved command identity');
   if(!Number.isSafeInteger(segment)||Number(segment)<1||!Number.isSafeInteger(expectedRevision)||Number(expectedRevision)<0)throw new DomainError('Invalid segment or expected revision');
   if(typeof text!=='string')throw new DomainError('Message text required');
   if(this.#draining)throw new HostDrainError();
-  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text));
+  return this.#track(this.#send(commandId,Number(segment),Number(expectedRevision),text,scheduledMemberId));
  }
  async #load(n:number){return await this.#store.load(segmentId(n,this.#thread)) as Snapshot<AssistantSegment>|null;}
  /** A committed message may sit in the target segment; the same command with different text is an idempotency conflict, never a replay.
  * A committed message may sit in the target segment or, when the retry aims past a segment its own commit filled, in the one before. */
  async #replay(n:number,messageId:string,turnId:string,text:string):Promise<AssistantSendResult|null>{for(const k of n>1?[n,n-1]:[n]){const found=await this.#load(k),stored=found?.value.messages.find(m=>m.id===messageId);if(found&&stored)return stored.text===text?this.#stored(found,turnId,'replayed'):{message:{status:'conflict',revision:found.revision,reason:'idempotency'},turn:null};}return null;}
  #stored(snapshot:Snapshot<AssistantSegment>,turnId:string,status:'committed'|'replayed'):AssistantSendResult{return {message:{status,revision:snapshot.revision,value:snapshot.value},turn:turnView(snapshot.value,turnId)};}
- async #send(commandId:string,n:number,expectedRevision:number,text:string):Promise<AssistantSendResult>{
+ async #send(commandId:string,n:number,expectedRevision:number,text:string,scheduledMemberId?:string):Promise<AssistantSendResult>{
   const messageId=ownerMessageId(commandId),turnId=assistantTurnId(messageId);// A retry of a committed message replays its stored state and starts nothing.
   const replayed=await this.#replay(n,messageId,turnId,text);if(replayed)return replayed;let current=await this.#load(n);
   const concurrent=await this.#replay(n,messageId,turnId,text);if(concurrent)return concurrent;
@@ -136,15 +136,17 @@ export class AssistantService {
    if(current.value.closed||!hasRoom(current.value))throw new DomainError('segment_full: open segment '+(n+1),'conflict');
    const now=this.#clock();if(current.value.turns.some(t=>t.status==='pending'&&now<t.ownership!.deadlineAt+PENDING_GRACE_MS))throw new DomainError('answer_in_progress: an earlier turn is still pending','conflict');
   }
+  const scheduledMember=scheduledMemberId===undefined?undefined:!this.#member?(await this.#roster?.())?.find(m=>m.id===scheduledMemberId):undefined;
+  if(scheduledMemberId!==undefined&&!scheduledMember)throw new DomainError('Scheduled member unavailable','conflict');
   const member=this.#member&&this.#roster?(await this.#roster()).find(m=>m.id===this.#member!.id):this.#member;
   const resolution=this.#connections?await (this.#member?this.#connections.resolveMember(member?.modelGroup??''):this.#connections.resolveRepresentative()):{status:'unresolved' as const,diagnostics:[{code:'assistant_route_missing',message:'No Representative route is set.'}]};
   try{
    let turn:AssistantTurnInput,call:Call|undefined;
    if(resolution.status==='resolved'){
-    const head=await this.#head(),memoryState=this.#member?await this.#store.readState(resolution.intakeMissionId):null,memoryMission=memoryState?.snapshot?.value as Mission|undefined,memoryWorks=memoryMission?.works.filter(w=>(w.assistantSource?.memberId??w.team?.memberId)===this.#member?.id).slice(0,8);if(memoryWorks)head.memoryWorks=memoryWorks.map(w=>({id:w.id,title:w.title}));const {history,ids}=boundedHistory(await this.#earlier(context),text,resolution.maxInputBytes,head),controller=new AbortController(),startedAt=this.#clock();
+    const head=await this.#head(),memoryState=this.#member?await this.#store.readState(resolution.intakeMissionId):null,memoryMission=memoryState?.snapshot?.value as Mission|undefined,memoryWorks=memoryMission?.works.filter(w=>(w.assistantSource?.memberId??w.team?.memberId)===this.#member?.id).slice(0,8);if(memoryWorks)head.memoryWorks=memoryWorks.map(w=>({id:w.id,title:w.title}));if(scheduledMember)head.scheduledMember={id:scheduledMember.id,name:scheduledMember.name};const {history,ids}=boundedHistory(await this.#earlier(context),text,resolution.maxInputBytes,head),controller=new AbortController(),startedAt=this.#clock();
     const request:ProviderRequest={invocationId:turnId,workId:turnId,instruction:JSON.stringify({...head,...(head.works?{works:head.works.map(({id,title})=>({id,title}))}:{}),currentMessage:text,history}),inputReferences:[],maxOutputTokens:resolution.route.outputTokenCap,signal:controller.signal};
     turn={status:'pending',id:turnId,route:resolution.route,ownership:{hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+this.#timeoutMs},requestHash:providerRequestHash(request),contextMessageIds:ids};
-    call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,works:(head.works??[]).map(({id,missionId})=>({id,missionId})),...(memoryMission?{memoryContext:{missionId:memoryMission.id,scope:memoryMission.scope,sources:(memoryWorks??[]).map(w=>memoryWorkSource(memoryMission,w))}}:{})};
+    call={request,controller,adapter:resolution.adapter,route:resolution.route,intakeMissionId:resolution.intakeMissionId,text,...(scheduledMember?{scheduledMember}:{}),works:(head.works??[]).map(({id,missionId})=>({id,missionId})),...(memoryMission?{memoryContext:{missionId:memoryMission.id,scope:memoryMission.scope,sources:(memoryWorks??[]).map(w=>memoryWorkSource(memoryMission,w))}}:{})};
    }else turn={status:'not_started',id:turnId,diagnostics:bounded(resolution.diagnostics)};
    if(this.#draining)throw new HostDrainError();
    const command:AssistantCommand=expectedRevision===0?{type:'open-assistant-segment',recordMessageTime:true,segment:n,previous,messageId,text,turn}:{type:'append-assistant-message',recordMessageTime:true,messageId,text,turn};
@@ -165,6 +167,7 @@ export class AssistantService {
   if(!valid||usage.outputTokens!==null&&usage.outputTokens>route.outputTokenCap){status='unknown';if(valid)reason='Reported output usage exceeds the Representative cap; no success is inferred.';}
   else if(result.status==='completed'){if(usage.outputTokens===null||typeof result.output!=='string'){status='unknown';reason='Output usage or text was not reported; no success is inferred.';}else{parsed=this.#member?memberTurn(parseAssistantTurn(result.output,{steer:true}),call.works.map(w=>w.id)):parseAssistantTurn(result.output);status=parsed?'answered':'failed';if(!parsed)reason='Output broke the assistant-turn/v2 contract; not retried.';}}
   else status=result.status==='failed'?'failed':'unknown';
+  if(status==='answered'&&parsed?.proposal&&call.scheduledMember)parsed.proposal={...parsed.proposal,member:call.scheduledMember.name};
   if(status!=='unknown'&&(controller.signal.aborted||this.#clock()>=ownership.deadlineAt)){status='unknown';parsed=null;}
   const receipt=JSON.stringify({status:result?.status??'unknown',reason:clip(reason,256),outputSha256:typeof result?.output==='string'?createHash('sha256').update(result.output).digest('hex'):null});
   // The model only proposes. Only an explicit owner confirmation may write or interrupt Work.

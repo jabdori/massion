@@ -755,6 +755,15 @@ test('parallel credential rejections do not open competing repair continuations'
  f.script.push(v2('On it.','Parallel refused sources','Quill'));await f.say(f.assistant,'Compare sources');await f.assistant.idle();
  assert.equal(workers,2);assert.equal(repairs,0);assert.equal((await f.intake()).works.at(-1)!.execution,'blocked');
 });
+test('a host-bound scheduled request assigns only its persisted member despite another model proposal',async t=>{
+ const f=await setup(t),quill=await f.admit();f.script.push(v2('On it.','Scheduled review','Someone else'));
+ const view=await f.assistant.read(),input={commandId:'schedule-work:member-bound',segment:view.head,expectedRevision:view.segment!.revision,text:'Review the supplied records for Quill'};
+ await f.assistant.send(input,quill.id);await f.assistant.idle();const work=(await f.intake()).works.at(-1)!;
+ assert.equal(work.assistantSource?.memberId,quill.id);assert.equal(work.title,'Scheduled review');
+ const calls=f.prompts.length;assert.equal((await f.assistant.send(input,quill.id)).message.status,'replayed');assert.equal(f.prompts.length,calls);
+ const fresh=await f.assistant.read();await assert.rejects(f.assistant.send({...input,commandId:'schedule-work:missing',segment:fresh.head,expectedRevision:fresh.segment!.revision},'missing'),/member/i);
+ validateMissionJournalLineage(f.store.inspect());
+});
 
 test('confirmed procedure steering continues once with fresh inputs, telemetry and replayable journal',async t=>{
  const f=await setup(t),quill=await f.admit(),chat=f.chatFor(quill);

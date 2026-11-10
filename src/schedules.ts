@@ -21,13 +21,17 @@ export const SCHEDULE_TEMPLATES={
  'weekend-groceries':{title:'Weekend groceries',request:'Make a weekend grocery list from the supplied plans and preferences. Mark missing information; do not place orders.',copyKey:'page.button.16',minute:1080,cycle:'friday'}
 } as const;
 export type ScheduleKind=keyof typeof SCHEDULE_TEMPLATES;
-export interface ScheduleProduction {turnIds:string[];segment:number}
-export type ScheduleProducer=(input:{commandId:string;scheduleId:string;runId:string;kind:ScheduleKind;request:string})=>Promise<ScheduleProduction|null>;
+/** The source thread is distinct from the schedule assignee; an empty string names the Representative. */
+export interface ScheduleProduction {turnIds:string[];segment:number;sourceThread?:string}
+export type ScheduleProducer=(input:{commandId:string;scheduleId:string;runId:string;kind:ScheduleKind;request:string;memberId?:string})=>Promise<ScheduleProduction|null>;
+export type ScheduleMember=(id:string)=>Promise<{id:string;name:string;archivedAt?:number}|undefined>;
 // 호스트가 기존 대화 경로를 연결하며, 결과는 실제 생성된 작업의 정확한 출처만 보관합니다.
 export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'read'>):ScheduleProducer {
  return async input=>{
+  const text=copy('ui.schedules.dispatch',{request:input.request});
+  ensure(Buffer.byteLength(text,'utf8')<=MESSAGE_BYTES,'Scheduled request exceeds the conversation byte limit');
   const head=await assistant.read(),segment=head.segment,full=segment?.full===true;
-  const result=await assistant.send({commandId:input.commandId,segment:segment?segment.number+(full?1:0):1,expectedRevision:segment&&!full?segment.revision:0,text:copy('ui.schedules.dispatch',{request:input.request})});
+  const result=await assistant.send({commandId:input.commandId,segment:segment?segment.number+(full?1:0):1,expectedRevision:segment&&!full?segment.revision:0,text},input.memberId);
   if(result.message.status==='conflict')throw new DomainError('Scheduled conversation changed','conflict');
   const turn=result.turn;
   if(!turn||turn.status==='pending'||turn.status==='unknown'||turn.outcome?.work.status==='unknown')return null;
@@ -36,20 +40,21 @@ export function scheduleWorkProducer(assistant:Pick<AssistantService,'send'|'rea
   if(!turn.outcome&&(!work||work.status!=='answered'||work.proposal))return null;
   ensure(turn.outcome?.work.status==='admitted','Scheduled Work was not admitted');
   if(!work?.work||work.work.unknown)return null;
-  return {turnIds:[turn.id],segment:number};
+  if(input.memberId!==undefined&&work.work.memberId!==input.memberId)return null;
+  return {turnIds:[turn.id],segment:number,...(input.memberId===undefined?{}:{sourceThread:''})};
  };
 }
-export interface ScheduleRun {id:string;slot:number;manual:boolean;state:'started'|'done'|'failed'|'closed';startedAt:number;deadlineAt:number;endedAt?:number;turnIds?:string[];segment?:number;reason?:string}
-export interface Schedule {id:string;kind:ScheduleKind;title?:string;request?:string;onceAt?:number;minute:number;offset:number;active:boolean;nextAt:number;budget:{runs:number};used:number;runs:ScheduleRun[]}
+export interface ScheduleRun {id:string;slot:number;manual:boolean;state:'started'|'done'|'failed'|'closed';startedAt:number;deadlineAt:number;endedAt?:number;turnIds?:string[];segment?:number;sourceThread?:string;reason?:string}
+export interface Schedule {id:string;kind:ScheduleKind;memberId?:string;title?:string;request?:string;onceAt?:number;minute:number;offset:number;active:boolean;nextAt:number;budget:{runs:number};used:number;runs:ScheduleRun[]}
 export interface SchedulesState {kind:'schedules';id:string;schedules:Schedule[]}
 export type SchedulesCommand =
- | {type:'create-schedule';scheduleId:string;kind:ScheduleKind;title?:string;request?:string;onceAt?:number;minute:number;offset:number;budget:{runs:number}}
+ | {type:'create-schedule';scheduleId:string;kind:ScheduleKind;memberId?:string;title?:string;request?:string;onceAt?:number;minute:number;offset:number;budget:{runs:number}}
  | {type:'pause-schedule'|'resume-schedule';scheduleId:string}
  | {type:'start-run';scheduleId:string;runId:string;slot:number;manual:false}
  /** Run now: its slot is the time the reducer observes; `retryOf` closes the failed run it retries in the same step. */
  | {type:'start-run';scheduleId:string;runId:string;manual:true;retryOf?:string}
  /** `segment` is the conversation segment the turns were read from (0 when none), so a briefing keeps its Work after the segment rolls over. */
- | {type:'finish-run';scheduleId:string;runId:string;turnIds:string[];segment:number}
+ | {type:'finish-run';scheduleId:string;runId:string;turnIds:string[];segment:number;sourceThread?:string}
  | {type:'fail-run';scheduleId:string;runId:string;reason:string}
  | {type:'skip-run';scheduleId:string;runId:string;slot:number}
  | {type:'close-run';scheduleId:string;runId:string};
@@ -72,7 +77,7 @@ export function nextScheduleSlot(s:Pick<Schedule,'kind'|'minute'|'offset'|'onceA
  return slot;
 }
 const scheduleText=(v:unknown,max:number)=>typeof v==='string'&&v.trim().length>0&&v.isWellFormed()&&Buffer.byteLength(v,'utf8')<=max&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(v);
-const createExtras=(v:object)=>['title','request','onceAt'].filter(k=>Object.hasOwn(v,k));
+const createExtras=(v:object)=>['title','request','onceAt','memberId'].filter(k=>Object.hasOwn(v,k));
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[a-zA-Z0-9:_-]{1,128}$/.test(v);
@@ -94,6 +99,7 @@ export function applySchedules(current:SchedulesState|null,command:SchedulesComm
   case 'create-schedule': {
    ensure(exact(command,['type','scheduleId','kind','minute','offset','budget',...createExtras(command)])&&id(command.scheduleId)&&Object.hasOwn(SCHEDULE_TEMPLATES,command.kind)&&int(command.minute,0,1439)&&int(command.offset,-840,840),'Exact schedule fields required');
    ensure(command.kind!=='briefing'||createExtras(command).length===0,'Briefing fields are fixed');
+   ensure(!Object.hasOwn(command,'memberId')||id(command.memberId),'Invalid schedule member');
    ensure(!Object.hasOwn(command,'title')||scheduleText(command.title,256)&&!/[\r\n]/.test(command.title!),'Invalid schedule title');
    ensure(!Object.hasOwn(command,'request')||scheduleText(command.request,16000),'Invalid schedule request');
    ensure(command.kind==='meeting-preparation'?int(command.onceAt,at+1,8640000000000000):!Object.hasOwn(command,'onceAt'),'A meeting requires an exact future time');
@@ -114,10 +120,11 @@ export function applySchedules(current:SchedulesState|null,command:SchedulesComm
    s.used++;s.runs.push({id:command.runId,slot:command.manual?at:command.slot,manual:command.manual,state:'started',startedAt:at,deadlineAt:at+RUN_MS});if(!command.manual){s.nextAt=nextScheduleSlot(s,at);if(s.kind==='meeting-preparation')s.active=false;}keep(s);break;
   }
   case 'finish-run': {
-   ensure(exact(command,['type','scheduleId','runId','turnIds','segment'])&&int(command.segment,0,Number.MAX_SAFE_INTEGER)&&Array.isArray(command.turnIds)&&command.turnIds.length<=BRIEFING_TURNS&&command.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Exact finish fields required');
+   ensure(exact(command,['type','scheduleId','runId','turnIds','segment',...Object.hasOwn(command,'sourceThread')?['sourceThread']:[]])&&int(command.segment,0,Number.MAX_SAFE_INTEGER)&&Array.isArray(command.turnIds)&&command.turnIds.length<=BRIEFING_TURNS&&command.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Exact finish fields required');
    const s=schedule();ensure(s.kind==='briefing'||command.segment>0&&command.turnIds.length>0&&new Set(command.turnIds).size===command.turnIds.length,'A completed schedule requires an exact Work source');
+   ensure(!Object.hasOwn(command,'sourceThread')||command.sourceThread===''||s.memberId!==undefined&&command.sourceThread==='member:'+s.memberId,'Invalid schedule source thread');
    // 원래 요청의 확정 응답은 기한 뒤에도 보존하며, 소유자가 닫은 실행은 다시 열지 않습니다.
-   const r=run(s);ensure(r.state==='started'&&(s.kind!=='briefing'||at<r.deadlineAt),'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds],segment:command.segment});break;
+   const r=run(s);ensure(r.state==='started'&&(s.kind!=='briefing'||at<r.deadlineAt),'Only a started run in time finishes','conflict');Object.assign(r,{state:'done',endedAt:at,turnIds:[...command.turnIds],segment:command.segment,...(Object.hasOwn(command,'sourceThread')?{sourceThread:command.sourceThread}:{})});break;
   }
   case 'fail-run': {ensure(exact(command,['type','scheduleId','runId','reason'])&&typeof command.reason==='string'&&command.reason.length>0&&command.reason.length<=64,'Exact fail fields required');const r=run(schedule());ensure(r.state==='started','Only a started run fails','conflict');Object.assign(r,{state:'failed',endedAt:at,reason:command.reason});break;}
   case 'skip-run': {
@@ -142,36 +149,38 @@ export function replaySchedules(operation:Operation<SchedulesState>,prior:Operat
  ensure(hash(next.value)===hash(operation.value)&&hash(next.events)===hash(operation.events)&&operation.outbox.length===0,'schedules command/state transition');
 }
 
-type Turn={id:string;at?:number;work?:unknown};type Turns={segment?:{number:number}|null;turns:Turn[]};
+type Turn={id:string;at?:number;work?:unknown};export type Turns={segment?:{number:number}|null;turns:Turn[]};
+export interface ScheduleMemberOptions {member:ScheduleMember;readMember:(memberId:string,segment?:number)=>Promise<Turns>;produceMember:ScheduleProducer}
 const OWNER='local-owner',host:Actor={id:ASSISTANT_ACTOR_ID,roles:['assistant']},owner:Actor={id:OWNER,roles:['owner']};
 const display=(r:ScheduleRun,at:number)=>unknownRun(r,at)?'unknown':r.state==='started'?'running':r.state;
 const fact=(r:ScheduleRun,at:number)=>r.state==='done'?r.turnIds!.length+(r.turnIds!.length===1?' Work item':' Work items'):unknownRun(r,at)?'Not resent':r.reason??'';
 export class SchedulesService {
- readonly #store:Store<any>;readonly #ownerStore:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;readonly #produce?:ScheduleProducer;#ticking=false;#unsettled=false;
+ readonly #store:Store<any>;readonly #ownerStore:Store<any>;readonly #read:(segment?:number)=>Promise<Turns>;readonly #clock:()=>number;readonly #produce?:ScheduleProducer;readonly #members?:ScheduleMemberOptions;#ticking=false;#unsettled=false;
  /** `read` is the Representative's conversation read (head when no segment is named); the briefing lists its Work turns, so no model is called. `ownerStore` takes the owner's own commit (the host passes its drain-aware store); a run's later host steps use `store`, so a run already started still finishes during drain. */
- constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now,ownerStore:Store<any>=store,produce?:ScheduleProducer){this.#store=store;this.#ownerStore=ownerStore;this.#read=read;this.#clock=clock;this.#produce=produce;}
+ constructor(store:Store<any>,read:(segment?:number)=>Promise<Turns>,clock:()=>number=Date.now,ownerStore:Store<any>=store,produce?:ScheduleProducer,options?:ScheduleMemberOptions){this.#store=store;this.#ownerStore=ownerStore;this.#read=read;this.#clock=clock;this.#produce=produce;this.#members=options;}
  /** True once any schedule write met an unknown commit outcome, so the host drain reports `unsettled`. */
  get unsettled(){return this.#unsettled;}
  async #state(){return await this.#store.load(SCHEDULES_ID) as Snapshot<SchedulesState>|null;}
  async read(){
   const s=await this.#state(),now=this.#clock();
-  return {revision:s?.revision??0,schedules:(s?.value.schedules??[]).map(x=>({id:x.id,kind:x.kind,title:x.title??SCHEDULE_TEMPLATES[x.kind].title,request:x.request??SCHEDULE_TEMPLATES[x.kind].request,assignee:representativeName,destination:'Conversation with '+representativeName,active:x.active,nextAt:x.nextAt,minute:x.minute,offset:x.offset,budget:{runs:x.budget.runs,used:x.used},
-   runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]],...(r.segment===undefined?{}:{segment:r.segment}),...display(r,now)==='running'?{deadlineAt:r.deadlineAt}:{}}))}))};
+  return {revision:s?.revision??0,schedules:await Promise.all((s?.value.schedules??[]).map(async x=>{const assignee=x.memberId===undefined?representativeName:(await this.#members?.member(x.memberId))?.name??x.memberId;return {id:x.id,kind:x.kind,...(x.memberId===undefined?{}:{memberId:x.memberId}),title:x.title??SCHEDULE_TEMPLATES[x.kind].title,request:x.request??SCHEDULE_TEMPLATES[x.kind].request,assignee,destination:'Conversation with '+assignee,active:x.active,nextAt:x.nextAt,minute:x.minute,offset:x.offset,budget:{runs:x.budget.runs,used:x.used},
+   runs:[...x.runs].reverse().map(r=>({id:r.id,at:r.endedAt??r.startedAt,state:display(r,now),fact:fact(r,now),turnIds:[...r.turnIds??[]],...(r.segment===undefined?{}:{segment:r.segment}),...(x.memberId===undefined&&r.sourceThread===undefined?{}:{sourceThread:r.sourceThread??''}),...display(r,now)==='running'?{deadlineAt:r.deadlineAt}:{}}))};}))};
  }
  /** What the Representative's conversation shows: one briefing per done run, one exception card per failed or unknown run not closed, and `runDeadlineAt` while a run is still in time, so the page reads again when it turns unknown. A briefing read from a segment other than `current` carries its turns, read from that segment, so rollover never empties it. */
- async conversation(current?:number){
-  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[],segments=new Map<number,Promise<Turn[]>>();let deadline=Infinity;
-  const turnsOf=(n:number)=>{if(!segments.has(n))segments.set(n,this.#read(n).then(v=>v.turns,()=>[]));return segments.get(n)!;};
-  for(const x of s?.value.schedules??[])for(const r of x.runs){
-   if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&r.segment!==current&&ids.length?(await turnsOf(r.segment)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),turnIds:[...ids],...other?{turns:other}:{}});}
+ async conversation(current?:number,memberId?:string){
+  const s=await this.#state(),now=this.#clock(),briefings=[],exceptions=[],segments=new Map<string,Promise<Turn[]>>();let deadline=Infinity;
+  const turnsOf=(n:number,thread:string)=>{const key=thread+':'+n;if(!segments.has(key))segments.set(key,(thread===''?this.#read(n):this.#members?.readMember(memberId!,n)??Promise.resolve({turns:[]})).then(v=>v.turns,()=>[]));return segments.get(key)!;};
+  for(const x of s?.value.schedules??[]){if(x.memberId!==memberId)continue;for(const r of x.runs){
+   const sourceThread=r.sourceThread??'',source=x.memberId===undefined&&r.sourceThread===undefined?{}:{sourceThread};
+   if(r.state==='done'){const ids=r.turnIds!,other=r.segment&&(r.segment!==current||sourceThread!==(memberId===undefined?'':'member:'+memberId))&&ids.length?(await turnsOf(r.segment,sourceThread)).filter(t=>ids.includes(t.id)):undefined;briefings.push({id:r.id,at:r.endedAt!,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),turnIds:[...ids],...source,...other?{turns:other}:{}});}
    else if(r.state==='started'&&!unknownRun(r,now))deadline=Math.min(deadline,r.deadlineAt);
-   else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id});}
-  }
+   else if(r.state==='failed'||unknownRun(r,now)){const unknown=r.state==='started';exceptions.push({id:r.id,at:r.endedAt??r.deadlineAt,title:x.title??(x.kind==='briefing'?BRIEFING.title:copy('ui.schedules.'+x.kind+'-title')),state:unknown?'unknown':'failed',fact:x.kind==='briefing'?fact(r,now):copy(unknown?'ui.schedules.not-resent':'ui.schedules.work-unavailable'),actions:unknown?['check','close']:x.used<x.budget.runs?['retry','close']:['close'],scheduleId:x.id,runId:r.id,...source});}
+  }}
   return {briefings,exceptions,...deadline<Infinity?{runDeadlineAt:deadline}:{}};
  }
  /** The owner's actions. Run now writes the host's start for the owner, with a run ID from the owner's command ID and no caller time in the command, so a lost Run now replays and runs once; Retry is Run now that closes the failed run in the same step. */
  async act(input:unknown):Promise<CommitResult<SchedulesState>>{
-  const action=(input as {action?:unknown})?.action,actions:Record<string,string[]>={create:['minute','offset','budget',...input&&typeof input==='object'&&Object.hasOwn(input,'kind')?['kind',...createExtras(input)]:[]],pause:['scheduleId'],resume:['scheduleId'],run:['scheduleId',...input&&typeof input==='object'&&Object.hasOwn(input,'retryOf')?['retryOf']:[]],close:['scheduleId','runId']};
+  const action=(input as {action?:unknown})?.action,actions:Record<string,string[]>={create:['minute','offset','budget',...input&&typeof input==='object'?[...(Object.hasOwn(input,'kind')?['kind']:[]),...createExtras(input)]:[]],pause:['scheduleId'],resume:['scheduleId'],run:['scheduleId',...input&&typeof input==='object'&&Object.hasOwn(input,'retryOf')?['retryOf']:[]],close:['scheduleId','runId']};
   ensure(typeof action==='string'&&Object.hasOwn(actions,action),'Unknown schedule action');const keys=actions[action]!;ensure(exact(input,['commandId','action',...keys])&&id(input.commandId)&&(action==='create'||id(input.scheduleId)),'Exact schedule action fields required');
   const commandId=input.commandId as string;ensure(!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');const scheduleId=input.scheduleId as string;
   if(action==='create')return this.#dispatch(commandId,owner,{type:'create-schedule',scheduleId:'schedule-'+hash(commandId).slice(0,16),kind:(Object.hasOwn(input,'kind')?input.kind:'briefing') as ScheduleKind,...Object.fromEntries(createExtras(input).map(k=>[k,input[k]])),minute:input.minute as number,offset:input.offset as number,budget:input.budget as {runs:number}},this.#ownerStore);
@@ -184,7 +193,7 @@ export class SchedulesService {
  /** The host scheduler: a due slot starts a run, or with no budget left records `Budget reached` and pauses. Returns the runs it started. */
  async tick():Promise<string[]>{
   if(this.#ticking)return [];this.#ticking=true;const ran:string[]=[];
-  try{const now=this.#clock();for(const s of (await this.#state())?.value.schedules??[]){if(!s.active||s.nextAt>now||s.runs.some(r=>r.state==='started'&&now<r.deadlineAt))continue;const runId=scheduledRunId(s.id,s.nextAt);try{
+  try{const now=this.#clock();for(const s of (await this.#state())?.value.schedules??[]){if(!s.active||s.nextAt>now||s.runs.some(r=>r.state==='started'&&now<r.deadlineAt))continue;if(s.memberId!==undefined&&!await this.#activeMember(s.memberId))continue;const runId=scheduledRunId(s.id,s.nextAt);try{
    if(s.used>=s.budget.runs){await this.#dispatch(HOST_STEPS['skip-run']+runId,host,{type:'skip-run',scheduleId:s.id,runId,slot:s.nextAt});continue;}
    const started=await this.#dispatch(HOST_STEPS['start-run']+runId,host,{type:'start-run',scheduleId:s.id,runId,slot:s.nextAt,manual:false});if(started.status==='committed'){ran.push(runId);await this.#run(s.id,runId);}
    }catch(error){if(!(error instanceof DomainError)||error.code!=='conflict')throw error;}}}
@@ -194,15 +203,17 @@ export class SchedulesService {
  async #run(scheduleId:string,runId:string){
   const schedule=(await this.#state())?.value.schedules.find(s=>s.id===scheduleId),run=schedule?.runs.find(r=>r.id===runId);
   if(!schedule||run?.state!=='started'||this.#clock()>=run.deadlineAt)return;
-  let turnIds:string[],segment=0;
+  let turnIds:string[],segment=0,sourceThread:string|undefined;
   try{
    if(schedule.kind==='briefing'){const view=await this.#read(),since=this.#clock()-DAY_MS;segment=view.segment?.number??0;turnIds=view.turns.filter(t=>t.work&&Number.isSafeInteger(t.at)&&t.at!>=since).slice(-BRIEFING_TURNS).map(t=>t.id);}
    else{
-    ensure(this.#produce,'Scheduled Work producer unavailable');
-    const produced=await this.#produce({commandId:'schedule-work:'+runId,scheduleId,runId,kind:schedule.kind,request:schedule.request??copy('ui.schedules.'+schedule.kind+'-request')});
+    const produce=schedule.memberId===undefined?this.#produce:this.#members?.produceMember;ensure(produce,'Scheduled Work producer unavailable');
+    const produced=await produce({commandId:'schedule-work:'+runId,scheduleId,runId,kind:schedule.kind,request:schedule.request??copy('ui.schedules.'+schedule.kind+'-request'),...(schedule.memberId===undefined?{}:{memberId:schedule.memberId})});
     if(produced===null){this.#unsettled=true;return;}
-    ensure(exact(produced,['turnIds','segment'])&&int(produced.segment,1,Number.MAX_SAFE_INTEGER)&&Array.isArray(produced.turnIds)&&produced.turnIds.length>0&&produced.turnIds.length<=BRIEFING_TURNS&&produced.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Invalid scheduled Work source');
+    ensure(exact(produced,['turnIds','segment',...Object.hasOwn(produced,'sourceThread')?['sourceThread']:[]])&&int(produced.segment,1,Number.MAX_SAFE_INTEGER)&&Array.isArray(produced.turnIds)&&produced.turnIds.length>0&&produced.turnIds.length<=BRIEFING_TURNS&&produced.turnIds.every(t=>typeof t==='string'&&t.length>0&&t.length<=256),'Invalid scheduled Work source');
     ({turnIds,segment}=produced);
+    sourceThread=produced.sourceThread??(schedule.memberId===undefined?undefined:'');
+    ensure(!Object.hasOwn(produced,'sourceThread')||sourceThread===''||schedule.memberId!==undefined&&sourceThread==='member:'+schedule.memberId,'Invalid schedule source thread');
    }
   }
   catch(error){
@@ -210,8 +221,9 @@ export class SchedulesService {
    if(schedule.kind!=='briefing'&&!(error instanceof DomainError)){this.#unsettled=true;return;}
    await this.#dispatch(HOST_STEPS['fail-run']+runId,host,{type:'fail-run',scheduleId,runId,reason:schedule.kind==='briefing'?'Briefing unavailable':'Scheduled Work unavailable'}).catch(()=>{});return;
   }
-  await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment}).catch(()=>{});
+  await this.#dispatch(HOST_STEPS['finish-run']+runId,host,{type:'finish-run',scheduleId,runId,turnIds,segment,...(sourceThread===undefined?{}:{sourceThread})}).catch(()=>{});
  }
+ async #activeMember(memberId:string){const member=await this.#members?.member(memberId);return member?.id===memberId&&member.archivedAt===undefined?member:undefined;}
  /** Every write goes here, so an unknown commit outcome is recorded once for the host drain, whether a request or the scheduler made it. */
  async #dispatch(commandId:string,actor:Actor,command:SchedulesCommand,store=this.#store):Promise<CommitResult<SchedulesState>>{
   try{return await this.#attempt(commandId,actor,command,store);}catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.#unsettled=true;throw error;}
@@ -221,6 +233,8 @@ export class SchedulesService {
   const identity={id:SCHEDULES_ID,commandId,fingerprint:fingerprint(actor.id,command)};
   for(let attempt=0;attempt<3;attempt++){
    const snapshot=await this.#state(),prior=await store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   if(command.type==='create-schedule'&&Object.hasOwn(command,'memberId')){ensure(id(command.memberId),'Invalid schedule member');ensure(await this.#activeMember(command.memberId),'Scheduled member must be active','conflict');}
+   if(command.type==='start-run'||command.type==='skip-run'){const memberId=snapshot?.value.schedules.find(s=>s.id===command.scheduleId)?.memberId;if(memberId!==undefined)ensure(await this.#activeMember(memberId),'Scheduled member must be active','conflict');}
    if(command.type==='create-schedule'&&command.request!==undefined){ensure(typeof command.request==='string'&&Buffer.byteLength(copy('ui.schedules.dispatch',{request:command.request}),'utf8')<=MESSAGE_BYTES,'Scheduled request exceeds the conversation byte limit');}
    const {value,events}=applySchedules(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await store.commit({id:SCHEDULES_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});

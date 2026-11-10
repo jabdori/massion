@@ -30,11 +30,10 @@ Representative and member AssistantService instances instead of using the heavie
 This admission-time roster read does not provide a cross-aggregate transaction
 against an archive racing after the roster was read.
 
-Current schedules are Representative-only briefings, with no member binding;
-member schedule counts are zero. Mission memory has no member binding either;
-member memory is unavailable, not a guessed association from source text or name.
-B19 omits sections without member-bound producers and records the missing
-capability in the ledger; it never synthesizes member schedules or memory. Conversation links use the retained member ID.
+Member-bound schedules, builtin skill provenance and exact saved candidate memory
+are projected by the [member page producers](member-page-producers.md). Older
+records without bindings remain unassociated. Conversation links retain member
+identity; archive preserves stored memory, skills, schedules, Work and history.
 
 Verification: focused reducer/service and existing member/Work tests, then static
 typecheck, all under Node 24. No external provider, model, payment or secret access.
