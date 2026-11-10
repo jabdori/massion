@@ -134,3 +134,12 @@ for(const slot of ['executor','verifier'])test('steering immediately after '+slo
  f.store.commit=async input=>{const c=(input.events[0] as any)?.command,result=await commit(input);if(!changed&&c?.type==='admit-effect'&&c.effect.id==='run:'+slot){changed=true;await f.steer();}return result;};
  assert.equal((await f.runtime.run('mission',workId,'run',(await f.read()).revision)).status,'settled');const w=await f.work();assert.equal(await f.artifacts.read(w.artifact),'Answer enterprise');assert.ok(w.effects.every((e:any)=>e.status==='succeeded'));assert.equal(f.calls.filter(c=>c.id==='run:'+slot).length,1);assert.equal(f.calls.filter(c=>c.prompt.step).length,2);
 });
+
+test('a clean checkpoint releases its monthly hold only after the original deadline prevents resume',async t=>{
+ const f=await fixture(t),commit=f.store.commit.bind(f.store);let stopped=false;
+ f.store.commit=async input=>{const c=(input.events[0] as any)?.command,result=await commit(input);if(!stopped&&c?.type==='receipt'&&c.effectId==='run:step:0'){stopped=true;f.runtime.beginDrain();}return result;};
+ await f.runtime.run('mission',workId,'run',(await f.read()).revision);f.store.commit=commit;
+ const {MonthlyBudgetService}=await import('../src/monthly-budget.ts'),budget=new MonthlyBudgetService(f.store),before=await f.work();assert.equal((await budget.snapshot()).budget!.value.reservations[0]!.state,'reserved');
+ t.mock.timers.enable({apis:['Date'],now:before.runtimeRun.ownership.deadlineAt+1});await budget.reconcile();
+ const reservation=(await budget.snapshot()).budget!.value.reservations[0]!;assert.equal(reservation.state,'settled');assert.equal(reservation.usage,2);assert.deepEqual(await f.work(),before);assert.equal(f.calls.length,2);
+});
