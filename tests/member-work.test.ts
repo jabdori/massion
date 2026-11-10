@@ -915,3 +915,21 @@ test('a leading roster mention calls that member and persists typed attribution 
  await assert.rejects(f.members.act({commandId:'undo-used',action:'undo',memberId:member.id}),/undo/i);
  validateMissionJournalLineage(f.store.inspect());
 });
+
+test('mention routing prefers the longest complete admitted name and closes only its undo window',async t=>{
+ const f=await setup(t),short=await f.admit(),workIds=(await f.intake()).works.slice(0,2).map(w=>w.id);
+ await f.members.propose({topic:'Extended member name',workIds});await f.members.decide({commandId:'admit-long-name',decisionId:(await f.members.read()).decisions.at(-1)!.id,answer:'act',member:{name:'Quill Jr',shape:'round'}});
+ const long=(await f.members.roster()).find(m=>m.name==='Quill Jr')!;
+ f.script.push(v1('The longer name replies.'));await f.say(f.assistant,'@Quill Jr Explain rounding.');
+ assert.equal(f.prompts.at(-1)!.prompt.member.name,'Quill Jr');assert.deepEqual((await f.assistant.read()).segment!.messages.at(-1)!.member,{id:long.id,name:long.name});
+ assert.equal((await f.members.member(short.id))!.admissionOpen,true);assert.equal((await f.members.member(long.id))!.admissionOpen,undefined);
+});
+
+test('Representative-thread member replies retain their answer when an unsolicited memory proposal is returned',async t=>{
+ const f=await setup(t),member=await f.admit();
+ f.script.push(JSON.stringify({reply:'I will keep it concise.',work:null,steer:null,memory:{name:'Concise replies',content:'Keep replies short.',sourceWorkId:null}}));
+ const sent=await f.say(f.assistant,'@Quill Please keep answers concise.');assert.equal(sent.turn?.status,'answered');assert.equal(sent.turn?.reply,'I will keep it concise.');
+ assert.deepEqual((await f.assistant.read()).segment!.messages.at(-1)!.member,{id:member.id,name:member.name});assert.equal((await f.intake()).memories.length,0);
+ assert.equal((await f.assistant.read()).turns.at(-1)!.memoryCandidate,undefined);
+ assert.match(f.prompts.at(-1)!.prompt.instruction,/Do not propose.*memory/);
+});

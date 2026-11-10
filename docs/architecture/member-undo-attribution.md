@@ -31,3 +31,7 @@ The first-use operation has a reserved host command identity. A pre-upgrade
 admission answer is looked up with its original fingerprint before the new
 undo-enabled admission is considered. Conversation history retains member pins
 as data so a later speaker does not inherit another member's authorship.
+
+Mention routing chooses the longest complete name when admitted names overlap.
+This direct-answer context forbids memory and steering proposals; unsolicited
+proposals are discarded while the answer and its original attribution survive.

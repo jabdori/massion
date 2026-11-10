@@ -60,3 +60,16 @@ contract checks and visual measurements) and `.runtime/rp-interactions/`
 
 The full suite and all screen contracts run in CI; no whole-repo local suite,
 live-provider evaluation, deployment or merge is claimed here.
+
+## First CI and Codex correction
+
+CI exposed fixture assumptions outside the initial focused set. Screen fixture
+clocks now remain fixed; attributed sample turns settle through the production
+conversation dispatcher without invoking a model. Readiness and memory-candidate
+tests use actual admitted member identities rather than presentation-only IDs.
+The 51 fixture/lifecycle/memory tests passed before the next push.
+
+Both Codex P2 cases were reproduced with failing tests: overlapping names choose
+the longest complete roster match, and Representative-thread member replies use
+a direct-answer instruction and discard unsolicited memory/steering proposals
+without discarding the answer. No memory write or Work follows those proposals.
