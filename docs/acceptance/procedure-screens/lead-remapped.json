@@ -1,0 +1,40 @@
+[
+  {
+    "before": {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "business-procedure",
+      "reason": "The typed pricing producer now supplies this card and count. The inherited Representative request history still places pricing before churn, whereas the prototype orders churn before pricing; no task text or time is rewritten to imply another history.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#lead-review-corrections"
+    },
+    "after": {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1
+    }
+  },
+  {
+    "before": {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "business-procedure",
+      "reason": "The typed pricing producer now supplies this card and count. The inherited Representative request history still places pricing before churn, whereas the prototype orders churn before pricing; no task text or time is rewritten to imply another history.",
+      "ledger": "docs/acceptance/procedure-screens/README.md#lead-review-corrections"
+    },
+    "after": {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1
+    }
+  }
+]
