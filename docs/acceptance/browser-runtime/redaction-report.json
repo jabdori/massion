@@ -19,6 +19,7 @@
   "formattedBase64Reflection": true,
   "punctuationSeparatedBase64Reflection": true,
   "mixedAlphabetGroupingReflection": true,
+  "hexReflection": true,
   "base64UrlReflection": true,
   "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,

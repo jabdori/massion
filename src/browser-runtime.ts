@@ -45,7 +45,14 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
  const mapBack=(normalize:(text:string)=>string,nextDecode:boolean)=>{const starts:number[]=[],ends:number[]=[];let visible='';for(const {segment,index} of new Intl.Segmenter('und',{granularity:'grapheme'}).segment(value)){const part=normalize(segment);visible+=part;for(let i=0;i<part.length;i++){starts.push(index);ends.push(index+segment.length);}}if(visible===value)throw Error('Browser text normalization failed');return browserPrivateRanges(visible,secrets,encodingDepth,nextDecode).map(([start,end]):[number,number]=>[starts[start]!,ends[end-1]!]);};
  const display=(text:string)=>digits(text.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,''));
  if(decode&&display(value)!==value)return combine(mapBack(display,true));
+ const encodedPrivate=(decoded:string)=>{if(!decoded)return false;if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');if(/%[a-f0-9]{2}/i.test(display(decoded).replace(/\s/g,'')))throw Error('Encoded browser text cannot be retained');return secrets.some(secret=>secret&&decoded.includes(secret))||browserPrivateRanges(decoded,secrets,encodingDepth+1).length>0;};
  const ranges:Array<[number,number]>=[];
+ if(decode)for(const match of value.matchAll(/[A-Fa-f0-9](?:[A-Fa-f0-9\s\p{P}\p{S}]*[A-Fa-f0-9])?/gu)){
+  if(value[match.index-1]==='%'||match[0].includes('%'))continue;
+  const token=match[0].replace(/[^A-Fa-f0-9]/g,'');for(let offset=0;offset<2&&offset<token.length-1;offset++){
+   const pairs=token.slice(offset).match(/../g)!;const decoded=new TextDecoder('utf-8',{ignoreBOM:true}).decode(Uint8Array.from(pairs,pair=>parseInt(pair,16)));if(encodedPrivate(decoded)){ranges.push([match.index,match.index+match[0].length]);break;}
+  }
+ }
  if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-](?:[A-Za-z0-9\s\p{P}\p{S}]*[A-Za-z0-9+/_-])?={0,2}/gu)){
   const base=match[0].replace(/[^A-Za-z0-9+/_-]/g,''),symbols:number[]=[];for(const symbol of base.matchAll(/[+/_-]/g)){symbols.push(symbol.index);if(symbols.length>6)break;}
   if(symbols.length>6){ranges.push([match.index,match.index+match[0].length]);continue;}
@@ -54,10 +61,8 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
   // 앞뒤의 일반 단어가 붙어도 네 가지 Base64 정렬에서 민감값을 확인합니다.
   for(let offset=0;offset<4&&offset<token.length-1;offset++){
    let candidate=token.slice(offset);if(candidate.length%4===1)candidate=candidate.slice(0,-1);
-   let decoded:string;try{const binary=atob(candidate);decoded=new TextDecoder().decode(Uint8Array.from(binary,c=>c.charCodeAt(0)));}catch{continue;}
-   if(encodingDepth>=8)throw Error('Browser encoding bound exceeded');
-   if(/%[a-f0-9]{2}/i.test(display(decoded).replace(/\s/g,'')))throw Error('Encoded browser text cannot be retained');
-   if(browserPrivateRanges(decoded,secrets,encodingDepth+1).length){ranges.push([match.index,match.index+match[0].length]);break candidates;}
+   let decoded:string;try{const binary=atob(candidate);decoded=new TextDecoder('utf-8',{ignoreBOM:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0)));}catch{continue;}
+   if(encodedPrivate(decoded)){ranges.push([match.index,match.index+match[0].length]);break candidates;}
   }
   }
  }

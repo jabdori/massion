@@ -233,3 +233,8 @@ for(const separator of [':','%253A','%EF%BC%9A'])test('reserved capability path 
  const s=await fixture(t),token='M4G1CL1NK7e32',address='https://shop.example.com/reset'+separator+token,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:token,blocks:[token],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
  for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(token),'Capability suffix must not persist');validateMissionJournalLineage(s.journal().operations);
 });
+
+for(const [plain,separator] of [['WXYZ9876',''],['WXYZ-9876',''],['ＷＸＹＺ９８７６',':'],['WXYZ-9876',' ']] as const)test('hex display candidates cannot retain private values: '+separator+plain,async t=>{
+ const s=await fixture(t),display=Buffer.from(plain).toString('hex').match(/.{1,4}/g)!.join(separator),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'앞😀'+display+'뒤',blocks:[display],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:'WXYZ9876'}]};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);const observed=await service.read('mission','work');assert.equal(observed.session!.page.title,'앞😀••••뒤');assert.deepEqual(observed.session!.page.blocks,['••••']);
+ for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(display),'Hex private value must not persist');validateMissionJournalLineage(s.journal().operations);
+});

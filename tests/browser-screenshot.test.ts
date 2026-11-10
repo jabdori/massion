@@ -52,3 +52,7 @@ test('a benign name alone cannot expose a field without an explicit textual labe
 test('durable validation refuses reversibly encoded structural text',()=>{
  const page={readId:'read:encoding',expectedRevision:1,inputHash:'a'.repeat(64),at:1,address:'https://shop.example.com',title:'Order',blocks:['%41%42%43%44%31%32%33%34'],fields:[]};assert.throws(()=>validateBrowserSession({id:'session',pages:[page]}),/encoded browser text/i);
 });
+
+test('decoding retains an invisible private value for exact matching before normalization',()=>{
+ for(const encoding of ['hex','base64'] as const){const secret='\uFEFF',encoded=Buffer.from(secret).toString(encoding),page=sanitizePage({address:raw.address,title:encoded,blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret}]});assert.equal(page.title,'••••');}
+});
