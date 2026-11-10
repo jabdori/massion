@@ -40,6 +40,7 @@ export function isEnvironmentState(value:unknown):value is EnvironmentState{retu
 function apply(current:EnvironmentState,command:Command,at:number):EnvironmentState {
  validateState(current);boundedPlainJson(command);ensure(integer(at)&&at>=current.at,'Environment clock moved backwards');const s=structuredClone(current);s.at=at;ensure(id(command.stepId),'Invalid step identity');
  if(command.type==='propose'){
+  for(const e of s.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline){e.status='timed-out';e.updatedAt=at;}
   exact(command,['type','stepId','request']);validateRequest(command.request,s.owner,s.environment);ensure(!s.entries.some(e=>e.id===command.stepId)&&!s.entries.some(pending),'An earlier step is unresolved or this step already exists','conflict');ensure(s.entries.length<32,'Environment history bound reached');
   const r=command.request,deadline=at+(r.type==='wait'?r.wait.timeoutMs:300000);ensure(Number.isSafeInteger(deadline),'Invalid environment deadline');
   s.entries.push({id:command.stepId,hash:hash(r),request:structuredClone(r),status:r.type==='action'&&r.action.gates.length===0?'ready':'waiting',at,deadline,polls:0,nextPoll:at,updatedAt:at});
@@ -56,7 +57,7 @@ function apply(current:EnvironmentState,command:Command,at:number):EnvironmentSt
     exact(command,['type','stepId','hash']);ensure(e.request.type==='action'&&e.status==='ready','Action is waiting for approval or already claimed','conflict');ensure(!e.request.action.gates.some(g=>g.kind==='payment'),'Payment intents are non-executable','denied');
     if(at>=e.deadline){e.status='timed-out';break;}e.status='unknown';if(e.request.action.input.kind==='type')s.tainted=true;break;
    }
-   case 'invalidate':exact(command,['type','stepId','hash']);ensure(e.status==='ready'||e.status==='waiting','Only pending actions can be invalidated','conflict');e.status='invalidated';break;
+   case 'invalidate':exact(command,['type','stepId','hash']);if(e.status==='ready'||e.status==='waiting')e.status='invalidated';break;
    case 'delivered':exact(command,['type','stepId','hash']);ensure(e.request.type==='action'&&e.status==='unknown','Only an original claim can record delivery','conflict');e.status='delivered';break;
    case 'reserve-poll':{
     exact(command,['type','stepId']);ensure(e.status==='waiting'&&e.request.type==='wait'&&e.request.wait.kind!=='approve','Only observation waits can poll; approval needs the owner','conflict');const w=e.request.wait;
@@ -83,11 +84,17 @@ export function replayEnvironment(operation:Operation<EnvironmentState>,prior?:O
 interface Options {owner:string;environment:string;clock?:()=>number;callTimeoutMs?:number;resolveSecret?:(reference:{owner:string;slot:string},signal:AbortSignal)=>Promise<Uint8Array>}
 /** Host-only library. Bind authenticated Work/owner authority before exposing any method to a client. */
 export class EnvironmentActions {
- readonly #store:Store<any>;readonly #owner:Store<any>;readonly #adapter:EnvironmentAdapter;readonly #options:Options;readonly #clock:()=>number;readonly #timeout:number;#readGeneration=0;
+ readonly #store:Store<any>;readonly #owner:Store<any>;readonly #adapter:EnvironmentAdapter;readonly #options:Options;readonly #clock:()=>number;readonly #timeout:number;#readGeneration=0;#feedId?:string;
  constructor(store:Store<any>,ownerStore:Store<any>,adapter:EnvironmentAdapter,options:Options){ensure(id(options.owner)&&id(options.environment),'Invalid environment owner');this.#store=store;this.#owner=ownerStore;this.#adapter=adapter;this.#options={...options};this.#clock=options.clock??Date.now;this.#timeout=options.callTimeoutMs??5000;ensure(integer(this.#timeout)&&this.#timeout>0&&this.#timeout<=TOOL_TIMEOUT_MS,'Invalid environment call timeout');}
- async #load(){const read=await this.#store.readState(stateId(this.#options));const context:Context={owner:this.#options.owner,environment:this.#options.environment,feedId:read.feedId};const value:EnvironmentState=read.snapshot?.value??empty(context);validateState(value);ensure(value.feedId===read.feedId&&value.id===stateId(context),'Environment database feed changed','conflict');return {context,value,revision:read.snapshot?.revision??0};}
+ async #load(){const read=await this.#store.readState(stateId(this.#options));this.#feedId??=read.feedId;ensure(read.feedId===this.#feedId,'Environment database feed changed','conflict');const context:Context={owner:this.#options.owner,environment:this.#options.environment,feedId:read.feedId};const value:EnvironmentState=read.snapshot?.value??empty(context);validateState(value);ensure(value.feedId===read.feedId&&value.id===stateId(context),'Environment database feed changed','conflict');return {context,value,revision:read.snapshot?.revision??0};}
  async state(){const {value}=await this.#load(),at=this.#clock();for(const e of value.entries)if(['waiting','ready'].includes(e.status)&&at>=e.deadline)e.status='timed-out';return value;}
- async #observe(timeoutMs=this.#timeout):Promise<EnvironmentObservation>{const observation=await callTool(signal=>this.#adapter.observe(signal),{readOnly:true,timeoutMs});validateObservation(observation);ensure(observation.binding.environment===this.#options.environment,'Environment observation identity changed');return structuredClone(observation);}
+ async #observe(timeoutMs=this.#timeout):Promise<EnvironmentObservation>{
+  const pendingEntry=(await this.#load()).value.entries.find(e=>e.status==='waiting'||e.status==='ready');
+  let observation:EnvironmentObservation;try{observation=await callTool(signal=>this.#adapter.observe(signal),{readOnly:true,timeoutMs});}catch{throw new Error('Environment observation unavailable');}
+  validateObservation(observation);observation=structuredClone(observation);
+  if(pendingEntry&&!sameSurface(binding(pendingEntry.request),observation.binding))this.#entry(await this.#dispatch({type:'invalidate',stepId:pendingEntry.id,hash:pendingEntry.hash}),pendingEntry.id);
+  ensure(observation.binding.environment===this.#options.environment,'Environment observation identity changed');return observation;
+ }
  async observe(){const generation=++this.#readGeneration,{context}=await this.#load(),observation=await this.#observe(),{value}=await this.#load();ensure(generation===this.#readGeneration&&context.feedId===value.feedId,'Stale environment observation','conflict');return value.tainted?{...observation,structure:[],facts:{},image:null}:{...observation,image:observation.image&&observation.image.expiresAt>this.#clock()?observation.image:null};}
  async #dispatch(command:Command,commandId?:string,hostReceipt=false):Promise<CommitResult<EnvironmentState>>{
   boundedPlainJson(command);command=structuredClone(command);const initial=await this.#load(),c=initial.context;commandId??=hostCommand(c,command);ensure(id(commandId)&& (command.type==='answer'?!commandId.startsWith('assistant-'):commandId.startsWith(prefix)),'Invalid environment command identity');

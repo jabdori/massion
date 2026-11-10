@@ -14,7 +14,7 @@ class FakeEnvironment implements EnvironmentAdapter {
  delivered:EnvironmentAction[]=[];reads=0;secretBytes:Uint8Array|undefined;beforeAct?:()=>void;holdRead?:()=>Promise<void>;
  async observe(_signal:AbortSignal):Promise<EnvironmentObservation>{this.reads++;const observation=structuredClone(this.observation);await this.holdRead?.();return observation;}
  async act(action:EnvironmentAction,context:Parameters<EnvironmentAdapter['act']>[1]){
-  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);};
+  const current=()=>{assert.ok(!context.signal.aborted);assert.deepEqual(action.binding,this.observation.binding);const node=this.observation.structure.find(e=>e.id===action.element);assert.ok(node&&node.operations.includes(action.input.kind));const gates=structuredClone(node.gates);if(action.input.kind==='submit'&&!gates.length)gates.push({kind:'irreversible-submit'});assert.deepEqual(action.gates,gates);};
   this.beforeAct?.();current();let bytes:Uint8Array|undefined;
   try{if(action.input.kind==='type'){assert.ok(context.secret);bytes=await context.secret();this.secretBytes=bytes;current();assert.ok(bytes.length>0);}this.delivered.push(structuredClone(action));}
   finally{bytes?.fill(0);}
@@ -49,7 +49,7 @@ test('surface, origin, generation and policy changes between approval and act in
 });
 
 test('navigation during adapter dispatch is unknown and never retried',async()=>{
- const s=setup([]),entry=await s.propose();s.adapter.beforeAct=()=>s.adapter.observation.binding.generation++;await s.service.execute('step',entry.hash);assert.equal((await s.read()).entries[0]!.status,'unknown');await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);
+ for(const change of ['generation','policy']){const s=setup([]),entry=await s.propose();s.adapter.beforeAct=()=>{if(change==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.structure[0]!.gates=[{kind:'account-creation'}];};await s.service.execute('step',entry.hash);assert.equal((await s.read()).entries[0]!.status,'unknown');await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);}
 });
 
 test('a lost claim response authorizes neither initial dispatch nor restart replay',async()=>{
@@ -129,7 +129,26 @@ test('a pending owner wait exports and parses as inert portable history without 
  const replacement=new EnvironmentActions(restored,restored,s.adapter,{owner:'local-owner',environment:'fixture'});await assert.rejects(replacement.poll('step'),/feed/i);
 });
 
-test('read-only polling is bounded by the remaining wait deadline, not a longer adapter timeout',async()=>{
+test('read-only polling is bounded by the remaining wait deadline, not a longer adapter timeout',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});
  const store=new InMemoryStore<any>(),adapter=new FakeEnvironment();const service=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:'fixture',callTimeoutMs:1000});
- await service.wait('step',{...wait,timeoutMs:30});let aborted=false;adapter.observe=async signal=>{signal.addEventListener('abort',()=>{aborted=true;});return new Promise(()=>{});};const start=Date.now();await service.poll('step');assert.ok(Date.now()-start<500);assert.equal(aborted,true);assert.equal((await service.state()).entries[0]!.status,'timed-out');
+ await service.wait('step',{...wait,timeoutMs:30});let aborted=false,entered!:()=>void;const ready=new Promise<void>(r=>entered=r);adapter.observe=async signal=>{signal.addEventListener('abort',()=>{aborted=true;});entered();return new Promise(()=>{});};const polling=service.poll('step');await ready;t.mock.timers.tick(30);assert.equal(aborted,true);await polling;assert.equal((await service.state()).entries[0]!.status,'timed-out');
+});
+
+test('adapter observation errors cannot expose private page values through a public error',async()=>{
+ const s=setup([]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});await s.service.execute('step',entry.hash);s.adapter.observe=async()=>{throw new Error('fixture-private-value');};
+ await assert.rejects(s.service.observe(),error=>error instanceof Error&&!String(error.stack).includes('fixture-private-value')&&!error.cause);
+});
+
+test('observing another surface permanently invalidates an approval even after returning to its original binding',async()=>{
+ for(const field of ['surface','origin','generation'] as const){const s=setup(),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');const original=structuredClone(s.adapter.observation.binding);if(field==='generation')s.adapter.observation.binding.generation++;else s.adapter.observation.binding[field]+='-changed';await s.service.observe();s.adapter.observation.binding=original;await s.create().execute('step',entry.hash);assert.equal(s.adapter.delivered.length,0);assert.equal((await s.read()).entries[0]!.status,'invalidated');validateMissionJournalLineage(s.store.inspect());}
+});
+
+test('expired waits and ready actions retire durably before admitting the next step',async()=>{
+ for(const kind of ['action','wait'] as const){const s=setup([]);if(kind==='action')await s.propose();else await s.service.wait('step',wait);s.tick(300001);assert.equal((await s.read()).entries[0]!.status,'timed-out');await s.create().propose('next','control',{kind:'click'});const state=await s.read();assert.equal(state.entries[0]!.status,'timed-out');assert.equal(state.entries[1]!.status,'ready');validateMissionJournalLineage(s.store.inspect());}
+});
+
+test('replacing a live environment with an empty feed cannot erase secret taint',async()=>{
+ const first=new InMemoryStore<any>();let active=first;const proxy=new Proxy(first,{get(_target,key){const value=Reflect.get(active,key);return typeof value==='function'?value.bind(active):value;}}),adapter=new FakeEnvironment();adapter.observation.structure[0]!.gates=[];
+ const service=new EnvironmentActions(proxy,proxy,adapter,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>new TextEncoder().encode('private-fixture')});const entry=await service.propose('step','control',{kind:'type',secret:{owner:'local-owner',slot:'login'}});await service.execute('step',entry.hash);active=new InMemoryStore();const reads=adapter.reads;await assert.rejects(service.observe(),/feed/i);assert.equal(adapter.reads,reads);assert.equal(active.inspect().length,0);
 });
