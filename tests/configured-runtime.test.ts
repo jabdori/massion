@@ -347,3 +347,19 @@ test('credential repair retries only the rejected verifier stage and keeps origi
  assert.equal(w.acceptance,'accepted');assert.equal(s.calls.length,2);assert.equal(w.effects.filter(e=>e.taskId===s.workId+':executor').length,2);assert.equal(w.effects.find(e=>e.id==='credential-run:verifier')!.status,'failed');assert.equal(w.effects.find(e=>e.id==='credential-run:verifier:repair')!.status,'succeeded');
  const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');assert.doesNotThrow(()=>validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect()));
 });
+
+test('member text output creates a typed owner decision before any artifact or checker',async t=>{
+ const output=JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:2500,currency:'USD',purpose:'Requested supplies',sourceReference:'document:quote-1'}),s=await setup(t,{binaryOutput:output});await s.admit();
+ const result=await s.product.run(s.missionId,s.workId,'intent-run',2),w=result.snapshot.value.works[0]!;
+ assert.equal(w.execution,'waiting',JSON.stringify(w.blocker));assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);
+ const e=w.effects.find(e=>e.ownerDecision)!;assert.equal(e.ownerDecision!.request.kind,'payment-intent');assert.match(s.calls[0]!.prompt.instruction,/massion-payment-intent\/v1/);
+ const {EffectDecisionsService}=await import('../src/effect-decisions.ts'),service=new EffectDecisionsService(s.store,s.store,()=>s.missionId,{clock:()=>w.runtimeRun!.ownership!.deadlineAt+1});
+ await service.decide({commandId:'approve-intent',decisionId:e.id,answer:'act',requestHash:e.ownerDecision!.requestHash});
+ assert.equal(s.calls.length,1);assert.equal((await s.store.load(s.missionId))!.value.works[0]!.effects.find(e=>e.ownerDecision)!.ownerDecision!.dispatch,undefined);
+ const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage((s.store as InMemoryStore<Mission>).inspect());
+});
+test('malformed typed payment output blocks instead of becoming a checked artifact',async t=>{
+ const s=await setup(t,{binaryOutput:JSON.stringify({format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:'25 USD',currency:'USD',purpose:'Supplies',sourceReference:'document:quote-1'})});await s.admit();
+ const result=await s.product.run(s.missionId,s.workId,'malformed-intent',2),w=result.snapshot.value.works[0]!;
+ assert.equal(w.execution,'blocked');assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);assert.equal(s.calls.length,1);assert.equal(w.effects.some(e=>e.ownerDecision),false);assert.equal(JSON.parse(w.effects[0]!.receipt!).output,null);assert.match(w.blocker!.detail,/Invalid payment intent/);
+});

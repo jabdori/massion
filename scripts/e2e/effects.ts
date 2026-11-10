@@ -12,7 +12,7 @@ import type {createWorkbench} from '../../src/server.ts';
 export function effectFixtures(store:Store<Mission>,root:string){
  const releases=new Map<string,()=>void>();
  const log=(data:unknown)=>appendFile(join(root,'calls.jsonl'),JSON.stringify(data)+'\n');
- const adapters:EffectAdapter[]=['payment','external-member'].map(kind=>({id:'fixture-'+kind,kind:kind as OwnerEffectRequest['kind'],async send(input){
+ const adapters:EffectAdapter[]=['payment','external-member'].map(kind=>({id:'fixture-'+kind,kind:kind as EffectAdapter['kind'],async send(input){
   const scenario=input.request.kind==='payment'?input.request.checkoutId:input.request.deviceId;
   await log({kind,scenario,idempotencyKey:input.idempotencyKey});
   if(scenario.endsWith('lost'))throw Error('Fixture reply lost after sending');

@@ -272,3 +272,10 @@ test('expanded flow keeps worker titles with identity and uses result disclosure
  }
  for(const node of descendants(flow).filter(n=>n.tagName==='SUMMARY'))assert.ok(![work.title,'작성','확인'].includes(node.textContent),'a result disclosure does not repeat task headings');
 });
+
+test('payment intent rows expose the declared amount and owner answer without fabricating a receipt',async()=>{
+ const {app,work,nodes}=await scene('B7');
+ const d={stepId:'payment-intent',at:1793855300000,request:{kind:'payment-intent',payee:'공급처',amountMinor:12345,currency:'USD',purpose:'물품 구매',sourceReference:'document:quote'},state:'approved',answers:[{answer:'act',at:1793855400000}]};
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.effects.push({id:'intent',taskId:w.id+':root',status:'pending',ownerDecision:${JSON.stringify(d)}});renderMission();}`,app.context);
+ assert.match(nodes().find(n=>hasClass(n,'room-detail'))!.textContent,/123.45 USD/);assert.match(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/승인됨 · Massion 미실행/);assert.doesNotMatch(nodes().find(n=>hasClass(n,'room-flow'))!.textContent,/결제 완료/);
+});

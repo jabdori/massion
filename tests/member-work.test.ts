@@ -901,3 +901,10 @@ test('late confirmed steering and resumed checkpoints retain complete portable j
  assert.equal((await connections.resume('intake',running.work.id)).status,'settled');const w=(await f.intake()).works.at(-1)!;
  assert.equal(w.artifact!.version,2);assert.equal(w.runtimeRun!.resumptions!.length,1);assert.equal(w.instructions![0]!.text,'Annual plans only.');validateMissionJournalLineage(f.store.inspect());
 });
+
+test('member worker payment declarations pause after sibling receipts and skip dependent work',async t=>{
+ const f=await setup(t);await f.admit();f.workPrompts.length=0;const envelope={format:'massion-payment-intent/v1',payee:'Example supplier',amountMinor:34000,currency:'KRW',purpose:'Requested supplies',sourceReference:'document:quote'};
+ f.setWorker(async()=>JSON.stringify(envelope));f.script.push(v2('On it.','Review payment request','Quill'));await f.say(f.assistant,'Review the supplied payment request');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(w.execution,'waiting');assert.equal(w.effects.filter((e:any)=>e.ownerDecision).length,1);const declared=w.effects.find(e=>e.ownerDecision)!.ownerDecision!.request;assert.equal(declared.kind,'payment-intent');if(declared.kind==='payment-intent')assert.equal(declared.amountMinor,34000);assert.equal(w.artifact,undefined);assert.equal(w.record,undefined);
+ assert.equal(f.workPrompts.filter(p=>p.step).length,1);assert.equal(f.workPrompts.some(p=>p.artifact),false);validateMissionJournalLineage(f.store.inspect());
+});

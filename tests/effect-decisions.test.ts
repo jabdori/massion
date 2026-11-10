@@ -174,3 +174,46 @@ for(const outcome of ['succeeded','failed'] as const)test(outcome+' receipt pres
   await s.service.decide({commandId:'pay',decisionId:id,answer:'act'});assert.equal(calls,1);assert.equal((await s.read()).execution,w.execution);
  }
 });
+
+const intent={kind:'payment-intent',payee:'Example supplier',amountMinor:12345,currency:'USD',purpose:'Owner-requested supplies',sourceReference:'document:quote-1'};
+const intentAnswer=(d:any,commandId='approve',answer='act')=>({commandId,decisionId:d.id,requestHash:d.ownerDecision.requestHash,answer});
+test('typed payment approval survives restart, consumes once and never dispatches',async()=>{
+ const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!;
+ const results=await Promise.all([1,2].map(()=>s.service.decide(intentAnswer(e))));assert.ok(results.every(r=>['committed','replayed'].includes(r.status)));
+ const restarted=new EffectDecisionsService(s.store,s.store,()=>'intake',{clock:()=>NOW});assert.equal((await restarted.decide(intentAnswer(e))).status,'replayed');
+ await assert.rejects(restarted.decide(intentAnswer(e,'another')),/open/);
+ const w=await s.read(),d=w.effects[0]!.ownerDecision!;assert.equal(d.state,'approved');assert.equal(d.answers.length,1);assert.equal(d.dispatch,undefined);assert.equal(d.receipt,undefined);assert.equal(w.record,undefined);assert.equal(w.execution,'waiting');
+ assert.equal((d.answers[0] as any).requestHash,d.requestHash);assert.match((await restarted.decisions())[0]!.line,/미실행/);
+ for(const command of [{type:'dispatch-owner-effect',workId:'work',effectId:e.id,feedId:'feed'},{type:'record-owner-effect',workId:'work',effectId:e.id,receipt:null}])assert.throws(()=>apply((s.store.inspect().at(-1)!).value,command as any,{id:EFFECT_HOST,roles:['representative']},{observedAt:NOW}),/never executed|not executable/i);
+ validateMissionJournalLineage(s.store.inspect());
+});
+test('typed decline is durable and cannot later approve',async()=>{
+ const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!;await s.service.decide(intentAnswer(e,'decline','reject'));
+ assert.equal((await s.read()).effects[0]!.ownerDecision!.state,'rejected');assert.equal((await s.read()).effects[0]!.status,'failed');await assert.rejects(s.service.decide(intentAnswer(e)),/open/);validateMissionJournalLineage(s.store.inspect());
+});
+test('typed approval rejects stale hashes and retained intent tampering',async()=>{
+ const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!;
+ await assert.rejects(s.service.decide({...intentAnswer(e),requestHash:'0'.repeat(64)}),/hash/i);
+ await assert.rejects(s.service.decide({commandId:'missing',decisionId:e.id,answer:'act'}),/hash/i);
+ await s.service.decide(intentAnswer(e));const snapshot=(await s.store.load('intake'))!;
+ for(const field of ['amountMinor','currency','payee','purpose','sourceReference']){
+  const value=structuredClone(snapshot.value),d=value.works[0]!.effects[0]!.ownerDecision!;(d.request as any)[field]=field==='amountMinor'?12346:field==='currency'?'EUR':'changed';d.requestHash=hash(d.request);
+  const {validateOwnerEffect}=await import('../src/effect-decisions.ts');assert.throws(()=>validateOwnerEffect(value.works[0]!.effects[0]!),/hash|intent/i);
+ }
+});
+test('typed envelope rejects malformed money, currency, extra fields and oversized labels',async()=>{
+ for(const patch of [{amountMinor:0},{amountMinor:-1},{amountMinor:1.5},{amountMinor:'123'},{amountMinor:NaN},{amountMinor:Infinity},{amountMinor:Number.MAX_SAFE_INTEGER+1},{currency:'usd'},{currency:'ZZZ'},{currency:'XXX'},{currency:'US'},{payee:'x'.repeat(257)},{purpose:'x'.repeat(2001)},{sourceReference:'x\n'},{card:'hidden'}]){
+  const s=await setup();await assert.rejects(s.propose({...intent,...patch} as any));assert.equal((await s.read()).effects.length,0);
+ }
+ for(const currency of ['KRW','USD','JPY','KWD','CLF']){const s=await setup();await s.propose({...intent,currency} as any);assert.equal((await s.read()).effects[0]!.ownerDecision!.request.kind,'payment-intent');}
+});
+test('typed intent input fencing and owner drain also apply to approval',async()=>{
+ const s=await setup();await s.propose(intent as any);const e=(await s.read()).effects[0]!,snapshot=(await s.store.load('intake'))!;
+ const changed=structuredClone(snapshot.value);changed.works[0]!.title='Changed request';assert.throws(()=>apply(changed,{type:'answer-owner-effect',workId:'work',effectId:e.id,answer:'act',requestHash:e.ownerDecision!.requestHash} as any,{id:'local-owner',roles:['owner']},{observedAt:NOW}),/input/);
+ const guarded=new Proxy(s.store,{get(target,key){if(key==='commit')return ()=>{throw new HostDrainError();};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),drained=new EffectDecisionsService(s.store,guarded,()=>'intake',{clock:()=>NOW});
+ await assert.rejects(drained.decide(intentAnswer(e)),HostDrainError);assert.equal((await s.read()).effects[0]!.ownerDecision!.state,'open');
+});
+test('minor-unit display preserves safe integer precision for zero, three and four decimal currencies',async()=>{
+ const {paymentAmount}=await import('../src/payment-intent.ts');
+ for(const [currency,amountMinor,expected] of [['USD',Number.MAX_SAFE_INTEGER,'90,071,992,547,409.91 USD'],['KRW',34000,'34,000원'],['JPY',1,'1 JPY'],['KWD',1,'0.001 KWD'],['CLF',1,'0.0001 CLF']] as const)assert.equal(paymentAmount({...intent,kind:'payment-intent',currency,amountMinor}),expected);
+});

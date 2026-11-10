@@ -81,7 +81,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -101,7 +101,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -121,7 +121,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -131,7 +131,7 @@
       "diagnostic": "missing pane text \"{amount}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -141,7 +141,7 @@
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -151,7 +151,7 @@
       "diagnostic": "missing pane button \"확인 완료 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-dark"
     },
     {
@@ -161,7 +161,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -201,7 +201,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -211,7 +211,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
     },
     {
@@ -231,7 +231,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
     },
     {
@@ -241,7 +241,7 @@
       "diagnostic": "missing pane button \"확인 안 함 결제 응답 없음\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
     },
     {
@@ -251,7 +251,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -281,7 +281,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -311,7 +311,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -321,7 +321,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -381,7 +381,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -731,7 +731,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -751,7 +751,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -771,7 +771,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -781,7 +781,7 @@
       "diagnostic": "missing pane text \"{amount}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -791,7 +791,7 @@
       "diagnostic": "missing pane text \"{count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -801,7 +801,7 @@
       "diagnostic": "missing pane button \"확인 완료 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-done-light"
     },
     {
@@ -811,7 +811,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -851,7 +851,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -861,7 +861,7 @@
       "diagnostic": "missing sidebar link \"{work_title} 결제 요청에 응답이 없어요. 다시 보내지 않았어요.\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
     },
     {
@@ -881,7 +881,7 @@
       "diagnostic": "missing conversation button \"주문 내역 확인\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
     },
     {
@@ -891,7 +891,7 @@
       "diagnostic": "missing pane button \"확인 안 함 결제 응답 없음\"",
       "occurrence": 1,
       "category": "payment",
-      "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
+      "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
     },
     {
@@ -901,7 +901,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -931,7 +931,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -961,7 +961,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -971,7 +971,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1031,7 +1031,7 @@
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+      "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -1825,7 +1825,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1844,7 +1844,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1863,7 +1863,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1882,7 +1882,7 @@
       "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1901,7 +1901,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1920,7 +1920,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 2,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1939,7 +1939,7 @@
       "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
       "occurrence": 3,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",
@@ -1958,7 +1958,7 @@
       "diagnostic": "order pane text \"결과 모름\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. No payment producer or extra exception is added.",
+      "reason": "Contract pane orders 12, 15, 18 and 20-22 require three observed shopping stages followed by an owner payment row. The fixture has only generic executor/verifier tasks and an unknown text effect. Its real task time now supplies the first time token; the same absent business/payment rows report order, including the later unknown label, rather than timestamps found only in conversation. Typed payment declarations now exist, but this legacy fixture has no declared intent or owner approval. Its shopping stages and execution observations remain absent; no extra exception is added.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals",
       "sources": [
         "src/internal-teams.ts:9",

@@ -1,0 +1,30 @@
+[
+  {
+    "theme": "light",
+    "states": [
+      "open",
+      "approved",
+      "declined",
+      "reloaded-mobile"
+    ],
+    "paymentCalls": 0,
+    "ownerAnswers": [
+      1,
+      1
+    ]
+  },
+  {
+    "theme": "dark",
+    "states": [
+      "open",
+      "approved",
+      "declined",
+      "reloaded-mobile"
+    ],
+    "paymentCalls": 0,
+    "ownerAnswers": [
+      1,
+      1
+    ]
+  }
+]
