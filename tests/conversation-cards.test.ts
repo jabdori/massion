@@ -6,20 +6,21 @@ import {harness,reply,settle} from './support/workbench-client.ts';
 import type {Node} from './support/workbench-client.ts';
 
 // docs/architecture/conversation-cards.md: one slot per Work that changes in place, exception cards with only the safe action, decision cards as the only yellow.
-type Work={workId:string;title:string;execution:string;acceptance:string;started:boolean;unknown?:boolean;startedAt?:number|null;steps?:{done:number;total:number};progress?:{make:{done:number;total:number};check:{done:number;total:number}}};
+type Work={credentialRepair?:{connectionId:string;configHash:string;generation:number;effectId:string;failure:{kind:string;code:string};canRetry:boolean};workId:string;title:string;execution:string;acceptance:string;started:boolean;unknown?:boolean;startedAt?:number|null;steps?:{done:number;total:number};progress?:{make:{done:number;total:number};check:{done:number;total:number}}};
 type Entry={text:string;at?:number;work?:Work;outcome?:'unknown'|'not_created'};
 const T0=Date.UTC(2026,10,5,0,40);
 function fixture(entries:Entry[],extra:{decisions?:unknown[];briefings?:unknown[];members?:unknown[]}={}){
  const criteria={version:1,description:'Answer the owner request',oracle:'bounded-text-review/v1'};
- const state={entries,extra,revision:2,cursor:1,events:[] as any[],posted:[] as {path:string;body:any}[],answer:200,sendHold:null as Promise<void>|null};
+ const state={lifecycle:null as any,lifecycleWait:null as Promise<void>|null,entries,extra,revision:2,cursor:1,events:[] as any[],posted:[] as {path:string;body:any}[],answer:200,sendHold:null as Promise<void>|null};
  const works=()=>state.entries.flatMap(e=>e.work?[e.work]:[]);
  const mission=()=>({id:'intake',version:1,purpose:'Owner requests',scope:'local',constraints:[],criteria,works:works().map(w=>({id:w.workId,title:w.title,missionVersion:1,criteria,execution:w.execution,acceptance:w.acceptance,tasks:[],attempts:[{id:'attempt:1',number:1,criteria,status:'queued',modelVersions:[]}],assignments:[],effects:[],appliedMemoryVersions:[],budget:{limit:8,reserved:0,measured:0}})),memories:[],growth:[],relations:[]});
  const view=()=>{const messages:any[]=[],turns:any[]=[];state.entries.forEach((e,i)=>{const id=String(i+1).repeat(32),turn='assistant-turn:m:'+id;messages.push({id:'m:'+id,role:'owner',turnId:null,text:e.text},{id:'r:'+turn,role:'representative',turnId:turn,text:'Okay.'});
   const w=e.work;turns.push({id:turn,messageId:'m:'+id,status:'answered',displayStatus:'answered',...(e.at?{at:e.at}:{}),...(w||e.outcome?{proposal:{title:w?.title??'Lost one'}}:{}),
-   ...(w?{outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,startedAt:w.startedAt??null,unknown:!!w.unknown,steps:w.steps??{done:0,total:2},...(w.progress?{progress:w.progress}:{})}}:e.outcome?{outcome:{work:{status:e.outcome,diagnostics:[]},run:{status:'off',diagnostics:[]}}}:{})});});
+   ...(w?{outcome:{work:{status:'admitted',diagnostics:[]},run:{status:'started',diagnostics:[]}},work:{missionId:'intake',missionRevision:state.revision,workId:w.workId,title:w.title,execution:w.execution,acceptance:w.acceptance,started:w.started,startedAt:w.startedAt??null,unknown:!!w.unknown,...(w.credentialRepair?{credentialRepair:w.credentialRepair}:{}),steps:w.steps??{done:0,total:2},...(w.progress?{progress:w.progress}:{})}}:e.outcome?{outcome:{work:{status:e.outcome,diagnostics:[]},run:{status:'off',diagnostics:[]}}}:{})});});
   return {feedId:'feed:a',cursor:state.cursor,head:1,segment:{number:1,revision:9,closed:false,full:false,previous:null,messages},turns,...state.extra};};
  const app=harness(async(path,options)=>{
-  if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});if(state.sendHold)await state.sendHold;return reply({},state.answer);}
+  if(options?.method==='POST'){state.posted.push({path,body:JSON.parse(options.body)});if(state.sendHold)await state.sendHold;return reply(path.endsWith('/retry')?{status:'completed'}:{},state.answer);}
+  if(path==='/connections/lifecycle'){if(state.lifecycleWait)await state.lifecycleWait;return reply(state.lifecycle??{});}
   if(path==='/assistant/works')return reply({feedId:'feed:a',works:view().turns.filter(t=>t.work).map(t=>({memberId:null,endedAt:null,segment:1,...t.work,turnId:t.id})).reverse()});
   if(path.startsWith('/assistant/conversation'))return reply(view());
   if(path.startsWith('/events'))return reply({feedId:'feed:a',cursor:state.cursor,events:state.events});
@@ -265,4 +266,20 @@ for(const status of [200,500])test('mention popup closes after '+(status===200?'
 test('recorded reply time places install notices between the owner message and reply',async()=>{
  const app=harness(async(path)=>path.startsWith('/assistant/conversation')?reply({feedId:'feed:a',cursor:1,head:1,segment:{number:1,revision:1,closed:false,full:false,previous:null,messages:[{id:'owner',role:'owner',turnId:null,text:'List PRs',at:T0},{id:'reply',role:'representative',turnId:null,text:'Listed PRs',at:T0+2000}]},turns:[],decisions:[{id:'installed',at:T0+1000,title:'GitHub',question:'Install?',rows:[],action:'Install',state:'done',line:'Installed',remove:'app-github'}]}):reply({error:'unavailable'},503));
  await settle();const nodes=shown(app);assert.equal(nodes[0]!.className,'chat-date');assert.deepEqual(nodes.filter(n=>n.className!=='chat-date').map(n=>n.textContent),['List PRs','Installed제거','Listed PRs']);
+});
+
+
+test('a credential card opens the exact masked repair and retry sends the bound stage only once',async()=>{
+ const credentialRepair={connectionId:'owner-api',configHash:'a'.repeat(64),generation:1,effectId:'run:executor',failure:{kind:'expired',code:'1003'},canRetry:true};
+ const {app,state}=fixture([{text:'Check repair',work:{workId:'work',title:'Check repair',execution:'blocked',acceptance:'pending',started:true,credentialRepair}}]);await settle();
+ state.lifecycle={feedId:'feed:a',connections:[{connectionId:'owner-api',configHash:'a'.repeat(64),credentialWriteStatus:'stored',replacementCommandId:'replacement'}]};
+ const retry=byId(app,'chat-credential-retry-'+turnId(1))!;assert.ok(retry);assert.equal(retry.disabled,false);
+ const first=retry.fire('click');await retry.fire('click');await first;await settle();const sent=state.posted.filter(p=>p.path.endsWith('/retry'));assert.equal(sent.length,1,JSON.stringify(app.calls.map(c=>c.path)));assert.equal(sent[0]!.body.effectId,'run:executor');assert.equal(sent[0]!.body.replacementCommandId,'replacement');assert.equal(sent[0]!.path,'/connections/owner-api/retry');
+});
+
+test('a delayed credential read cannot retry after the owner leaves the affected conversation',async()=>{
+ const credentialRepair={connectionId:'owner-api',configHash:'a'.repeat(64),generation:1,effectId:'run:executor',failure:{kind:'expired',code:'1003'},canRetry:true};
+ const {app,state}=fixture([{text:'Check repair',work:{workId:'work',title:'Check repair',execution:'blocked',acceptance:'pending',started:true,credentialRepair}}]);await settle();
+ state.lifecycle={feedId:'feed:a',connections:[{connectionId:'owner-api',configHash:'a'.repeat(64),credentialWriteStatus:'stored',replacementCommandId:'replacement'}]};let release!:()=>void;state.lifecycleWait=new Promise(r=>release=r);
+ const pending=byId(app,'chat-credential-retry-'+turnId(1))!.fire('click');await settle();await app.node('me-settings').fire('click');release();await pending;assert.equal(state.posted.length,0);
 });

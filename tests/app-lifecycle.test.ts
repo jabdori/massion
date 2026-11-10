@@ -108,3 +108,11 @@ test('legacy connection completion replays without adding new credential metadat
  await slots.delete(ref);assert.equal((await service.read()).apps[0]!.credential!.state,'missing');
  assert.deepEqual(store.inspect(),journal);assert.equal((await store.load(APPS_ID))!.value.apps[0].credential,undefined);
 });
+
+test('GitHub reads record invalid credentials from the exact authenticated response without claiming expiry',async()=>{
+ const f=await setup();await f.service.act({commandId:'reconnect-network',action:'reconnect',appId:'app-github'});
+ const decision=(await f.service.decisions(null)).find(d=>d.state==='open')!;await f.service.connect({commandId:'network-key',decisionId:decision.id,token:'never-render-token'});
+ const service=new AppsService(f.store,{...f.options,network:async()=>({status:401,body:JSON.stringify({message:'Bad credentials',documentation_url:'https://docs.github.com/rest'})})});
+ await assert.rejects(service.view({app:'app-github',handler:'page'}));
+ assert.equal((await service.read()).apps[0]!.credential!.state,'invalid');assert.doesNotMatch(JSON.stringify(f.store.inspect()),/never-render-token/);validateMissionJournalLineage(f.store.inspect());
+});
