@@ -57,12 +57,12 @@ function browserOperation(request:any){
   if(input.kind==='submit'&&!submitter&&!(activator instanceof HTMLFormElement))return {unsupportedTarget:true};
   const form=activator instanceof HTMLFormElement?activator:(activator as HTMLInputElement).form;
   const submitting=input.kind==='submit'||input.kind==='click'&&!!submitter;
-  const policies=config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:submitting&&form&&(control as HTMLInputElement|null)?.form===form?e.gates.filter((g:any)=>g.kind==='payment'):[];});
+  const policies=config.elements.flatMap((e:any,i:number)=>{const control=labelled(targets[i]);return control===activator?e.gates:submitting&&form&&(control===form||(control as HTMLInputElement|null)?.form===form)?e.gates.filter((g:any)=>g.kind==='payment'):[];});
   if(policies.some((g:any)=>g.kind==='payment'||!action.gates.some((approved:any)=>approved.kind===g.kind)))throw Error('Browser activator policy denied');
   const route=(url:string,target:string)=>{target||=document.querySelector<HTMLBaseElement>('base[target]')?.target??'';const u=new URL(url,location.href);if(u.origin!==config.origin||u.username||u.password||target&&target!=='_self')throw Error('Browser route denied');};
   if(input.kind==='click'&&activator instanceof HTMLAnchorElement)route(activator.href,activator.target);
   if(form){let address=form.action,target=form.target,method=form.method;if(submitter){if(submitter.hasAttribute('formaction'))address=submitter.formAction;if(submitter.hasAttribute('formtarget'))target=submitter.formTarget;if(submitter.hasAttribute('formmethod'))method=submitter.formMethod;}route(address,target);
-   if(state.private&&['click','submit'].includes(input.kind)&&method.toLowerCase()!=='post')throw Error('Private form requires POST');
+   if(state.private&&submitting&&method.toLowerCase()!=='post')throw Error('Private form requires POST');
   }
   switch(input.kind){
    case 'type':{

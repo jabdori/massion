@@ -62,6 +62,7 @@ test('owned browser applies its native allowlist and completes a guarded synthet
    {id:'human',selector:'#human',role:'checkbox',label:'Human check',operations:['click'],gates:[],ownerOnly:true},
    {id:'terms',selector:'#terms',role:'checkbox',label:'Terms',operations:['click'],gates:[{kind:'terms-acceptance'}]},
    {id:'submit',selector:'#submit',role:'button',label:'Submit',operations:['submit'],gates:[{kind:'personal-data-submission'},{kind:'account-creation'},gate]},
+   {id:'payment-container',selector:'#declared-payment-form',role:'form',label:'Payment form',operations:['submit'],gates:[{kind:'payment',intent}]},
    {id:'payment',selector:'#pay',role:'button',label:'Payment',operations:['click'],gates:[{kind:'payment',intent}]},
   ],facts:[{id:'confirmed',selector:'#human',state:'checked'},{id:'received',selector:'#receipt',state:'present'}]};
   await t.test('private form metadata is never retained',async()=>{const probe=await openBrowserEnvironment({...config,environment:'ambiguous-fields'},origin+'/ambiguous',signal);try{const page=await probe.read({address:origin+'/',sessionId:'fixture',signal});assert.equal(page.privateSession,true);assert.equal(page.title,'');assert.deepEqual(page.blocks,[]);assert.deepEqual(page.fields,[]);}finally{await probe.close();}});
@@ -80,6 +81,12 @@ test('owned browser applies its native allowlist and completes a guarded synthet
   });
   await t.test('labels cannot bypass protected controls or their payment policy',async()=>{
    for(const html of ['<label id="candidate" for="human">Continue</label>','<label id="candidate" for="pay">Continue</label>','<button id="candidate" form="payment-form" type="submit">Submit</button>','<input id="owner-radio" form="form" type="radio" name="owner-choice" checked><input id="candidate" form="form" type="radio" name="owner-choice">']){await setTarget(html);await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));}assert.equal(await owner('document.getElementById("owner-radio").checked'),true);assert.equal(posts,0);
+  });
+  await t.test('a declared form payment policy blocks its separately declared submit button',async()=>{
+   await setTarget('<form id="declared-payment-form" method="post" action="/no-navigation"><button id="candidate" type="submit">Submit</button></form>');await assert.rejects(browser.act(await action('target',{kind:'click'}),{signal}));
+  });
+  await t.test('declared checkbox and radio clicks work in a private GET form without submitting',async()=>{
+   await owner('document.getElementById("form").method="get"');try{for(const type of ['checkbox','radio']){await setTarget('<input id="candidate" form="form" type="'+type+'" name="native-choice">');await browser.act(await action('target',{kind:'click'}),{signal});assert.equal(await owner('document.getElementById("candidate").checked'),true);}assert.equal(posts,0);}finally{await owner('document.getElementById("form").method="post"');}
   });
   await t.test('selection requires a unique enabled value and label and its exact observed state',async()=>{
    for(const html of ['<option value="x" disabled>Disabled</option><option value="x">Enabled</option>','<option value="x">Same</option><option value="y">Same</option>','<optgroup disabled><option value="x">Disabled group</option></optgroup>']){await owner('document.getElementById("choice").innerHTML='+JSON.stringify(html));await assert.rejects(browser.act(await action('choice',{kind:'select',option:'x'}),{signal}));}
