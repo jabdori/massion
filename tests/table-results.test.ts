@@ -16,6 +16,8 @@ import {ASSISTANT_ACTOR_ID,ownerMessageId,assistantTurnId,assistantWorkId} from 
 import {hash} from '../src/domain.ts';
 import {applySkills} from '../src/skills.ts';
 import {memberProcedures} from '../src/internal-teams.ts';
+import {workCardFacts} from '../src/assistant-service.ts';
+import {validateMissionJournalLineage} from '../src/backup-lineage.ts';
 
 const table={format:'massion-table/v1',caption:'Controlled prices',columns:['Plan','Monthly'],rows:[['<img src=x onerror=alert(1)>','9,900원'],['javascript:alert(1)','19,900원']]};
 const original=' \n'+JSON.stringify(table,null,2)+'\n';
@@ -67,10 +69,10 @@ test('settled worker result tables are inert and worker instructions are never i
  work.tasks[0]!.status='active';work.tasks[0]!.result=original;assert.equal(descendants(render(work)).some(n=>n.tagName==='TABLE'),false);
 });
 
-async function runtime(t:test.TestContext,output:string,team=false){
+async function runtime(t:test.TestContext,output:string,team=false,workerOutput=output){
  const root=await mkdtemp(join(await realpath(tmpdir()),'massion-table-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const calls:any[]=[],store=new InMemoryStore<Mission>(),artifacts=new TextArtifactStore(join(root,'artifacts'));
- const adapter=(role:string):ProviderAdapter=>({descriptor:{provider:'fixture',model:role,configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},async invoke(request:ProviderRequest){const prompt=JSON.parse(request.instruction);calls.push({role,prompt});const result=role==='verifier'?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'9,900원',reason:'Controlled fixture evidence'}]}):prompt.teamPlanning?JSON.stringify({steps:[{role:'Table',title:'Table',dependsOn:[],instruction:'Create a table'}]}):output;return {status:'completed',output:result,usage:{inputTokens:1,outputTokens:1},reason:'Controlled fixture'};}});
+ const adapter=(role:string):ProviderAdapter=>({descriptor:{provider:'fixture',model:role,configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},async invoke(request:ProviderRequest){const prompt=JSON.parse(request.instruction);calls.push({role,prompt});const result=role==='verifier'?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:output.includes('9,900원')?'9,900원':'41',reason:'Controlled fixture evidence'}]}):prompt.teamPlanning?JSON.stringify({steps:[{role:'Table',title:'Table',dependsOn:[],instruction:'Create a table'}]}):prompt.step?workerOutput:output;return {status:'completed',output:result,usage:{inputTokens:1,outputTokens:1},reason:'Controlled fixture'};}});
  const executor=adapter('executor'),verifier=adapter('verifier'),options={enabled:true,outputTokenCap:32,authorization:{id:'fixture',scope:'local',mode:'mock-http' as const,executor:executor.descriptor,verifier:verifier.descriptor,maxOutputTokensPerCall:32},executor:{identity:'executor',adapter:executor},verifier:{identity:'verifier',adapter:verifier},artifacts};
  const instance=new ConfiguredTextRuntime(store,options);await instance.app.create({id:'mission',purpose:'Controlled table',scope:'local',constraints:[],criteria:{version:1,description:'Produce controlled prices',oracle:TEXT_REVIEW_ORACLE}},'local-owner','create');
  const owner={id:'local-owner',roles:['owner' as const]},skills=team?applySkills(null,{type:'write-skill',memberId:'member',kind:'procedure',name:'Table',body:{description:'Table',steps:['Table'],verify:'Controlled prices'}},owner,{observedAt:1}).value:null;
@@ -88,4 +90,36 @@ for(const team of [false,true])test(`runtime refuses marked malformed ${team?'wo
  const f=await runtime(t,JSON.stringify({...table,rows:[['bad']]}),team),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
  assert.equal(result.status,'blocked');assert.equal(work.artifact,undefined);assert.equal(work.record,undefined);assert.equal(f.calls.some(c=>c.role==='verifier'),false);assert.equal(work.effects.some(e=>e.id==='run:artifact'),false);
  if(team)assert.equal(work.tasks.find(task=>task.id===f.workId+':step:0')!.result,undefined);
+});
+
+const declaredFacts={format:'massion-facts/v1',items:[{label:'Processed',value:41,unit:'items'},{label:'Phase',value:'Ready'}]};
+test('only settled explicit business facts reach list summaries without worker bodies or prose inference',async t=>{
+ const f=await runtime(t,JSON.stringify(declaredFacts),true),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
+ const facts=workCardFacts(work) as any;
+ assert.deepEqual(facts.resultFacts,declaredFacts);assert.equal(facts.tableCount,0);
+ assert.equal(work.acceptance,'accepted');assert.equal(await f.artifacts.read(work.artifact!),JSON.stringify(declaredFacts));
+ assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,JSON.stringify(declaredFacts));
+ assert.ok(work.tasks.some(task=>!task.step&&task.result===JSON.stringify(declaredFacts)),'final assembly facts survive the result projection');
+ assert.equal(JSON.stringify(facts).includes('Create a table'),false);
+ for(const task of work.tasks){task.status='active';task.result=JSON.stringify(declaredFacts);}
+ assert.equal((workCardFacts(work) as any).resultFacts,null,'unsettled results never acquire facts');
+ for(const task of work.tasks){task.status='settled';task.result='41 reasons, business 9, other 32';}
+ assert.equal((workCardFacts(work) as any).resultFacts,null,'ordinary prose never acquires counts');
+});
+for(const team of [false,true])test(`runtime refuses malformed ${team?'worker':'assembly'} business facts before writes or checking`,async t=>{
+ const f=await runtime(t,JSON.stringify({...declaredFacts,items:[{label:'Processed',value:-1}]}),team),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
+ assert.equal(result.status,'blocked');assert.equal(work.artifact,undefined);assert.equal(work.record,undefined);assert.equal(f.calls.some(c=>c.role==='verifier'),false);
+ if(team)assert.equal(work.tasks.find(task=>task.step)!.result,undefined);
+});
+
+test('assembly facts survive canonical journal validation without a new storage shape',async t=>{
+ const f=await runtime(t,JSON.stringify(declaredFacts)),result=await f.instance.run('mission',f.workId,'run',2);
+ assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect());
+});
+
+for(const team of [false,true])test(`final declared facts replace worker declarations ${team?'with a team':'without a team'}`,async t=>{
+ const final=JSON.stringify(declaredFacts),worker=JSON.stringify({format:'massion-facts/v1',items:[{label:'Earlier',value:3}]}),f=await runtime(t,final,team,worker),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!,summary=workCardFacts(work) as any;
+ assert.equal(work.acceptance,'accepted');assert.deepEqual(summary.resultFacts,declaredFacts);assert.equal(summary.tableCount,0);
+ assert.equal(await f.artifacts.read(work.artifact!),final);assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,final);
+ if(!team)validateMissionJournalLineage(f.store.inspect());
 });

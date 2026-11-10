@@ -76,3 +76,12 @@ the continuation fences and R-N's timestamps, note acknowledgement and exact fil
 inputs. Related member/runtime/credential/telemetry tests: 138 passed, no failures
 or skips; typecheck passed. The file-claim boundary also checks retained original
 ownership, resumed ownership and refusal of an unbound host.
+
+
+The merge-only follow-up incorporates main's generic ordered result facts and
+flow-disclosure styles without changing the reviewed R-N behavior. Preserved both
+sets of copy keys and fixture producers. All 108 affected result/table/room/fixture
+tests passed, as did the selected-byte/owner-note runtime integration and typecheck.
+All eight visual state/theme checks passed again; these PNGs and bounds were
+refreshed against the merged source. Per owner instruction, this merge-only round
+requires CI, without another independent review or manual Codex request.

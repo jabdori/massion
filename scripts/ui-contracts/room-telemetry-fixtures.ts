@@ -26,12 +26,19 @@ const pricing=[
  {role:'표 정리',title:'표 만들기',dependsOn:[1],instruction:'C사는 연간 요금을 12로 나눠 적어 줘. 금액은 원 단위로.',start:'10:42',end:'10:47',done:1,total:1,result:pricingTableResult()}
 ];
 const coding=[{role:'읽기',title:'읽기',dependsOn:[],start:'10:40',done:4,total:11},{role:'테스트',title:'테스트 돌리기',dependsOn:[0]}];
+const churn=[
+ {role:'조사',title:'범위 정하기',dependsOn:[],start:'09:41',end:'09:41',done:1,total:1,result:'지난 90일 해지'},
+ {role:'조사',title:'자료 모으기',dependsOn:[0],start:'09:42',end:'10:05',done:41,total:41,result:'해지 사유 41건 모았어요.'},
+ {role:'분류',title:'나누기',dependsOn:[1],start:'10:05',end:'10:24',done:41,total:41,result:JSON.stringify({format:'massion-facts/v1',items:[{label:'해지 사유',value:41,unit:'건'},{label:'기업',value:9,unit:'건'},{label:'그 외',value:32,unit:'건'}]})},
+ {role:'설문',title:'설문 다시 보내기',dependsOn:[],skipReason:'지난달 설문 있음',end:'10:24',result:'Skipped · 지난달 설문 있음'},
+ {role:'요약',title:'원인 정리',dependsOn:[2],start:'10:24',done:0,total:1}
+];
 
 /** Observed units are controlled fixture inputs, never parsed from a model's prose. */
-export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding',now?:number){
+export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn',now?:number){
  const stamp=(clock:string)=>time(clock)+(kind==='pricing'?200*60000:now===undefined?0:now-time('10:44'));
- const spec:typeof pricing|typeof coding=kind==='pricing'?pricing:coding,memberId=kind==='pricing'?'member-quill':'member-juno',title=kind==='pricing'?'경쟁사 가격':'PR #84 검토',start=kind==='pricing'?'10:30':'10:40';
- const messageId=ownerMessageId('room-telemetry-'+kind),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),runId=assistantRunId(turnId),message={id:messageId,ordinal:1,actorId:owner.id,role:'owner' as const,turnId:null,text:kind==='pricing'?'경쟁사 가격도 확인해 줘.':'PR #84 검토해 줘.',at:stamp(start)};
+ const spec:typeof pricing|typeof coding|typeof churn=kind==='pricing'?pricing:kind==='churn'?churn:coding,memberId=kind==='coding'?'member-juno':'member-quill',title=kind==='pricing'?'경쟁사 가격':kind==='churn'?'이탈 원인 조사':'PR #84 검토',start=kind==='pricing'?'10:30':kind==='churn'?'09:41':'10:40';
+ const messageId=ownerMessageId('room-telemetry-'+kind),turnId=assistantTurnId(messageId),workId=assistantWorkId(turnId),runId=assistantRunId(turnId),message={id:messageId,ordinal:1,actorId:owner.id,role:'owner' as const,turnId:null,text:kind==='pricing'?'경쟁사 가격도 확인해 줘.':kind==='churn'?'지난 90일 동안 해지한 고객들이 왜 떠났는지 원인을 조사해 줘.':'PR #84 검토해 줘.',at:stamp(start)};
  const source={segmentId:'assistant-conversation:1',turnId,messageId,messageHash:hash(message),message,representative:{provider:'fixture',model:'fixture-representative'},memberId};
  const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:title,body:{description:title,steps:spec.map(s=>s.title),verify:mission.criteria.description}},owner,{observedAt:stamp(start)}).value,team=memberProcedures(skills,memberId,1);
  let state=createMission({id:mission.id,purpose:mission.purpose,scope:mission.scope,constraints:mission.constraints,criteria:mission.criteria},owner),at=stamp(start);
@@ -65,6 +72,7 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding',now?:n
   }
   if(s.end)send({type:'settle-task',workId,taskId,result:s.result!},actor,s.end);
  }
+ if(kind==='pricing')send({type:'settle-task',workId,taskId:workId+':executor',result:JSON.stringify({format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]})},{id:'executor',roles:['executor']});
  let proposal:Mission|undefined;
  if(kind==='coding'){send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');proposal=structuredClone(state);send({type:'acknowledge-step-note',workId,messageId:'procedure-note'},{id:'worker-1',roles:['executor']},'10:44');}
  validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source,documents:state.documents,proposal};
