@@ -15,7 +15,8 @@ import {stopOwnedChild} from '../../tests/support/owned-process.ts';
 import {exportPortableBackup,restorePortableBackup} from '../../src/portable-backup.ts';
 import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
-import {browserCommand,browserEgressProxy} from './browser-command.mjs';
+import {browserCommand} from './browser-command.mjs';
+import {createBrowserNetwork} from './browser-network.mjs';
 import {evidenceBrowser,redactEvidence} from '../browser-evidence.mjs';
 
 const run=promisify(execFile),out=resolve('.runtime/e2e');
@@ -29,10 +30,9 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a'])).stdout.trim()+'-'+randomUUID().slice(0,8);
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('AGENT_BROWSER_')));
  Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_PLUGINS:'[]'});
- const egress=await browserEgressProxy();t.after(()=>egress.close());
- const browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{}));
+ const network=await createBrowserNetwork(),browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify({...network.config,...(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{})}));
  const browser=evidenceBrowser(async(...args)=>{
-  const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--proxy',egress.url,'--proxy-bypass','<-loopback>,127.0.0.1','--args','--force-webrtc-ip-handling-policy=disable_non_proxied_udp','--json',...args],{env,timeout:35000,maxBuffer:4e6}));
+  const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--json',...args],{env,timeout:35000,maxBuffer:4e6}));
   if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;
  });
  const wait=async code=>browser('wait','--fn',code);
@@ -54,7 +54,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  async function stop(){if(!child)return;const owned=child;await stopOwnedChild(owned,{cwd:root,argv});child=undefined;assert.equal(owned.exitCode,0,'Daemon drain: '+logs);}
  async function open(fragment=''){await browser('open',url+'/'+fragment);await wait(workbenchReady);}
  async function capture(name,patterns){const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern,name);evidence.push(name);}
- async function say(text){await browser('fill','#chat-input',text);await browser('click','#chat-send');await wait("!document.getElementById('chat-input').disabled && !document.getElementById('chat-input').value");}
+ async function say(text){await wait("!document.getElementById('chat-send').disabled");await browser('fill','#chat-input',text);await browser('click','#chat-send');await wait("!document.getElementById('chat-send').disabled && !document.getElementById('chat-input').value");}
  async function finished(title,acceptance='accepted'){
   await until(async()=>{const work=(await current()).value.works.find(w=>w.title===title);return work?.acceptance===acceptance&&work.execution==='settled';});
   await wait(`document.getElementById('chat-log').textContent.includes(${JSON.stringify(title)})`);
@@ -227,5 +227,5 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
   await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:[]},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
- finally{await browser('close').catch(()=>{});await stop();await writeFile(join(out,'daemon.log'),redactEvidence(logs));await rm(root,{recursive:true,force:true});}
+ finally{await browser('close').catch(()=>{});await network.close();await stop();await writeFile(join(out,'daemon.log'),redactEvidence(logs));await rm(root,{recursive:true,force:true});}
 });
