@@ -12,7 +12,7 @@ export function validateProviderDispatch(work:Work,effect:Effect,claim:ProviderD
  if(!claim||typeof claim!=='object'||Array.isArray(claim)||Object.keys(claim).length!==fields.length||!Object.keys(claim).every(k=>fields.includes(k)))return invalid();
  for(const key of fields.filter(k=>!['requestHash','claimedAt'].includes(k))){const value=claim[key as keyof ProviderDispatchClaim];if(typeof value!=='string'||!value.trim()||value.length>4096||!value.isWellFormed())return invalid();}
  if(!/^[a-zA-Z0-9:_-]{1,128}$/.test(claim.id)||!/^[a-f0-9]{64}$/.test(claim.requestHash)||!Number.isSafeInteger(claim.claimedAt))return invalid();
- const run=work.runtimeRun,owner=run?.ownership;if(!run||!owner)return invalid();validateRuntimeOwnership(owner);
+ const run=work.runtimeRun,owner=[run?.ownership,...(run?.resumptions??[])].find(o=>o?.dispatchId===claim.dispatchId);if(!run||!owner)return invalid();validateRuntimeOwnership(owner);
  const assignment=work.assignments.find(a=>a.id===claim.assignmentId);
  if(claim.runId!==run.id||claim.hostSessionId!==owner.hostSessionId||claim.dispatchId!==owner.dispatchId||claim.claimedAt<owner.startedAt||claim.claimedAt>=owner.deadlineAt||effect.authority!==run.authorizationId||!assignment||assignment.actorId!==claim.actorId||assignment.taskId!==effect.taskId||assignment.model.provider!==claim.provider||assignment.model.model!==claim.model||assignment.model.configVersion!==claim.configVersion||effect.target!==`${claim.provider}/${claim.model}`)return invalid();
 }

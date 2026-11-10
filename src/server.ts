@@ -1,6 +1,7 @@
 import {BrowserSessions} from './browser-runtime.ts';
 import type {BrowserAdapter} from './browser-runtime.ts';
 import {localBrowserAdapter} from './headless-browser.ts';
+import {canResume,currentOwnership} from './runtime-continuation.ts';
 import {RuleChangesService,RULE_DECISION_PREFIX,withRuleBriefings} from './rule-changes.ts';
 import {MonthlyBudgetService,BUDGET_DECISION_PREFIX} from './monthly-budget.ts';
 import {createAppDocumentHost} from './app-documents.ts';
@@ -20,7 +21,7 @@ import {readMemoryUsage,MemoryUsageError} from './memory-usage.ts';
 import {findMemoryVersions} from './memory-find.ts';
 import {searchMemoryContent} from './memory-content-search.ts';
 import {loadRestoredArtifactReader} from './restored-artifact-reader.ts';
-import {HostDrainError} from './runtime-lifetime.ts';
+import {HOST_SESSION_ID,HostDrainError} from './runtime-lifetime.ts';
 import {ASSISTANT_CONVERSATION_PREFIX} from './assistant-conversation.ts';
 import {AssistantService} from './assistant-service.ts';
 import {LoginConnections} from './connection-logins.ts';
@@ -92,9 +93,17 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  const ruleChanges=new RuleChangesService(ownerStore,()=>options.connections?.list().representative?.intakeMissionId);
  const monthlyBudget=new MonthlyBudgetService(ownerStore);
  let budgetTask:Promise<void>|undefined,budgetAgain=false;
+ const startupResume=Promise.resolve().then(async()=>{
+  if(!product.runtime?.resume)return;const snapshot=await monthlyBudget.snapshot();
+  for(const r of snapshot.budget?.value.reservations??[]){
+   if(draining)break;const w=snapshot.missions.get(r.missionId)?.value.works.find(w=>w.id===r.workId);
+   if(r.state!=='reserved'||r.feedId!==snapshot.feedId||!w||w.runtimeRun?.id!==r.runId||!canResume(w,Date.now())||currentOwnership(w)?.hostSessionId===HOST_SESSION_ID)continue;
+   try{await withAdmissionFeed(snapshot.feedId,()=>product.runtime!.resume!(r.missionId,r.workId));}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}
+  }
+ }).catch(()=>{unsettled=true;});
  const queueMonthlyReconcile=()=>{
   if(draining)return;budgetAgain=true;if(budgetTask)return;
-  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;try{await monthlyBudget.reconcile(undefined,async(r,revision)=>{if(product.runtime)await product.run(r.missionId,r.workId,r.runId,revision,r.selection);},async(r,revision)=>!!product.runtime&&!product.runtime.hasActiveAdmission?.()&&!!(await product.preflight(r.missionId,r.workId,revision,r.selection))?.ready,()=>product.runtime?.hasActiveAdmission?.()??false);}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueMonthlyReconcile();});
+  budgetTask=Promise.resolve().then(async()=>{do{budgetAgain=false;await startupResume;if(draining)return;try{await monthlyBudget.reconcile(undefined,async(r,revision)=>{if(product.runtime)await product.run(r.missionId,r.workId,r.runId,revision,r.selection);},async(r,revision)=>!!product.runtime&&!product.runtime.hasActiveAdmission?.()&&!!(await product.preflight(r.missionId,r.workId,revision,r.selection))?.ready,()=>product.runtime?.hasActiveAdmission?.()??false);}catch(error){if(!(error instanceof HostDrainError)&&!(error instanceof DomainError))unsettled=true;}}while(budgetAgain&&!draining);}).finally(()=>{budgetTask=undefined;if(budgetAgain&&!draining)queueMonthlyReconcile();});
  };
  const effects=new EffectDecisionsService(store,ownerStore,()=>options.connections?.list().representative?.intakeMissionId,{adapters:options.effectAdapters,timeoutMs:options.effectTimeoutMs});
  const connectionLifecycle=options.connections?new ConnectionLifecycle(ownerStore,options.connections,{logins:options.logins,observe:options.connectionObserver}):undefined;
@@ -364,7 +373,7 @@ export function createWorkbench(store:Store<Mission>,workspaceRoot:string,option
  });
  server.on('close',()=>{browserSessions.beginDrain();clearInterval(scheduler);feed.close();void appDocuments.close();});
  queueMonthlyReconcile();
- return Object.assign(server,{browserSessions,effectDecisions:effects,drain(){if(drainPromise)return drainPromise;draining=true;connectionLifecycle?.beginDrain();devices.beginDrain();apps.beginDrain();effects.beginDrain();browserSessions.beginDrain();feed.close();clearInterval(scheduler);product.runtime?.beginDrain?.();assistant.beginDrain();options.logins?.beginDrain();for(const chat of memberChats.values())chat.beginDrain();drainPromise=new Promise(resolve=>{let done=false,timedOut=false,httpClosed=false,runtimeSettled=false;const finish=()=>{if(done||!timedOut&&(!httpClosed||!runtimeSettled))return;done=true;clearTimeout(timer);resolve({status:timedOut||unsettled||schedules.unsettled?'unsettled':'drained',timedOut});};const timer=setTimeout(()=>{timedOut=true;server.closeAllConnections();finish();},drainTimeoutMs);void (async()=>{const results=await Promise.allSettled([product.runtime?.drain?.(),assistant.drain(),budgetTask,effects.drain(),browserSessions.drain(),devices.drain(),connectionLifecycle?.drain(),options.logins?.drain(),(async()=>{await ticking;if(schedules.unsettled)throw new Error('A scheduled step is unsettled; inspect durable state before any next action.');})(),...[...memberChats.values()].map(chat=>chat.drain())]);if(results.some(result=>result.status==='rejected'))unsettled=true;})().then(()=>{runtimeSettled=true;finish();},()=>{unsettled=true;runtimeSettled=true;finish();});server.close(()=>{void appDocuments.close().then(()=>{httpClosed=true;finish();},()=>{unsettled=true;httpClosed=true;finish();});});});return drainPromise;}});
+ return Object.assign(server,{browserSessions,effectDecisions:effects,drain(){if(drainPromise)return drainPromise;draining=true;connectionLifecycle?.beginDrain();devices.beginDrain();apps.beginDrain();effects.beginDrain();browserSessions.beginDrain();feed.close();clearInterval(scheduler);product.runtime?.beginDrain?.();assistant.beginDrain();options.logins?.beginDrain();for(const chat of memberChats.values())chat.beginDrain();drainPromise=new Promise(resolve=>{let done=false,timedOut=false,httpClosed=false,runtimeSettled=false;const finish=()=>{if(done||!timedOut&&(!httpClosed||!runtimeSettled))return;done=true;clearTimeout(timer);resolve({status:timedOut||unsettled||schedules.unsettled?'unsettled':'drained',timedOut});};const timer=setTimeout(()=>{timedOut=true;server.closeAllConnections();finish();},drainTimeoutMs);void (async()=>{const results=await Promise.allSettled([product.runtime?.drain?.(),assistant.drain(),startupResume,budgetTask,effects.drain(),browserSessions.drain(),devices.drain(),connectionLifecycle?.drain(),options.logins?.drain(),(async()=>{await ticking;if(schedules.unsettled)throw new Error('A scheduled step is unsettled; inspect durable state before any next action.');})(),...[...memberChats.values()].map(chat=>chat.drain())]);if(results.some(result=>result.status==='rejected'))unsettled=true;})().then(()=>{runtimeSettled=true;finish();},()=>{unsettled=true;runtimeSettled=true;finish();});server.close(()=>{void appDocuments.close().then(()=>{httpClosed=true;finish();},()=>{unsettled=true;httpClosed=true;finish();});});});return drainPromise;}});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  const stopping=new AbortController();let server:ReturnType<typeof createWorkbench>|undefined,shutdown:Promise<void>|undefined;

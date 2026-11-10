@@ -47,4 +47,4 @@ test('standalone card and API-key text uses the same display normalization as kn
 
 test('literal punctuation secrets are still masked when grouped matching removes separators',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:['a---b'],fields:[{label:'Password',type:'password',autocomplete:'',value:'---'}]});assert.deepEqual(page.blocks,['a••••b']);});
 
-test('a benign name alone cannot expose a field without an explicit textual label',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:[],fields:[{label:'',name:'quantity',type:'number',autocomplete:'',value:'456'}]});assert.equal(page.fields[0].masked,true);assert.equal(page.fields[0].value,'••••');});
+test('a benign name alone cannot expose a field without an explicit textual label',()=>{const page=sanitizePage({address:raw.address,title:'Order',blocks:[],fields:[{label:'',name:'quantity',type:'number',autocomplete:'',value:'456'}]});assert.equal(page.fields[0]!.masked,true);assert.equal(page.fields[0]!.value,'••••');});
