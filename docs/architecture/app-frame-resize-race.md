@@ -12,6 +12,10 @@ message keys, safe integer heights from 80 through 1200, URL admission and sandb
 attributes. Detached, replaced and unrelated frames must never resize a live view.
 The same client serves loopback documents and desktop `massion-app` documents.
 
+The initial browser-command retry below was later removed after it hid browser
+closure. See [E2E app-frame network controls](e2e-app-frame-network.md) for the
+remaining harness race and native loopback restriction.
+
 Reproduce first-message delivery before load, including insertion after the old
 registration microtask, in the existing frame tests. Reuse the bounded one-retry
 browser command helper for all browser operations in the journey drivers; only
