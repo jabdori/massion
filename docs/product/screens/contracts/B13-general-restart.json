@@ -17,7 +17,7 @@
    "screenshot": "shots/light/B13-general-restart.png"
   }
  },
- "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: no '★'.",
+ "notes": "Generated from the rendered artboard (accessible rendered DOM at 1440x900, including scroll content). required=false items are data examples; {member},{work_title},{time},{date},{duration},{amount},{progress},{count},{content} are placeholders. Owner overrides applied: Polish2 uses the existing unset briefing label and installed desktop version; no '★'.",
  "regions": [
   {
    "region": "rail",
@@ -176,7 +176,7 @@
      "text": "아침 브리핑",
      "required": true,
      "order": 4,
-     "visible_text": "— 끔 적게 많이"
+     "visible_text": "없음"
     },
     {
      "role": "text",
@@ -201,7 +201,7 @@
     },
     {
      "role": "text",
-     "text": "—",
+     "text": "{content}",
      "required": true,
      "order": 8
     },

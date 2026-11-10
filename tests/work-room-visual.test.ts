@@ -109,7 +109,9 @@ test('failed procedure rows show only the current bound verdict evidence',async(
 
 for(const [screen,word] of [['B8-done','맞음'],['B8-fail','아님']] as const)test(screen+' shows the verdict word instead of repeating the header count',async()=>{
  const {nodes}=await scene(screen),group=nodes().find(n=>hasClass(n,'room-grid'))!.children[1]!;
- assert.equal(descendants(group).filter(n=>hasClass(n,'room-field-note'))[0]?.textContent,word);
+ const row=descendants(group).find(n=>hasClass(n,'room-field'))!;assert.equal(row.children[1]!.textContent,word);assert.equal(row.children.length,2);
+ const compact=nodes().find(n=>hasClass(n,'room-procedure'))!,check=descendants(compact).find(n=>hasClass(n,'room-step')&&n.children[1]?.textContent==='확인')!;
+ assert.equal(check.children.filter(n=>n.textContent===word).length,1);assert.ok(!check.children.some(n=>hasClass(n,'room-step-count')));
 });
 
 test('conversation and procedure counts use the same child tasks and failed check state',async()=>{

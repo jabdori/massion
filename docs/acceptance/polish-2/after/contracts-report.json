@@ -1,0 +1,229 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "passed": 23,
+      "failed": 0,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B13-general-restart.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "dark",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B23.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 67,
+      "failed": 2,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18-room-b.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 2,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 36,
+      "failed": 0,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 3,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-unknown.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "dark",
+      "passed": 37,
+      "failed": 0,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B19-juno.png"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "passed": 21,
+      "failed": 0,
+      "warnings": 0,
+      "required": 21,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13-general.png"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "passed": 23,
+      "failed": 0,
+      "warnings": 0,
+      "required": 23,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B13-general-restart.png"
+    },
+    {
+      "screen": "B23",
+      "theme": "light",
+      "passed": 29,
+      "failed": 0,
+      "warnings": 0,
+      "required": 29,
+      "visualFailures": [],
+      "gaps": [
+        "The host catalog contains only GitHub; the six other recommended apps have no installable packages."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B23.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 67,
+      "failed": 2,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18-room-b.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "passed": 34,
+      "failed": 2,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 36,
+      "failed": 0,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "passed": 36,
+      "failed": 10,
+      "warnings": 3,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-unknown.png"
+    },
+    {
+      "screen": "B19-juno",
+      "theme": "light",
+      "passed": 37,
+      "failed": 0,
+      "warnings": 0,
+      "required": 37,
+      "visualFailures": [],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B19-juno.png"
+    }
+  ]
+}
