@@ -143,6 +143,17 @@ export class ConnectionWorkbench implements WorkRuntime {
   };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
   const router=this.router(guarded);this.#active.set(key,router);try{return await router.run(missionId,workId,runId,expectedRevision,choice,activationActorId);}finally{this.#active.delete(key);}
  }
+ async resume(missionId:string,workId:string){
+  if(this.#draining)throw new HostDrainError();const snapshot=await this.#store.load(missionId);if(!snapshot)throw new DomainError('Unknown Mission');
+  if(this.#active.size)return {status:'blocked' as const,snapshot,reason:'Local runtime is busy'};
+  const fence=await captureRuntimeFence(this.#store,this),changed=await checkRuntimeFence(this.#store,this,fence);
+  if(changed||this.#active.size)return {status:'blocked' as const,snapshot,reason:changed?.message??'Local runtime is busy'};
+  const runtime=this,guarded=new Proxy(this.#store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{
+   if(input.events.some(e=>(e as {type?:string}).type==='resume-runtime')){const changed=await checkRuntimeFence(target,runtime,fence);if(changed)throw new RuntimeConfigurationChangedError(changed);if(runtime.#draining)throw new HostDrainError();}
+   return target.commit(input);
+  };const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),router=this.router(guarded),key=missionId+'\0'+workId;
+  if(this.#draining)throw new HostDrainError();this.#active.set(key,router);try{return await router.resume(missionId,workId);}finally{this.#active.delete(key);}
+ }
  owns(missionId:string,workId:string,runId:string){return this.#active.get(missionId+'\0'+workId)?.owns(missionId,workId,runId)??false;}
  interrupt(missionId:string,workId:string){this.#active.get(missionId+'\0'+workId)?.interrupt(missionId,workId);}
  private version(){return hash({connections:[...this.#connections.values()].map(c=>c.configHash),profiles:[...this.#profiles.values()].map(v=>hash(v.profile)),grants:this.#grants,routes:this.#routes,revoked:this.#revoked,representative:this.#representative,groups:this.#groups});}

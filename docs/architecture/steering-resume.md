@@ -13,13 +13,17 @@ assembly revisions fit inside the original Work budget and deadline.
 Each revision binds its input hash before assembly. A changed input fences
 artifact publication, room progression, verdicts and acceptance. Revision changes
 retain effects, reservations and attempt history, reset only finalization tasks,
-and preserve prior artifacts and room transcripts in the journal. Legacy runs
+and preserve prior artifacts and room transcripts in the journal. New procedure
+admissions reserve their original Work limit against the monthly budget, rather
+than only the first pass. Successful receipts retain their original reservations;
+insufficient remaining capacity blocks a revision without increasing either limit. Legacy runs
 retain their original contract. Cancelled, unknown, failed-provider, quarantined,
 budget-paused and expired runs do not acquire continuation authority.
 
 Restart continuation is a host-only CAS transition, not a second Run request.
 It retains original run identity, start, deadline, models, authorization and
-budgets, and appends a dispatch ownership record. Older dispatches are fenced
+budgets, and appends a dispatch ownership record. An admission-time configuration
+hash pins identities and model descriptors even before the first assignment exists. Older dispatches are fenced
 against the new ownership. Resume requires an exact still-authorized configuration
 and no pending or unknown effects. A claimed call without a committed outcome
 cannot be proved absent remotely; it stays unresolved for the existing owner
@@ -29,8 +33,8 @@ claim of distributed exactly-once delivery.
 The existing execution sequence becomes restartable at committed boundaries:
 reuse successful provider receipts, completed tasks and artifact-write receipts;
 perform only the next unadmitted effect. Never infer a successful output from a
-task label. Startup discovers stored Missions, reads them on the same database
-feed, and resumes eligible runs serially through the existing host runtime.
+task label. Startup discovers runs through the existing durable monthly reservations, reads
+their Missions on the same database feed, and resumes eligible runs serially through the existing host runtime.
 Drain fences startup writes and waits for its work. No new public endpoint,
 owner command, permission, model dependency or background polling is needed.
 
@@ -49,3 +53,21 @@ owner command, permission, model dependency or background polling is needed.
 Own only continuation domain/runtime, affected lineage, startup and their tests.
 Browser execution, connection repair, activity facts, file telemetry, procedure
 editing, UI redesign, real-provider evaluation and merge are outside this batch.
+
+## Evidence and limits
+
+Fixture coverage includes SIGKILL between receipt and task settlement followed by
+normal host startup in a new Node process, seven committed restart boundaries,
+three unresolved-effect boundaries, stale writers and competing resumers, late
+steering at assembly/check/publication/verification/acceptance, clean shutdown,
+drain, configuration changes, original budgets and deadlines. A member conversation
+confirms late steering, resumes its revised result, and validates the full portable
+journal. No screen components or allow-list entries change.
+
+An unresolved provider or artifact write cannot safely resume: pending intent is
+not proof that nothing happened, and a successful task label is not a receipt.
+These cases keep their existing owner inspection/unknown-outcome path. The host
+does not infer another process's death or remote stop from a different session ID.
+Expired, cancelled, quarantined, failed-provider or budget-exhausted runs stay
+stopped. There is no authorization restoration or account repair. A later host
+with changed configuration cannot automatically adopt the old run.

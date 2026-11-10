@@ -13,7 +13,7 @@ const text=(v:unknown,max=4000):v is string=>typeof v==='string'&&v.trim().lengt
 export const normalizeQuote=(s:string)=>s.normalize('NFC').replace(/\s+/gu,' ').trim();
 export const containsQuote=(content:string,quote:string)=>normalizeQuote(quote).length>0&&normalizeQuote(content).includes(normalizeQuote(quote));
 function roomStart(w:Work,c:Extract<RoomCommand,{type:'open-room'}>,at?:number):MemberRoom {
- requireRoom(w.team&&w.team.procedures.flatMap(p=>p.body.steps).length>1&&w.artifact?.version===1,'multi-step team artifact required');
+ requireRoom(w.artifact&&w.team&&w.team.procedures.flatMap(p=>p.body.steps).length>1&&(w.artifact?.version===1||w.runtimeRun?.continuationVersion===1&&w.artifact?.version===w.runtimeRun.assembly?.version),'multi-step team artifact required');
  requireRoom(typeof c.content==='string'&&Buffer.byteLength(c.content)<=32768&&c.content.isWellFormed(),'artifact content mismatch');
  const binary=['application/pdf','image/png'].includes(w.artifact.kind);let matches=false;
  if(binary){
@@ -25,7 +25,7 @@ function roomStart(w:Work,c:Extract<RoomCommand,{type:'open-room'}>,at?:number):
  requireRoom(producer?.role==='executor'&&producer.taskId===w.id+':executor'&&challenger?.role==='executor'&&challenger.taskId===w.id+':challenge'&&producer.actorId!==challenger.actorId,'separate producing and challenger assignments required');
  requireRoom(!w.assignments.some(a=>a.actorId===challenger.actorId&&a.id!==challenger.id)&&w.tasks.some(t=>t.id===challenger.taskId&&t.parentId===w.id+':root'),'challenger must be outside producing subtree');
  requireRoom(!w.assignments.some(a=>a.role==='verifier'&&[producer.actorId,challenger.actorId].includes(a.actorId)),'checking identity cannot participate');
- return {version:1,artifact:{version:1,sha256:w.artifact.sha256,content:c.content,...binary?{base64:c.artifactBase64!}:{}},producerAssignmentId:producer.id,challengerAssignmentId:challenger.id,sameModel:producer.model.provider===challenger.model.provider&&producer.model.model===challenger.model.model,messages:[{...(at===undefined?{}:{at}),ordinal:1,authorId:producer.actorId,assignmentId:producer.id,effectId:null,kind:'proposal',replyTo:null,text:c.content,quote:'',inferred:true,status:'admitted'}],issue:null};
+ return {version:1,artifact:{version:w.artifact.version,sha256:w.artifact.sha256,content:c.content,...binary?{base64:c.artifactBase64!}:{}},producerAssignmentId:producer.id,challengerAssignmentId:challenger.id,sameModel:producer.model.provider===challenger.model.provider&&producer.model.model===challenger.model.model,messages:[{...(at===undefined?{}:{at}),ordinal:1,authorId:producer.actorId,assignmentId:producer.id,effectId:null,kind:'proposal',replyTo:null,text:c.content,quote:'',inferred:true,status:'admitted'}],issue:null};
 }
 function appendTurn(w:Work,room:MemberRoom,effectId:string,at?:number){
  requireRoom(room.messages.length<3,'bounded round already ended');
