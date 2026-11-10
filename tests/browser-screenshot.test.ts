@@ -47,3 +47,10 @@ test('tainted schemas reject page-controlled strings and an origin cannot become
  for(const patch of [{title:'leak'},{blocks:['leak']},{fields:[]},{imageHash:'hmac-sha256:'+ 'a'.repeat(64)}])assert.throws(()=>validateBrowserSession({id:'session',pages:[{...page,...patch}]}),/browser/i);
  const publicPage={readId:'public',expectedRevision:2,inputHash:page.inputHash,at:2,...sanitizePage({address:raw.address,title:'Public',blocks:[],fields:[]})};assert.throws(()=>validateBrowserSession({id:'session',pages:[page,publicPage]}),/private/i);
 });
+
+for(const tainted of [false,true])test('URL persistence is origin-only on '+(tainted?'private':'public')+' pages',()=>{
+ for(const origin of ['https://shop.example.com','http://public.example:8080','https://[::1]:8443']){
+  const content=sanitizePage({address:origin+'/reset/DEMO%2554OKEN?query=fixture#fragment',title:'Page',blocks:[],fields:tainted?[{label:'Password',type:'password',value:'fixture-value',autocomplete:''}]:[]}),page={readId:'url:1',expectedRevision:1,inputHash:'a'.repeat(64),at:1,...content};assert.equal(page.address,origin);assert.equal(page.tainted===true,tainted);assert.doesNotThrow(()=>validateBrowserSession({id:'session',pages:[page]}));
+  for(const suffix of ['/','/reset/DEMO%2554OKEN','?query=fixture','#fragment'])assert.throws(()=>validateBrowserSession({id:'session',pages:[{...page,address:origin+suffix}]}),/browser/i);
+ }
+});
