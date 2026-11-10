@@ -5,11 +5,17 @@
     "name=csc",
     "autocomplete=cc-csc",
     "aria-labelledby",
-    "second associated label"
+    "second associated label",
+    "image alt reference",
+    "nested alt",
+    "nested aria-label"
   ],
   "scriptExecuted": false,
   "identicalMaskedPixels": true,
   "independentFieldValues": true,
+  "base64Reflection": true,
+  "base64UrlReflection": true,
+  "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,
   "splitNodeReflection": true,
   "hiddenSeparatorReflection": true,
@@ -21,5 +27,5 @@
   "textPseudoPixelsNeutralized": true,
   "trustedFontsOnly": true,
   "displayContentsReflection": true,
-  "pngSha256": "89593319a80db72e34d78e39a929c16f3122bd9105f7b8af89c336d40f727df2"
+  "pngSha256": "d037d76111c45a4b4e9190ad56276976425d0d0ea17e3f0d91d6724400f6e398"
 }

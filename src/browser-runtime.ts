@@ -46,7 +46,8 @@ export function browserPrivateRanges(value:string,secrets:string[]=[]):Array<[nu
  if(secrets.length){const positions:number[]=[],characters:string[]=[];for(let i=0;i<value.length;i++)if(!/\s/.test(value[i]!)){positions.push(i);characters.push(value[i]!);}const compact=characters.join('');
   const grouping=/(?<=[\p{L}0-9])[\p{P}\p{S}]{1,3}(?=[\p{L}0-9])/gu,gaps=[...compact.matchAll(grouping)],groupedPositions:number[]=[];let grouped='',gap=0;
   for(let i=0;i<compact.length;i++){if(gaps[gap]?.index===i){i+=gaps[gap++]![0].length-1;continue;}grouped+=compact[i];groupedPositions.push(positions[i]!);}
-  for(const secret of secrets){const literal=canonical(secret).replace(/\s/g,'');
+  const forms=new Set(secrets);for(const secret of secrets){let encoded=secret;for(let depth=0;encoded&&depth<8&&encoded.length<=value.length;depth++){encoded=btoa(String.fromCharCode(...new TextEncoder().encode(encoded)));const unpadded=encoded.replace(/=+$/,'');if(unpadded.length>value.length)break;for(const form of [encoded,unpadded]){forms.add(form);forms.add(form.replace(/\+/g,'-').replace(/\//g,'_'));}}}
+  for(const secret of forms){const literal=canonical(secret).replace(/\s/g,'');
    const code=/^[+−(\p{Dash_Punctuation}]{0,2}[\p{L}0-9]+(?:[\p{P}\p{S}]{1,3}[\p{L}0-9]+)*\)?$/u.test(literal),folded=code?literal.replace(/[^\p{L}0-9]/gu,''):literal.replace(grouping,'');
    for(const [haystack,needle,offsets] of [[compact,literal,positions],[grouped,folded,groupedPositions]] as const){if(!needle)continue;let start=0;while((start=haystack.indexOf(needle,start))!==-1){ranges.push([offsets[start]!,offsets[start+needle.length-1]!+1]);start+=needle.length;}}
   }
