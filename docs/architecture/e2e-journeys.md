@@ -83,8 +83,11 @@ This suite requires Linux process-ownership evidence and fails, rather than skip
 when prerequisites are missing. `MASSION_E2E_BROWSER` can select an already
 installed Chromium executable. In a container, keep a network interface so
 Chromium reports online; an internal Docker network blocks external routing
-without making the UI's offline guard refuse local commands. Browser domains
-are restricted to loopback and the model transport never opens a network socket.
+without making the UI's offline guard refuse local commands. Browser requests
+bypass a fixture-owned denying proxy only for 127.0.0.1; implicit loopback bypass
+and non-proxied WebRTC UDP are disabled. This avoids context-dependent domain
+injection into starting app frames. Browser command failures are never retried.
+The model transport never opens a network socket.
 
 Backup/restore uses a separate real installation with one accepted and one
 unknown Work. The full scenario journal exceeds the default RPC request-size
