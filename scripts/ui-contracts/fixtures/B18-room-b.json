@@ -16,9 +16,7 @@
       "readySelector": "#work-heading-assistant-6a2a6478f24797a3b996652d"
     }
   ],
-  "gaps": [
-    "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
-  ],
+  "gaps": [],
   "reuse": [
     "scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands"
   ],
@@ -133,7 +131,8 @@
               "evidenceCount": null,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "fileReads": []
             }
           },
           {
@@ -249,7 +248,8 @@
                 ]
               },
               "tableCount": 1,
-              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
+              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013",
+              "fileReads": []
             }
           },
           {
@@ -364,7 +364,8 @@
                   }
                 ]
               },
-              "tableCount": 0
+              "tableCount": 0,
+              "fileReads": []
             }
           }
         ],
@@ -498,7 +499,8 @@
                 }
               ]
             },
-            "tableCount": 0
+            "tableCount": 0,
+            "fileReads": []
           },
           {
             "missionId": "intake",
@@ -592,7 +594,8 @@
                 }
               ]
             },
-            "tableCount": 1
+            "tableCount": 1,
+            "fileReads": []
           },
           {
             "missionId": "intake",
@@ -630,7 +633,8 @@
             "evidenceCount": null,
             "workerSteps": [],
             "resultFacts": null,
-            "tableCount": 0
+            "tableCount": 0,
+            "fileReads": []
           }
         ]
       }
@@ -2429,7 +2433,8 @@
               "evidenceCount": null,
               "workerSteps": [],
               "resultFacts": null,
-              "tableCount": 0
+              "tableCount": 0,
+              "fileReads": []
             }
           },
           {
@@ -2545,7 +2550,8 @@
                 ]
               },
               "tableCount": 1,
-              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
+              "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013",
+              "fileReads": []
             }
           },
           {
@@ -2660,7 +2666,8 @@
                   }
                 ]
               },
-              "tableCount": 0
+              "tableCount": 0,
+              "fileReads": []
             }
           }
         ],
