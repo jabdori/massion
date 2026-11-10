@@ -203,12 +203,12 @@ test('offline fixtures use browser disconnection and failed send stays local bef
 });
 
 
-test('approved example members keep their artboard identity hues as palette roles',async()=>{
+test('recorded example hues remain stable and regenerated admission uses the host palette',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B2','B12','B13','B14']){
-  const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation']!.body as {members:{id:string;look:{color:string}}[]};
-  assert.equal(view.members.find(m=>m.id==='member-juno')!.look.color,'agent-6',screen);
-  assert.equal(view.members.find(m=>m.id==='member-quill')!.look.color,'agent-1',screen);
+  const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation']!.body as {members:{id:string;name:string;look:{color:string}}[]};
+  assert.equal(view.members.find(m=>m.name==='주노')!.look.color,screen==='B13'?'agent-2':'agent-6',screen);
+  assert.equal(view.members.find(m=>m.name==='퀼')!.look.color,'agent-1',screen);
  }
 });
 

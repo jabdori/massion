@@ -35,3 +35,9 @@ The final default-deny tightening requires every nonempty semantic signal to be 
 Recovery-code grouping now uses the same bounded punctuation/symbol matching as numeric values, while a parallel literal pass preserves punctuation-only passwords. Grouped recovery codes, underscores, slash/symbol separators and mixed-script values failed before and pass after; the real browser fixture includes an independent grouped recovery code. Standalone card/API-key text also handles formatted digits and spaced labels without relying on an input field. All 93 affected tests, typecheck and memory-only capture proofs pass; reference-page hashes remain unchanged.
 
 Caseless canonicalization now precedes both literal and grouped matching. ASCII recovery-code case changes, German sharp-S expansions, dotted-I composition and Greek sigma forms failed before and pass after with original UTF-16 ranges preserved. The live fixture uses a lowercase private recovery value reflected in uppercase. All 98 affected tests, typecheck and actual memory-only capture proofs pass; reference-page hashes remain unchanged.
+
+## Mainline lifecycle/polish integration
+
+Merged main through PR #130 (member/app/connection/device lifecycle and settings) and #136 (visual polish). Both fixture-producer sets and both exception-removal sets remain. Reconnect clears browser images and invalidates settings together. The host drains browser captures alongside the new device/connection services using main's all-settled cleanup.
+
+All 249 related browser, privacy, settings, connection, device, member and Work-room tests pass, as does typecheck. Fourteen affected screen/theme captures have no new/stale/infrastructure diagnostics: [merged gate](lifecycle-polish-merge-gate.json).

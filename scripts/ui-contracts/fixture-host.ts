@@ -10,6 +10,9 @@ import {createServer} from 'node:http';
 import {workbenchPage} from '../../src/workbench.ts';
 import {daemonGuard} from '../../src/daemon-auth.ts';
 import {EFFECT_SCREENS,effectFixture} from './effect-fixtures.ts';
+import {CONNECTION_SCREENS,settingsLifecycleFixture} from './settings-lifecycle-fixtures.ts';
+import {appLifecycleFixture} from './app-lifecycle-fixtures.ts';
+import {memberLifecycleFixture} from './member-lifecycle-fixtures.ts';
 import {githubScreenFixture} from './github-fixture.ts';
 import {scheduleScreenFixture} from './schedule-fixture.ts';
 import {binaryScreenFixture} from './binary-fixture.ts';
@@ -49,11 +52,13 @@ export async function loadFixture(screen:string,parents:string[]=[],images?:Reco
    !response||!Number.isInteger(response.status)||response.status<200||response.status>599||!Object.hasOwn(response,'body'))throw new Error('Invalid fixture route: '+path);
  }
  if(fixture.appViews!==undefined&&(!Array.isArray(fixture.appViews)||!fixture.appViews.every((view:NonNullable<ScreenFixture['appViews']>[number])=>view&&text(view.request?.app)&&['page','item'].includes(view.request.handler)&&(view.request.ref===undefined||text(view.request.ref))&&Object.hasOwn(view,'body'))))throw new Error('Invalid app views: '+screen);
- if(parents.length)return fixture;
- const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture,images?.checkout):fixture;
+ if(parents.length!==0)return fixture;
+ let produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture,images?.checkout):fixture;
+ if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
+ if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
+ if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')produced=await settingsLifecycleFixture(produced);
  const observed=['B15','B5','B7'].includes(screen)?await browserFixture(produced,images):produced;
- const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;
- const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
+ const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
  if(screen==='B17')return scheduleScreenFixture(memory);
  return screen==='B10'?binaryScreenFixture(memory):memory;
