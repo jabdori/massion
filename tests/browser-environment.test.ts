@@ -11,12 +11,12 @@ const config:BrowserEnvironmentConfig={environment:'browser-fixture',origin:'htt
  {id:'human',selector:'#human',role:'checkbox',label:'Human check',operations:['click'],gates:[],ownerOnly:true},
 ],facts:[{id:'confirmed',selector:'#confirmed',state:'checked'}]};
 function fixture(){
- let revision=1,document='document-one',privatePage=false;const calls:string[]=[];
+ let revision=1,document='document-one',privatePage=false,unsupportedClicks:string[]=[];const calls:string[]=[];
  const page={address:config.origin+'/private-path?token=hidden',title:'Public title',blocks:['Public paragraph'],fields:[]};
- const control:BrowserControl={async evaluate(expression){calls.push(expression);if(expression.includes('"operation":"act"'))return {delivered:true};return {document,revision,available:['field','continue','human'],facts:{confirmed:false},page:{...page,...(privatePage?{privateFields:1}:{} )}};},async close(){}};
+ const control:BrowserControl={async evaluate(expression){calls.push(expression);if(expression.includes('"operation":"act"'))return {delivered:true};return {document,revision,unsupportedClicks,available:['field','continue','human'],facts:{confirmed:false},page:{...page,...(privatePage?{privateFields:1}:{} )}};},async close(){}};
  const adapter=new BrowserEnvironment(control,config),store=new InMemoryStore<any>();let bytes:Uint8Array|undefined;
  const service=new EnvironmentActions(store,store,adapter,{owner:'local-owner',environment:config.environment,resolveSecret:async()=>bytes=new TextEncoder().encode('synthetic-private-value')});
- return {adapter,store,service,calls,page,bytes:()=>bytes,change:()=>{revision++;},navigate:()=>{document='document-two';},private:()=>{privatePage=true;}};
+ return {adapter,store,service,calls,page,bytes:()=>bytes,change:()=>{revision++;},navigate:()=>{document='document-two';},private:()=>{privatePage=true;},unsupported:()=>{unsupportedClicks=['continue'];}};
 }
 
 test('browser declarations reject HTTP origins, duplicate elements and page-text confirmation predicates',()=>{
@@ -57,7 +57,14 @@ test('current-page reads cannot pretend to navigate and expired secret delivery 
 
 test('an aborted private observation preserves taint after the renderer document changes',async()=>{
  let release!:()=>void,entered!:()=>void,first=true;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
- const control:BrowserControl={async evaluate(){if(first){first=false;entered();await gate;return {document:'private-document',revision:1,available:[],facts:{},page:{address:config.origin+'/',title:'',blocks:[],fields:[],privateSession:true}};}return {document:'next-document',revision:1,available:[],facts:{},page:{address:config.origin+'/',title:'Private receipt',blocks:['Private receipt content'],fields:[]}};},async close(){}};
+ const control:BrowserControl={async evaluate(){if(first){first=false;entered();await gate;return {document:'private-document',revision:1,unsupportedClicks:[],available:[],facts:{},page:{address:config.origin+'/',title:'',blocks:[],fields:[],privateSession:true}};}return {document:'next-document',revision:1,unsupportedClicks:[],available:[],facts:{},page:{address:config.origin+'/',title:'Private receipt',blocks:['Private receipt content'],fields:[]}};},async close(){}};
  const adapter=new BrowserEnvironment(control,config),controller=new AbortController(),reading=assert.rejects(adapter.observe(controller.signal));await ready;controller.abort();release();await reading;
  const page=await adapter.read({address:config.origin+'/',sessionId:'unused',signal:new AbortController().signal});assert.equal(page.privateSession,true);assert.equal(page.title,'');assert.deepEqual(page.blocks,[]);
+});
+
+
+test('unsupported click targets are excluded from capabilities and return a typed error without delivery',async()=>{
+ const s=fixture();s.unsupported();const observation=await s.adapter.observe(new AbortController().signal);assert.ok(!observation.structure.find(e=>e.id==='continue')?.operations.includes('click'));
+ await assert.rejects(s.adapter.act({binding:observation.binding,element:'continue',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:new AbortController().signal}),e=>e instanceof Error&&'code' in e&&e.code==='unsupported-target');
+ assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);
 });
