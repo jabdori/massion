@@ -65,3 +65,11 @@ business-result count or a threshold predicate. The following contract gaps stay
 
 This is a bounded R-G slice. It does not establish complete prototype parity,
 real-provider quality, business correctness or production browser/payment support.
+
+## Review correction
+
+Codex identified that the settled-worker check caption could overwrite an unknown
+outcome before a Mission was loaded. The caption now uses the existing running
+Work predicate, preserving unknown, blocked, cancelled and budget-waiting labels.
+The new regression first reproduced the overwrite, then the related surface batch
+passed all 124 tests; typecheck passed. No producer, criterion or allowance changed.

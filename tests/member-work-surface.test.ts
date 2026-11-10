@@ -36,6 +36,16 @@ test('cards use host worker facts before opening a pane and replace them with a 
  assert.match(card().textContent,/2\/2/);assert.match(card().textContent,/조사/);assert.doesNotMatch(card().textContent,/작성/);
 });
 
+test('settled worker summaries cannot replace unknown, stopped or budget-waiting status with check progress',async()=>{
+ const {app}=fixture();await settle();
+ const base={...row({workId:'w1',title:'Churn causes',memberId:quill.id,execution:'active',acceptance:'pending',started:true}),workerSteps:[{step:{title:'Read sources',role:'조사'},status:'settled'}]};
+ for(const [state,label] of [[{unknown:true},'결과 모름'],[{execution:'blocked'},'실패'],[{execution:'cancelled'},'취소'],[{execution:'budget-waiting'},'예산 대기']] as const){
+  const turn={id:'status-card',proposal:{title:base.title},work:{...base,...state}};
+  const card=runInContext('chatCard('+JSON.stringify(turn)+')',app.context);
+  assert.ok(card.textContent.includes(label),card.textContent);assert.ok(!card.textContent.includes('확인 대기'));
+ }
+});
+
 test('Work lines come from the host Work list: the Representative\'s and each member\'s running Work, also Work outside the shown segment; activity lists them all',async()=>{
  const {app}=fixture({works:[{workId:'w3',title:'Churn causes',memberId:'member-q',execution:'active',acceptance:'pending',started:true},{workId:'w2',title:'Price table',memberId:'member-q',execution:'waiting',acceptance:'pending',started:true},{workId:'w1',title:'Weekly totals',memberId:null,execution:'active',acceptance:'pending',started:true},{workId:'w0',title:'Old summary',memberId:null,execution:'settled',acceptance:'accepted',started:true}]});
  await settle();
