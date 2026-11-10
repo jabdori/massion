@@ -20,6 +20,7 @@ import {githubScreenFixture} from './github-fixture.ts';
 import {scheduleScreenFixture} from './schedule-fixture.ts';
 import {binaryScreenFixture} from './binary-fixture.ts';
 import {RESULT_FACT_SCREENS,resultFactsFixture} from './result-facts-fixtures.ts';
+import {fileReadActivityFixture} from './file-read-activity-fixture.ts';
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
@@ -62,6 +63,7 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  if(['B11-quill','B21-done-hana'].includes(screen))return memberAdmissionFixture(fixture);
  let produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;
  if(RESULT_FACT_SCREENS.includes(screen))produced=resultFactsFixture(produced);
+ if(['B7-done','B7-fail','B7-unknown'].includes(screen))produced=fileReadActivityFixture(produced);
  if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
  if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
  if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')produced=await settingsLifecycleFixture(produced);

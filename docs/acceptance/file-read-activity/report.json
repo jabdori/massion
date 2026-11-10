@@ -1,0 +1,95 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "passed": 36,
+      "failed": 11,
+      "warnings": 3,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 73,
+      "failed": 5,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "passed": 37,
+      "failed": 9,
+      "warnings": 3,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-unknown.png"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "passed": 36,
+      "failed": 11,
+      "warnings": 3,
+      "required": 47,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-done.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 73,
+      "failed": 5,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "passed": 37,
+      "failed": 9,
+      "warnings": 3,
+      "required": 46,
+      "visualFailures": [],
+      "gaps": [
+        "Business procedures and typed counts exist for churn/pricing; browser/page-read telemetry is absent.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-unknown.png"
+    }
+  ]
+}

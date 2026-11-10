@@ -1,0 +1,50 @@
+[
+  {
+    "screen": "B7-done",
+    "theme": "dark",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "dark",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "label": "PR #84 검토 파일 11개를 다 읽었어요. 14:08 완료.",
+    "selected": "PR #84 검토",
+    "completionLinks": 1,
+    "duplicateTabs": false
+  }
+]

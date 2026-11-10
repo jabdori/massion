@@ -60,7 +60,7 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn
   if(s.start&&kind==='coding'){
    const doc=current().sourceDocuments![0]!.document,files=JSON.parse(doc.content).files;
    for(let i=0;i<5;i++){
-    const file=files[i],id=taskId+':file:'+i,claimId='file-claim-'+i,claimedAt=stamp(s.start)+i;
+    const file=files[i],id=taskId+':file:'+i,claimId='file-claim-'+i,claimedAt=stamp(s.start);
     send({type:'admit-effect',workId,effect:{id,taskId,status:'pending',target:'fixture/bounded-fixture',authority:'fixture-only'},reserve:0},actor,s.start);
     send({type:'claim-provider-dispatch',workId,effectId:id,claim:{id:claimId,runId,hostSessionId:'fixture-room',dispatchId:'fixture-coding',actorId:actor.id,assignmentId:taskId,provider:'fixture',model:'bounded-fixture',configVersion:'v1',requestHash:hash({file,fixture:true}),claimedAt,fileInputs:[{documentId:doc.id,path:file.path,sha256:documentContentHash(file.content)}]}},actor);
     if(i<4)send({type:'receipt',workId,effectId:id,providerDispatchId:claimId,outcome:'succeeded',receipt:'Controlled fixture worker received '+file.path,usage:0},actor);

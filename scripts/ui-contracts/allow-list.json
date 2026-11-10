@@ -108,16 +108,6 @@
       "screen": "B7-done",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -178,16 +168,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
       "category": "business-result predicate",
@@ -213,16 +193,6 @@
       "category": "payment",
       "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -708,16 +678,6 @@
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing sidebar link \"{work_title} 주문 내역에서 {count} 들어간 걸 확인했어요.\"",
       "occurrence": 1,
       "category": "payment",
@@ -778,16 +738,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
       "occurrence": 1,
       "category": "business-result predicate",
@@ -813,16 +763,6 @@
       "category": "payment",
       "reason": "The text runtime has no payment approval/amount/currency/order-history producer. Generic effects and owner/model text are not a typed payment or vendor receipt. Execution token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 파일 {count}를 다 읽었어요. {time} 완료.\"",
-      "occurrence": 1,
-      "category": "file-read telemetry",
-      "reason": "Typed business-result summaries are available. This label requires actual file-read observations and completion time, owned by the parallel file-read telemetry slice; settled text and counts do not establish file reads.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
