@@ -16,7 +16,7 @@ import {createServer} from 'node:net';
 const worker={skip:workerCommand()===null&&'no network sandbox on this host'};
 const T0=Date.UTC(2026,10,5,10,31),owner={id:'local-owner',roles:['owner' as const]},host={id:'assistant-representative',roles:['assistant' as const]};
 const mock=(log:any[]=[]):AppNetwork=>async request=>{log.push(request);return githubFixture(request.url);};
-const pkg=(source:string,changes:Partial<AppManifest>={},permissions:Partial<AppManifest['permissions']>={}):AppPackage=>({manifest:{format:'massion.app.v1',id:'probe',name:'Probe',version:'0.1.0',description:'Probe',permissions:{read:['Pull requests'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub token'}],events:[],...permissions},contributes:{templates:[],skills:[],procedures:[],tools:[]},handlers:['run'],...changes},source});
+const pkg=(source:string,changes:Partial<AppManifest>={},permissions:Partial<AppManifest['permissions']>={}):AppPackage=>({manifest:{format:'massion.app.v1',id:'probe',name:'Probe',version:'0.1.0',description:'Probe',permissions:{read:['Pull requests'],write:[],network:['api.github.com'],files:[],secrets:[{slot:'github-token',label:'GitHub 토큰'}],events:[],...permissions},contributes:{templates:[],skills:[],procedures:[],tools:[]},handlers:['run'],...changes},source});
 
 async function setup(network:AppNetwork|undefined=mock()){
  const store=new InMemoryStore<any>();let now=T0;
@@ -83,7 +83,7 @@ test('installing waits for the owner: a decision card in the Representative conv
  await install(service);
  let cards=await service.decisions(null);assert.equal(cards.length,1);const card=cards[0]!;
  assert.deepEqual([card.question,card.detail,card.action,card.state],['Install GitHub app?','GitHub · '+GITHUB_APP.manifest.version,'Install','open']);
- assert.deepEqual(card.rows,[['Read','Repositories · Pull requests · Check results'],['Write','None'],['Network','api.github.com'],['Token','GitHub token'],['Events','PR opened · PR merged'],['Adds','GitHub page · PR tab']]);
+assert.deepEqual(card.rows,[['Read','저장소 · PR · 체크 결과'],['Write','None'],['Network','api.github.com'],['Token','GitHub 토큰'],['Events','PR 열림 · PR 병합'],['Adds','GitHub page · PR tab']]);
  assert.deepEqual(await service.decisions('member-juno'),[],'a catalog app asks in the Representative conversation');
  assert.equal((await service.read()).apps.length,0,'nothing is installed before the answer');
  await assert.rejects(service.view({app:'app-github',handler:'page'}),/Unknown app|not installed/);
@@ -149,7 +149,7 @@ test('a self-made app is offered only from accepted Work after host-run tests pa
  await offer('assistant-app-self-1');
  const card=(await service.decisions('member-juno'))[0]!;assert.deepEqual(await service.decisions(null),[],'asked in the member conversation');
  assert.deepEqual([card.question,card.detail,card.action],['Install PR list fetcher?','Self-made app · Made by 주노 · 0.1.0','Install']);
- assert.deepEqual(card.rows,[['Does','Fetches open and merged PR lists'],['Read','PR list'],['Write','None'],['Network','api.github.com'],['Files','None'],['Token','GitHub token'],['Events','None'],['Check','Declared permissions only'],['Source','PR #84 review']]);
+ assert.deepEqual(card.rows,[['Does','Fetches open and merged PR lists'],['Read','PR list'],['Write','None'],['Network','api.github.com'],['Files','None'],['Token','GitHub 토큰'],['Events','None'],['Check','Declared permissions only'],['Source','PR #84 review']]);
  // A failing test or an undeclared call keeps the offer rejected with its reason; no card opens.
  const bad=structuredClone(tool);bad.manifest.version='0.1.1';
  await offer('assistant-app-self-2',bad,[{...cases[0],expect:{title:'other',groups:[]}}]);
