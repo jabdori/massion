@@ -91,3 +91,9 @@ The original conversation ordering and shifted fixture times are visible in the
 pairs and remain outside this slice. Prices are controlled examples, not URLs
 or market observations. The existing B10-preview plain text and its budget
 allowance were preserved.
+
+After merging main's skipped-step glyph/time correction (#136), the affected
+40-test batch and typecheck passed. B18 contracts and table interaction PNGs were
+recaptured on the merged implementation; the scoped gate still has no new,
+stale or infrastructure diagnostics. The two additional B7-churn allowances from
+main are retained. Relative to that main, this PR removes 16 entries (428 -> 412).
