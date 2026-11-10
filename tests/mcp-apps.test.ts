@@ -67,7 +67,7 @@ test('write timeout is durable unknown and never resent across service restart',
  validateMissionJournalLineage(store.inspect() as any);
 });
 
-async function connectedSetup(slots:any){const store=new InMemoryStore<any>(),service=new AppsService(store,{secrets:slots,mcp:{list:async()=>tools,call:async()=>({}),close:async()=>{}}}),p:any=pkg();p.manifest.permissions.secrets=[{slot:'github-token',label:'GitHub token'}];p.manifest.connection={slot:'github-token'};await service.offer({commandId:'assistant-app-offer',pkg:p,origin:'catalog'});return {store,service,decisionId:appDecisionId('assistant-app-offer')};}
+async function connectedSetup(slots:any){const store=new InMemoryStore<any>(),service=new AppsService(store,{secrets:slots,mcp:{list:async()=>tools,call:async()=>({}),close:async()=>{}}}),p:any=pkg();p.manifest.permissions.secrets=[{slot:'github-token',label:'GitHub 토큰'}];p.manifest.connection={slot:'github-token'};await service.offer({commandId:'assistant-app-offer',pkg:p,origin:'catalog'});return {store,service,decisionId:appDecisionId('assistant-app-offer')};}
 test('connect writes token once to its own slot; no token or token hash enters journal or readback',async()=>{
  const sentinel='sentinel-private-token-E5b',stored=new InMemorySecretSlots();let writes=0;const slots={set:async(ref:{owner:string;slot:string},value:string)=>{assert.deepEqual(ref,{owner:'app-mcp-github',slot:'github-token'});assert.equal(value,sentinel);await stored.set(ref,value);writes++;}};
  const {store,service,decisionId}=await connectedSetup(slots);

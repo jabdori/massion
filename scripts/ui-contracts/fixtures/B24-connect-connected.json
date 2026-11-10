@@ -100,7 +100,7 @@
             "connection": {
               "appId": "app-github",
               "slot": "github-token",
-              "label": "GitHub token",
+              "label": "GitHub 토큰",
               "connected": true
             },
             "answeredAt": 1793842260000
@@ -205,7 +205,7 @@
             "connection": {
               "appId": "app-github",
               "slot": "github-token",
-              "label": "GitHub token",
+              "label": "GitHub 토큰",
               "connected": true
             },
             "answeredAt": 1793842260000
