@@ -106,3 +106,13 @@ The merged result/credential/conversation/fixture batch passed 187 tests, zero
 failures/skips; typecheck passed. The final pricing table discriminator was also
 checked through both themes' real headless table interactions, including exact
 Copy/Original data, expansion and mobile visibility.
+
+The second Codex P2 covered final marked pricing tables. Runtime now stores their
+bounded count envelope in the existing executor result, derived from the exact
+artifact text sent to independent checking. Final assembly facts replace worker
+counts and their table count is not added to earlier worker tables. Red/green
+cases cover a standalone final table and a three-row worker table assembled into
+a two-row final table, preserving exact checking bytes and canonical journal
+validation. The affected runtime/table/room batch passed 94 tests with three
+existing disposable-DB skips, zero failures; typecheck passed. No screen output
+or fixture projection changed in this correction.

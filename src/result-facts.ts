@@ -25,8 +25,8 @@ export function workResultFacts(work:Work){
  const settled=work.tasks.filter(t=>t.status==='settled'&&!t.step?.skipReason&&typeof t.result==='string'&&work.assignments.some(a=>a.taskId===t.id&&a.role==='executor'));
  const tables=settled.filter(t=>t.step).map(t=>parseTableResult(t.result!)).filter(t=>t!==null);
  const pricing=tables.filter(t=>t.business==='pricing');
- const facts=settled.filter(t=>t.step).concat(settled.filter(t=>!t.step)).map(t=>parseResultFacts(t.result!)).filter(f=>f!==null);
- return {resultFacts:facts.at(-1)??(pricing.length?{format:'massion-facts/v1' as const,kind:'pricing' as const,plans:pricing.reduce((sum,t)=>sum+t.rows.length,0),tables:pricing.length}:null),tableCount:tables.length};
+ const facts=settled.filter(t=>t.step).map(t=>parseResultFacts(t.result!)).filter(f=>f!==null),assembly=settled.filter(t=>!t.step).map(t=>parseResultFacts(t.result!)).filter(f=>f!==null).at(-1);
+ return {resultFacts:assembly??facts.at(-1)??(pricing.length?{format:'massion-facts/v1' as const,kind:'pricing' as const,plans:pricing.reduce((sum,t)=>sum+t.rows.length,0),tables:pricing.length}:null),tableCount:assembly?.kind==='pricing'?assembly.tables:tables.length};
 }
 export const FACTS_RESULT_FORMAT=' For business-result counts you may instead return exactly JSON {"format":"massion-facts/v1","kind":"pricing","plans":6,"tables":1}, {"format":"massion-facts/v1","kind":"churn","reasons":41,"business":9,"other":32}, or {"format":"massion-facts/v1","kind":"causes","causes":1,"evidence":2}. These are schema examples, not facts: use only counts supported by your actual inputs. Exact keys, integers 0–1000000000, churn reasons must equal business+other, at most 1024 UTF-8 bytes. These are untrusted observations, never checking, acceptance or permission.';
 

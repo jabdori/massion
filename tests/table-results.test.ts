@@ -69,10 +69,10 @@ test('settled worker result tables are inert and worker instructions are never i
  work.tasks[0]!.status='active';work.tasks[0]!.result=original;assert.equal(descendants(render(work)).some(n=>n.tagName==='TABLE'),false);
 });
 
-async function runtime(t:test.TestContext,output:string,team=false){
+async function runtime(t:test.TestContext,output:string,team=false,workerOutput=output){
  const root=await mkdtemp(join(await realpath(tmpdir()),'massion-table-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const calls:any[]=[],store=new InMemoryStore<Mission>(),artifacts=new TextArtifactStore(join(root,'artifacts'));
- const adapter=(role:string):ProviderAdapter=>({descriptor:{provider:'fixture',model:role,configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},async invoke(request:ProviderRequest){const prompt=JSON.parse(request.instruction);calls.push({role,prompt});const result=role==='verifier'?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:output.includes('9,900원')?'9,900원':'41',reason:'Controlled fixture evidence'}]}):prompt.teamPlanning?JSON.stringify({steps:[{role:'Table',title:'Table',dependsOn:[],instruction:'Create a table'}]}):output;return {status:'completed',output:result,usage:{inputTokens:1,outputTokens:1},reason:'Controlled fixture'};}});
+ const adapter=(role:string):ProviderAdapter=>({descriptor:{provider:'fixture',model:role,configVersion:'v1',enabled:true,capabilities:['text-output'],evidenceClass:'fixture'},async invoke(request:ProviderRequest){const prompt=JSON.parse(request.instruction);calls.push({role,prompt});const result=role==='verifier'?JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:output.includes('9,900원')?'9,900원':'41',reason:'Controlled fixture evidence'}]}):prompt.teamPlanning?JSON.stringify({steps:[{role:'Table',title:'Table',dependsOn:[],instruction:'Create a table'}]}):prompt.step?workerOutput:output;return {status:'completed',output:result,usage:{inputTokens:1,outputTokens:1},reason:'Controlled fixture'};}});
  const executor=adapter('executor'),verifier=adapter('verifier'),options={enabled:true,outputTokenCap:32,authorization:{id:'fixture',scope:'local',mode:'mock-http' as const,executor:executor.descriptor,verifier:verifier.descriptor,maxOutputTokensPerCall:32},executor:{identity:'executor',adapter:executor},verifier:{identity:'verifier',adapter:verifier},artifacts};
  const instance=new ConfiguredTextRuntime(store,options);await instance.app.create({id:'mission',purpose:'Controlled table',scope:'local',constraints:[],criteria:{version:1,description:'Produce controlled prices',oracle:TEXT_REVIEW_ORACLE}},'local-owner','create');
  const owner={id:'local-owner',roles:['owner' as const]},skills=team?applySkills(null,{type:'write-skill',memberId:'member',kind:'procedure',name:'Table',body:{description:'Table',steps:['Table'],verify:'Controlled prices'}},owner,{observedAt:1}).value:null;
@@ -115,4 +115,11 @@ for(const team of [false,true])test(`runtime refuses inconsistent ${team?'worker
 test('assembly facts survive canonical journal validation without a new storage shape',async t=>{
  const f=await runtime(t,JSON.stringify(churnFacts)),result=await f.instance.run('mission',f.workId,'run',2);
  assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect());
+});
+
+for(const team of [false,true])test(`final marked pricing table supplies authoritative summary without counting ${team?'worker tables twice':'a missing team'}`,async t=>{
+ const final=JSON.stringify({...table,business:'pricing'}),worker=JSON.stringify({...table,business:'pricing',rows:[...table.rows,['Other','29,900원']]}),f=await runtime(t,final,team,worker),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!,summary=workCardFacts(work) as any;
+ assert.equal(work.acceptance,'accepted');assert.deepEqual(summary.resultFacts,{format:'massion-facts/v1',kind:'pricing',plans:2,tables:1});assert.equal(summary.tableCount,1);
+ assert.equal(await f.artifacts.read(work.artifact!),final);assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,final);
+ if(!team)validateMissionJournalLineage(f.store.inspect());
 });
