@@ -1,11 +1,15 @@
 name: UI contracts
 on:
   pull_request:
+    paths-ignore: ['docs/acceptance/**', 'docs/architecture/**', 'docs/guide/**']
   push:
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   ui-contracts:
     runs-on: ubuntu-latest
@@ -25,9 +29,17 @@ jobs:
           agent-browser install --with-deps
           sudo apt-get update
           sudo apt-get install --yes imagemagick fonts-noto-cjk
+      - name: Verify ephemeral browser images
+        run: node scripts/ui-contracts/capture-browser-pages.mjs
+      - name: Capture synthetic live and ended browser panes
+        env:
+          MASSION_E2E_BROWSER: /usr/bin/google-chrome
+        run: |
+          "$MASSION_E2E_BROWSER" --version
+          node scripts/ui-contracts/capture-live-browser.mjs
       - name: Check harness and copy lint
         run: |
-          node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts
+          node --test tests/ui-contract-*.test.ts tests/ui-copy-lint.test.ts scripts/browser-evidence.test.mjs
           node scripts/check.mjs
       - name: Capture all 75 screen contracts in dark and light
         run: node scripts/ui-contracts/run.mjs
@@ -45,7 +57,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-contracts
-          path: .runtime/ui-contracts/
+          path: |
+            .runtime/ui-contracts/
+            .runtime/browser-pages/redaction-report.json
+            .runtime/browser-pages/ephemeral-report.json
+            .runtime/browser-live-fixture/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

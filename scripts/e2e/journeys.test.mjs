@@ -1,5 +1,6 @@
 import test from 'node:test';
 import {desktopJourney} from './desktop.mjs';
+import {randomUUID} from 'node:crypto';
 import {APPS_ID} from '../../src/apps.ts';
 import {paymentJourney} from './decisions.mjs';
 import assert from 'node:assert/strict';
@@ -16,6 +17,7 @@ import {TextArtifactStore} from '../../src/text-artifacts.ts';
 import {workbenchReady} from '../ui-contracts/report.ts';
 import {browserCommand} from './browser-command.mjs';
 import {createBrowserNetwork} from './browser-network.mjs';
+import {evidenceBrowser,redactEvidence} from '../browser-evidence.mjs';
 
 const run=promisify(execFile),out=resolve('.runtime/e2e');
 // No skip: a missing database/browser must fail the required CI job.
@@ -25,14 +27,14 @@ await run('agent-browser',['--version']);
 test('real daemon + workbench + durable owner journeys',{timeout:480000},async t=>{
  await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
  const root=await mkdtemp(join(tmpdir(),'massion-owned-e9a-')),f=await growthStore(true);let database=(await f.transport.query('RETURN $session.db;',{}))[0];
- const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a'])).stdout.trim();
+ const session=(await run('agent-browser',['session','id','--scope','worktree','--prefix','massion-e9a'])).stdout.trim()+'-'+randomUUID().slice(0,8);
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('AGENT_BROWSER_')));
- Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_PLUGINS:'[]'});
+ Object.assign(env,{AGENT_BROWSER_NO_WEBMCP:'1',AGENT_BROWSER_NO_VERSION_CHECK:'1',AGENT_BROWSER_PLUGINS:'[]'});
  const network=await createBrowserNetwork(),browserConfig=join(root,'browser.json');await writeFile(browserConfig,JSON.stringify({...network.config,...(process.env.MASSION_E2E_BROWSER?{executablePath:process.env.MASSION_E2E_BROWSER}:{})}));
- const browser=async(...args)=>{
+ const browser=evidenceBrowser(async(...args)=>{
   const data=await browserCommand(()=>run('agent-browser',['--config',browserConfig,'--session',session,'--json',...args],{env,timeout:35000,maxBuffer:4e6}));
   if(args[0]==='reload')await browser('wait','--fn',workbenchReady);return data;
- };
+ });
  const wait=async code=>browser('wait','--fn',code);
  const entry=fileURLToPath(new URL('./daemon.ts',import.meta.url)),configPath=join(root,'host.json'),argv=[process.execPath,entry,configPath];
  let child,url,logs='',currentStore=f.store;const evidence=[];
@@ -61,7 +63,8 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   return work;
  }
  try{
-  await browser('set','viewport','1280','900');assert.equal((await browser('eval','navigator.onLine')).result,true,'Browser must have a network interface; use an internal Docker network to block egress');
+  // Pin after launch: agent-browser 0.41.2 does not apply a launch-time pin to its new browser manager.
+  await browser('--no-pin-tab','set','viewport','1280','900');await browser('--pin-tab','get','url');assert.equal((await browser('eval','navigator.onLine')).result,true,'Browser must have a network interface; use an internal Docker network to block egress');
   await journey('first run without a connection and with detected subscription',async()=>{
    await start('none');await browser('open',url);await wait("!document.getElementById('first-signin').hidden");await capture('first-run-none',[/ChatGPT/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
    await start('found');await open();await wait("!!document.getElementById('first-calculation')");await capture('first-run-found',[/radio|계산|정리/]);assert.deepEqual(await calls(),[]);assert.equal((await f.store.exportJournal()).head,0);await stop();
@@ -224,5 +227,5 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
   const inventory=[...await calls(),...JSON.parse(await readFile(join(out,'desktop-calls.json'),'utf8'))];
   await writeFile(join(out,'report.json'),JSON.stringify({evidence,fixtureCalls:inventory.length,fixtureModelCalls:inventory.filter(c=>c.model).length,fixtureEffectCalls:inventory.filter(c=>!c.model).length,liveCalls:0,capabilityGaps:[]},null,2)+'\n');
  }catch(error){console.error('Journey failure',error);console.error('Browser errors',await browser('errors').catch(()=>null));console.error('Settings state',await browser('eval',"JSON.stringify({shown:typeof settingsShown==='undefined'?null:settingsShown,apps:typeof settingsApps==='undefined'?null:settingsApps})").catch(()=>null));await capture('failure',[]).catch(()=>{});await writeFile(join(out,'failure-state.json'),JSON.stringify({connections:url?await get('/connections').catch(()=>null):null,conversation:url?await get('/assistant/conversation').catch(()=>null):null,snapshot:await current(),calls:await calls()},null,2));throw error;}
- finally{await browser('close').catch(()=>{});await network.close();await stop();await writeFile(join(out,'daemon.log'),logs);await rm(root,{recursive:true,force:true});}
+ finally{await browser('close').catch(()=>{});await network.close();await stop();await writeFile(join(out,'daemon.log'),redactEvidence(logs));await rm(root,{recursive:true,force:true});}
 });

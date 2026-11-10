@@ -7,6 +7,9 @@ on:
     paths-ignore: ['**/*.md', 'docs/**']
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   install-smoke:
     runs-on: ubuntu-latest
