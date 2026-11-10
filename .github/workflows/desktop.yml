@@ -7,6 +7,9 @@ on:
     paths: ['desktop/**', 'src/**', 'docs/product/screens/copy.ko.json', '.github/workflows/desktop.yml', 'package*.json', 'tsconfig.json']
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   headless:
     runs-on: ubuntu-latest
