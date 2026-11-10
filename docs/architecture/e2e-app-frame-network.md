@@ -26,6 +26,16 @@ loopback bypass and non-proxied WebRTC UDP. Do not retry failed commands.
 Retain the production sandbox/CSP and the probe's rejected fetch before its
 617px resize. No product protocol, timeout, dependency or effect retry changes.
 
+The first CI batch also exposed two independent harness failures. Chromium can
+reset a rejected CONNECT socket: handle that socket's error so a denied request
+cannot terminate the Node test process. A deterministic Linux regression resets
+three refused tunnels and reproduced the unhandled ECONNRESET before the fix.
+The message helper previously waited on the input's disabled property even
+though `chatControls` disables the send button. `sendChat` clears the input
+before its final awaited read and re-enables the button only in `finally`.
+Wait for that actual button before and after sending, so the next journey cannot
+click it during the previous send. No message is resent.
+
 Add a focused real-browser regression covering the separate document, blocked
 parent access, CSP-blocked local network request and app-originated resize,
 plus a loopback sink proving disallowed browser requests reach only the denying

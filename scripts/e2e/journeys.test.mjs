@@ -52,7 +52,7 @@ test('real daemon + workbench + durable owner journeys',{timeout:480000},async t
  async function stop(){if(!child)return;const owned=child;await stopOwnedChild(owned,{cwd:root,argv});child=undefined;assert.equal(owned.exitCode,0,'Daemon drain: '+logs);}
  async function open(fragment=''){await browser('open',url+'/'+fragment);await wait(workbenchReady);}
  async function capture(name,patterns){const {snapshot}=await browser('snapshot');await writeFile(join(out,name+'.snapshot.txt'),snapshot+'\n');await browser('screenshot',join(out,name+'.png'));for(const pattern of patterns)assert.match(snapshot,pattern,name);evidence.push(name);}
- async function say(text){await browser('fill','#chat-input',text);await browser('click','#chat-send');await wait("!document.getElementById('chat-input').disabled && !document.getElementById('chat-input').value");}
+ async function say(text){await wait("!document.getElementById('chat-send').disabled");await browser('fill','#chat-input',text);await browser('click','#chat-send');await wait("!document.getElementById('chat-send').disabled && !document.getElementById('chat-input').value");}
  async function finished(title,acceptance='accepted'){
   await until(async()=>{const work=(await current()).value.works.find(w=>w.title===title);return work?.acceptance===acceptance&&work.execution==='settled';});
   await wait(`document.getElementById('chat-log').textContent.includes(${JSON.stringify(title)})`);
