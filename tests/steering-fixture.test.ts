@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
+import {hash,workInputHash} from '../src/domain.ts';
+import {STEERING_SCREENS} from '../scripts/ui-contracts/steering-fixture.ts';
+import type {Mission} from '../src/domain.ts';
+
+for(const screen of STEERING_SCREENS)test(`${screen} has confirmed enterprise steering and continued real Work state`,async()=>{
+ const fixture=await loadFixture(screen),mission=(fixture.routes['/missions/intake']!.body as {value:Mission}).value;
+ const work=mission.works.find(w=>w.title==='이탈 원인 조사')!,view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any;
+ const turn=view.turns.find((t:any)=>t.steer?.status==='recorded');assert.equal(turn.steer.workId,work.id);assert.equal(turn.steer.title,work.title);
+ assert.equal(work.instructions!.at(-1)!.text,'기업 고객은 따로 봐 줘.');assert.equal(work.runtimeRun!.inputHash,workInputHash(work));
+ assert.ok(work.tasks.some(t=>t.step&&t.endedAt!>=work.instructions!.at(-1)!.at!));assert.ok(!fixture.gaps.some(g=>g.startsWith('Confirmed enterprise steering followed')));
+ assert.equal(work.execution,['B7-churn','B18-room-b'].includes(screen)?'active':'settled');
+ if(work.execution==='active'){assert.equal(work.endedAt,undefined);assert.ok(work.runtimeRun!.ownership!.deadlineAt>fixture.now);}
+ else{assert.equal(work.acceptance,'failed');const route=Object.entries(fixture.routes).find(([path,r])=>path.includes('/rejected-artifact?')&&(r.body as any).workId===work.id)!;assert.ok(route);assert.equal(new URL(route[0],'http://fixture').searchParams.get('binding'),hash(work));assert.equal((route[1].body as any).inputHash,workInputHash(work));}
+});

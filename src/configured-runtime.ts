@@ -212,8 +212,25 @@ export class ConfiguredTextRuntime implements WorkRuntime {
  private async active(missionId:string,workId:string,controller?:AbortController){controller?.signal.throwIfAborted();const {work}=await this.current(missionId,workId);controller?.signal.throwIfAborted();if(work.execution==='cancelled'||work.execution==='waiting'||work.blocker)throw new DomainError('Work is cancelled, steered, or blocked');return work;}
  private async invoke(missionId:string,workId:string,runId:string,stage:'executor'|'verifier',instruction:string,binding:Record<string,unknown>,controller:AbortController,slot=stage as string,identity=this.options[stage].identity):Promise<ProviderOutcome>{
   const current=await this.current(missionId,workId);const available=this.availability({...current.snapshot.value,criteria:current.work.criteria});if(!available.ready)throw new DomainError(available.reason);await this.active(missionId,workId,controller);const role={...this.options[stage],identity},ownership=current.work.runtimeRun!.ownership!;const taskId=`${workId}:${slot}`;const effectId=`${runId}:${slot}`;
-  await this.send(missionId,{type:'admit-effect',workId,effect:{id:effectId,taskId,status:'pending',target:`${role.adapter.descriptor.provider}/${role.adapter.descriptor.model}`,authority:this.options.authorization!.id},reserve:this.options.outputTokenCap},role.identity);
-  const request:ProviderRequest={invocationId:effectId,workId,instruction,inputReferences:current.work.team?[`work:${missionId}/${workId}`,`task:${taskId}`,`input:${workInputHash(current.work)}`,...(current.work.prerequisiteRecords??[]).map(r=>`record:${r.recordId}`)]:[],maxOutputTokens:this.options.outputTokenCap,signal:controller.signal};let claim:ProviderDispatchClaim|undefined;
+  // Refresh before intent; an already admitted or ambiguous invocation is never retried.
+  for(let attempt=0;;attempt++){
+   const fresh=await this.active(missionId,workId,controller);
+   if(fresh.runtimeRun?.steeringVersion===1){
+    const prompt=JSON.parse(instruction),inputHash=workInputHash(fresh);binding={...binding,inputHash};
+    if(prompt.work)prompt.work.instructions=fresh.instructions??[];
+    if(prompt.requirements)prompt.requirements.instructions=fresh.instructions??[];
+    if(prompt.binding)prompt.binding.inputHash=inputHash;
+    if(prompt.references?.work)prompt.references.work.inputHash=inputHash;
+    instruction=JSON.stringify(prompt);
+   }
+   try{
+    const admitted=await this.dispatch(missionId,{type:'admit-effect',workId,...(fresh.runtimeRun?.steeringVersion===1?{inputHash:workInputHash(fresh)}:{}),effect:{id:effectId,taskId,status:'pending',target:`${role.adapter.descriptor.provider}/${role.adapter.descriptor.model}`,authority:this.options.authorization!.id},reserve:this.options.outputTokenCap},role.identity);
+    if(admitted.status==='committed')break;
+    if(admitted.status==='conflict'&&admitted.reason==='revision'&&attempt<2)continue;
+    throw new DomainError('Provider effect is not a fresh committed admission');
+   }catch(error){if(attempt<2&&error instanceof DomainError&&error.message==='Provider input changed before admission')continue;throw error;}
+  }
+  const request:ProviderRequest={invocationId:effectId,workId,instruction,inputReferences:current.work.team?[`work:${missionId}/${workId}`,`task:${taskId}`,`input:${binding.inputHash}`,...(current.work.prerequisiteRecords??[]).map(r=>`record:${r.recordId}`)]:[],maxOutputTokens:this.options.outputTokenCap,signal:controller.signal};let claim:ProviderDispatchClaim|undefined;
   if(!controller.signal.aborted&&Date.now()<ownership.deadlineAt){
    if(ownership.hostSessionId!==HOST_SESSION_ID||!this.owns(missionId,workId,runId))throw new DomainError('Only the original active host dispatch may attempt a provider claim');
    const descriptor=role.adapter.descriptor;claim={id:randomUUID(),runId,hostSessionId:ownership.hostSessionId,dispatchId:ownership.dispatchId,actorId:role.identity,assignmentId:`${runId}:${slot}:assignment`,provider:descriptor.provider,model:descriptor.model,configVersion:descriptor.configVersion,requestHash:providerRequestHash(request),claimedAt:Date.now()};
@@ -245,7 +262,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   try{
   const memories=pinnedMemoryInput(initial.snapshot.value,initial.work),prerequisiteRecords=resolvedPrerequisites(initial.snapshot.value,initial.work);
   const startedAt=Date.now(),ownership={hostSessionId:HOST_SESSION_ID,dispatchId:randomUUID(),startedAt,deadlineAt:startedAt+(this.options.runTimeoutMs??DEFAULT_RUN_TIMEOUT_MS)};
-  let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{toolTimeoutVersion:TOOL_TIMEOUT_VERSION,...(initial.work.team&&procedureSteps(initial.work.team).length>1?{roomVersion:1 as const}:{}),ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
+  let activationFenced=false;const runtime=this,activationStore=new Proxy(this.app.store,{get(target,key){if(key==='commit')return async(input:Parameters<typeof target.commit>[0])=>{if(fence&&((await target.load(MEMBERS_ID))?.revision??0)!==fence.membersRevision)throw new RuntimeConfigurationChangedError(ROUTING_CHANGED);if(runtime.draining){activationFenced=true;throw new HostDrainError();}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});const g=this.options.authorization!;let activation:CommitResult<Mission>;try{activation=await new Application(activationStore,[this.app.actor(activationActorId)]).dispatch({missionId,commandId:runId,expectedRevision,actorId:activationActorId,command:{type:'activate-runtime',workId,run:{...(initial.work.team?{steeringVersion:1 as const}:{}),toolTimeoutVersion:TOOL_TIMEOUT_VERSION,...(initial.work.team&&procedureSteps(initial.work.team).length>1?{roomVersion:1 as const}:{}),ownership,id:runId,authorizationId:g.id,criteriaHash:hash(initial.work.criteria),inputHash:workInputHash(initial.work),mode:g.mode,outputTokenCap:this.options.outputTokenCap,...(this.options.connectionBindings?{connectionBindings:this.options.connectionBindings}:{})}}});}catch(error){
    if(error instanceof RuntimeConfigurationChangedError){return rejectedRun({...preflight,ready:false,diagnostics:[error.diagnostic]},await this.snapshot(missionId));}
    if(activationFenced||error instanceof HostDrainError||error instanceof Error&&error.name==='StorageContentionError'){throw error;}
    let snapshot:Snapshot<Mission>|undefined;try{snapshot=await this.snapshot(missionId);}catch{/* Admission remains unknown when exact readback is unavailable. */}
@@ -302,12 +319,12 @@ export class ConfiguredTextRuntime implements WorkRuntime {
    const executed=await this.invoke(missionId,workId,runId,'executor',productionPrompt,binding,controller);
    controller.signal.throwIfAborted();if(executed.status!=='completed'){await this.block(missionId,workId,executed.reason);return this.result(missionId,workId);}
    let binary:ReturnType<typeof binaryResult>;try{binary=binaryResult(executed.output!);if(binary)binaryArtifactText(binary.kind,binary.bytes);}catch{await this.block(missionId,workId,'Unsupported or invalid bounded result format');return this.result(missionId,workId);}
-   await this.active(missionId,workId,controller);
+   const artifactInput=await this.active(missionId,workId,controller);
    const effectId=`${runId}:artifact`;await this.send(missionId,{type:'admit-effect',workId,effect:{id:effectId,taskId:`${workId}:executor`,status:'pending',target:'bounded text artifact',authority:g.id},reserve:0},this.options.executor.identity);
    let artifact:Artifact;
    try{controller.signal.throwIfAborted();if(binary){await this.options.artifacts.initialize();artifact=await this.binaryArtifacts.write(hash({missionId,workId}),1,binary.kind,binary.bytes);}else artifact=await this.options.artifacts.write(hash({missionId,workId}),1,executed.output!);}
    catch(error){if(controller.signal.aborted)throw error;await this.send(missionId,{type:'receipt',workId,effectId,outcome:'unknown',receipt:'Artifact write did not produce a durable receipt; inspect content-addressed storage before resolution.',usage:null},this.options.executor.identity);return this.result(missionId,workId);}
-   controller.signal.throwIfAborted();await this.send(missionId,{type:'receipt',workId,effectId,outcome:'succeeded',receipt:JSON.stringify({sha256:artifact.sha256,path:artifact.path,binding}),usage:0},this.options.executor.identity);
+   controller.signal.throwIfAborted();await this.send(missionId,{type:'receipt',workId,effectId,outcome:'succeeded',receipt:JSON.stringify({sha256:artifact.sha256,path:artifact.path,binding:{...binding,inputHash:workInputHash(artifactInput)}}),usage:0},this.options.executor.identity);
    await this.send(missionId,{type:'publish-artifact',workId,artifact},this.options.executor.identity);
    const content=await this.artifactText(artifact);
    if(initial.work.team&&procedureSteps(initial.work.team).length>1){

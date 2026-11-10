@@ -1,3 +1,4 @@
+import {STEERING_SCREENS,steeringFixture} from './steering-fixture.ts';
 import {MEMORY_SCREENS,memoryFixture} from './memory-fixtures.ts';
 import {GROWTH_SCREENS,growthFixture} from './growth-fixtures.ts';
 import {protocolConnection,protocolSupport,validHeader,validRange} from '../../src/protocol.ts';
@@ -50,7 +51,8 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  if(parents.length)return fixture;
  const produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;
  const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;
- const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(growth):growth;
+ const steered=STEERING_SCREENS.includes(screen)?await steeringFixture(growth):growth;
+ const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(steered):steered;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
  if(screen==='B17')return scheduleScreenFixture(memory);
  return screen==='B10'?binaryScreenFixture(memory):memory;
