@@ -14,14 +14,14 @@ function appConnectOpen(id){
  const d=chatDecisions().find(d=>d.id===id);if(!d?.connection||d.connection.connected||d.state!=='open'||reconnectRequired||chatView?.feedId!==feedId||chatDeciding.has(id))return;
  appConnectClose();appConnectChoice={id,sequence:appConnectSequence,thread:chatThread,segment:chatSegment,feed:chatView.feedId,epoch:connectionEpoch,connection:JSON.stringify(d.connection)};
  $('app-connect-title').textContent=d.title;const label=copy('pane.textbox.01',{work_title:d.title});$('app-connect-label').textContent=label;$('app-connect-token').setAttribute('aria-label',label);
- const outcome=appConnectOutcomes.get(appConnectKey(chatView.feedId,id));$('app-connect-token').disabled=$('app-connect-submit').disabled=!!outcome;$('app-connect-status').textContent=outcome?copy('conversation.text.01'):'';$('app-connect-status').hidden=!outcome;$('app-connect-panel').hidden=false;$('app-connect-token').focus();
+ const outcome=d.connection.pending===true||appConnectOutcomes.get(appConnectKey(chatView.feedId,id));$('app-connect-token').disabled=$('app-connect-submit').disabled=!!outcome;$('app-connect-status').textContent=outcome?copy('conversation.text.01'):'';$('app-connect-status').hidden=!outcome;$('app-connect-panel').hidden=false;if(!outcome)$('app-connect-token').focus();
 }
 $('app-connect-token').type='password';$('app-connect-token').setAttribute('autocomplete','off');
 $('app-connect-close').addEventListener('click',()=>appConnectClose(true));$('app-connect-cancel').addEventListener('click',()=>appConnectClose(true));
 $('app-connect-panel').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();appConnectClose(true);}});
 $('app-connect-form').addEventListener('submit',async event=>{
  event.preventDefault();const choice=appConnectChoice,input=$('app-connect-token');
- if(!choice||!appConnectCurrent(choice)||!input.value.trim()){input.value='';return;}
+ if(!choice||!appConnectCurrent(choice)||input.disabled||!input.value.trim()){input.value='';return;}
  const key=appConnectKey(choice.feed,choice.id);if(appConnectOutcomes.has(key)){input.value='';return;}
  appConnectOutcomes.set(key,'pending');input.disabled=$('app-connect-submit').disabled=true;
  const controller=new AbortController();choice.controller=controller;
