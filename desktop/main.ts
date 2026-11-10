@@ -8,6 +8,7 @@ import {createProtocolClient} from '../src/client-protocol.ts';
 import {appOrigin,channels,windowOptions,isAppURL,allowWorkbenchRequest,validSender,contentPolicy,isAppDocumentURL} from './security.ts';
 import {daemonOrigin,daemonTransport,proxyProtocol} from './transport.ts';
 import {prepareControl,launchDaemon,drainDaemon,daemonFiles,daemonCredential} from './daemon.ts';
+import {DesktopLifecycle} from './lifecycle.ts';
 import {ExceptionTracker} from './notifications.ts';
 import type {OwnerException} from './notifications.ts';
 
@@ -20,8 +21,8 @@ export async function startDesktop(){
  const directory=app.getPath('userData'),socket=join(directory,'daemon.sock');
  const credential=()=>daemonCredential(socket,origin);
  const client=createProtocolClient(daemonTransport(origin,credential)),tracker=new ExceptionTracker();
- let window:BrowserWindow|null=null,ready=false,pending:OwnerException|undefined,quitting=false,reading=false;
- let timer:ReturnType<typeof setTimeout>|undefined;
+ let window:BrowserWindow|null=null,ready=false,pending:OwnerException|undefined,quitting=false,reading=false,daemonDrained=false;
+ let timer:ReturnType<typeof setTimeout>|undefined,connecting:Promise<void>|undefined;
  const documents=new AppDocuments();
  const readDocument=(url:string)=>isAppDocumentURL(url)?documents.read(new URL(url).pathname):undefined;
  const notifications=new Map<string,Notification>();
@@ -49,11 +50,21 @@ export async function startDesktop(){
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;clearTimeout(timer);documents.clear();
   for(const notice of notifications.values())notice.close();
-  void drainDaemon(socket,origin).then(result=>{if(result.status==='unsettled')console.error('Daemon drain unsettled; inspect original state');},error=>{if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))console.error('Daemon drain could not be confirmed');}).finally(()=>app.quit());
+  void (daemonDrained?Promise.resolve({status:'drained'}):drainDaemon(socket,origin)).then(result=>{if(result.status==='unsettled')console.error('Daemon drain unsettled; inspect original state');},error=>{if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code??''))console.error('Daemon drain could not be confirmed');}).finally(()=>app.quit());
  });
  await app.whenReady();nativeTheme.themeSource='system';
  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Massion',submenu:[{role:'about'},{type:'separator'},{role:'quit'}]},{role:'editMenu'},{role:'windowMenu'}]));
  await mkdir(directory,{recursive:true,mode:0o700});await chmod(directory,0o700);
+ const version=app.isPackaged?app.getVersion():JSON.parse(await readFile(join(import.meta.dirname,'../../package.json'),'utf8')).version;
+ const lifecycle=await DesktopLifecycle.open(join(directory,'notifications.json'),version,async()=>{
+  await connecting?.catch(()=>{});
+  try{await credential();const result=await drainDaemon(socket,origin);if(result.status==='drained')daemonDrained=true;return result;}
+  catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ECONNREFUSED')await prepareControl(socket);else if(code!=='ENOENT')throw error;daemonDrained=true;return {status:'drained'};}
+ },()=>{setImmediate(()=>{app.relaunch();app.quit();});});
+ for(const [channel,handle] of [[channels.settings,()=>lifecycle.read()],[channels.notifications,(value:boolean)=>lifecycle.saveNotifications(value)],[channels.restart,()=>lifecycle.restart()]] as const){
+  ipcMain.handle(channel,(event,...args)=>{if(!window||!validSender(event,window.webContents))throw Error('Refused desktop sender');return handle(args[0]);});
+ }
+
  const ses=session.defaultSession;
  ses.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
  ses.setPermissionCheckHandler(()=>false);ses.setDevicePermissionHandler(()=>false);
@@ -99,7 +110,7 @@ export async function startDesktop(){
    }
    const fresh=tracker.update(view.body.feedId,works.body.works,decisions);
    for(const [key,notice] of notifications)if(!tracker.current({key} as OwnerException)){notice.close();notifications.delete(key);}
-   if(headless||!Notification.isSupported()||quitting)return;
+   if(headless||!lifecycle.notifications||!Notification.isSupported()||quitting)return;
    for(const item of fresh){
     const notice=new Notification({title:'Massion',body:item.title,silent:false});notifications.set(item.key,notice);
     notice.on('click',()=>{if(!tracker.current(item))return;pending=item;void openWindow();});
@@ -107,7 +118,8 @@ export async function startDesktop(){
    }
   }catch{client.reconnect();}finally{reading=false;if(!quitting)timer=setTimeout(()=>void observe(),10000);}
  }
+ connecting=connectDaemon().catch(()=>console.error('Desktop daemon unavailable; check local Node and daemon configuration'));
  await openWindow();
- void connectDaemon().catch(()=>console.error('Desktop daemon unavailable; check local Node and daemon configuration')).finally(()=>{client.reconnect();void observe();});
+ void connecting.finally(()=>{client.reconnect();void observe();});
  return {get window(){return window;},openWindow};
 }
