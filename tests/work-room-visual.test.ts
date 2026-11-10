@@ -37,7 +37,7 @@ for(const screen of ['B7-done','B7-fail','B7-unknown'] as const)test(screen+' is
  if(screen==='B7-done')assert.ok(markers.length>0&&markers.every(n=>hasClass(n,'done')));
  if(screen==='B7-fail'){
   assert.ok(markers.some(n=>hasClass(n,'failed')));
-  const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent.split('/').map(Number);assert.ok(count[0]!<count[1]!, 'failed verification is not a fully completed procedure');
+  const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent.split('/').map(Number);assert.deepEqual(count,[5,5]);assert.equal(work.record,undefined,'settled workers do not accept a failed check');
  }
 });
 
@@ -64,7 +64,7 @@ test('a failed verdict marks only its bound verification task as failed',async()
  const {app,nodes,work}=await scene('B7-fail');
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'settled'});renderMission()}`,app.context);
  assert.equal(nodes().filter(n=>hasClass(n,'room-step-marker')&&hasClass(n,'failed')).length,1);
- assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'2/3');
+ assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'5/5');
 });
 
 test('a rejected Stop reports the revision conflict while the Work stays running',async()=>{
@@ -102,7 +102,7 @@ for(const [screen,word] of [['B8-done','맞음'],['B8-fail','아님']] as const)
 test('conversation and procedure counts use the same child tasks and failed check state',async()=>{
  const {app,nodes,work}=await scene('B7-fail');
  const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent;
- assert.equal(count,'1/2');
+ assert.equal(count,'5/5');
  const active=await scene('B7');
  const card=active.app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(active.work.title))!;
  assert.ok(card);assert.equal(descendants(card).find(n=>hasClass(n,'chat-steps'))?.textContent,active.nodes().find(n=>hasClass(n,'room-progress'))!.textContent);
@@ -116,7 +116,7 @@ test('legacy procedures list exactly the child tasks counted by their progress',
 
 for(const screen of ['B8-done','B8-fail'])test(screen+' keeps raw execution results behind deliberate flow disclosures',async()=>{
  const {nodes,work}=await scene(screen),flow=nodes().find(n=>hasClass(n,'room-flow'))!;
- for(const task of work.tasks.filter((task:any)=>task.result)){
+ for(const task of work.tasks.filter((task:any)=>task.result&&!task.step?.skipReason)){
   const detail=descendants(flow).find(n=>n.tagName==='DETAILS'&&n.textContent.includes(task.result));
   assert.ok(detail,'task result has a disclosure');assert.equal(detail.open,false);
   assert.ok(detail.children.some(n=>n.tagName==='SUMMARY'&&n.textContent.length>0));

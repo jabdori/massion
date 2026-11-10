@@ -6,6 +6,7 @@ import {applySkills} from '../../src/skills.ts';
 import {memberProcedures,parseTeamPlan} from '../../src/internal-teams.ts';
 import {validateMissionLineage} from '../../src/backup-lineage.ts';
 import {loadFixture} from './fixture-host.ts';
+import {workCardFacts} from '../../src/assistant-service.ts';
 
 const directory=new URL('./fixtures/',import.meta.url),owner:Actor={id:'local-owner',roles:['owner']},host:Actor={id:'runtime-representative',roles:['representative']};
 const time=(clock:string)=>Date.parse('2026-11-05T'+clock+':00+09:00');
@@ -47,17 +48,18 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'){
 
 export async function regenerateRoomScreens(){
  for(const [screen,base,kind,legacyId] of [['B18-room-b','B7-churn','pricing','pricing'],['B22-room-steps','B22-room','coding','pr84']] as const){
-  const fixture=await loadFixture(base),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
+  const fixture=await loadFixture(base,['regeneration-source']),mission=structuredClone((fixture.routes['/missions/intake']!.body as any).value) as Mission,{work,conversation,source}=roomTelemetryWork(mission,kind),now=kind==='pricing'?fixture.now:time('10:44'),previous=mission.works.find(w=>kind==='pricing'?w.title==='경쟁사 가격':w.id===legacyId)!,previousId=previous.id;
   mission.works=mission.works.map(w=>w.id===previousId?work:w);if(conversation)mission.conversations=[...(mission.conversations??[]).filter(c=>c.workId!==previousId),conversation];
   const previousTurn=previous.assistantSource?.turnId??'assistant-turn:m:'+previousId,previousMessage=previous.assistantSource?.messageId??'m:'+previousId;
   for(const route of Object.values(fixture.routes) as any[]){const body=route.body;
    if(body?.value?.id===mission.id)body.value=JSON.parse(canonical(mission));if(body?.snapshot?.value?.id===mission.id)body.snapshot.value=JSON.parse(canonical(mission));
    for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===previousId){Object.assign(row,{workId:work.id,execution:work.execution,startedAt:work.runtimeRun?.ownership?.startedAt??work.tasks.find(t=>t.startedAt!==undefined)?.startedAt??null,endedAt:null,turnId:source.turnId,steps:{done:work.tasks.filter(t=>t.step&&t.status==='settled').length,total:work.tasks.filter(t=>t.step).length},progress:{make:{done:work.tasks.filter(t=>t.step&&t.status==='settled').length,total:work.tasks.filter(t=>t.step).length},check:{done:0,total:1}}});}
+   for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])]){const current=mission.works.find(w=>w.id===row.workId);if(current)Object.assign(row,workCardFacts(current));}
    for(const turn of body?.turns??[])if(turn.id===previousTurn){turn.id=source.turnId;turn.messageId=source.messageId;turn.at=work.admittedAt;}
    for(const m of body?.segment?.messages??[]){if(m.id===previousMessage){m.id=source.messageId;m.at=work.admittedAt;}if(m.turnId===previousTurn){m.turnId=source.turnId;m.at=work.admittedAt;}}
   }
   const steps=kind==='pricing'?[{selector:'#side-member-member-quill',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="side-line-intake/'+work.id+'"]',action:'click',readySelector:'#work-heading-'+work.id}]:[{selector:'#side-member-member-juno',action:'click',readySelector:'#chat-log .chat-reply'},{selector:'[id="chat-card-'+source.turnId+'"] .chat-card-open',action:'click',readySelector:'#work-heading-'+work.id}];
-  const parent=await loadFixture(base),routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(parent.routes[key])));
+  const parent=await loadFixture(base,['regeneration-source']),routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(parent.routes[key])));
   const output={screen,extends:base,description:'Selected room observations produced by domain commands; no injected challenge transcript or external calls.',now,readySelector:kind==='pricing'?'#side-member-member-quill':'#side-member-member-juno',steps,gaps:kind==='pricing'?['The monthly pricing table has no typed business-result producer; the memory-candidate row belongs to R-D. No table is inferred from worker text.']:[],reuse:['scripts/ui-contracts/room-telemetry-fixtures.ts: owner procedure, validated plan, assigned progress, receipts and pending procedure note commands'],routes};
   await writeFile(new URL(screen+'.json',directory),JSON.stringify(output,null,2)+'\n');
  }

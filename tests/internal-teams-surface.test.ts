@@ -28,7 +28,7 @@ function fixture(){
  const open=async()=>{await settle();await app.all().find(n=>n.id==='side-line-intake/w1')!.fire('click');await settle();};
  const progress=()=>app.all().find(n=>n.className==='room-steps'&&n.attributes.get('aria-label')==='절차');
  const people=()=>app.all().find(n=>n.className==='room-people room-compact');
- const results=()=>app.all().find(n=>n.className==='room-worker-results');
+ const results=()=>app.all().find(n=>n.className==='room-worker-results room-compact');
  return {app,state,open,progress,people,results};
 }
 
@@ -48,7 +48,7 @@ test('worker roles stay between member and Check; rows show status and worker ou
  assert.ok(app.node('work-list').contains(results()!),'worker output belongs to the selected pane');assert.ok(!app.node('chat-log').contains(results()!));
  const flow=app.all().find(n=>n.className==='room-flow')!;
  assert.equal(flow.children.filter(n=>n.textContent.includes('해지 내역 수집')).length,1);
- assert.match(flow.textContent,/해지 내역 수집.*퀼.*조사/);assert.doesNotMatch(flow.textContent,/해지 41건/);
+ assert.match(flow.textContent,/해지 내역 수집.*퀼.*조사/);assert.equal(app.all().find(n=>n.tagName==='DETAILS'&&n.children.some(c=>c.tagName==='PRE'&&c.textContent==='해지 41건'))?.open,false);
  assert.match(flow.textContent,/설문 발송.*건너뜀 · 기존 설문/);
  assert.match(list.children[2]!.attributes.get('aria-label')!,/건너뜀 · 기존 설문/);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
@@ -213,6 +213,9 @@ test('worker instruction and result project direction and recorded times into th
  assert.deepEqual(messages[1]!.children[0]!.children.map(n=>n.textContent),['조사',' → ','퀼',runInContext('chatTime('+(at+480000)+')',app.context)]);
  assert.match(results()!.textContent,/세 곳 요금제에서 월 요금만 모아 줘. <b>원문<\/b>/);assert.doesNotMatch(results()!.textContent,/건너뛴 지시|기존 설문/);
  assert.ok(app.node('work-list').contains(results()!));assert.equal(app.all().filter(n=>n.tagName==='B').length,0);
+ const copied:string[]=[];(app.context.navigator as any).clipboard={writeText:async(text:string)=>{copied.push(text);}};
+ for(const message of messages){const button=message.children.find(n=>n.tagName==='BUTTON');assert.ok(button);assert.equal(button.attributes.get('aria-label'),'복사');await button.fire('click');}
+ assert.deepEqual(copied,['세 곳 요금제에서 월 요금만 모아 줘. <b>원문</b>','해지 41건']);
  runInContext('paneOpen("elsewhere","w2","Other")',app.context);assert.equal(results(),undefined);
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
 });

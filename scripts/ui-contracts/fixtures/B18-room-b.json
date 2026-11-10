@@ -130,7 +130,8 @@
                   "total": 1
                 }
               },
-              "evidenceCount": null
+              "evidenceCount": null,
+              "workerSteps": []
             }
           },
           {
@@ -187,6 +188,49 @@
                 }
               },
               "evidenceCount": null,
+              "workerSteps": [
+                {
+                  "step": {
+                    "title": "출처 고르기",
+                    "role": "조사"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 3,
+                    "total": 3
+                  }
+                },
+                {
+                  "step": {
+                    "title": "가격 모으기",
+                    "role": "조사"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 3,
+                    "total": 3
+                  }
+                },
+                {
+                  "step": {
+                    "title": "요약",
+                    "role": "요약",
+                    "skipReason": "표만 요청"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "표 만들기",
+                    "role": "표 정리"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 1,
+                    "total": 1
+                  }
+                }
+              ],
               "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
             }
           },
@@ -230,20 +274,58 @@
                 "fact": null
               },
               "steps": {
-                "done": 2,
-                "total": 4
+                "done": 4,
+                "total": 5
               },
               "progress": {
                 "make": {
-                  "done": 0,
-                  "total": 1
+                  "done": 4,
+                  "total": 5
                 },
                 "check": {
                   "done": 0,
                   "total": 1
                 }
               },
-              "evidenceCount": null
+              "evidenceCount": null,
+              "workerSteps": [
+                {
+                  "step": {
+                    "title": "범위 정하기",
+                    "role": "조사"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "자료 모으기",
+                    "role": "조사"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "나누기",
+                    "role": "분류"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "설문 다시 보내기",
+                    "role": "설문",
+                    "skipReason": "지난달 설문 있음"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "원인 정리",
+                    "role": "요약"
+                  },
+                  "status": "active"
+                }
+              ]
             }
           }
         ],
@@ -305,9 +387,58 @@
             "turnId": "assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
             "segment": 1,
             "steps": {
-              "done": 2,
-              "total": 4
-            }
+              "done": 4,
+              "total": 5
+            },
+            "progress": {
+              "make": {
+                "done": 4,
+                "total": 5
+              },
+              "check": {
+                "done": 0,
+                "total": 1
+              }
+            },
+            "evidenceCount": null,
+            "workerSteps": [
+              {
+                "step": {
+                  "title": "범위 정하기",
+                  "role": "조사"
+                },
+                "status": "settled"
+              },
+              {
+                "step": {
+                  "title": "자료 모으기",
+                  "role": "조사"
+                },
+                "status": "settled"
+              },
+              {
+                "step": {
+                  "title": "나누기",
+                  "role": "분류"
+                },
+                "status": "settled"
+              },
+              {
+                "step": {
+                  "title": "설문 다시 보내기",
+                  "role": "설문",
+                  "skipReason": "지난달 설문 있음"
+                },
+                "status": "settled"
+              },
+              {
+                "step": {
+                  "title": "원인 정리",
+                  "role": "요약"
+                },
+                "status": "active"
+              }
+            ]
           },
           {
             "missionId": "intake",
@@ -341,7 +472,51 @@
                 "done": 0,
                 "total": 1
               }
-            }
+            },
+            "evidenceCount": null,
+            "workerSteps": [
+              {
+                "step": {
+                  "title": "출처 고르기",
+                  "role": "조사"
+                },
+                "status": "settled",
+                "progress": {
+                  "done": 3,
+                  "total": 3
+                }
+              },
+              {
+                "step": {
+                  "title": "가격 모으기",
+                  "role": "조사"
+                },
+                "status": "settled",
+                "progress": {
+                  "done": 3,
+                  "total": 3
+                }
+              },
+              {
+                "step": {
+                  "title": "요약",
+                  "role": "요약",
+                  "skipReason": "표만 요청"
+                },
+                "status": "settled"
+              },
+              {
+                "step": {
+                  "title": "표 만들기",
+                  "role": "표 정리"
+                },
+                "status": "settled",
+                "progress": {
+                  "done": 1,
+                  "total": 1
+                }
+              }
+            ]
           },
           {
             "missionId": "intake",
@@ -361,7 +536,23 @@
             "startedAt": 1793855279999,
             "endedAt": null,
             "turnId": "assistant-turn:m:5bacf74c63c9982da724b62f5fbcef5d",
-            "segment": 1
+            "segment": 1,
+            "steps": {
+              "done": 0,
+              "total": 2
+            },
+            "progress": {
+              "make": {
+                "done": 0,
+                "total": 1
+              },
+              "check": {
+                "done": 0,
+                "total": 1
+              }
+            },
+            "evidenceCount": null,
+            "workerSteps": []
           }
         ]
       }
@@ -379,7 +570,7 @@
                 "messages": [
                   {
                     "actorId": "local-owner",
-                    "at": 1793855280007,
+                    "at": 1793855280011,
                     "id": "e3c-churn-discussion",
                     "ordinal": 1,
                     "replyTo": null,
@@ -505,6 +696,20 @@
                     },
                     "role": "executor",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
+                  },
+                  {
+                    "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:4",
+                    "extensionVersion": "massion.builtin.bounded-text@9",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:assignment",
+                    "model": {
+                      "configVersion": "fixture-v1",
+                      "evidenceClass": "fixture",
+                      "model": "claude-sonnet-5-5",
+                      "provider": "fixture",
+                      "reason": "Deterministic UI fixture; no model invocation"
+                    },
+                    "role": "executor",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                   }
                 ],
                 "assistantSource": {
@@ -541,6 +746,7 @@
                       "fixture-v1",
                       "fixture-v1",
                       "fixture-v1",
+                      "fixture-v1",
                       "fixture-v1"
                     ],
                     "number": 1,
@@ -548,7 +754,7 @@
                   }
                 ],
                 "budget": {
-                  "limit": 28,
+                  "limit": 32,
                   "measured": 1,
                   "reserved": 4,
                   "unit": "output-tokens"
@@ -562,7 +768,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:fixture",
-                    "receipt": "지난 90일 해지 41건을 정리했습니다.",
+                    "receipt": "지난 90일 해지",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
@@ -570,10 +776,26 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:fixture",
-                    "receipt": "고객 분류",
+                    "receipt": "해지 사유 41건 모았어요.",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                  },
+                  {
+                    "authority": "data-only fixture",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
+                    "receipt": "기업 9건, 그 외 32건이에요.",
+                    "status": "succeeded",
+                    "target": "fixture text",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
+                  },
+                  {
+                    "authority": "data-only fixture",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
+                    "receipt": "원인 정리",
+                    "status": "succeeded",
+                    "target": "fixture text",
+                    "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                   },
                   {
                     "authority": "fixture-authorization",
@@ -597,7 +819,7 @@
                   "authorizationId": "fixture-authorization",
                   "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                   "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-                  "inputHash": "fa73082ef048e7dfc7915bcda750f44d37e527972f80d568ecefb49131487d61",
+                  "inputHash": "2e64f229a20e44a083eb26e0eeea51b418e9e6680cbda2aa413a0057d4572d3a",
                   "mode": "mock-http",
                   "outputTokenCap": 4,
                   "ownership": {
@@ -616,7 +838,7 @@
                   {
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
-                    "startedAt": 1793855280006,
+                    "startedAt": 1793855280010,
                     "status": "active"
                   },
                   {
@@ -628,51 +850,72 @@
                     "endedAt": 1793855280003,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "지난 90일 해지 41건을 정리했습니다.",
+                    "result": "지난 90일 해지",
                     "startedAt": 1793855280002,
                     "status": "settled",
                     "step": {
                       "dependsOn": [],
                       "role": "조사",
-                      "title": "해지 내역 수집"
+                      "title": "범위 정하기"
                     }
                   },
                   {
+                    "endedAt": 1793855280007,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "startedAt": 1793855280004,
-                    "status": "active",
+                    "result": "해지 사유 41건 모았어요.",
+                    "startedAt": 1793855280005,
+                    "status": "settled",
                     "step": {
                       "dependsOn": [
                         "assistant-236a368dfcf6f32eaeb68fb0:step:0"
                       ],
-                      "role": "분류",
-                      "title": "고객 분류"
+                      "instruction": "지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘.",
+                      "role": "조사",
+                      "title": "자료 모으기"
                     }
                   },
                   {
-                    "endedAt": 1793855280005,
+                    "endedAt": 1793855280008,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "Skipped · 기존 설문 활용",
+                    "result": "기업 9건, 그 외 32건이에요.",
+                    "startedAt": 1793855280006,
+                    "status": "settled",
+                    "step": {
+                      "dependsOn": [
+                        "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                      ],
+                      "instruction": "모은 건은 기업 고객과 그 외로 나눠 줘.",
+                      "role": "분류",
+                      "title": "나누기"
+                    }
+                  },
+                  {
+                    "endedAt": 1793855280004,
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                    "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                    "result": "Skipped · 지난달 설문 있음",
                     "status": "settled",
                     "step": {
                       "dependsOn": [],
                       "role": "설문",
-                      "skipReason": "기존 설문 활용",
-                      "title": "설문 발송"
+                      "skipReason": "지난달 설문 있음",
+                      "title": "설문 다시 보내기"
                     }
                   },
                   {
-                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                    "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "status": "queued",
+                    "startedAt": 1793855280009,
+                    "status": "active",
                     "step": {
                       "dependsOn": [
-                        "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                        "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                       ],
+                      "instruction": "두 묶음 따로 원인을 정리해 줘.",
                       "role": "요약",
-                      "title": "원인 요약"
+                      "title": "원인 정리"
                     }
                   }
                 ],
@@ -681,17 +924,18 @@
                   "procedures": [
                     {
                       "body": {
-                        "description": "해지 원인 조사",
+                        "description": "이탈 원인 조사",
                         "steps": [
-                          "해지 내역 수집",
-                          "고객 분류",
-                          "설문 발송",
-                          "원인 요약"
+                          "범위 정하기",
+                          "자료 모으기",
+                          "나누기",
+                          "설문 다시 보내기",
+                          "원인 정리"
                         ],
-                        "verify": "근거와 해지 원인 대조"
+                        "verify": "요청한 결과와 근거 확인"
                       },
-                      "hash": "640153fda6b8efe4b82a6c99df8ad645907e8da664b21d3fcac4037e9739ff99",
-                      "id": "q13-churn",
+                      "hash": "25116d70afbd81c4625d2a4d2fdce7cf241e035acf7663a47541f1449e7e7235",
+                      "id": "skill-0ab3ae0f66683f7c",
                       "version": 1
                     }
                   ],
@@ -1167,7 +1411,7 @@
               "messages": [
                 {
                   "actorId": "local-owner",
-                  "at": 1793855280007,
+                  "at": 1793855280011,
                   "id": "e3c-churn-discussion",
                   "ordinal": 1,
                   "replyTo": null,
@@ -1293,6 +1537,20 @@
                   },
                   "role": "executor",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
+                },
+                {
+                  "actorId": "fixture-worker-assistant-236a368dfcf6f32eaeb68fb0:step:4",
+                  "extensionVersion": "massion.builtin.bounded-text@9",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:assignment",
+                  "model": {
+                    "configVersion": "fixture-v1",
+                    "evidenceClass": "fixture",
+                    "model": "claude-sonnet-5-5",
+                    "provider": "fixture",
+                    "reason": "Deterministic UI fixture; no model invocation"
+                  },
+                  "role": "executor",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                 }
               ],
               "assistantSource": {
@@ -1329,6 +1587,7 @@
                     "fixture-v1",
                     "fixture-v1",
                     "fixture-v1",
+                    "fixture-v1",
                     "fixture-v1"
                   ],
                   "number": 1,
@@ -1336,7 +1595,7 @@
                 }
               ],
               "budget": {
-                "limit": 28,
+                "limit": 32,
                 "measured": 1,
                 "reserved": 4,
                 "unit": "output-tokens"
@@ -1350,7 +1609,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0:fixture",
-                  "receipt": "지난 90일 해지 41건을 정리했습니다.",
+                  "receipt": "지난 90일 해지",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:0"
@@ -1358,10 +1617,26 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1:fixture",
-                  "receipt": "고객 분류",
+                  "receipt": "해지 사유 41건 모았어요.",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                },
+                {
+                  "authority": "data-only fixture",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
+                  "receipt": "기업 9건, 그 외 32건이에요.",
+                  "status": "succeeded",
+                  "target": "fixture text",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
+                },
+                {
+                  "authority": "data-only fixture",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
+                  "receipt": "원인 정리",
+                  "status": "succeeded",
+                  "target": "fixture text",
+                  "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                 },
                 {
                   "authority": "fixture-authorization",
@@ -1385,7 +1660,7 @@
                 "authorizationId": "fixture-authorization",
                 "criteriaHash": "89e83555389dc350e136c16fdaafa22c689cdec8eeacf85a0ec6cc3ba3c5e142",
                 "id": "assistant-run:assistant-turn:m:c47b25c227c848b8a866d24abe7ee3cd",
-                "inputHash": "fa73082ef048e7dfc7915bcda750f44d37e527972f80d568ecefb49131487d61",
+                "inputHash": "2e64f229a20e44a083eb26e0eeea51b418e9e6680cbda2aa413a0057d4572d3a",
                 "mode": "mock-http",
                 "outputTokenCap": 4,
                 "ownership": {
@@ -1404,7 +1679,7 @@
                 {
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:executor",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:root",
-                  "startedAt": 1793855280006,
+                  "startedAt": 1793855280010,
                   "status": "active"
                 },
                 {
@@ -1416,51 +1691,72 @@
                   "endedAt": 1793855280003,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:0",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "지난 90일 해지 41건을 정리했습니다.",
+                  "result": "지난 90일 해지",
                   "startedAt": 1793855280002,
                   "status": "settled",
                   "step": {
                     "dependsOn": [],
                     "role": "조사",
-                    "title": "해지 내역 수집"
+                    "title": "범위 정하기"
                   }
                 },
                 {
+                  "endedAt": 1793855280007,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:1",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "startedAt": 1793855280004,
-                  "status": "active",
+                  "result": "해지 사유 41건 모았어요.",
+                  "startedAt": 1793855280005,
+                  "status": "settled",
                   "step": {
                     "dependsOn": [
                       "assistant-236a368dfcf6f32eaeb68fb0:step:0"
                     ],
-                    "role": "분류",
-                    "title": "고객 분류"
+                    "instruction": "지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘.",
+                    "role": "조사",
+                    "title": "자료 모으기"
                   }
                 },
                 {
-                  "endedAt": 1793855280005,
+                  "endedAt": 1793855280008,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "Skipped · 기존 설문 활용",
+                  "result": "기업 9건, 그 외 32건이에요.",
+                  "startedAt": 1793855280006,
+                  "status": "settled",
+                  "step": {
+                    "dependsOn": [
+                      "assistant-236a368dfcf6f32eaeb68fb0:step:0"
+                    ],
+                    "instruction": "모은 건은 기업 고객과 그 외로 나눠 줘.",
+                    "role": "분류",
+                    "title": "나누기"
+                  }
+                },
+                {
+                  "endedAt": 1793855280004,
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                  "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
+                  "result": "Skipped · 지난달 설문 있음",
                   "status": "settled",
                   "step": {
                     "dependsOn": [],
                     "role": "설문",
-                    "skipReason": "기존 설문 활용",
-                    "title": "설문 발송"
+                    "skipReason": "지난달 설문 있음",
+                    "title": "설문 다시 보내기"
                   }
                 },
                 {
-                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:3",
+                  "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "status": "queued",
+                  "startedAt": 1793855280009,
+                  "status": "active",
                   "step": {
                     "dependsOn": [
-                      "assistant-236a368dfcf6f32eaeb68fb0:step:1"
+                      "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                     ],
+                    "instruction": "두 묶음 따로 원인을 정리해 줘.",
                     "role": "요약",
-                    "title": "원인 요약"
+                    "title": "원인 정리"
                   }
                 }
               ],
@@ -1469,17 +1765,18 @@
                 "procedures": [
                   {
                     "body": {
-                      "description": "해지 원인 조사",
+                      "description": "이탈 원인 조사",
                       "steps": [
-                        "해지 내역 수집",
-                        "고객 분류",
-                        "설문 발송",
-                        "원인 요약"
+                        "범위 정하기",
+                        "자료 모으기",
+                        "나누기",
+                        "설문 다시 보내기",
+                        "원인 정리"
                       ],
-                      "verify": "근거와 해지 원인 대조"
+                      "verify": "요청한 결과와 근거 확인"
                     },
-                    "hash": "640153fda6b8efe4b82a6c99df8ad645907e8da664b21d3fcac4037e9739ff99",
-                    "id": "q13-churn",
+                    "hash": "25116d70afbd81c4625d2a4d2fdce7cf241e035acf7663a47541f1449e7e7235",
+                    "id": "skill-0ab3ae0f66683f7c",
                     "version": 1
                   }
                 ],
@@ -2047,7 +2344,8 @@
                   "total": 1
                 }
               },
-              "evidenceCount": null
+              "evidenceCount": null,
+              "workerSteps": []
             }
           },
           {
@@ -2104,6 +2402,49 @@
                 }
               },
               "evidenceCount": null,
+              "workerSteps": [
+                {
+                  "step": {
+                    "title": "출처 고르기",
+                    "role": "조사"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 3,
+                    "total": 3
+                  }
+                },
+                {
+                  "step": {
+                    "title": "가격 모으기",
+                    "role": "조사"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 3,
+                    "total": 3
+                  }
+                },
+                {
+                  "step": {
+                    "title": "요약",
+                    "role": "요약",
+                    "skipReason": "표만 요청"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "표 만들기",
+                    "role": "표 정리"
+                  },
+                  "status": "settled",
+                  "progress": {
+                    "done": 1,
+                    "total": 1
+                  }
+                }
+              ],
               "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
             }
           },
@@ -2147,20 +2488,58 @@
                 "fact": null
               },
               "steps": {
-                "done": 2,
-                "total": 4
+                "done": 4,
+                "total": 5
               },
               "progress": {
                 "make": {
-                  "done": 0,
-                  "total": 1
+                  "done": 4,
+                  "total": 5
                 },
                 "check": {
                   "done": 0,
                   "total": 1
                 }
               },
-              "evidenceCount": null
+              "evidenceCount": null,
+              "workerSteps": [
+                {
+                  "step": {
+                    "title": "범위 정하기",
+                    "role": "조사"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "자료 모으기",
+                    "role": "조사"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "나누기",
+                    "role": "분류"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "설문 다시 보내기",
+                    "role": "설문",
+                    "skipReason": "지난달 설문 있음"
+                  },
+                  "status": "settled"
+                },
+                {
+                  "step": {
+                    "title": "원인 정리",
+                    "role": "요약"
+                  },
+                  "status": "active"
+                }
+              ]
             }
           }
         ],
