@@ -121,12 +121,47 @@ retain them in client state/storage. UI approval is a follow-up, not claimed her
 5. Run typecheck and affected tests locally. Assert sentinel absence from
    journals, portable backup, model input and public results; use fake vendor
    executables and fixture own stores only. Never use a real vault, login
-   keychain, GUI prompt or real model. Any keychain integration test must name a
-   disposable explicit keychain and suppress interaction.
+   keychain, GUI prompt or real model. Local tests use injected fake keychain runners or fixture memory; they never
+   execute security, a real op, osascript, sudo or signing commands. Any actual
+   keychain interoperability script is macOS CI-only and is never run locally.
 6. Push and run the requested CI/Codex loop on each final head, at most four
    rounds. Merge main if necessary; never rebase, force-push or merge the PR.
 
-## Limits for 1.0
+## Host configuration and backend entry points
+
+Slot credentials accept, for example, `{"ref":"account-ref","slot":"api-key",
+"source":{"kind":"external-ref","vendor":"onepassword",
+"reference":"op://vault/item/password"}}`. Omit `source` for `own`, or choose
+`import` for the one-time copy. The optional manifest `onePassword` object has
+exact fields `binary` (absolute installed CLI path), `account`, `configDirectory`
+(absolute owner-selected CLI configuration), and `sessionEnvironment` (the name
+of the explicitly supplied OP_SESSION value, not the value itself).
+
+`GET /connections/lifecycle` exposes each slot's non-secret grant binding in
+`secretSource`: `secret`, `sourceHash`, `consumer`, `purpose`, plus source kind and
+the most recent resolution state. This state is an observation, not a live
+availability guarantee. Send those four binding fields to the existing
+`POST /assistant/permissions` with `action: "grant-secret"` and a new `commandId`.
+`action: "revoke-secret"` takes the returned `grantId`. Use the current feed
+header on owner writes. Existing slot connections also require this explicit
+grant after upgrade; old execution grants do not silently authorize secret use.
+Revoke all grants for an old source before assigning a different source to the
+same physical slot. An unavailable import is not automatically retried; choose
+a fresh slot for a deliberate new import after investigating the old receipt.
+
+Trusted member adapters call the host's `secretRequests.offer` with the exact
+Mission/Work/revision, request ID and typed declaration. This is not a public
+model-writable route. `GET /assistant/secrets?missionId=...&workId=...` returns
+safe request metadata and states. `POST /assistant/secrets` takes the owner
+decision, current revision, request hash, source selections and (for own sources
+only) transient values. It returns only `provided`, `declined` or `unavailable`.
+The host's `secretRequests.slots` returns a read-only capability for the exact
+Work/request/member/purpose, suitable for the existing isolated launcher. Values
+use request-scoped `(owner, slot)` identities, preventing a different request's
+partial provision from overwriting an existing grant. Stop/cancel, feed changes
+and closed Work revoke use. No conversation form or model prompt is added here.
+
+## Limits and evidence for 1.0
 
 Other vendors need separately verified official authentication/error contracts.
 Windows/Linux own stores need a platform-specific protected storage boundary.
@@ -136,3 +171,11 @@ fixture tests. The existing keychain CLI/ACL integration can require OS approval
 unattended packaging still needs the dedicated native host described in
 [secret-launcher.md](secret-launcher.md). Same-user debuggers and a malicious
 trusted vendor binary are outside process-environment isolation.
+
+Local verification uses Node 24.21.0 and the owner's canonical temporary root.
+The 75 affected source/request/permissions/host/lifecycle/repair/backup tests and
+two fixture-producer checks passed before the implementation push. Tests use
+only fake vendor executables and injected/in-memory keychain substitutes. An
+audit of local test/script call sites found no direct real security/op invocation;
+no real vault or keychain operation was run. CI supplies full-suite and screen
+contract evidence; fixtures are not real-vendor interoperability evidence.

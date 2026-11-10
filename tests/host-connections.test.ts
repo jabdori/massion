@@ -10,6 +10,8 @@ import {InMemoryStore} from '../src/storage.ts';
 import type {Mission} from '../src/domain.ts';
 import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {harness,reply} from './support/workbench-client.ts';
+import {InMemorySecretSlots} from '../src/secret-slots.ts';
+import {PermissionsService} from '../src/permissions.ts';
 const manifest=()=>({version:1,revision:'owner-v1',mode:'https',connections:[{id:'account',label:'Owner account',providerType:'compatible',baseUrl:'https://owner.example/v1/',models:['exec','review'],credential:{ref:'owner-ref',environment:'OWNER_MODEL_SECRET'}}]});
 async function root(t:test.TestContext){const root=await mkdtemp(join(tmpdir(),'massion-host-binding-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
 
@@ -69,4 +71,16 @@ test('compatible discriminator credentials bind only the selected profile and ex
 
 test('review 8: System One credentials require a canonical v1 path and current discriminator membership',async()=>{
  for(const baseUrl of ['https://owner.example/api/','https://owner.example/v1/']){const config=manifest();config.connections[0]!.baseUrl=baseUrl;let reads=0,member=false;const host=compileHostBindings(parseHostManifest(config),()=>{reads++;return 'fixture-only-value';},()=>member),connection=host.bindings.connections[0]!.input,profileId='profile:'+hash({connectionId:connection.id,configHash:hash(connection),model:'exec'}).slice(0,32),request={secretRef:connection.secretRef!,profileId,endpoint:baseUrl+'systemone',signal:new AbortController().signal};await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,0);member=true;if(baseUrl.endsWith('/v1/')){assert.equal(await host.resolveCredential(request),'fixture-only-value');assert.equal(reads,1);member=false;await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,1);}else {await assert.rejects(host.resolveCredential(request),/binding/);assert.equal(reads,0);}}
+});
+
+test('source manifests reach the normal host resolver only after a durable exact connection grant',async t=>{
+ const directory=await root(t),store=new InMemoryStore<Mission>(),own=new InMemorySecretSlots();let reads=0,sends=0;
+ const source={kind:'external-ref',vendor:'onepassword',reference:'op://fixture/account/password'},raw=manifest() as any;raw.connections[0].credential={ref:'owner-ref',slot:'api-key',source};
+ const config=parseHostManifest(raw),manager=createHostConnections(store,new TextArtifactStore(directory),{manifest:config,allowLiveExecution:false},{secrets:own,readEnvironment:()=>assert.fail('No fallback'),vaults:{onepassword:{read:async()=>{reads++;return 'fixture-vault-value';}}},transport:async(_url,init)=>{sends++;assert.equal(new Headers(init.headers).get('authorization'),'Bearer fixture-vault-value');return new Response('{"data":[]}',{headers:{'content-type':'application/json'}});}}),c=manager.list().connections[0]!;
+ assert.equal((await manager.discover(c.id,c.configHash)).status,'unavailable');assert.equal(reads,0);assert.equal(sends,0);
+ const {kind,state,...binding}=manager.secretSource(c.id)!;assert.equal(kind,'external-ref');assert.equal(state,'grant-required');await new PermissionsService(store).act({commandId:'allow-vault',action:'grant-secret',...binding});
+ assert.equal((await manager.discover(c.id,c.configHash)).status,'listed');assert.equal(reads,1);assert.equal(sends,1);assert.equal(await own.has({owner:'account',slot:'api-key'}),false);
+ assert.doesNotMatch(JSON.stringify([manager.list(),store.inspect(),manager.secretSource(c.id)]),/fixture-vault-value|op:\/\//);
+ assert.equal(manager.canReplaceKey(c.id),false,'external references cannot be overwritten by API key repair');
+ for(const credential of [{ref:'owner-ref',environment:'ENV',source},{ref:'owner-ref',slot:'api-key',source:{...source,value:'private'}}])assert.throws(()=>parseHostManifest({...raw,connections:[{...raw.connections[0],credential}]}));
 });

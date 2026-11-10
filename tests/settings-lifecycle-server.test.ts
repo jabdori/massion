@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -23,6 +24,7 @@ test('lifecycle HTTP routes retain feed admission and never return secret bytes'
  const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),manifest=parseHostManifest({version:1,revision:'fixture',mode:'https',connections:[{id:'api',label:'API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]});
  let writes=0;const set=secrets.set.bind(secrets);secrets.set=async(slot,value)=>{writes++;await set(slot,value);};
  const connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>{throw Error('No environment access');},transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
+ await grantConnectionSecrets(store,connections);
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port;
  const request=(path:string,body?:unknown,feed?:string)=>fetch(origin+path,body?{method:'POST',headers:{'Content-Type':'application/json',...(feed?{'X-Massion-Feed':feed}:{})},body:JSON.stringify(body)}:undefined);
  for(const path of ['/assistant/members','/assistant/devices','/connections/lifecycle','/assistant/members?commandId=unknown-archive&memberId=member-fixture&action=archive']){const response=await request(path);assert.equal(response.status,200,path);assert.equal(typeof (await response.json()).feedId,'string');}
@@ -90,6 +92,7 @@ test('shutdown reports an unconfirmed key write as unsettled instead of drained'
  const store=new InMemoryStore<any>(),secrets=new InMemorySecretSlots(),set=secrets.set.bind(secrets);let start!:()=>void,release!:()=>void,writes=0;const started=new Promise<void>(resolve=>{start=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
  secrets.set=async(slot,key)=>{start();await held;writes++;await set(slot,key);};t.after(()=>release());
  const manifest=parseHostManifest({version:1,revision:'drain-fixture',mode:'https',connections:[{id:'api',label:'API',providerType:'openai',baseUrl:'https://api.openai.com/v1/',models:['fixture'],credential:{ref:'fixture-key',slot:'api-key'}}]}),connections=createHostConnections(store,new TextArtifactStore(root),{manifest,allowLiveExecution:false},{secrets,readEnvironment:()=>undefined,transport:async()=>{throw Error('No network');}}),server=createWorkbench(store,root,{connections,scheduleIntervalMs:0});
+ await grantConnectionSecrets(store,connections);
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.drain());const origin='http://127.0.0.1:'+(server.address() as {port:number}).port,target=connections.list().connections[0]!;
  const pending=fetch(origin+'/connections/'+encodeURIComponent(target.id)+'/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commandId:'write-before-drain',expectedConfigHash:target.configHash,apiKey:'drain-fixture-key'})});
  await started;const draining=server.drain();release();assert.equal((await (await pending).json()).status,'unknown');assert.equal(writes,1);assert.deepEqual(await draining,{status:'unsettled',timedOut:false});

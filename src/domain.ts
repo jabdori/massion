@@ -1,3 +1,5 @@
+import {applySecretRequest,requireProvidedSecrets} from './secret-requests.ts';
+import type {SecretRequest,SecretRequestCommand} from './secret-requests.ts';
 import {validatePredicates,validateStepProgress,validateProcedureEdit} from './work-telemetry.ts';
 import {currentOwnership,resumeRuntime,beginAssembly,validateContinuation} from './runtime-continuation.ts';
 import {validCredentialBlocker} from './provider-credentials.ts';
@@ -57,6 +59,7 @@ export interface RuntimeRecovery {runId:string;actorId:string;reason:string;pend
 export interface WorkPrerequisite {workId:string;criteriaHash:string;inputHash:string;actorId:string;reason:string}
 export interface PrerequisiteRecord {workId:string;recordId:string;checksum:string;criteriaVersion:number;evidenceClass:'fixture'|'real-provider';artifact:Pick<Artifact,'id'|'version'|'sha256'|'kind'>}
 export interface Work {
+  secretRequests?:SecretRequest[];
   admittedAt?:number;
   room?:import('./member-rooms.ts').MemberRoom;
   team?:import('./internal-teams.ts').TeamProcedure;
@@ -86,7 +89,7 @@ export interface StepNote {taskId:string;title:string}
 export interface ConversationMessage {stepNote?:StepNote;at?:number;id:string;ordinal:number;actorId:string;role:'owner';replyTo:string|null;text:string}
 export interface Conversation {id:string;workId:string|null;messages:ConversationMessage[]}
 export interface Mission { memoryExpiries?:import('./memory-expiry.ts').MemoryExpiry[]; memoryTimeWatermark?:number; memoryConflicts?:import('./memory-conflicts.ts').MemoryConflict[]; conversations?:Conversation[]; documents?:DocumentVersion[]; organizationRevisions?:OrganizationRevision[]; id: string; version: number; purpose: string; scope: string; constraints: string[]; criteria: Criteria; works: Work[]; memories: Memory[]; growth: Growth[]; relations: Relation[] }
-export type Command =
+export type Command = SecretRequestCommand
   | {type:'resume-runtime';workId:string;previousDispatchId:string;ownership:RuntimeOwnership}
   | {type:'begin-runtime-assembly';workId:string;inputHash:string}
   | {type:'fence-monthly-admission';workId:string;inputHash:string}
@@ -243,7 +246,7 @@ export function freshSourceWork(w:Work):boolean {
 }
 /** Commands that end or stop a Work carry the host time, kept as `Work.endedAt` (member-work.md). */
 export const endsWork=(type:string)=>['verify','accept','cancel','block-work','quarantine-runtime','steer','expire-runtime','stop-owned-runtime','close-expired-runtime'].includes(type);
-export const observesWork=(type:string)=>['receipt','resume-runtime','begin-runtime-assembly','admit-work','admit-effect','accept','acknowledge-step-note','record-step-progress','settle-task','verify','steer','append-work-message','append-mission-message','open-room','record-room-turn'].includes(type);
+export const observesWork=(type:string)=>['request-secret','answer-secret-request','settle-secret-request','receipt','resume-runtime','begin-runtime-assembly','admit-work','admit-effect','accept','acknowledge-step-note','record-step-progress','settle-task','verify','steer','append-work-message','append-mission-message','open-room','record-room-turn'].includes(type);
 export function apply(current: Mission, command: Command, actor: Actor, time?:import('./memory-expiry.ts').TimeObservation&{workEndVersion?:2;telemetryVersion?:1|2}): { value: Mission; events: unknown[] } {
   if(actor.id===EFFECT_HOST)ensure(isEffectDecisionCommand(command.type)&&command.type!=='answer-owner-effect','Effect host has effect-only authority');
   if(actor.id===DISCRIMINATOR_ACTOR)ensure(command.type==='reserve-moderation'||command.type==='record-moderation','Discriminator host has moderation only authority');
@@ -266,7 +269,9 @@ export function apply(current: Mission, command: Command, actor: Actor, time?:im
   const growth = (): Growth => { const g = state.growth.find(g => 'growthId' in command && g.id === command.growthId); ensure(g, 'Unknown growth'); return g; };
   if(work?.runtimeInterruption&&['claim-provider-dispatch','activate-runtime','block-work','revise-work','assign','delegate','record-step-progress','settle-task','admit-effect','receipt','reconcile-effect','publish-artifact','verify','accept'].includes(command.type))throw new DomainError('Expired runtime rejects late progression; no replay or ownership reclaim');
   if(work&&['assign','delegate','record-step-progress','settle-task','admit-effect','publish-artifact','verify','accept'].includes(command.type))requireAnswered(work);
+  if(work&&['activate-runtime','resume-runtime','assign','delegate','admit-effect','claim-provider-dispatch','propose-owner-effect','dispatch-owner-effect','settle-task','publish-artifact','verify','accept'].includes(command.type))requireProvidedSecrets(work);
   switch (command.type) {
+    case 'request-secret': case 'answer-secret-request': case 'settle-secret-request': {applySecretRequest(needWork(),command,actor,at!);break;}
     case 'propose-owner-effect': case 'answer-owner-effect': case 'dispatch-owner-effect': case 'record-owner-effect': {applyEffectDecision(state,command,actor,time);break;}
     case 'open-room': case 'record-room-turn': {applyRoom(needWork(),command,actor,at);break;}
     case 'reserve-moderation': case 'record-moderation': {applyModeration(needWork(),command,actor);break;}

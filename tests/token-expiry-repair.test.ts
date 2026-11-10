@@ -1,3 +1,4 @@
+import {grantConnectionSecrets} from './support/secret-grants.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -26,6 +27,7 @@ async function setup(t:test.TestContext,unknown=false,environment=false){
   }
   checks++;const prompt=JSON.parse(JSON.parse(String(init.body)).messages[0].content);return Response.json({type:'message',id:'msg-test',role:'assistant',model:'claude-test',usage:{input_tokens:1,output_tokens:1},stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({artifactSha256:prompt.binding.artifactSha256,criteriaVersion:prompt.criteria.version,criteriaHash:prompt.binding.criteriaHash,verdict:'passed',checks:[{criterion:prompt.criteria.description,passed:true,quote:'checked result',reason:'Exact text checked'}]})}]});
  }});
+ await grantConnectionSecrets(store,manager);
  const catalog=manager.configuration() as any,[executor,verifier]=catalog.connections;
  manager.authorize({id:'grant',scope:'test',executorProfileId:executor.id,verifierProfileId:verifier.id,maxOutputTokensPerCall:32,expectedConfigHash:manager.list().configHash});
  const choice={executorProfileId:executor.id,verifierProfileId:verifier.id,authorizationId:'grant',outputTokenCap:32};
