@@ -171,3 +171,5 @@ test('a held observation commit cannot resurrect pixels after Work stops and rea
  await s.send({type:'reconcile-effect',workId:'work',effectId:'effect',outcome:'succeeded',receipt:'Work reactivated'});
  release();assert.equal((await capturing).status,'committed');await imageVisible(s.service,false);assert.equal(s.calls(),1);
 });
+
+test('restart refuses legacy image-bearing state rather than reviving durable pixels',async t=>{const s=await fixture(t);await s.service.capture(request);const snapshot=(await s.store.load('mission'))!;Object.assign(snapshot.value.works[0]!.browserSession!.pages[0]!,{screenshot});await s.store.commit({id:'mission',expectedRevision:snapshot.revision,commandId:'legacy-fixture',fingerprint:'legacy-fixture',value:snapshot.value,events:[],outbox:[]});const restarted=new BrowserSessions(s.store,s.store);t.after(()=>restarted.drain());await assert.rejects(restarted.read('mission','work'),/browser/i);});

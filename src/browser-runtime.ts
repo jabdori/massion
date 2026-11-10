@@ -106,7 +106,7 @@ export class BrowserSessions {
    }}return result;
   }catch(error){if(error instanceof Error&&error.name==='CommitOutcomeUnknownError')this.unsettled=true;throw error;}finally{this.#pendingImages.delete(pending);this.#controllers.delete(controller);}
  }
- async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);this.#prune(missionId,state.snapshot?.value);for(const [key,image] of this.#images)if(image.feedId!==state.feedId)this.#drop(key);ensure(w,'Unknown browser Work');const s=w.browserSession;
+ async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);this.#prune(missionId,state.snapshot?.value);for(const [key,image] of this.#images)if(image.feedId!==state.feedId)this.#drop(key);ensure(w,'Unknown browser Work');const s=w.browserSession;if(s)validateBrowserSession(s);
   const pages=s?.pages.map(page=>{const image=this.#images.get(JSON.stringify([missionId,workId,page.readId]));return {...structuredClone(page),...(!this.#draining&&live(w,this.#clock())&&image&&image.imageHash===page.imageHash?{screenshot:structuredClone(image.image)}:{})};});
   return {feedId:state.feedId,revision:state.snapshot!.revision,session:s&&pages?{id:s.id,active:live(w,this.#clock())&&!this.#draining,startedAt:s.pages[0]!.at,pagesRead:s.pages.length,page:pages.at(-1)!,pages}:null};}
  beginDrain(){this.#draining=true;this.#unsubscribe?.();for(const key of this.#images.keys())this.#drop(key);for(const c of this.#controllers)c.abort();}
