@@ -1,3 +1,4 @@
+import {validCredentialBlocker} from './provider-credentials.ts';
 import {validateMemoryMetadata} from './memory-candidates.ts';
 import {isMonthlyBudgetState,replayMonthlyBudget} from './monthly-budget.ts';
 import type {MonthlyBudgetState} from './monthly-budget.ts';
@@ -204,7 +205,8 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   if (item.missionVersion === mission.version) equal(item.criteria, mission.criteria, 'current Mission criteria pin');
   if (Object.hasOwn(item, 'blocker')) {
-    const blocker = object(item.blocker, 'execution blocker', ['code', 'detail']);
+    const blocker = object(item.blocker, 'execution blocker', ['code', 'detail'],['credential']);
+    if(Object.hasOwn(blocker,'credential'))ensure(validCredentialBlocker(blocker.credential),'Invalid credential blocker');
     oneOf(blocker.code, ['provider_unavailable', 'runtime_unavailable', 'provider_failed', 'budget_exceeded', 'verification_failed'], 'blocker code'); text(blocker.detail, 'blocker detail');
   }
   if (Object.hasOwn(item, 'instructions')) for (const entry of array(item.instructions, 'instructions')) {
@@ -397,6 +399,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'activate-runtime': { required: ['workId', 'run'] },
   'close-expired-runtime': { required: ['workId','runId','dispatchId','hostSessionId','deadlineAt','observedAt','reason','acknowledgeUncertainOutcome'] },
   'quarantine-runtime': { required: ['workId', 'runId', 'reason', 'acknowledgeUncertainOutcome'] },
+  'retry-credential':{required:['workId','effectId','connectionId','configHash','replacementCommandId']},
   'block-work': { required: ['workId', 'blocker'] },
   delegate: { required: ['workId', 'taskId', 'parentId'], optional:['step'] },
   'acknowledge-step-note':{required:['workId','messageId']},

@@ -61,3 +61,11 @@ Legacy Records without a creation observation remain untimed.
 
 No merge, release, real-provider run, browser/payment implementation, token repair,
 business-result activity summary or steering/restart continuation was performed.
+
+## Main integration
+
+Merged main after #142 without rebasing. The two import conflicts retain both
+credential-repair validation and file/procedure observations. A repaired invocation
+cannot acknowledge a new note for its already started step; the proposal stays
+discussion. Typecheck and 185 related integration tests passed (182 passed,
+three environment-gated skips), including token-repair and member runtime paths.

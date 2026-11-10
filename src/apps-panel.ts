@@ -171,9 +171,9 @@ function settingsAppView(a){
  const screens=[...(c.page?[c.page.title]:[]),...(c.roomTab?[copy('ui.panel.app-tab',{title:String(c.roomTab.prefix).replace(/\s*#$/,'')})]:[])];
  const permissions=[[copy('ui.panel.tools'),appsJoin([...(p.read||[]),...(p.write||[])])],[copy('settings.text.02'),appsJoin(p.network)],[copy('sidebar.button.14'),appsJoin(p.files)],[copy('settings.text.05'),appsJoin((p.secrets||[]).map(s=>s.label))],[copy('settings.text.04'),appsJoin(p.events)]].map(([l,v])=>settingsPair(l,v));
  if(a.credential){
-  const credential=a.credential,status=['saved','expired','missing'].includes(credential.state)?copy('ui.apps.credential-'+credential.state):copy('conversation.text.01'),token=permissions[3];
+  const credential=a.credential,status=['saved','expired','invalid','missing'].includes(credential.state)?copy('ui.apps.credential-'+credential.state):copy('conversation.text.01'),token=permissions[3];
   token.children[1].textContent=appsJoin((p.secrets||[]).map(s=>s.label+(s.slot===credential.slot?' · '+status:'')));
-  if(['expired','missing'].includes(credential.state)){
+  if(['expired','invalid','missing'].includes(credential.state)){
    const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;const memberId=a.origin==='self-made'?a.memberId:'';chatOpenThread(memberId||'',chatMembers().find(m=>m.id===memberId)?.name||'');await readChat();},'secondary set-side');
    reconnect.id='settings-app-reconnect';reconnect.disabled=settingsLifecycleLocked('app:'+a.id)||!current();token.append(reconnect);
   }

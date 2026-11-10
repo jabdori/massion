@@ -24,14 +24,14 @@ export type AppNetwork=(request:{appId:string;url:string;method:string;secret:st
 export interface AppView {sourceFiles?:import('./github-review.ts').GithubFile[];frame?:{html:string};github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[];title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string;github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[]}[]}[];fields?:[string,string][]}
 export interface AppCheck {tests:{passed:number;total:number};declaredOnly:boolean;evidence:string}
 export interface AppVersion {hash:string;package:AppPackage;at:number;approvedAt?:number;check?:AppCheck}
-export interface App {id:string;name:string;origin:'catalog'|'self-made';memberId?:string;memberIds?:string[];credential?:{slot:string;state:'saved'|'expired';at:number;connectionId:string};source?:{missionId:string;workId:string;title:string};versions:AppVersion[];current:number|null;enabled:boolean;installedAt?:number;removedAt?:number}
+export interface App {id:string;name:string;origin:'catalog'|'self-made';memberId?:string;memberIds?:string[];credential?:{slot:string;state:'saved'|'expired'|'invalid';at:number;connectionId:string};source?:{missionId:string;workId:string;title:string};versions:AppVersion[];current:number|null;enabled:boolean;installedAt?:number;removedAt?:number}
 export interface AppDecision {id:string;at:number;appId:string;version:number;base:number|null;kind:'install'|'widen'|'reconnect';state:'open'|'later'|'done'|'stale';answeredAt?:number;connection?:{commandId:string;state:'pending'|'connected'}}
 export interface AppsState {toolCalls?:McpCall[];kind:'apps';id:string;apps:App[];decisions:AppDecision[];rejected:{at:number;memberId:string;name:string;version:string;hash:string;reason:string}[]}
 type Offer={decisionId:string;origin:'catalog'|'self-made';memberId?:string;source?:App['source'];pkg:AppPackage;check?:AppCheck};
 export type AppsCommand =
  | {type:'bind-app-members';appId:string;memberIds:string[]}
  | {type:'reconnect-app';appId:string;decisionId:string}
- | {type:'expire-app-credential';appId:string;connectionId:string}
+ | {type:'expire-app-credential';appId:string;connectionId:string;invalid?:true}
  | {type:'abandon-app-tool';callId:string}
  | {type:'reconcile-app-tool';appId:string;callId:string;outcome:'done'|'not-done';evidence:string}
  | {type:'begin-app-connect';decisionId:string;connectionId:string}
@@ -114,8 +114,8 @@ export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor
    state.decisions.push({id:command.decisionId,at,appId:a.id,version:a.current!,base:a.current,kind:'reconnect',state:'open'});break;
   }
   case 'expire-app-credential': {
-   role('assistant');ensure(exact(command,['type','appId','connectionId'])&&id(command.connectionId),'Exact credential observation required');const a=installed(command.appId);
-   ensure(a.credential?.connectionId===command.connectionId,'Credential changed before expiry observation','conflict');a.credential.state='expired';a.credential.at=at;break;
+   role('assistant');ensure(exact(command,['type','appId','connectionId'],['invalid'])&&(command.invalid===undefined||command.invalid===true)&&id(command.connectionId),'Exact credential observation required');const a=installed(command.appId);
+   ensure(a.credential?.connectionId===command.connectionId,'Credential changed before expiry observation','conflict');a.credential.state=command.invalid?'invalid':'expired';a.credential.at=at;break;
   }
   case 'offer-app': {
    ensure(exact(command,['type','decisionId','origin','pkg'],['memberId','source','check']),'Exact app offer fields required');const reason=validatePackage(command.pkg);ensure(reason===null,reason!);const h=packageHash(command.pkg);
@@ -232,7 +232,7 @@ export class AppsService {
   const state=await this.#store.readState(APPS_ID);feedId??=state.feedId;if(state.feedId!==feedId)throw new FeedAdmissionError();
   const s=state.snapshot as Snapshot<AppsState>|null,v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState,availableMembers=await this.#availableMembers();
   const apps=await Promise.all(v.apps.filter(a=>a.current!==null).map(async a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest,bundled=a.origin==='catalog'&&CATALOG.find(c=>c.manifest.id===m.id);
-   const slot=connectionSlot(m),pending=v.decisions.find(d=>d.appId===a.id&&d.connection?.state==='pending');let credential:{slot:string;state:'saved'|'expired'|'unknown'|'missing';at?:number;connectionId?:string}|null=slot?(pending?{slot,state:'unknown',connectionId:pending.connection!.commandId}:a.credential?.slot===slot?structuredClone(a.credential):{slot,state:'missing'}):null;
+   const slot=connectionSlot(m),pending=v.decisions.find(d=>d.appId===a.id&&d.connection?.state==='pending');let credential:{slot:string;state:'saved'|'expired'|'invalid'|'unknown'|'missing';at?:number;connectionId?:string}|null=slot?(pending?{slot,state:'unknown',connectionId:pending.connection!.commandId}:a.credential?.slot===slot?structuredClone(a.credential):{slot,state:'missing'}):null;
    if(slot&&!pending&&this.#secrets?.has){try{const present=await boundedCall(signal=>this.#secrets!.has!({owner:a.id,slot},signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:5000});ensure(typeof present==='boolean','Secret slot presence unavailable');if(!present)credential={slot,state:'missing'};else if(credential?.state==='missing')credential={slot,state:'saved'};}catch{credential={slot,state:'unknown'};}}
    return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,memberIds:[...a.memberIds??[]],members:(a.memberIds??[]).flatMap(id=>availableMembers.filter(m=>m.id===id)),credential,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),...bundled&&bundled.manifest.version.localeCompare(m.version,'en',{numeric:true})>0?{update:{catalogId:bundled.manifest.id,version:bundled.manifest.version}}:{},
     versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};}));
@@ -274,7 +274,17 @@ export class AppsService {
   }
   const item=cur.package.manifest.handlers.includes('item');
   if(input.handler==='item')ensure(ref(input.ref),'Invalid ref');else ensure(input.ref===undefined,'A page takes no ref');
-  const view=(await runHandler({appId:a.id,pkg:cur.package,handler:input.handler,input:input.handler==='item'?{ref:input.ref}:{},network:this.#network})).view;
+  const view=(await runHandler({appId:a.id,pkg:cur.package,handler:input.handler,input:input.handler==='item'?{ref:input.ref}:{},network:this.#network?async request=>{
+   const response=await this.#network!(request);
+   if(a.id==='app-github'&&a.credential?.connectionId&&request.secret===a.credential.slot&&request.method==='GET'&&new URL(request.url).hostname==='api.github.com'&&response.status===401&&Buffer.byteLength(response.body)<=32768){
+    let body;try{body=JSON.parse(response.body);}catch{}
+    if(body?.message==='Bad credentials'){
+     const fresh=(await this.#state())?.value.apps.find(x=>x.id===a.id);
+     if(fresh?.credential?.connectionId===a.credential.connectionId&&fresh.current===a.current&&fresh.enabled)await this.#dispatch(HOST_PREFIX+'-invalid-'+hash([a.id,a.credential.connectionId]).slice(0,32),ASSISTANT_ACTOR_ID,{type:'expire-app-credential',appId:a.id,connectionId:a.credential.connectionId,invalid:true});
+    }
+   }
+   return response;
+  }:undefined})).view;
   if(a.id==='app-github'&&view.github)ensure(input.handler==='item'&&String(view.github.number)===input.ref&&view.github.repository==='jabdori/massion','GitHub item identity changed during read','conflict');
   // Page rows are what the owner selects as item refs, so a page is held to the same ref contract as the item request.
   if(input.handler==='page'&&item)ensure(view.groups.every(g=>g.rows.every(r=>ref(r.id))),'Page row ids must be item refs');
