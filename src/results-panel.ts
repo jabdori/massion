@@ -1,5 +1,6 @@
 import {copy} from './ui-copy.ts';
 import {tableResultsClient,tableResultsStyle} from './table-results.ts';
+import {resultFactsClient} from './result-facts.ts';
 /** Results page and the preview tab (docs/architecture/results-and-schedules.md, prototype B10 and B10-preview). 검증된 텍스트와 제한된 정적 PDF/PNG만 표시합니다. */
 import {representativeName} from './surface-shell.ts';
 export const icon=(path:string,size=15)=>`<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -27,7 +28,7 @@ const gridIcon=icon('<rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x=
 export const resultsPage=String.raw`<div id="page-results" class="page-body" hidden><div class="shelf"><div class="shelf-top"><h2 id="results-title">${copy('page.button.14')}</h2><div class="page-search results-search"><span class="page-glyph glyph-search" aria-hidden="true"></span><input id="results-query" type="search" aria-label="${copy('page.textbox.01')}" placeholder="${copy('sidebar.button.04')}"></div><div class="view-switch" role="group" aria-label="${copy('ui.panel.view')}"><button id="results-grid" type="button" aria-pressed="false" aria-label="${copy('page.button.07')}">${gridIcon}</button><button id="results-list" type="button" aria-pressed="true" aria-label="${copy('page.button.11')}">${listIcon}</button></div></div>
 <p id="results-empty" class="page-empty" hidden>${copy('ui.panel.no-results')}</p><table id="results-table" class="results-table" aria-label="${copy('rail.link.01')}"><thead><tr><th scope="col">${copy('page.columnheader.02')}</th><th scope="col">${copy('ui.panel.work')}</th><th scope="col">${copy('page.columnheader.01')}</th><th scope="col">${copy('ui.panel.last-activity')}</th></tr></thead><tbody id="results-rows"></tbody></table><div id="results-tiles" class="result-tiles" hidden></div></div></div><!-- /page-results -->`;
 export const resultsPane=String.raw`<div id="pane-result" class="pane-result" role="tabpanel" aria-label="${copy('rail.link.01')}" hidden><div class="result-bar"><div class="result-modes" role="tablist" aria-label="${copy('ui.panel.view')}"><button id="result-tab-preview" type="button" role="tab" aria-selected="true">${copy('ui.panel.preview')}</button><button id="result-tab-original" type="button" role="tab" aria-selected="false">${copy('ui.panel.original')}</button></div><button id="result-copy" type="button" class="secondary">${copy('conversation.button.10')}</button></div><div id="result-preview" class="result-doc" tabindex="0"></div><pre id="result-original" class="result-doc" hidden></pre></div>`;
-export const resultsClient=tableResultsClient+String.raw`
+export const resultsClient=resultFactsClient+tableResultsClient+String.raw`
 let resultRows=[],resultGrid=false,resultQuery='',resultFilter='all',resultSeq=0,resultText='',resultLoadSeq=0,resultFeed='',resultBinaryMode=false;
 const resultKinds={all:copy('page.button.14'),documents:copy('sidebar.button.06'),files:copy('sidebar.button.14'),images:copy('sidebar.button.11')};
 const resultMember=r=>r.memberId||'';
@@ -89,7 +90,7 @@ async function resultLoad(r){
   const original=element('a',copy('ui.panel.original'));original.setAttribute('href',source);original.setAttribute('download',r.title);$('result-preview').replaceChildren(viewer,original);return;
  }
 const content=body.content;resultText=content;$('result-copy').disabled=false;$('result-original').textContent=content;
- const table=tableResultElement(content);if(table){$('result-preview').replaceChildren(table);return;}
+ const table=tableResultElement(content)||resultFactsElement(content);if(table){$('result-preview').replaceChildren(table);return;}
  // 목록과 문단은 텍스트 노드로만 구성합니다.
  const blocks=[];let list=null;for(const line of content.split('\n')){const item=/^[-*] (.*)$/.exec(line);if(item){if(!list){list=element('ul');blocks.push(list);}list.append(element('li',item[1]));continue;}list=null;if(line.trim())blocks.push(element('p',line));}
  $('result-preview').replaceChildren(...blocks);

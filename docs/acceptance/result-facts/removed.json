@@ -1,0 +1,202 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "business-procedure",
+    "reason": "The typed pricing producer now supplies this card and count. The inherited Representative request history still places pricing before churn, whereas the prototype orders churn before pricing; no task text or time is rewritten to imply another history.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#lead-review-corrections"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "The typed table count now appears in the compound conversation card. The card still precedes the required business-message sequence in this retained fixture; R-G owns B18 composition and this slice does not reorder conversation messages.",
+    "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "business-procedure",
+    "reason": "The typed pricing producer now supplies this card and count. The inherited Representative request history still places pricing before churn, whereas the prototype orders churn before pricing; no task text or time is rewritten to imply another history.",
+    "ledger": "docs/acceptance/procedure-screens/README.md#lead-review-corrections"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+    "occurrence": 1,
+    "category": "capability / composition",
+    "reason": "The typed table count now appears in the compound conversation card. The card still precedes the required business-message sequence in this retained fixture; R-G owns B18 composition and this slice does not reorder conversation messages.",
+    "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+  },
+  {
+    "screen": "B7",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-done",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-done",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-unknown",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-done",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B7-unknown",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-done",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-fail",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B8-unknown",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "These text-only Works have no named business procedure or browser/page-read telemetry.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  }
+]
