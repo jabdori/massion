@@ -18,6 +18,7 @@
   "bidirectionalBase64Reflection": true,
   "formattedBase64Reflection": true,
   "punctuationSeparatedBase64Reflection": true,
+  "mixedAlphabetGroupingReflection": true,
   "base64UrlReflection": true,
   "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,

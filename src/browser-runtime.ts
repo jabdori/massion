@@ -24,7 +24,7 @@ export function browserAddress(value:string){let u:URL;try{u=new URL(value);}cat
 export function browserUrlSecrets(value:string){
  const u=new URL(value),parts=[u.username,u.password,u.pathname,u.search.slice(1),u.hash.slice(1),...u.searchParams.keys(),...u.searchParams.values()],secrets=new Set<string>();
  for(let part of parts)for(let depth=0;;depth++){
-  for(const piece of [part,...part.split(/[/?&=#;]/)])if(piece)secrets.add(piece);
+  for(const value of [part,part.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'')])for(const piece of [value,...value.split(/[/?#:\[\]@!$&'()*+,;=]/)])if(piece)secrets.add(piece);
   if(!/%[a-f0-9]{2}/i.test(part))break;if(depth===8)throw Error('Browser URL encoding bound exceeded');
   try{part=decodeURIComponent(part);}catch{throw Error('Invalid browser URL encoding');}
  }
@@ -47,7 +47,10 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
  if(decode&&display(value)!==value)return combine(mapBack(display,true));
  const ranges:Array<[number,number]>=[];
  if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-](?:[A-Za-z0-9\s\p{P}\p{S}]*[A-Za-z0-9+/_-])?={0,2}/gu)){
-  candidates: for(const token of new Set([match[0].replace(/[^A-Za-z0-9+/_-]/g,'').replace(/-/g,'+').replace(/_/g,'/'),match[0].replace(/[^A-Za-z0-9]/g,'')])){
+  const base=match[0].replace(/[^A-Za-z0-9+/_-]/g,''),symbols:number[]=[];for(const symbol of base.matchAll(/[+/_-]/g)){symbols.push(symbol.index);if(symbols.length>6)break;}
+  if(symbols.length>6){ranges.push([match.index,match.index+match[0].length]);continue;}
+  candidates: for(let bits=0;bits<2**symbols.length;bits++){
+  let token='',start=0;for(let i=0;i<symbols.length;i++)if(bits&(1<<i)){token+=base.slice(start,symbols[i]);start=symbols[i]!+1;}token=(token+base.slice(start)).replace(/-/g,'+').replace(/_/g,'/');
   // 앞뒤의 일반 단어가 붙어도 네 가지 Base64 정렬에서 민감값을 확인합니다.
   for(let offset=0;offset<4&&offset<token.length-1;offset++){
    let candidate=token.slice(offset);if(candidate.length%4===1)candidate=candidate.slice(0,-1);
