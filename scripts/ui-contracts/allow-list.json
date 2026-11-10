@@ -51,7 +51,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The research Work is blocked by the provider-confirmed token expiry, so its sidebar row must say stopped rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -61,7 +61,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The pricing Work is recorded waiting for checking, so its sidebar row must say waiting rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -71,7 +71,7 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "Juno has only the accepted PR review in this capture, so its member row is unread rather than working.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -81,7 +81,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The PR review has an accepted Record, so its sidebar row must say completed rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -511,7 +511,7 @@
       "diagnostic": "missing composer textbox \"퀼에게 메시지 보내기\"",
       "occurrence": 1,
       "category": "Representative-only Work source",
-      "reason": "Validated Work sources belong to the Representative; the row member is its assignee. Open the real source segment, not an unrelated member segment with the same number.",
+      "reason": "The accepted result pins its original Representative segment, so opening it retains the Hana composer rather than opening an unrelated Quill segment.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -521,18 +521,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "reason": "The exact accepted weekly text and preview controls occupy 49 pane characters against the fixed 41-character contract budget.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B13",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"주노 작업 중 · 일 {count} · 예약 {count} 코딩\"",
-      "occurrence": 1,
-      "category": "fixture fallback",
-      "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
       "screen": "B15",
@@ -631,7 +621,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The research Work is blocked by the provider-confirmed token expiry, so its sidebar row must say stopped rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -641,7 +631,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 2,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The pricing Work is recorded waiting for checking, so its sidebar row must say waiting rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -651,7 +641,7 @@
       "diagnostic": "order sidebar status \"작업 중\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "Juno has only the accepted PR review in this capture, so its member row is unread rather than working.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -661,7 +651,7 @@
       "diagnostic": "missing sidebar status \"실행 중\"",
       "occurrence": 3,
       "category": "fixture fallback",
-      "reason": "The token-expiry card now comes from a provider-confirmed Z.ai 1003 response and binds repair/retry to the original Work effect and connection. The unrelated captured sidebar Works retain their recorded failed, waiting and accepted states rather than the active statuses in this artboard; no unrelated execution is invented.",
+      "reason": "The PR review has an accepted Record, so its sidebar row must say completed rather than running.",
       "ledger": "docs/acceptance/token-expiry-repair/README.md"
     },
     {
@@ -1091,7 +1081,7 @@
       "diagnostic": "missing composer textbox \"퀼에게 메시지 보내기\"",
       "occurrence": 1,
       "category": "Representative-only Work source",
-      "reason": "Validated Work sources belong to the Representative; the row member is its assignee. Open the real source segment, not an unrelated member segment with the same number.",
+      "reason": "The accepted result pins its original Representative segment, so opening it retains the Hana composer rather than opening an unrelated Quill segment.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
@@ -1101,18 +1091,8 @@
       "diagnostic": "budget pane chars 49 > 41",
       "occurrence": 1,
       "category": "Typed table preview / fixed example budget",
-      "reason": "The explicit table envelope and accepted preview now exist, but B10-preview retains its original accepted plain text, which exceeds the prototype pane budget. Do not truncate exact bytes or substitute a smaller result merely to satisfy the budget.",
+      "reason": "The exact accepted weekly text and preview controls occupy 49 pane characters against the fixed 41-character contract budget.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B13",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings link \"주노 작업 중 · 일 {count} · 예약 {count} 코딩\"",
-      "occurrence": 1,
-      "category": "fixture fallback",
-      "reason": "Production member metadata and archive commands exist. The recorded background contains no active Juno Work; a busy state is not fabricated.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
       "screen": "B15",
@@ -1545,46 +1525,6 @@
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
       ]
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Named research/team steps, enterprise-steering continuation have no producing host path. The retained failed text result and member discussion are real supported fixture states.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Typed member memory propose/save/discard now exists. This gap retains only the pre-existing research/team and enterprise-steering detail missing from the legacy fixture.",
-      "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations.",
-      "occurrence": 1,
-      "category": "pricing-table-and-memory-proposal",
-      "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
-      "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
       "screen": "B9-update",

@@ -254,6 +254,32 @@ test('E3e member room reads reuse exact host Work sources and child tasks',async
  }
 });
 
+test('produced research steering and memory candidates no longer report missing capabilities',async()=>{
+ const {loadFixture}=await hostModule();
+ for(const screen of ['B6','B18-room-b']){
+  const fixture=await loadFixture(screen),mission=(fixture.routes['/missions/intake']!.body as any).value;
+  const work=mission.works.find((w:any)=>w.title==='이탈 원인 조사');
+  assert.ok(work.tasks.filter((t:any)=>t.step).length>1);
+  assert.ok(work.instructions.some((i:any)=>i.text==='기업 고객은 따로 봐 줘.'));
+  const view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any;
+  assert.ok(view.turns.some((t:any)=>t.memoryCandidate?.state==='proposed'));
+  assert.deepEqual(fixture.gaps,[]);
+ }
+});
+
+test('B13 busy coding member comes from an active source-bound Work, not legacy display rows',async()=>{
+ const {loadFixture}=await hostModule(),fixture=await loadFixture('B13');
+ const member=(fixture.routes['/assistant/members']!.body as any).members.find((m:any)=>m.modelGroup==='coding');
+ assert.equal(member.workCount,1);assert.equal(member.openWorkCount,1);
+ const row=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.memberId===member.id);
+ assert.equal(row.execution,'active');assert.equal(row.acceptance,'pending');
+ const mission=(fixture.routes['/read-state?mission=intake']!.body as any).snapshot.value;
+ const work=mission.works.find((w:any)=>w.id===row.workId);
+ assert.equal(work.assistantSource.memberId,member.id);assert.equal(work.execution,row.execution);
+ assert.ok(work.tasks.some((t:any)=>t.step&&t.status==='active'));
+ assert.equal(work.runtimeRun.inputHash,(await import('../src/domain.ts')).workInputHash(work));
+});
+
 test('B26 budget fallbacks never expose the unrelated rounding evaluation conversation',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B26','B26-later']){
