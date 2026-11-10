@@ -2,6 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 const admissionFeed = new AsyncLocalStorage<string>();
+const commitAdmission = new AsyncLocalStorage<() => void>();
+// 대기열이 끝난 시점에 요청의 변경 가능한 승인 조건을 다시 확인합니다.
+export function withCommitAdmission<R>(check: () => void, action: () => R): R {
+  return commitAdmission.run(check, action);
+}
 /** Bind every application/runtime/fixture commit in this request to its admitted database. */
 export function withAdmissionFeed<R>(feedId: string, action: () => R): R {
   identifier(feedId,'feedId');
@@ -39,6 +44,7 @@ export interface ReadState<T> extends FeedPosition { snapshot: Snapshot<T> | nul
 export interface CatchupPage extends EventPage { feedId: string }
 export type OperationIdentity = Pick<CommitInput<unknown>, 'id' | 'commandId' | 'fingerprint'>;
 export interface Store<T> {
+  onWrite?(listener:(id?:string,value?:T)=>void):()=>void;
   load(id: string): Promise<Snapshot<T> | null>;
   readEvents(after: number, limit?: number): Promise<EventPage>;
   readState(id?: string): Promise<ReadState<T>>;
@@ -234,6 +240,8 @@ function replay<T>(stored: Operation<T>, input: CommitInput<T>, digest: string):
 
 /** Test-only reference implementation. It provides no process durability or DB evidence. */
 export class InMemoryStore<T> implements Store<T> {
+  private readonly writeListeners=new Set<(id?:string,value?:T)=>void>();
+  onWrite(listener:(id?:string,value?:T)=>void){this.writeListeners.add(listener);return ()=>{this.writeListeners.delete(listener);};}
   private readonly states = new Map<string, Snapshot<T>>();
   private readonly operations = new Map<string, Operation<T>>();
   private cursor = 0;
@@ -246,6 +254,8 @@ export class InMemoryStore<T> implements Store<T> {
   }
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     const { input, digest } = prepare(command);
+    commitAdmission.getStore()?.();
+    for(const listener of this.writeListeners)listener(input.id,input.value);
     const expectedFeed=admissionFeed.getStore();
     if(expectedFeed!==undefined && expectedFeed!==this.feedId)throw new FeedAdmissionError();
     const existing = this.operations.get(input.commandId);
@@ -669,6 +679,8 @@ export function journalRestoreRpcRequestBytes<T>(value:PortableJournal<T>):numbe
 }
 
 export class SurrealStore<T> implements Store<T> {
+  private readonly writeListeners=new Set<(id?:string,value?:T)=>void>();
+  onWrite(listener:(id?:string,value?:T)=>void){this.writeListeners.add(listener);return ()=>{this.writeListeners.delete(listener);};}
   private commitQueue: Promise<void> = Promise.resolve();
   private readonly transport: QueryTransport;
   private readonly clock: () => Date;
@@ -707,9 +719,10 @@ export class SurrealStore<T> implements Store<T> {
     catch (cause) { throw new StorageProtocolError(`Invalid stored journal: ${cause instanceof Error ? cause.message : String(cause)}`); }
   }
   async restoreJournal(value: PortableJournal<T>): Promise<JournalRestoreResult> {
+    for(const listener of this.writeListeners)listener();
     // Validate and isolate every byte before queueing or touching the database.
     const journal = validateJournal<T>(value);
-    const result = this.commitQueue.then(() => this.restoreOnce(journal));
+    const result = this.commitQueue.then(async()=>{try{return await this.restoreOnce(journal);}finally{for(const listener of this.writeListeners)listener();}});
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }
@@ -770,8 +783,13 @@ export class SurrealStore<T> implements Store<T> {
   async commit(command: CommitInput<T>): Promise<CommitResult<T>> {
     // Capture/validate before waiting: callers cannot mutate queued submissions.
     const { input } = prepare(command);
-    const expectedFeed=admissionFeed.getStore() ?? '';
-    const result = this.commitQueue.then(() => this.commitOnce(input,expectedFeed));
+    const expectedFeed=admissionFeed.getStore() ?? '',admit=commitAdmission.getStore();
+    const result = this.commitQueue.then(async()=>{
+      admit?.();
+      for(const listener of this.writeListeners)listener(input.id,input.value);
+      try{const committed=await this.commitOnce(input,expectedFeed);for(const listener of this.writeListeners)listener(input.id,committed.status==='conflict'?undefined:committed.value);return committed;}
+      catch(error){for(const listener of this.writeListeners)listener(input.id);throw error;}
+    });
     this.commitQueue = result.then(() => undefined, () => undefined);
     return result;
   }

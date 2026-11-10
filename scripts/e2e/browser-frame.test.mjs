@@ -31,7 +31,7 @@ fetch('http://127.0.0.1:1/').then(()=>{},()=>{document.getElementById('probe').t
    assert.deepEqual(state.result,{blocked:true,escaped:false,sandbox:'allow-scripts'});assert.match((await browser('snapshot')).snapshot,/network blocked/);
   }
   await browser('open','http://localhost:'+server.address().port);
-  assert.equal((await browser('get','text','body')).text,'E2E loopback only');assert.ok(hosts.every(value=>value.startsWith('127.0.0.1:')));
+  assert.equal((await browser('get','text','body')).text,'Browser request denied');assert.ok(hosts.every(value=>value.startsWith('127.0.0.1:')));
   await new Promise((resolve,reject)=>{const req=request(network.config.proxy,{method:'CONNECT',path:'localhost:'+server.address().port});req.once('error',reject);req.once('connect',(res,socket)=>{socket.destroy();try{assert.equal(res.statusCode,403);resolve();}catch(error){reject(error);}});req.end();});
  }finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await host.close();await network.close();await rm(root,{recursive:true,force:true});}
 });

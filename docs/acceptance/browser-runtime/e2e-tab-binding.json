@@ -1,0 +1,12 @@
+[
+  {
+    "pinned": false,
+    "url": "about:blank",
+    "owned": false
+  },
+  {
+    "pinned": true,
+    "url": "http://127.0.0.1:62081/",
+    "owned": true
+  }
+]

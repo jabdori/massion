@@ -8,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {startFixtureHost,loadFixture} from './fixture-host.ts';
 import {parseCheck,checkVisual,exitCode,reportMarkdown,isInteractionGap,workbenchReady,visualTokens,visibleTextBudgetExpression,visibleBudgets} from './report.ts';
 import {runGate} from './gate.ts';
+import {evidenceBrowser} from '../browser-evidence.mjs';
 
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../',import.meta.url));
 const specs=join(root,'docs/product/screens'),out=resolve(root,process.env.UI_CONTRACTS_OUTPUT||'.runtime/ui-contracts');
@@ -27,7 +28,7 @@ for(const theme of ['dark','light'])for(const screen of (requested.length?reques
  const contract=await json(join(specs,'contracts',screen+'.json'));
  const row={screen,theme,passed:0,failed:0,warnings:0,required:contract.regions.reduce((sum,r)=>sum+r.elements.filter(e=>e.required).length,0),visualFailures:[],gaps:[],errors:[],pair:null};
  rows.push(row);let host;const session=sessionRoot+'-contracts-'+runId+'-'+screen.toLowerCase()+'-'+theme;
- const browser=async(...args)=>{const {stdout}=await run('agent-browser',['--config',config,'--session',session,'--color-scheme',theme,'--allowed-domains','127.0.0.1','--json',...args]);const result=JSON.parse(stdout);if(!result.success)throw Error(result.error||stdout);return result.data;};
+ const browser=evidenceBrowser(async(...args)=>{const {stdout}=await run('agent-browser',['--config',config,'--session',session,'--color-scheme',theme,'--allowed-domains','127.0.0.1','--json',...args]);const result=JSON.parse(stdout);if(!result.success)throw Error(result.error||stdout);return result.data;});
  try{
   const fixture=await loadFixture(screen);row.gaps.push(...fixture.gaps);
   host=await startFixtureHost(screen);

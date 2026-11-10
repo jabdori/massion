@@ -1,3 +1,5 @@
+import type {RawBrowserPage} from '../../src/browser-runtime.ts';
+import {browserFixture} from './browser-fixtures.ts';
 import {memberAdmissionFixture} from './member-admission-fixtures.ts';
 import {credentialRepairFixture} from './credential-repair-fixture.ts';
 import {DEVICE_SCREENS,deviceLifecycleFixture} from './device-lifecycle-fixtures.ts';
@@ -40,7 +42,7 @@ export interface ScreenFixture {
 const fixtureDirectory=new URL('./fixtures/',import.meta.url);
 const text=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
 
-export async function loadFixture(screen:string,parents:string[]=[]):Promise<ScreenFixture>{
+export async function loadFixture(screen:string,parents:string[]=[],images?:Record<string,RawBrowserPage>):Promise<ScreenFixture>{
  if(!/^B[1-9]\d*(?:-[a-z]+)*$/.test(screen))throw new Error('Unknown fixture screen: '+screen);
  if(parents.includes(screen))throw new Error('Fixture inheritance cycle: '+[...parents,screen].join(' -> '));
  const raw=JSON.parse(await readFile(new URL(screen+'.json',fixtureDirectory),'utf8'));
@@ -61,14 +63,15 @@ export async function loadFixture(screen:string,parents:string[]=[]):Promise<Scr
  if(parents.length!==0)return fixture;
  if(screen==='B6-token')return credentialRepairFixture(fixture);
  if(['B11-quill','B21-done-hana'].includes(screen))return memberAdmissionFixture(fixture);
- let produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture):fixture;
+ let produced=EFFECT_SCREENS.includes(screen)?await effectFixture(fixture,images?.checkout):fixture;
  if(RESULT_FACT_SCREENS.includes(screen))produced=resultFactsFixture(produced);
  if(['B7-done','B7-fail','B7-unknown'].includes(screen))produced=fileReadActivityFixture(produced);
  if(['B13','B13-general','B13-general-restart','B19','B19-juno'].includes(screen))produced=await memberLifecycleFixture(produced);
  if(['B23','B23-github','B23-github-expired'].includes(screen))produced=await appLifecycleFixture(produced);
  if(CONNECTION_SCREENS.includes(screen)||screen==='B13-devices')produced=await settingsLifecycleFixture(produced);
  if(DEVICE_SCREENS.includes(screen))produced=await deviceLifecycleFixture(produced);
- const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(produced):produced;
+ const observed=['B15','B5','B7'].includes(screen)?await browserFixture(produced,images):produced;
+ const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;
  const steered=STEERING_SCREENS.includes(screen)?await steeringFixture(growth):growth;
  const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(steered):steered;
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);

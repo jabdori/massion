@@ -1,0 +1,43 @@
+contract B15 (B15 브라우저) vs /Users/code/orca/workspaces/massion/browser-runtime/.runtime/browser-ephemeral-proof/snapshots/dark/B15.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      switch   "활동 보기, 확인 필요" -> switch "활동 보기, 확인 필요"
+  ok    sidebar      button   "검색" -> button "검색"
+  ok    sidebar      link     "{member}" -> button "하나"
+  ok    sidebar      link     "{work_title}" -> button "스터디룸 신청"
+  ok    sidebar      link     "{member}" -> button "퀼"
+  ok    sidebar      status   "작업 중" -> status "작업 중"
+  ok    sidebar      link     "{work_title}" -> button "이탈 원인 조사"
+  ok    sidebar      status   "실행 중" -> statictext "실행 중"
+  ok    sidebar      link     "{member}" -> button "주노"
+  ok    header       link     "사이드바 숨기기" -> button "사이드바 숨기기"
+  ok    header       button   "{member}" -> button "하나"
+  ok    header       link     "작업 공간" -> button "작업 공간"
+  ok    header       button   "더 보기" -> button "더 보기"
+  ok    conversation button   "복사" -> button "복사"
+  ok    conversation button   "나중에" -> button "나중에"
+  ok    pane         tab      "{work_title}" -> tab "이용 안내"
+  ok    pane         tab      "{work_title}" -> tab "빈 시간"
+  ok    pane         tab      "{work_title}" -> tab "신청"
+  ok    pane         link     "작업 공간 닫기" -> button "작업 공간 닫기"
+  ok    pane         text     "{work_title}" -> statictext "library.example.com"
+  ok    pane         text     "{work_title}" -> image "브라우저 페이지"
+  ok    pane         text     "{work_title}" -> heading "신청"
+  ok    pane         text     "이름" -> term "이름"
+  ok    pane         text     "{date}" -> statictext "11월 11일 (수)"
+  ok    pane         text     "{count}" -> statictext "4명"
+  ok    pane         chip     "{member}" -> statictext "하나"
+  ok    composer     textbox  "하나에게 메시지 보내기" -> textbox "하나에게 메시지 보내기"
+  ok    composer     button   "파일 추가" -> button "파일 추가"
+  ok    composer     button   "기본 권한" -> button "기본 권한"
+  ok    composer     button   "보내기" -> button "보내기"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":21,"strings":6,"sentences":0,"longest":8} proto {"chars":20,"strings":5,"sentences":0,"longest":8} source visibleTextBudget
+  budget header       app {"chars":3,"strings":2,"sentences":0,"longest":2} proto {"chars":2,"strings":1,"sentences":0,"longest":2} source visibleTextBudget
+  budget conversation app {"chars":221,"strings":15,"sentences":3,"longest":37} proto {"chars":252,"strings":20,"sentences":3,"longest":36} source visibleTextBudget
+  budget composer     app {"chars":6,"strings":2,"sentences":0,"longest":5} proto {"chars":5,"strings":1,"sentences":0,"longest":5} source visibleTextBudget
+  budget pane         app {"chars":33,"strings":6,"sentences":0,"longest":19} proto {"chars":123,"strings":24,"sentences":0,"longest":19} source visibleTextBudget
+  FAIL  missing sidebar      status   "결정 대기"
+FAIL: 1 failures, 0 warnings, 35 required elements
