@@ -822,3 +822,15 @@ for(const outcome of ['lost','replayed'])test(`continued team never invokes a wo
  assert.equal((await f.product.run('intake',w.id,'reclaim',(await f.store.load('intake'))!.revision)).status,'already-started');assert.equal(f.calls.length-before,1);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
+
+test('steering racing the failure blocker retains the failed worker outcome without replay',async t=>{
+ const f=await setup(t);await f.admit();f.setWorker(async()=> 'x'.repeat(16001));let raced=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{const event=input.events[0] as any,w=input.value.works?.at(-1);
+  if(!raced&&event?.type==='block-work'&&w?.runtimeRun?.steeringVersion===1){raced=true;await f.product.intervene('intake',{commandId:'race-blocker',expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Enterprise customers'}});}
+  return commit(input);
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.execution,'blocked');assert.equal(w.blocker?.code,'provider_failed');assert.match(w.blocker!.detail,/team step did not complete/);assert.equal(f.calls.length-before,2);
+ assert.equal(w.effects.find(e=>e.id.endsWith(':step:0'))!.status,'failed');assert.equal(w.instructions!.length,1);assert.equal(w.record,undefined);assert.equal(w.artifact,undefined);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});

@@ -208,7 +208,7 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   for(let attempt=0;;attempt++){
    const result=await this.dispatch(missionId,command,actorId,commandId);if(result.status!=='conflict')return result.value;
    // A definite revision refusal can retry journal-only progression, never the call.
-   if(result.reason==='revision'&&attempt<2&&['receipt','settle-task','record-step-progress','assign','delegate'].includes(command.type)&&'workId' in command&&(await this.current(missionId,command.workId)).work.runtimeRun?.steeringVersion===1)continue;
+   if(result.reason==='revision'&&attempt<2&&['receipt','settle-task','record-step-progress','assign','delegate','block-work'].includes(command.type)&&'workId' in command&&(await this.current(missionId,command.workId)).work.runtimeRun?.steeringVersion===1)continue;
    throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');
   }
  }

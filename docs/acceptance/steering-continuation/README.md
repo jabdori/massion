@@ -78,3 +78,11 @@ and confirmed steering coexist in the [B18 comparison](B18-main140-pair.png).
 Four steering browser flows and both table interaction flows passed. Typecheck
 and the related batch passed: 197 tests, three actual-DB skips, no failures.
 Full checks and current-head Codex review remain recorded on PR #137.
+
+Post-merge Codex review found the same definite revision race on `block-work`:
+an oversized worker response could remain active after the runtime exited.
+The regression first failed (`active` instead of `blocked`). Failure recording
+now uses the existing bounded journal-only revision retry, preserving the failed
+receipt and owner instruction with exactly one planning and one worker call.
+The affected 21-test steering/unknown-outcome batch and typecheck passed; provider
+invocation, ambiguity and legacy handling remain unchanged.
