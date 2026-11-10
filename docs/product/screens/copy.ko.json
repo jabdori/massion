@@ -18753,5 +18753,53 @@
    "text"
   ],
   "used_in": []
+ },
+ "ui.browser.private-page": {
+  "ko": "비공개 페이지",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead private-taint persistence rule; 2026-11-10."
+ },
+ "ui.browser.private-details": {
+  "ko": "비공개 입력값이 있어 상세 내용은 보관하지 않아요.",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead private-taint persistence rule; 2026-11-10."
+ },
+ "ui.browser.page-number": {
+  "ko": "페이지 {number}",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead private-taint persistence rule; 2026-11-10."
+ },
+ "ui.browser.empty-value": {
+  "ko": "값 없음",
+  "roles": [
+   "text"
+  ],
+  "used_in": [
+   "B4:pane",
+   "B7:pane",
+   "B15:pane"
+  ],
+  "provenance": "Lead private-taint persistence rule; 2026-11-10."
  }
 }

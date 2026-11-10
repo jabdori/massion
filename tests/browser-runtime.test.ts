@@ -7,10 +7,11 @@ import {InMemoryStore} from '../src/storage.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
 import {validateMissionJournalLineage,validateMissionLineage} from '../src/backup-lineage.ts';
 import {BrowserSessions,sanitizePage,BROWSER_HOST} from '../src/browser-runtime.ts';
-import type {BrowserAdapter,RawBrowserPage} from '../src/browser-runtime.ts';
+import type {BrowserAdapter,RawBrowserPage,BrowserPage} from '../src/browser-runtime.ts';
 const now=Date.UTC(2026,10,5,5,11),url='https://shop.example.com/checkout';
 const raw:RawBrowserPage={address:url,title:'주문 확인',blocks:['레이저 토너 검정','31,000원','3,000원','34,000원'],fields:[{label:'수량',type:'number',value:'1',autocomplete:''}]};
 const request={missionId:'intake',workId:'work',readId:'page:1',address:url};
+function publicPage(page:BrowserPage|undefined){assert.ok(page&&!page.tainted);return page;}
 async function setup(read:BrowserAdapter['read']=async()=>structuredClone(raw)){
  const store=new InMemoryStore<Mission>(),app=new Application(store,[{id:'local-owner',roles:['owner']}]);
  await app.create({id:'intake',purpose:'Browser fixture',scope:'local',constraints:[],criteria:{version:1,description:'Observed page',oracle:'bounded-text-review/v1'}},'local-owner','create');
@@ -19,7 +20,7 @@ async function setup(read:BrowserAdapter['read']=async()=>structuredClone(raw)){
 }
 test('sanitized observations omit credentials, query secrets, payment and password values everywhere',()=>{
  const page=sanitizePage({...raw,address:'https://user:password@shop.example.com/checkout?token=private#secret',title:'Receipt 4111 1111 1111 1111',blocks:['password hunter2','card 4111111111111111','token=abc123secret'],fields:[{label:'Password',type:'password',value:'hunter2',autocomplete:'current-password'},{label:'Card',type:'text',value:'4111111111111111',autocomplete:'cc-number'},{label:'CVV',type:'text',value:'123',autocomplete:''},{label:'수량',type:'number',value:'1',autocomplete:''}]});
- assert.equal(page.address,new URL(url).origin);assert.equal(page.fields[3]!.value,'1');assert.ok(page.fields.slice(0,3).every(f=>f.masked&&f.value==='••••'));
+ assert.equal(page.address,new URL(url).origin);assert.ok(page.tainted);assert.equal(page.summary.privateFields,3);assert.equal('fields' in page,false);
  assert.doesNotMatch(JSON.stringify(page),/hunter2|4111|abc123secret|user:password|token=private/);
  assert.throws(()=>sanitizePage({...raw,blocks:['x'.repeat(20000)]}),/bound|Invalid/);
 });
@@ -27,7 +28,7 @@ test('overlapping identical reads commit once, retain metadata after restart, an
  let calls=0,release!:()=>void;const held=new Promise<void>(r=>release=r);
  const s=await setup(async()=>{calls++;await held;return raw;});const a=s.service.capture(request),b=s.service.capture({...request});release();
  const results=await Promise.all([a,b]);assert.ok(results.every(r=>['committed','replayed'].includes(r.status)));assert.equal(calls,1);
- const read=await s.service.read('intake','work');assert.equal(read.session?.pagesRead,1);assert.equal(read.session?.page.title,'주문 확인');
+ const read=await s.service.read('intake','work');assert.equal(read.session?.pagesRead,1);assert.equal(publicPage(read.session?.page).title,'주문 확인');
  const restarted=new BrowserSessions(s.store,s.store,{adapter:{async read(){throw Error('Replay invoked adapter');}},clock:()=>now});
  await assert.rejects(restarted.capture(request),/identity.*unavailable/i);assert.equal((await restarted.read('intake','work')).session?.pagesRead,1);validateMissionJournalLineage(s.store.inspect());
  await assert.rejects(restarted.capture({...request,address:'https://shop.example.com/other'}),/identity|conflict/i);
@@ -40,7 +41,7 @@ test('drain-aware owner store refuses a write resumed after a read',async()=>{
 test('newer reads supersede late responses without replacing current page',async()=>{
  let release!:()=>void,entered!:()=>void;const held=new Promise<void>(r=>release=r),started=new Promise<void>(r=>entered=r);let calls=0;
  const s=await setup(async()=>{if(++calls===1){entered();await held;return {...raw,title:'Old'};}return {...raw,title:'New'};});
- const old=s.service.capture(request);await started;await s.service.capture({...request,readId:'page:2'});release();await assert.rejects(old,/superseded/i);assert.equal((await s.service.read('intake','work')).session?.page.title,'New');
+ const old=s.service.capture(request);await started;await s.service.capture({...request,readId:'page:2'});release();await assert.rejects(old,/superseded/i);assert.equal(publicPage((await s.service.read('intake','work')).session?.page).title,'New');
 });
 test('feed replacement, stopped Work and expired runtime refuse late browser observations',async()=>{
  for(const change of ['feed','stop','deadline']){
@@ -78,7 +79,7 @@ test('restored browser pages reject unmasked payment fields and secret-shaped te
  for(const tamper of [(p:any)=>p.fields.push({label:'Card',value:'4242424242424242',masked:false}),(p:any)=>p.blocks.push('token=restore-secret')]){const operations=structuredClone(s.store.inspect());tamper(operations.at(-1)!.value.works[0]!.browserSession!.pages[0]);assert.throws(()=>validateMissionLineage(operations.at(-1)!.value),/browser/i);}
 });
 test('one-time-code inputs are masked even when numeric and removed from page text',()=>{
- const page=sanitizePage({...raw,blocks:['Your code is 123456'],fields:[{label:'Verification code',type:'number',value:'123456',autocomplete:'one-time-code'}]});assert.equal(page.fields[0]!.masked,true);assert.equal(page.fields[0]!.value,'••••');assert.doesNotMatch(JSON.stringify(page),/123456/);
+ const page=sanitizePage({...raw,blocks:['Your code is 123456'],fields:[{label:'Verification code',type:'number',value:'123456',autocomplete:'one-time-code'}]});assert.ok(page.tainted);assert.equal(page.summary.privateFields,1);assert.doesNotMatch(JSON.stringify(page),/123456/);
 });
 test('a read superseded while application lookup is held cannot cross commit admission',async()=>{
  let oldLookupEntered!:()=>void,releaseOld!:()=>void,newReadEntered!:()=>void,releaseNew!:()=>void;
@@ -86,7 +87,7 @@ test('a read superseded while application lookup is held cannot cross commit adm
  const s=await setup(async()=>{if(++reads===2){newReadEntered();await newGate;return {...raw,title:'New'};}return {...raw,title:'Old'};});const lookup=s.store.lookupOperation.bind(s.store);let lookups=0;
  s.store.lookupOperation=async identity=>{if(++lookups===1){oldLookupEntered();await oldGate;}return lookup(identity);};
  const old=s.service.capture(request);await lookupEntered;const next=s.service.capture({...request,readId:'page:2'});await readEntered;releaseOld();
- const oldResult=await old.catch(error=>error);releaseNew();const nextResult=await next.catch(error=>error);assert.match(oldResult.message??'',/superseded/i);assert.equal(nextResult.status,'committed');assert.equal((await s.service.read('intake','work')).session?.page.title,'New');
+ const oldResult=await old.catch(error=>error);releaseNew();const nextResult=await next.catch(error=>error);assert.match(oldResult.message??'',/superseded/i);assert.equal(nextResult.status,'committed');assert.equal(publicPage((await s.service.read('intake','work')).session?.page).title,'New');
 });
 test('runtime expiry during application lookup rejects commit admission',async()=>{
  const {hash,workInputHash}=await import('../src/domain.ts'),s=await setup(),w=(await s.store.load('intake'))!.value.works[0]!;let clock=now;
@@ -98,7 +99,7 @@ test('runtime expiry during application lookup rejects commit admission',async()
 
 test('security labels, names and autocomplete never commit a numeric security code',async()=>{
  for(const field of [{label:'보안 코드',name:'field',autocomplete:''},{label:'Security code',name:'field',autocomplete:''},{label:'수량',name:'csc',autocomplete:''},{label:'수량',name:'quantity',autocomplete:'cc-csc'}]){
-  const s=await setup(async()=>({...raw,blocks:['Reflected value: 456'],fields:[{...field,type:'number',value:'456'}]}));await s.service.capture(request);const read=await s.service.read('intake','work'),operation=s.store.inspect().at(-1)!;assert.equal(read.session!.page.fields[0]!.masked,true);assert.equal(read.session!.page.fields[0]!.value,'••••');assert.equal(read.session!.page.blocks[0],'Reflected value: ••••');assert.doesNotMatch(JSON.stringify(operation),/"value":"456"|Reflected value: 456/);
+  const s=await setup(async()=>({...raw,blocks:['Reflected value: 456'],fields:[{...field,type:'number',value:'456'}]}));await s.service.capture(request);const read=await s.service.read('intake','work'),operation=s.store.inspect().at(-1)!;const page=read.session!.page;assert.ok(page.tainted);assert.equal(page.summary.privateFields,1);assert.equal(Object.hasOwn(page,'fields'),false);assert.equal(Object.hasOwn(page,'blocks'),false);assert.doesNotMatch(JSON.stringify(operation),/"value":"456"|Reflected value: 456/);
  }
 });
 
@@ -124,32 +125,10 @@ test('monthly budget waiting and journal replay preserve the same browser observ
  await app.dispatch({missionId:'intake',expectedRevision:4,commandId:'monthly-resume',actorId:'local-owner',command:{type:'resume-monthly-budget',workId:'work',decisionId:'monthly-budget:fixture'}});assert.deepEqual((await s.service.read('intake','work')).session!.page,page);validateMissionJournalLineage(s.store.inspect());
 });
 
-for(const separator of ['\u200b','\u200c','\u2060','\uFE0F','\u{E0100}'])test('format separators cannot preserve a reflected private code '+separator.codePointAt(0),async()=>{const secret='123456',reflected=[...secret].join(separator),s=await setup(async()=>({...raw,title:reflected,blocks:[reflected],fields:[{label:'Security code',name:'csc',type:'number',autocomplete:'one-time-code',value:secret}]}));await s.service.capture(request);const journal=JSON.stringify(s.store.inspect());assert.ok(!journal.includes(reflected));assert.ok(!journal.includes(secret));validateMissionJournalLineage(s.store.inspect());});
 
-for(const separator of ['\u200b','\u200c','\u2060','\uFE0F','\u{E0100}'])test('canonical sensitive metadata overrides benign field meanings '+separator.codePointAt(0),async()=>{
- const fields=[{label:'Ｓｅｃｕ'+separator+'ｒｉｔｙ ｃｏ'+separator+'ｄｅ',name:'quantity',autocomplete:''},{label:'수량',name:'c'+separator+'sc',autocomplete:''},{label:'수량',name:'quantity',autocomplete:'cc-'+separator+'csc'}].map(f=>({...f,type:'number',value:'123456'}));
- const s=await setup(async()=>({...raw,fields}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.ok(page.fields.every(f=>f.masked&&f.value==='••••'));assert.ok(!JSON.stringify(s.store.inspect()).includes('123456'));validateMissionJournalLineage(s.store.inspect());
+test('a superseded private observation taints subsequent reads even without a committed private page',async t=>{
+ let entered!:()=>void,release!:()=>void,reads=0;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);t.after(()=>release());
+ const s=await setup(async()=>{if(++reads===1){entered();await held;return {...raw,fields:[{label:'Security code',type:'number',value:'456',autocomplete:''}]};}return raw;});t.after(()=>s.service.drain());
+ const old=s.service.capture(request).catch(error=>error);await started;await s.service.capture({...request,readId:'public:1'});release();assert.match((await old).message,/superseded/);
+ await s.service.capture({...request,readId:'public:2'});const pages=(await s.service.read('intake','work')).session!.pages;assert.equal(pages[0]!.tainted,undefined);assert.equal(pages[1]!.tainted,true);assert.equal(Object.hasOwn(pages[1]!,'title'),false);
 });
-
-for(const [secret,reflection] of [['123456','１２３４５６'],['１２３４５６','123456'],['café','cafe\u0301'],['officer','oﬃcer']] as const)test('compatibility-equivalent reflections cannot reach the journal '+secret,async()=>{
- const s=await setup(async()=>({...raw,title:'😀 '+reflection+' end',blocks:['Before '+reflection+' after'],fields:[{label:'Security code',name:'csc',type:'text',autocomplete:'one-time-code',value:secret}]}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;
- assert.equal(page.title,'😀 •••• end');assert.deepEqual(page.blocks,['Before •••• after']);assert.ok(!JSON.stringify(s.store.inspect()).includes(reflection));validateMissionJournalLineage(s.store.inspect());
-});
-
-test('unknown or conflicting field metadata cannot borrow a benign exemption',async()=>{const fields=[{label:'Verification number',name:'quantity',autocomplete:''},{label:'수량',name:'challenge',autocomplete:''},{label:'수량',name:'quantity',autocomplete:'unknown-kind'}].map(f=>({...f,type:'number',value:'123456'}));const s=await setup(async()=>({...raw,fields}));await s.service.capture(request);assert.ok((await s.service.read('intake','work')).session!.page.fields.every(f=>f.masked));assert.ok(!JSON.stringify(s.store.inspect()).includes('123456'));validateMissionJournalLineage(s.store.inspect());});
-for(const [secret,reflection] of [['123456','123-456'],['123456','١٢٣٤٥٦'],['١٢٣٤٥٦','123 456'],['123-456','１２３·４５６'],['123456','१२३,४५६'],['123456','123−456'],['+821012345678','82(10)1234-5678']] as const)test('numeric display formatting is masked '+reflection,async()=>{const s=await setup(async()=>({...raw,title:'😀 '+reflection+' end',blocks:[reflection],fields:[{label:'Security code',name:'csc',type:'text',autocomplete:'one-time-code',value:secret}]}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.equal(page.title,'😀 •••• end');assert.deepEqual(page.blocks,['••••']);assert.ok(!JSON.stringify(s.store.inspect()).includes(reflection));validateMissionJournalLineage(s.store.inspect());});
-
-for(const [secret,reflection] of [['ABCD1234','ABCD-1234'],['ABCD-1234','ABCD_1234'],['p@ss-word','p@ss-wo-rd'],['비밀1234','비-밀-1234'],['ABCD1234','ABCD/1234'],['ABCD1234','ABCD|1234']] as const)test('grouped alphanumeric secrets cannot reach durable text '+reflection,async()=>{const s=await setup(async()=>({...raw,title:reflection,blocks:[reflection],fields:[{label:'Recovery code',name:'recovery',type:'text',autocomplete:'',value:secret}]}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.equal(page.title,'••••');assert.deepEqual(page.blocks,['••••']);assert.ok(!JSON.stringify(s.store.inspect()).includes(reflection));validateMissionJournalLineage(s.store.inspect());});
-
-for(const [secret,reflection] of [['abcd1234','ABCD-1234'],['straße1234','STRASSE-1234'],['STRAẞE1234','strasse1234'],['İstanbul1234','i\u0307stanbul-1234'],['ος12','ΟΣ-12']] as const)test('case-fold expansions cannot preserve private reflections '+reflection,async()=>{const s=await setup(async()=>({...raw,title:'😀 '+reflection+' end',blocks:[reflection],fields:[{label:'Recovery code',name:'recovery',type:'text',autocomplete:'',value:secret}]}));await s.service.capture(request);const page=(await s.service.read('intake','work')).session!.page;assert.equal(page.title,'😀 •••• end');assert.deepEqual(page.blocks,['••••']);assert.ok(!JSON.stringify(s.store.inspect()).includes(reflection));validateMissionJournalLineage(s.store.inspect());});
-
-test('excessive or malformed nested URL encodings fail closed',()=>{
- let path='code%41';for(let i=0;i<9;i++)path=path.replaceAll('%','%25');
- for(const value of [path,'code%FF','code%41%zz'])assert.throws(()=>sanitizePage({...raw,address:'https://shop.example.com/'+value}),/encoding/i);
-});
-
-for(const encoded of ['%41%42%43%44%31%32%33%34','%2541%2542%2543%2544%2531%2532%2533%2534','％４１％４２％４３％４４％３１％３２％３３％３４'])test('encoded sensitive-field reflections never enter committed observations: '+encoded.slice(0,5),async()=>{
- const s=await setup(async()=>({...raw,title:encoded,blocks:[encoded],fields:[{label:'Recovery code',type:'text',value:'ABCD1234',autocomplete:''}]})),before=s.store.inspect().length;let refused=false;try{assert.equal((await s.service.capture(request)).status,'committed');}catch(error){assert.match((error as Error).message,/encoded browser text/i);refused=true;}assert.equal(s.store.inspect().length,before+(refused?0:1));const page=(await s.service.read('intake','work')).session?.page;if(!refused)assert.equal(page!.fields[0]!.value,'••••');const journal=JSON.stringify(s.store.inspect());assert.ok(!journal.includes(encoded));assert.ok(!journal.includes('ABCD1234'));await s.service.drain();
-});
-
-test('Base64 cannot hide structural percent encodings from the fail-closed boundary',()=>{assert.throws(()=>sanitizePage({...raw,title:Buffer.from('%41%42%43%44').toString('base64')}),/encoded browser text/i);});

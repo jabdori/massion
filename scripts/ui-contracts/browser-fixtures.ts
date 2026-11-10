@@ -10,7 +10,8 @@ import type {ScreenFixture} from './fixture-host.ts';
 
 const pagesRoot=new URL('./browser-pages/',import.meta.url),captured=JSON.parse(await readFile(new URL('captured.json',pagesRoot),'utf8'));
 async function capturedPage(name:string):Promise<RawBrowserPage>{
- const {sourceSha256,sourceImageHash,sourceAddress,...page}=captured[name],html=await readFile(new URL(name+'.html',pagesRoot)),css=await readFile(new URL('page.css',pagesRoot));if(createHash('sha256').update(html).update(css).digest('hex')!==sourceSha256)throw Error('Browser fixture source changed; regenerate metadata');
+ const {sourceSha256,sourceAddress,...page}=captured[name],html=await readFile(new URL(name+'.html',pagesRoot)),css=await readFile(new URL('page.css',pagesRoot));if(createHash('sha256').update(html).update(css).digest('hex')!==sourceSha256)throw Error('Browser fixture source changed; regenerate metadata');
+ if(page.tainted)return {address:sourceAddress,title:'',blocks:Array(page.summary.textBlocks).fill(''),frames:page.summary.frames,privateFields:page.summary.privateFields,fields:page.summary.fields.map((f:{kind:string;length:number;private:boolean})=>({label:f.private?'Private':'Name',type:f.kind==='select'?'select-one':f.kind,value:'·'.repeat(f.length),valueLength:f.length,autocomplete:''}))};
  return {...page,address:sourceAddress,fields:page.fields.map((f:{label:string;value:string;masked:boolean})=>({label:f.label,value:f.value,type:f.masked?'password':'text',autocomplete:''}))};
 
 }

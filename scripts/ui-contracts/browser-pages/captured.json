@@ -13,7 +13,6 @@
       "이용 하루 전까지 취소 가능"
     ],
     "fields": [],
-    "sourceImageHash": "255583d6370ef8d560b0905183d51feba61ad61b10f0f7d1f18078d722102e71",
     "sourceAddress": "https://library.example.com/guide",
     "sourceSha256": "9b3c3a6192ba81c13ea9f67b3c95bb2903cc8af42abc55ff68631b70246a251a"
   },
@@ -32,86 +31,67 @@
       "15:00–17:00 · 4명"
     ],
     "fields": [],
-    "sourceImageHash": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c",
     "sourceAddress": "https://library.example.com/availability",
     "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
   },
   "library-form": {
     "address": "https://library.example.com",
-    "title": "신청",
-    "blocks": [
-      "시립도서관",
-      "이용 안내",
-      "스터디룸",
-      "신청",
-      "내 신청",
-      "스터디룸 신청"
-    ],
-    "fields": [
-      {
-        "label": "이름",
-        "value": "홍길동",
-        "masked": false
-      },
-      {
-        "label": "연락처",
-        "value": "••••",
-        "masked": true
-      },
-      {
-        "label": "날짜",
-        "value": "11월 11일 (수)",
-        "masked": false
-      },
-      {
-        "label": "시간",
-        "value": "15:00–17:00",
-        "masked": false
-      },
-      {
-        "label": "방",
-        "value": "스터디룸 B",
-        "masked": false
-      },
-      {
-        "label": "인원",
-        "value": "4명",
-        "masked": false
-      }
-    ],
-    "sourceImageHash": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58",
+    "tainted": true,
+    "summary": {
+      "textBlocks": 6,
+      "frames": 0,
+      "privateFields": 1,
+      "fields": [
+        {
+          "kind": "text",
+          "length": 3,
+          "private": false
+        },
+        {
+          "kind": "tel",
+          "length": 13,
+          "private": true
+        },
+        {
+          "kind": "select",
+          "length": 11,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 11,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 6,
+          "private": false
+        },
+        {
+          "kind": "select",
+          "length": 2,
+          "private": false
+        }
+      ]
+    },
     "sourceAddress": "https://library.example.com/apply",
     "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
   },
   "checkout": {
     "address": "https://shop.example.com",
-    "title": "주문 / 결제",
-    "blocks": [
-      "오피스몰",
-      "장바구니",
-      "주문 / 결제",
-      "내 주문",
-      "주문 / 결제",
-      "레이저 토너 검정",
-      "수량 1 · 지난 주문과 같은 상품",
-      "31,000원",
-      "배송지",
-      "집 · 저장된 주소",
-      "결제 수단",
-      "",
-      "배송비",
-      "3,000원",
-      "합계",
-      "34,000원"
-    ],
-    "fields": [
-      {
-        "label": "결제 수단",
-        "value": "••••",
-        "masked": true
-      }
-    ],
-    "sourceImageHash": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551",
+    "tainted": true,
+    "summary": {
+      "textBlocks": 16,
+      "frames": 0,
+      "privateFields": 1,
+      "fields": [
+        {
+          "kind": "text",
+          "length": 16,
+          "private": true
+        }
+      ]
+    },
     "sourceAddress": "https://shop.example.com/checkout",
     "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
   }

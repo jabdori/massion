@@ -83,8 +83,7 @@ const scriptHashes=[...workbenchPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].
 const csp=["default-src 'self'","script-src 'self' "+scriptHashes.join(' '),"style-src 'self' 'unsafe-inline'","connect-src 'self'","img-src 'self' data:","font-src 'self'","frame-src 'none'","frame-ancestors 'none'","object-src 'none'","base-uri 'none'","form-action 'none'"].join('; ');
 
 export async function startFixtureHost(screen:string|ScreenFixture,options:{daemonSecret?:string;port?:number}={}):Promise<{url:string;fixture:ScreenFixture;close:()=>Promise<void>}>{
- const images=typeof screen==='string'&&['B4','B15'].includes(screen)?(await (await import(new URL('./capture-browser-pages.mjs',import.meta.url).href)).captureReferencePages()).pages:undefined;
- const fixture=typeof screen==='string'?await loadFixture(screen,[],images):structuredClone(screen);
+ const fixture=typeof screen==='string'?await loadFixture(screen):structuredClone(screen);
  const page=fixture.desktopSettings?workbenchPage.replace('<script>',`<script>window.massionDesktop=Object.freeze({getSettings:async()=>(${JSON.stringify(fixture.desktopSettings)})});\n`):workbenchPage;
  const policy=page===workbenchPage?csp:csp.replace(scriptHashes.join(' '),[...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>"'sha256-"+createHash('sha256').update(match[1]!).digest('base64')+"'").join(' '));
  const authenticate=options.daemonSecret===undefined?undefined:daemonGuard(options.daemonSecret);

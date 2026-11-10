@@ -1918,16 +1918,6 @@
     },
     {
       "screen": "B4",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "budget pane sentences 1 > 0: \"페이지 이미지는 작업 후 보관하지 않아요.\"",
-      "occurrence": 1,
-      "category": "ephemeral page fallback",
-      "reason": "The lead explicitly requested a Korean non-retention sentence in the no-image card; the original artboard permits no sentences.",
-      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
-    },
-    {
-      "screen": "B4",
       "theme": "light",
       "kind": "contract",
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
@@ -1958,12 +1948,162 @@
     },
     {
       "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"이름\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{date}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{count}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "budget pane sentences 1 > 0: \"페이지 이미지는 작업 후 보관하지 않아요.\"",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
       "occurrence": 1,
-      "category": "ephemeral page fallback",
-      "reason": "The lead explicitly requested a Korean non-retention sentence in the no-image card; the original artboard permits no sentences.",
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B4",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"이름\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{date}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane text \"{count}\" (found in conversation)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "Private-tainted pages persist no page-controlled field labels or values. Fixture replay displays the privacy notice instead of form details. The adapter is read-only and cannot fill, click or submit.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "region pane chip \"{member}\" (found in rail)",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The member chip belongs to the live image; fixture replay has no retained image and omits the chip.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane sentences 1 > 0: \"비공개 입력값이 있어 상세 내용은 보관하지 않아요.\"",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
+      "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B15",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "budget pane longest string 28 > 24 chars",
+      "occurrence": 1,
+      "category": "private page retention",
+      "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     }
   ]

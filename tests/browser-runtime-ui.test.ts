@@ -255,3 +255,8 @@ test('empty structural observations show a non-retention notice without a blank 
 test('page-read evidence uses stored title, domain and timestamp without replacing named procedures',async()=>{
  const {app}=fixture();await settle();await openWork(app);const steps=find(app,'work-browser-evidence-work:1');assert.ok(steps);assert.equal(steps.children.length,2);assert.match(steps.textContent,/Observed checkout.*shop.example.com/);assert.equal(descendants(steps).filter(n=>n.tagName==='TIME').length,2);assert.doesNotMatch(steps.textContent,/https:|checkout\//);
 });
+
+for(const live of [false,true])test('private-tainted pane uses host copy only with '+(live?'ephemeral pixels':'no retained image'),async()=>{
+ const {app,state}=fixture(),p={readId:'private:1',expectedRevision:1,inputHash:'a'.repeat(64),at,address:'https://shop.example.com',tainted:true,summary:{textBlocks:3,frames:0,privateFields:1,fields:[{kind:'number',length:3,private:true}]},...(live?{screenshot}:{})};state.session.page=p;state.session.pages=[p];state.session.pagesRead=1;state.mission.works[0].browserSession.pages=[{...p,screenshot:undefined}];
+ await settle();await checkout(app);assert.equal(descendants(pane(app)).some(n=>n.tagName==='IMG'),live);assert.equal(find(app,'browser-address').textContent,'shop.example.com');assert.match(find(app,'browser-page-alternative').textContent,/비공개 페이지.*비공개 입력값이 있어 상세 내용은 보관하지 않아요/);assert.doesNotMatch(pane(app).textContent,/Observed|Recipient|Card|456/);assert.ok([...app.storage.values()].every(value=>!value.includes(screenshot.data)));
+});
