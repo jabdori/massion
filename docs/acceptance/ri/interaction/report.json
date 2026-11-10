@@ -1,0 +1,10 @@
+{
+  "states": [
+    "Search Slack: one unavailable recommendation, installed and self-made sections hidden",
+    "No match: recommendation heading and rows hidden",
+    "Installed GitHub detail: permissions and approved versions remain separate from unavailable recommendations",
+    "Back to Apps: all six unavailable recommendations restored"
+  ],
+  "unavailableRecommendations": 6,
+  "externalNetworkCalls": 0
+}
