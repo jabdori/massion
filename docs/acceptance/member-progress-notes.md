@@ -23,3 +23,10 @@ member-step note, browser telemetry and unrelated pane time/count ordering.
 Narrative is never a payment receipt, browser observation or accepted evidence.
 Approved contracts/prototypes remain unchanged; pinned vocabulary proposals are
 in the PR. Full-suite and aggregate screen-gate results belong to CI.
+
+R-Y removes the eight activity-order allowances and the two B16-sent link-order
+allowances by preserving the proposal's unread marker during fixture setup.
+Completed reads already follow ongoing Work; no row ordering change is needed.
+The eight transcript allowances remain: the stored second handoff precedes the
+member reply and steering exchange. Matching the later approved placement needs
+an owner decision on fixture chronology, not a screen-specific ordering rule.

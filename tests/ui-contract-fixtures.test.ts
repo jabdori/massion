@@ -295,6 +295,23 @@ test('B26 budget fallbacks never expose the unrelated rounding evaluation conver
 test('memory screen candidates come from answered production turns and remain owner proposals',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B6','B7-churn','B7-fail','B18','B18-room-b']){const fixture=await loadFixture(screen),view=fixture.routes['/assistant/conversation?member=member-quill']!.body as any,turn=view.turns.find((t:any)=>t.memoryCandidate);assert.equal(turn.status,'answered');assert.equal(turn.memoryCandidate.status,'proposed');assert.equal(turn.memoryCandidate.memberId,'member-quill');assert.ok(view.segment.messages.some((m:any)=>m.turnId===turn.id));}});
 
 test('rule capture keeps the proposal visible and briefings refer to decisions instead of phantom Work',async()=>{const {loadFixture}=await hostModule();for(const screen of ['B2','B9','B9-restart','B9-update']){const f=await loadFixture(screen),view=f.routes['/assistant/conversation']!.body as any,summaries=f.routes['/assistant/works']!.body as any;assert.deepEqual(f.captureScroll,{selector:'#chat-scroll',top:0});assert.equal(view.decisions.find((d:any)=>d.ruleChange).ruleChange.revision,(f.routes['/missions/intake']!.body as any).revision);assert.ok(!summaries.works.some((w:any)=>w.workId==='rounding-work'));assert.ok(view.briefings.some((b:any)=>b.decisionIds.includes(view.decisions.find((d:any)=>d.ruleChange).id)));}});
+
+test('activity capture preserves the unread decision before ongoing Work and completed file reads',async()=>{
+ const {loadFixture}=await hostModule(),{harness,reply,settle}=await import('./support/workbench-client.ts');
+ for(const screen of ['B7-done','B7-fail','B7-unknown','B16-sent']){
+  const fixture=await loadFixture(screen),app=harness(async(path,options)=>{
+   assert.notEqual(options?.method,'POST');const response=fixture.routes[path.startsWith('/events?')?'/events':path];return reply(response?.body??{},response?.status??404);
+  });await settle();
+  for(const step of fixture.steps){assert.equal(step.action,'click');if(step.action!=='click')continue;const id=step.selector.startsWith('#')?step.selector.slice(1):/^\[id="([^"]+)"\]$/.exec(step.selector)?.[1];const node=app.all().find(n=>n.id===id);assert.ok(node,step.selector);await node.fire('click');await settle();}
+  assert.equal(app.node('side-activity').hidden,false,screen);
+  assert.equal(app.node('activity-toggle').attributes.get('aria-label'),'활동 보기',screen+' open activity keeps its control name');
+  const rows=app.node('activity-list').children,decision=rows.find(n=>n.children.some(c=>c.id.startsWith('activity-row-decision:')))!;
+  assert.match(decision.textContent,/읽지 않음/,screen+' decision has not been opened');
+  if(screen==='B16-sent'){assert.ok(rows.indexOf(decision)<rows.findIndex(n=>n.textContent.includes('09:13에 보냈어요. 응답 대기예요.')));continue;}
+  const read=rows.findIndex(n=>n.children.some(c=>c.id.startsWith('activity-row-read-'))),summary=rows.findIndex(n=>n.textContent.includes('요금제 6개를 표 1개로 정리했어요.'));
+  assert.ok(rows.indexOf(decision)<summary&&summary<read,screen+' pending Work precedes completed reads');
+ }
+});
 test('R-A fixtures come from timed command producers and retain named worker dependencies and skips',async()=>{
  const {loadFixture}=await hostModule();
  for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown']){
