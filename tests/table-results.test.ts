@@ -92,34 +92,34 @@ for(const team of [false,true])test(`runtime refuses marked malformed ${team?'wo
  if(team)assert.equal(work.tasks.find(task=>task.id===f.workId+':step:0')!.result,undefined);
 });
 
-const churnFacts={format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32};
+const declaredFacts={format:'massion-facts/v1',items:[{label:'Processed',value:41,unit:'items'},{label:'Phase',value:'Ready'}]};
 test('only settled explicit business facts reach list summaries without worker bodies or prose inference',async t=>{
- const f=await runtime(t,JSON.stringify(churnFacts),true),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
+ const f=await runtime(t,JSON.stringify(declaredFacts),true),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
  const facts=workCardFacts(work) as any;
- assert.deepEqual(facts.resultFacts,churnFacts);assert.equal(facts.tableCount,0);
- assert.equal(work.acceptance,'accepted');assert.equal(await f.artifacts.read(work.artifact!),JSON.stringify(churnFacts));
- assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,JSON.stringify(churnFacts));
- assert.ok(work.tasks.some(task=>!task.step&&task.result===JSON.stringify(churnFacts)),'final assembly facts survive the result projection');
+ assert.deepEqual(facts.resultFacts,declaredFacts);assert.equal(facts.tableCount,0);
+ assert.equal(work.acceptance,'accepted');assert.equal(await f.artifacts.read(work.artifact!),JSON.stringify(declaredFacts));
+ assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,JSON.stringify(declaredFacts));
+ assert.ok(work.tasks.some(task=>!task.step&&task.result===JSON.stringify(declaredFacts)),'final assembly facts survive the result projection');
  assert.equal(JSON.stringify(facts).includes('Create a table'),false);
- for(const task of work.tasks){task.status='active';task.result=JSON.stringify(churnFacts);}
+ for(const task of work.tasks){task.status='active';task.result=JSON.stringify(declaredFacts);}
  assert.equal((workCardFacts(work) as any).resultFacts,null,'unsettled results never acquire facts');
  for(const task of work.tasks){task.status='settled';task.result='41 reasons, business 9, other 32';}
  assert.equal((workCardFacts(work) as any).resultFacts,null,'ordinary prose never acquires counts');
 });
-for(const team of [false,true])test(`runtime refuses inconsistent ${team?'worker':'assembly'} business facts before writes or checking`,async t=>{
- const f=await runtime(t,JSON.stringify({...churnFacts,other:33}),team),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
+for(const team of [false,true])test(`runtime refuses malformed ${team?'worker':'assembly'} business facts before writes or checking`,async t=>{
+ const f=await runtime(t,JSON.stringify({...declaredFacts,items:[{label:'Processed',value:-1}]}),team),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!;
  assert.equal(result.status,'blocked');assert.equal(work.artifact,undefined);assert.equal(work.record,undefined);assert.equal(f.calls.some(c=>c.role==='verifier'),false);
  if(team)assert.equal(work.tasks.find(task=>task.step)!.result,undefined);
 });
 
 test('assembly facts survive canonical journal validation without a new storage shape',async t=>{
- const f=await runtime(t,JSON.stringify(churnFacts)),result=await f.instance.run('mission',f.workId,'run',2);
+ const f=await runtime(t,JSON.stringify(declaredFacts)),result=await f.instance.run('mission',f.workId,'run',2);
  assert.equal(result.snapshot.value.works[0]!.acceptance,'accepted');validateMissionJournalLineage(f.store.inspect());
 });
 
-for(const team of [false,true])test(`final marked pricing table supplies authoritative summary without counting ${team?'worker tables twice':'a missing team'}`,async t=>{
- const final=JSON.stringify({...table,business:'pricing'}),worker=JSON.stringify({...table,business:'pricing',rows:[...table.rows,['Other','29,900원']]}),f=await runtime(t,final,team,worker),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!,summary=workCardFacts(work) as any;
- assert.equal(work.acceptance,'accepted');assert.deepEqual(summary.resultFacts,{format:'massion-facts/v1',kind:'pricing',plans:2,tables:1});assert.equal(summary.tableCount,1);
+for(const team of [false,true])test(`final declared facts replace worker declarations ${team?'with a team':'without a team'}`,async t=>{
+ const final=JSON.stringify(declaredFacts),worker=JSON.stringify({format:'massion-facts/v1',items:[{label:'Earlier',value:3}]}),f=await runtime(t,final,team,worker),result=await f.instance.run('mission',f.workId,'run',2),work=result.snapshot.value.works[0]!,summary=workCardFacts(work) as any;
+ assert.equal(work.acceptance,'accepted');assert.deepEqual(summary.resultFacts,declaredFacts);assert.equal(summary.tableCount,0);
  assert.equal(await f.artifacts.read(work.artifact!),final);assert.equal(f.calls.find(c=>c.role==='verifier')!.prompt.artifact.content,final);
  if(!team)validateMissionJournalLineage(f.store.inspect());
 });

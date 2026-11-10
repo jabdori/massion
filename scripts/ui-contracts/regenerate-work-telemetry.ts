@@ -9,6 +9,7 @@ import {parseTeamPlan,teamCallCount} from '../../src/internal-teams.ts';
 import {loadFixture} from './fixture-host.ts';
 import {applySkills} from '../../src/skills.ts';
 import {memberProcedures} from '../../src/internal-teams.ts';
+import {parseResultFacts} from '../../src/result-facts.ts';
 import {workCardFacts} from '../../src/assistant-service.ts';
 
 const owner:Actor={id:'local-owner',roles:['owner']},host:Actor={id:'runtime-representative',roles:['representative']},assistant:Actor={id:'fixture-assistant',roles:['assistant']};
@@ -19,9 +20,9 @@ export function churnSource(original:Work){
  const settled=original.acceptance==='failed',memberId=original.assistantSource!.memberId!,spec=[
   {title:'범위 정하기',role:'조사',dependsOn:[],status:'settled',result:'지난 90일 해지'},
   {title:'자료 모으기',role:'조사',dependsOn:[0],status:'settled',instruction:'지난 90일 해지 고객의 해지 사유와 문의 기록을 모아 줘.',result:'해지 사유 41건 모았어요.'},
-  {title:'나누기',role:'분류',dependsOn:[0],status:'settled',instruction:'모은 건은 기업 고객과 그 외로 나눠 줘.',result:JSON.stringify({format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32})},
+  {title:'나누기',role:'분류',dependsOn:[0],status:'settled',instruction:'모은 건은 기업 고객과 그 외로 나눠 줘.',result:JSON.stringify({format:'massion-facts/v1',items:[{label:'해지 사유',value:41,unit:'건'},{label:'기업',value:9,unit:'건'},{label:'그 외',value:32,unit:'건'}]})},
   {title:'설문 다시 보내기',role:'설문',dependsOn:[],status:'settled',skipReason:'지난달 설문 있음',result:'Skipped · 지난달 설문 있음'},
-  {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?JSON.stringify({format:'massion-facts/v1',kind:'causes',causes:1,evidence:2}):undefined}
+  {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?JSON.stringify({format:'massion-facts/v1',items:[{label:'기업 고객 원인',value:1,unit:'개'},{label:'근거',value:2,unit:'건'}]}):undefined}
  ];
  const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:original.title,body:{description:original.title,steps:spec.map(s=>s.title),verify:original.criteria.description}},owner,{observedAt:original.admittedAt??0}).value;
  return {...original,team:memberProcedures(skills,memberId,1),tasks:spec.map((s,index)=>({id:original.id+':step:'+index,parentId:original.id+':executor',status:s.status as Task['status'],...(s.result?{result:s.result}:{}),step:{title:s.title,role:s.role,dependsOn:s.dependsOn.map(i=>original.id+':step:'+i),...(s.instruction?{instruction:s.instruction}:{}),...(s.skipReason?{skipReason:s.skipReason}:{})}}))};
@@ -39,6 +40,8 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
  for(const field of ['sourceDocuments','questions','prerequisites','prerequisiteRecords','missionSnapshot','missionVersion','organizationSnapshot','criteria','appliedMemoryVersions'] as const)if(Object.hasOwn(original,field))(work() as any)[field]=structuredClone(original[field]);
  if(original.runtimeRun)send({type:'activate-runtime',workId:original.id,run:{...original.runtimeRun,inputHash:workInputHash(work())}},owner);
  const tasks:Task[]=structuredClone(original.tasks.filter(t=>!t.step));
+ const assembly=source.tasks.find(t=>t.id===source.id+':executor'&&t.status==='settled'&&t.result&&parseResultFacts(t.result));
+ if(assembly){const task=tasks.find(t=>t.id===original.id+':executor');if(task){task.status='settled';task.result=assembly.result;}}
  if(rawSteps.length){
   if(!tasks.some(t=>t.id===original.id+':executor'))tasks.push({id:original.id+':executor',parentId:original.id+':root',status:'queued'});
   const plan=parseTeamPlan(JSON.stringify({steps:rawSteps.map(task=>({...task.step,dependsOn:task.step!.dependsOn.map(id=>rawSteps.findIndex(t=>t.id===id))}))}),work());

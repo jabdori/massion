@@ -303,9 +303,18 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "causes",
-                "causes": 1,
-                "evidence": 2
+                "items": [
+                  {
+                    "label": "기업 고객 원인",
+                    "value": 1,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "근거",
+                    "value": 2,
+                    "unit": "건"
+                  }
+                ]
               },
               "tableCount": 0
             }
@@ -423,9 +432,18 @@
             ],
             "resultFacts": {
               "format": "massion-facts/v1",
-              "kind": "causes",
-              "causes": 1,
-              "evidence": 2
+              "items": [
+                {
+                  "label": "기업 고객 원인",
+                  "value": 1,
+                  "unit": "개"
+                },
+                {
+                  "label": "근거",
+                  "value": 2,
+                  "unit": "건"
+                }
+              ]
             },
             "tableCount": 0
           },
@@ -791,7 +809,7 @@
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
                       },
                       {
-                        "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                        "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                       },
                       {
@@ -799,7 +817,7 @@
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                       },
                       {
-                        "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                        "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                         "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                       }
                     ],
@@ -837,7 +855,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                    "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -845,7 +863,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
-                    "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
@@ -956,7 +974,7 @@
                     "endedAt": 1793855280008,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
@@ -985,7 +1003,7 @@
                     "endedAt": 1793855280010,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                     "startedAt": 1793855280009,
                     "status": "settled",
                     "step": {
@@ -1799,7 +1817,7 @@
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:1"
                     },
                     {
-                      "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                      "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
                     },
                     {
@@ -1807,7 +1825,7 @@
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:3"
                     },
                     {
-                      "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                      "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                       "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
                     }
                   ],
@@ -1845,7 +1863,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                  "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -1853,7 +1871,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4:fixture",
-                  "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:4"
@@ -1964,7 +1982,7 @@
                   "endedAt": 1793855280008,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
@@ -1993,7 +2011,7 @@
                   "endedAt": 1793855280010,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:4",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"causes\",\"causes\":1,\"evidence\":2}",
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"기업 고객 원인\",\"value\":1,\"unit\":\"개\"},{\"label\":\"근거\",\"value\":2,\"unit\":\"건\"}]}",
                   "startedAt": 1793855280009,
                   "status": "settled",
                   "step": {
@@ -2847,9 +2865,18 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "causes",
-                "causes": 1,
-                "evidence": 2
+                "items": [
+                  {
+                    "label": "기업 고객 원인",
+                    "value": 1,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "근거",
+                    "value": 2,
+                    "unit": "건"
+                  }
+                ]
               },
               "tableCount": 0
             }

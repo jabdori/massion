@@ -14,7 +14,7 @@ const time=(clock:string)=>Date.parse('2026-11-05T'+clock+':00+09:00');
 /** 외부 조회가 없는 통제 예시이며 출처 링크나 실제 시장 가격을 주장하지 않습니다. */
 export function pricingTableResult():string {
  const rows=[['A사','기본','9,900원','통제 예시'],['A사','팀','19,900원','통제 예시'],['B사','개인','8,000원','통제 예시'],['B사','팀','19,000원','통제 예시'],['B사','기업','45,000원','통제 예시'],['C사','연간 ÷ 12','12,500원','통제 예시']];
- const result=JSON.stringify({format:'massion-table/v1',business:'pricing',caption:'경쟁사 가격 · '+rows.length+'개',columns:['회사','요금제','월 요금','출처'],rows});
+ const result=JSON.stringify({format:'massion-table/v1',caption:'경쟁사 가격 · '+rows.length+'개',columns:['회사','요금제','월 요금','출처'],rows});
  validateTableOutput(result);return result;
 }
 const pricing=[
@@ -27,7 +27,7 @@ const coding=[{role:'읽기',title:'읽기',dependsOn:[],start:'10:40',done:4,to
 const churn=[
  {role:'조사',title:'범위 정하기',dependsOn:[],start:'09:41',end:'09:41',done:1,total:1,result:'지난 90일 해지'},
  {role:'조사',title:'자료 모으기',dependsOn:[0],start:'09:42',end:'10:05',done:41,total:41,result:'해지 사유 41건 모았어요.'},
- {role:'분류',title:'나누기',dependsOn:[1],start:'10:05',end:'10:24',done:41,total:41,result:JSON.stringify({format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32})},
+ {role:'분류',title:'나누기',dependsOn:[1],start:'10:05',end:'10:24',done:41,total:41,result:JSON.stringify({format:'massion-facts/v1',items:[{label:'해지 사유',value:41,unit:'건'},{label:'기업',value:9,unit:'건'},{label:'그 외',value:32,unit:'건'}]})},
  {role:'설문',title:'설문 다시 보내기',dependsOn:[],skipReason:'지난달 설문 있음',end:'10:24',result:'Skipped · 지난달 설문 있음'},
  {role:'요약',title:'원인 정리',dependsOn:[2],start:'10:24',done:0,total:1}
 ];
@@ -56,6 +56,7 @@ export function roomTelemetryWork(mission:Mission,kind:'pricing'|'coding'|'churn
   }
   if(s.end)send({type:'settle-task',workId,taskId,result:s.result!},actor,s.end);
  }
+ if(kind==='pricing')send({type:'settle-task',workId,taskId:workId+':executor',result:JSON.stringify({format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]})},{id:'executor',roles:['executor']});
  if(kind==='coding')send({type:'append-work-message',workId,messageId:'procedure-note',replyTo:null,text:'이번에도 테스트부터 돌려 줘.',stepNote:{taskId:workId+':step:1',title:'테스트 먼저 돌리기'}},owner,'10:44');
  validateMissionLineage(state);return {work:current(),conversation:state.conversations?.[0],source};
 }

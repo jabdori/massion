@@ -48,21 +48,21 @@ test('settled worker summaries cannot replace unknown, stopped or budget-waiting
 });
 
 test('typed result counts render before a pane opens and follow list revisions, exceptions and feed replacement',async()=>{
- const work={...row({workId:'w1',title:'Price table',memberId:quill.id,execution:'waiting',acceptance:'pending',started:true}),resultFacts:{format:'massion-facts/v1',kind:'pricing',plans:6,tables:1},tableCount:1,workerSteps:[{step:{title:'가격 모으기',role:'조사'},status:'settled'},{step:{title:'표 만들기',role:'표 정리'},status:'settled'}]};
+ const work={...row({workId:'w1',title:'Price table',memberId:quill.id,execution:'waiting',acceptance:'pending',started:true}),resultFacts:{format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]},tableCount:1,workerSteps:[{step:{title:'가격 모으기',role:'조사'},status:'settled'},{step:{title:'표 만들기',role:'표 정리'},status:'settled'}]};
  const turn={id:work.turnId,messageId:'owner',status:'answered',displayStatus:'answered',at:T0,proposal:{title:work.title},work},f=fixture({works:[work],turns:[turn],messages:[{id:'owner',role:'owner',text:'Compare prices'}]});await settle();
  const card=()=>f.app.all().find(n=>n.id==='chat-card-'+turn.id)!;
- assert.match(card().textContent,/표 1개 · 확인 대기/);assert.equal(f.app.calls.some(c=>c.path==='/missions/intake'),false);
- await f.app.node('activity-toggle').fire('click');assert.match(f.app.node('activity-list').textContent,/요금제 6개를 표 1개로 정리했어요\. 확인 대기예요\./);
+ assert.match(card().textContent,/요금제 6개 · 표 1개/);assert.equal(f.app.calls.some(c=>c.path==='/missions/intake'),false);
+ await f.app.node('activity-toggle').fire('click');assert.match(f.app.node('activity-list').textContent,/요금제 6개 · 표 1개 · 확인 대기/);
  let release=()=>{};f.state.hold=new Promise<void>(r=>release=r);const slow=runInContext('shellWorksLoad()',f.app.context);await settle();f.state.hold=null;
- Object.assign(f.state.works[0]!,{missionRevision:4,resultFacts:{...work.resultFacts,plans:8,tables:2},tableCount:2});await runInContext('shellWorksLoad()',f.app.context);release();await slow;await settle();
- assert.match(card().textContent,/표 2개/);assert.match(f.app.node('activity-list').textContent,/요금제 8개를 표 2개/);assert.doesNotMatch(f.app.node('activity-list').textContent,/요금제 6개/);
+ Object.assign(f.state.works[0]!,{missionRevision:4,resultFacts:{...work.resultFacts,items:[{label:'요금제',value:8,unit:'개'},{label:'표',value:2,unit:'개'}]},tableCount:2});await runInContext('shellWorksLoad()',f.app.context);release();await slow;await settle();
+ assert.match(card().textContent,/표 2개/);assert.match(f.app.node('activity-list').textContent,/요금제 8개 · 표 2개/);assert.doesNotMatch(f.app.node('activity-list').textContent,/요금제 6개/);
  Object.assign(f.state.works[0]!,{missionRevision:5,unknown:true});await runInContext('shellWorksLoad()',f.app.context);await settle();assert.match(f.app.node('activity-list').textContent,/결과 모름/);assert.doesNotMatch(f.app.node('activity-list').textContent,/확인 대기예요/);
  f.state.feedId='replacement';f.state.works=[];f.state.turns=[];await runInContext('chatReset()',f.app.context);await settle();assert.doesNotMatch(f.app.node('activity-list').textContent,/요금제 8개/);
 });
 
 test('accepted business results retain their counts while unknown and stopped status take priority',async()=>{
  const {app}=fixture();await settle();
- const work={...row({workId:'w1',title:'Prices',memberId:null,execution:'settled',acceptance:'accepted',started:true}),resultFacts:{format:'massion-facts/v1',kind:'pricing',plans:6,tables:1}};
+ const work={...row({workId:'w1',title:'Prices',memberId:null,execution:'settled',acceptance:'accepted',started:true}),resultFacts:{format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]}};
  const summary=(value:unknown)=>runInContext('shellResultSummary('+JSON.stringify(value)+')',app.context);
  assert.equal(summary(work),'요금제 6개 · 표 1개 · 완료');
  for(const state of [{unknown:true},{execution:'blocked'},{execution:'cancelled'}])assert.equal(summary({...work,...state}),'');
@@ -417,4 +417,14 @@ for(const projection of ['turn','shell'] as const)test('a fake clock refreshes a
  now+=120000;timer!.run();await settle();assert.ok(app.calls.filter(c=>c.path.startsWith('/assistant/conversation')).length>reads);assert.ok(state.worksCalls>lists);
  if(projection==='turn'){assert.match(app.all().find(n=>n.id==='chat-card-'+turn.id)!.textContent,/3분/);assert.equal(timers.get(runInContext('chatPendingTimer',app.context))?.delay,60000);}else{assert.deepEqual(memberLines(app),['Clocked check완료']);assert.equal(runInContext('chatPendingTimer',app.context),0);}
  assert.equal(app.calls.filter(c=>c.options?.method==='POST').length,0);
+});
+
+test('arbitrary fact labels and literal text stay ordered and real step titles drive activity state',async()=>{
+ const {app}=fixture();await settle();
+ const work={...row({workId:'any',title:'Package build',memberId:null,execution:'active',acceptance:'pending',started:true}),resultFacts:{format:'massion-facts/v1',items:[{label:'Bundles',value:7,unit:'items'},{label:'Phase',value:'<img src=x>'}]},workerSteps:[{step:{title:'Compile sources',role:'Build'},status:'settled'},{step:{title:'Package archives',role:'Build'},status:'active'}]};
+ const render=()=>runInContext('shellResultSummary('+JSON.stringify(work)+')',app.context);
+ assert.equal(render(),'Bundles 7items · Phase <img src=x> · Compile sources 완료 · Package archives 중');
+ work.workerSteps[1]!.step.title='Publish bundle';assert.match(render(),/Publish bundle 중$/);
+ const node=runInContext('resultFactsElement('+JSON.stringify(JSON.stringify(work.resultFacts))+')',app.context) as Node;
+ assert.equal(node.tagName,'P');assert.equal(node.textContent,'Bundles 7items · Phase <img src=x>');assert.equal(node.children.length,0);
 });

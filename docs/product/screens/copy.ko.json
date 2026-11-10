@@ -1,56 +1,39 @@
 {
- "ui.facts.pricing-counts": {
-  "ko": "요금제 {plans}개 · 표 {tables}개",
+ "ui.room.result": {
+  "ko": "결과 보기",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-M"
+   "B8-done:pane",
+   "B8-fail:pane"
   ]
  },
- "ui.facts.causes-counts": {
-  "ko": "기업 고객 원인 {causes}개 · 근거 {evidence}건",
+ "ui.room.overall-result": {
+  "ko": "전체 결과",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-M"
+   "B8-done:pane"
   ]
  },
- "ui.facts.pricing": {
-  "ko": "요금제 {plans}개를 표 {tables}개로 정리했어요. 확인 대기예요.",
+ "ui.room.production-result": {
+  "ko": "작성 결과",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-M"
+   "B8-done:pane"
   ]
  },
- "ui.facts.churn": {
-  "ko": "해지 사유 {reasons}건을 기업 {business}건, 그 외 {other}건으로 나눴어요.",
+ "ui.room.check-result": {
+  "ko": "확인 결과",
   "roles": [
    "text"
   ],
   "used_in": [
-   "R-M"
-  ]
- },
- "ui.facts.churn.running": {
-  "ko": "원인을 정리하고 있어요.",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-M"
-  ]
- },
- "ui.facts.causes": {
-  "ko": "기업 고객 원인 {causes}개 · 근거 {evidence}건 · {status}",
-  "roles": [
-   "text"
-  ],
-  "used_in": [
-   "R-M"
+   "B8-done:pane"
   ]
  },
  "ui.facts.steps": {

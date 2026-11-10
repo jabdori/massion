@@ -59,13 +59,9 @@ function shellStepSummary(work){
 }
 function shellResultSummary(work){
  const facts=work.resultFacts;if(!facts||work.unknown||!['active','waiting','settled'].includes(work.execution)||work.acceptance==='stale')return '';
- const status=shellWorkLabel(work);
- if(facts.kind==='pricing'&&work.acceptance==='pending'&&status===copy('sidebar.status.07'))return copy('ui.facts.pricing',facts);
- if(facts.kind==='churn'&&work.acceptance==='pending'&&work.execution==='active')return copy('ui.facts.churn',facts)+(work.workerSteps?.some(t=>t.status==='active'&&t.step.title==='원인 정리')?' '+copy('ui.facts.churn.running'):'');
- if(facts.kind==='pricing')return copy('ui.facts.pricing-counts',facts)+' · '+status;
- if(facts.kind==='churn')return copy('ui.facts.churn',facts)+' '+status;
- if(facts.kind==='causes')return copy('ui.facts.causes',{...facts,status:work.acceptance==='failed'?copy('ui.check-failed'):status});
- return '';
+ const active=work.execution==='active'&&work.acceptance==='pending'&&work.workerSteps?.some(t=>t.status==='active'&&!t.step.skipReason);
+ const status=work.acceptance==='failed'?copy('ui.check-failed'):active?shellStepSummary(work):shellWorkLabel(work);
+ return resultFactsText(facts)+(status?' · '+status:'');
 }
 const shellWorkBusy=work=>work.started&&['active','waiting'].includes(work.execution)&&work.acceptance==='pending'&&!work.unknown;
 function shellState(work){const state=element('span',undefined,'state'+(work.unknown||['failed','stale'].includes(work.acceptance)?' exception':work.acceptance==='accepted'?' done':''));state.setAttribute('role','status');state.append(element('span',shellWorkLabel(work),'visually-hidden'));return state;}

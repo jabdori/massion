@@ -235,9 +235,18 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "pricing",
-                "plans": 6,
-                "tables": 1
+                "items": [
+                  {
+                    "label": "요금제",
+                    "value": 6,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "표",
+                    "value": 1,
+                    "unit": "개"
+                  }
+                ]
               },
               "tableCount": 1,
               "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
@@ -337,10 +346,23 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "churn",
-                "reasons": 41,
-                "business": 9,
-                "other": 32
+                "items": [
+                  {
+                    "label": "해지 사유",
+                    "value": 41,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "기업",
+                    "value": 9,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "그 외",
+                    "value": 32,
+                    "unit": "건"
+                  }
+                ]
               },
               "tableCount": 0
             }
@@ -458,10 +480,23 @@
             ],
             "resultFacts": {
               "format": "massion-facts/v1",
-              "kind": "churn",
-              "reasons": 41,
-              "business": 9,
-              "other": 32
+              "items": [
+                {
+                  "label": "해지 사유",
+                  "value": 41,
+                  "unit": "건"
+                },
+                {
+                  "label": "기업",
+                  "value": 9,
+                  "unit": "건"
+                },
+                {
+                  "label": "그 외",
+                  "value": 32,
+                  "unit": "건"
+                }
+              ]
             },
             "tableCount": 0
           },
@@ -544,9 +579,18 @@
             ],
             "resultFacts": {
               "format": "massion-facts/v1",
-              "kind": "pricing",
-              "plans": 6,
-              "tables": 1
+              "items": [
+                {
+                  "label": "요금제",
+                  "value": 6,
+                  "unit": "개"
+                },
+                {
+                  "label": "표",
+                  "value": 1,
+                  "unit": "개"
+                }
+              ]
             },
             "tableCount": 1
           },
@@ -818,7 +862,7 @@
                   {
                     "authority": "data-only fixture",
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                    "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                    "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "status": "succeeded",
                     "target": "fixture text",
                     "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -913,7 +957,7 @@
                     "endedAt": 1793855280008,
                     "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                     "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                    "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                     "startedAt": 1793855280006,
                     "status": "settled",
                     "step": {
@@ -1138,7 +1182,7 @@
                   {
                     "authority": "fixture-only",
                     "id": "assistant-6a2a6478f24797a3b996652d:step:3:effect",
-                    "receipt": "{\"format\":\"massion-table/v1\",\"business\":\"pricing\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
+                    "receipt": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                     "status": "succeeded",
                     "target": "controlled fixture units",
                     "taskId": "assistant-6a2a6478f24797a3b996652d:step:3"
@@ -1168,9 +1212,11 @@
                     "status": "queued"
                   },
                   {
+                    "endedAt": 1793855220000,
                     "id": "assistant-6a2a6478f24797a3b996652d:executor",
                     "parentId": "assistant-6a2a6478f24797a3b996652d:root",
-                    "status": "queued"
+                    "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"요금제\",\"value\":6,\"unit\":\"개\"},{\"label\":\"표\",\"value\":1,\"unit\":\"개\"}]}",
+                    "status": "settled"
                   },
                   {
                     "id": "assistant-6a2a6478f24797a3b996652d:verifier",
@@ -1244,7 +1290,7 @@
                       "done": 1,
                       "total": 1
                     },
-                    "result": "{\"format\":\"massion-table/v1\",\"business\":\"pricing\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
+                    "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                     "startedAt": 1793854920000,
                     "status": "settled",
                     "step": {
@@ -1659,7 +1705,7 @@
                 {
                   "authority": "data-only fixture",
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2:fixture",
-                  "receipt": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                  "receipt": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "status": "succeeded",
                   "target": "fixture text",
                   "taskId": "assistant-236a368dfcf6f32eaeb68fb0:step:2"
@@ -1754,7 +1800,7 @@
                   "endedAt": 1793855280008,
                   "id": "assistant-236a368dfcf6f32eaeb68fb0:step:2",
                   "parentId": "assistant-236a368dfcf6f32eaeb68fb0:executor",
-                  "result": "{\"format\":\"massion-facts/v1\",\"kind\":\"churn\",\"reasons\":41,\"business\":9,\"other\":32}",
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"해지 사유\",\"value\":41,\"unit\":\"건\"},{\"label\":\"기업\",\"value\":9,\"unit\":\"건\"},{\"label\":\"그 외\",\"value\":32,\"unit\":\"건\"}]}",
                   "startedAt": 1793855280006,
                   "status": "settled",
                   "step": {
@@ -1979,7 +2025,7 @@
                 {
                   "authority": "fixture-only",
                   "id": "assistant-6a2a6478f24797a3b996652d:step:3:effect",
-                  "receipt": "{\"format\":\"massion-table/v1\",\"business\":\"pricing\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
+                  "receipt": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                   "status": "succeeded",
                   "target": "controlled fixture units",
                   "taskId": "assistant-6a2a6478f24797a3b996652d:step:3"
@@ -2009,9 +2055,11 @@
                   "status": "queued"
                 },
                 {
+                  "endedAt": 1793855220000,
                   "id": "assistant-6a2a6478f24797a3b996652d:executor",
                   "parentId": "assistant-6a2a6478f24797a3b996652d:root",
-                  "status": "queued"
+                  "result": "{\"format\":\"massion-facts/v1\",\"items\":[{\"label\":\"요금제\",\"value\":6,\"unit\":\"개\"},{\"label\":\"표\",\"value\":1,\"unit\":\"개\"}]}",
+                  "status": "settled"
                 },
                 {
                   "id": "assistant-6a2a6478f24797a3b996652d:verifier",
@@ -2085,7 +2133,7 @@
                     "done": 1,
                     "total": 1
                   },
-                  "result": "{\"format\":\"massion-table/v1\",\"business\":\"pricing\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
+                  "result": "{\"format\":\"massion-table/v1\",\"caption\":\"경쟁사 가격 · 6개\",\"columns\":[\"회사\",\"요금제\",\"월 요금\",\"출처\"],\"rows\":[[\"A사\",\"기본\",\"9,900원\",\"통제 예시\"],[\"A사\",\"팀\",\"19,900원\",\"통제 예시\"],[\"B사\",\"개인\",\"8,000원\",\"통제 예시\"],[\"B사\",\"팀\",\"19,000원\",\"통제 예시\"],[\"B사\",\"기업\",\"45,000원\",\"통제 예시\"],[\"C사\",\"연간 ÷ 12\",\"12,500원\",\"통제 예시\"]]}",
                   "startedAt": 1793854920000,
                   "status": "settled",
                   "step": {
@@ -2483,9 +2531,18 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "pricing",
-                "plans": 6,
-                "tables": 1
+                "items": [
+                  {
+                    "label": "요금제",
+                    "value": 6,
+                    "unit": "개"
+                  },
+                  {
+                    "label": "표",
+                    "value": 1,
+                    "unit": "개"
+                  }
+                ]
               },
               "tableCount": 1,
               "turnId": "assistant-turn:m:3bb90ae9635bb4d3f8037672050c3013"
@@ -2585,10 +2642,23 @@
               ],
               "resultFacts": {
                 "format": "massion-facts/v1",
-                "kind": "churn",
-                "reasons": 41,
-                "business": 9,
-                "other": 32
+                "items": [
+                  {
+                    "label": "해지 사유",
+                    "value": 41,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "기업",
+                    "value": 9,
+                    "unit": "건"
+                  },
+                  {
+                    "label": "그 외",
+                    "value": 32,
+                    "unit": "건"
+                  }
+                ]
               },
               "tableCount": 0
             }

@@ -130,7 +130,7 @@ for(const screen of ['B8-done','B8-fail'])test(screen+' keeps raw execution resu
  const {nodes,work}=await scene(screen),flow=nodes().find(n=>hasClass(n,'room-flow'))!;
  for(const task of work.tasks.filter((task:any)=>task.result&&!task.step?.skipReason)){
   if(parseResultFacts(task.result)){
-   const detail=descendants(flow).find(n=>n.tagName==='DETAILS'&&n.children.some(c=>c.tagName==='SUMMARY'&&c.textContent===task.step.title));assert.ok(detail,'typed result has a disclosure');assert.equal(detail.open,false);assert.ok(detail.children.some(n=>n.tagName==='P'));assert.doesNotMatch(detail.textContent,/massion-facts/);continue;
+   const worker=descendants(flow).find(n=>hasClass(n,'room-worker')&&n.textContent.includes(task.step.title)),detail=worker&&descendants(worker).find(n=>n.tagName==='DETAILS');assert.ok(detail,'typed result has a disclosure');assert.equal(detail.open,false);assert.ok(detail.children.some(n=>n.tagName==='P'));assert.doesNotMatch(detail.textContent,/massion-facts/);continue;
   }
   const detail=descendants(flow).find(n=>n.tagName==='DETAILS'&&n.textContent.includes(task.result));
   assert.ok(detail,'task result has a disclosure');assert.equal(detail.open,false);
@@ -225,8 +225,8 @@ test('conversation table summaries retain authoritative list facts across unrela
  const {app,work,fixture}=await scene('B18-room-b'),summary=(fixture.routes['/assistant/works']!.body as any).works.find((w:any)=>w.workId===work.id),table=JSON.stringify({format:'massion-table/v1',caption:'가격',columns:['요금'],rows:[['9,900원']]});
  const card=()=>runInContext('chatCard('+JSON.stringify({id:summary.turnId,work:summary})+')',app.context) as Node;
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});w.tasks.find(t=>t.step?.title==='표 만들기').result=${JSON.stringify(table)}}`,app.context);
- assert.match(card().textContent,/표 1개 · 확인 대기/);
- runInContext('snapshot.revision++',app.context);assert.match(card().textContent,/표 1개 ·/);
+ assert.match(card().textContent,/요금제 6개 · 표 1개/);
+ runInContext('snapshot.revision++',app.context);assert.match(card().textContent,/요금제 6개 · 표 1개/);
  summary.missionRevision+=2;delete summary.resultFacts;delete summary.tableCount;assert.doesNotMatch(card().textContent,/표 1개 ·/);
 });
 
@@ -252,4 +252,12 @@ test('room attribution uses named product members and omits identities without a
  assert.doesNotMatch(strip().textContent,/provider-internal|route-42|bounded-fixture|확인한 쪽/);
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});delete w.assistantSource.memberId;for(const row of shellWorks)if(row.workId===w.id)row.memberId=null;renderMission()}`,app.context);
  assert.equal(strip().children.length,1);assert.equal(strip().children[0]!.children[1]!.className,'room-connection');
+});
+
+test('expanded flow keeps worker titles with identity and uses result disclosures without repeating Work titles',async()=>{
+ const {nodes,work}=await scene('B8-fail'),flow=nodes().find(n=>hasClass(n,'room-flow'))!;
+ for(const task of work.tasks.filter((t:any)=>t.step)){
+  const header=descendants(flow).find(n=>hasClass(n,'room-worker-identity')&&n.textContent.includes(task.step.title));assert.ok(header,'step title shares the identity header');
+ }
+ for(const node of descendants(flow).filter(n=>n.tagName==='SUMMARY'))assert.ok(![work.title,'작성','확인'].includes(node.textContent),'a result disclosure does not repeat task headings');
 });

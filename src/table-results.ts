@@ -1,10 +1,10 @@
-export interface TableResult {format:'massion-table/v1';caption:string;columns:string[];rows:string[][];business?:'pricing'}
+export interface TableResult {format:'massion-table/v1';caption:string;columns:string[];rows:string[][]}
 
 /** 명시적인 표만 해석하며 기존 텍스트의 바이트와 의미는 바꾸지 않습니다. */
 export function parseTableResult(text:string):TableResult|null {
  if(typeof text!=='string'||text.length>32768||!text.isWellFormed()||new TextEncoder().encode(text).length>32768)return null;
  let value;try{value=JSON.parse(text);}catch{return null;}
- if(!value||value.format!=='massion-table/v1'||Object.keys(value).length!==(Object.hasOwn(value,'business')?5:4)||!['format','caption','columns','rows'].every(key=>Object.hasOwn(value,key))||Object.hasOwn(value,'business')&&value.business!=='pricing')return null;
+ if(!value||value.format!=='massion-table/v1'||Object.keys(value).length!==4||!['format','caption','columns','rows'].every(key=>Object.hasOwn(value,key)))return null;
  const label=(s:unknown)=>typeof s==='string'&&s.isWellFormed()&&!!s.trim()&&s.length<=128;
  if(!label(value.caption)||!Array.isArray(value.columns)||value.columns.length<1||value.columns.length>12||!value.columns.every(label)||!Array.isArray(value.rows)||value.rows.length<1||value.rows.length>100||value.rows.length*value.columns.length>600)return null;
  if(!value.rows.every((row:unknown)=>Array.isArray(row)&&row.length===value.columns.length&&row.every(cell=>typeof cell==='string'&&cell.isWellFormed()&&cell.length<=1024)))return null;
@@ -16,7 +16,7 @@ export function validateTableOutput(text:string):void {
  if(value?.format==='massion-table/v1'&&!parseTableResult(text))throw new Error('Invalid bounded table result');
 }
 
-export const TABLE_RESULT_FORMAT=' When the owner requests a table, return exactly JSON {"format":"massion-table/v1","caption":"Table title","columns":["Column"],"rows":[["Cell"]]}. Use only string cells, 1–12 nonempty columns, 1–100 rectangular rows, at most 600 cells, 128 characters per caption/header, 1024 characters per cell, at most 32768 UTF-8 bytes. For a table whose rows actually represent pricing plans, an optional business:"pricing" field declares that meaning explicitly; all other tables omit business. No Markdown fences, HTML or inferred facts.';
+export const TABLE_RESULT_FORMAT=' When the owner requests a table, return exactly JSON {"format":"massion-table/v1","caption":"Table title","columns":["Column"],"rows":[["Cell"]]}. Use only string cells, 1–12 nonempty columns, 1–100 rectangular rows, at most 600 cells, 128 characters per caption/header, 1024 characters per cell, at most 32768 UTF-8 bytes. No Markdown fences, HTML or inferred facts.';
 
 export const tableResultsClient=`const parseTableResult=${parseTableResult.toString()};`+String.raw`
 function tableResultElement(text){

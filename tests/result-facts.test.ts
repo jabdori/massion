@@ -8,32 +8,28 @@ import {roomTelemetryWork} from '../scripts/ui-contracts/room-telemetry-fixtures
 import {loadFixture} from '../scripts/ui-contracts/fixture-host.ts';
 import {validateMissionLineage} from '../src/backup-lineage.ts';
 
-const facts={format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32};
-test('generic table rows never acquire pricing semantics without an explicit producer discriminator',()=>{
- const mission=createMission({id:'intake',purpose:'Customers',scope:'local',constraints:[],criteria:{version:1,description:'Controlled customer rows',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing'),task=work.tasks.find(t=>t.step?.title==='표 만들기')!;
- const table={format:'massion-table/v1',caption:'Customers',columns:['Name'],rows:[['A'],['B']]};task.result=JSON.stringify(table);
- assert.deepEqual(workResultFacts(work),{resultFacts:null,tableCount:1});
- task.result=JSON.stringify({...table,business:'pricing'});assert.deepEqual(workResultFacts(work),{resultFacts:{format:'massion-facts/v1',kind:'pricing',plans:2,tables:1},tableCount:1});
- task.result=JSON.stringify({...table,business:'customers'});assert.deepEqual(workResultFacts(work),{resultFacts:null,tableCount:0});
-});
-test('checking-seat text cannot overwrite producer counts or invent business observations',()=>{
- const mission=createMission({id:'intake',purpose:'Prices',scope:'local',constraints:[],criteria:{version:1,description:'Controlled prices',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing'),checker=work.tasks.find(t=>t.id===work.id+':verifier')!;
- checker.status='settled';checker.result=JSON.stringify({format:'massion-facts/v1',kind:'causes',causes:999,evidence:999});
- assert.deepEqual(workResultFacts(work).resultFacts,{format:'massion-facts/v1',kind:'pricing',plans:6,tables:1});
-});
-test('business facts reject extra fields, inconsistent totals, noninteger and unbounded counts',()=>{
+const facts={format:'massion-facts/v1',items:[{label:'Files',value:41,unit:'items'},{label:'Phase',value:'Ready'}]};
+test('generic ordered facts validate bounded integer and text items without interpreting their labels',()=>{
  assert.deepEqual(parseResultFacts(JSON.stringify(facts)),facts);
- for(const value of [null,[],{...facts,other:33},{...facts,business:-1},{...facts,reasons:41.5},{...facts,reasons:'41'},{...facts,other:Infinity},{...facts,other:null},{...facts,kind:'unknown'},{...facts,accepted:true},{...facts,reason:'prose'}])assert.equal(parseResultFacts(JSON.stringify(value)),null);
- for(const kind of ['pricing','causes'] as const){const value=kind==='pricing'?{format:'massion-facts/v1',kind,plans:0,tables:0}:{format:'massion-facts/v1',kind,causes:1,evidence:2};assert.deepEqual(parseResultFacts(JSON.stringify(value)),value);}
- assert.equal(parseResultFacts(JSON.stringify({...facts,reasons:1_000_000_001,business:1_000_000_001,other:0})),null);
- assert.equal(parseResultFacts(' '.repeat(1024)+JSON.stringify(facts)),null);
- for(const text of ['41 reasons, business 9, other 32','{"format":"massion-facts/v1",','```json\n'+JSON.stringify(facts)+'\n```'])assert.equal(parseResultFacts(text),null);
+ const invalid=[null,[],{...facts,kind:'pricing'},{...facts,items:[]},{...facts,items:Array(9).fill(facts.items[0])},...[
+  {label:'',value:1},{label:'x'.repeat(65),value:1},{label:' Files',value:1},{label:'Files',value:-1},{label:'Files',value:1.5},{label:'Files',value:1_000_000_001},{label:'Files',value:null},{label:'Files',value:true},{label:'Files',value:{}},{label:'Phase',value:''},{label:'Phase',value:'x'.repeat(97)},{label:'Files',value:1,unit:''},{label:'Files',value:1,unit:'x'.repeat(17)},{label:'Files',value:1,extra:true},{label:'Files',value:'\u202e'},{label:'Files',value:'\ud800'},{label:'Files',value:'a\nb'}
+ ].map(item=>({format:'massion-facts/v1',items:[item]})),{format:'massion-facts/v1',kind:'churn',reasons:41,business:9,other:32}];
+ for(const value of invalid)assert.equal(parseResultFacts(JSON.stringify(value)),null,JSON.stringify(value));
+ for(const item of [{label:'Arbitrary label',value:0},{label:'Anything',value:1_000_000_000,unit:'units'},{label:'<img src=x>',value:'<script>inert</script>'}])assert.deepEqual(parseResultFacts(JSON.stringify({format:'massion-facts/v1',items:[item]})),{format:'massion-facts/v1',items:[item]});
+ assert.equal(parseResultFacts(' '.repeat(4096)+JSON.stringify(facts)),null);
+ for(const text of ['41 items','{"format":"massion-facts/v1",','```json\n'+JSON.stringify(facts)+'\n```'])assert.equal(parseResultFacts(text),null);
+});
+test('generic table rows never acquire fact labels and checking-seat text cannot overwrite producer observations',()=>{
+ const mission=createMission({id:'intake',purpose:'Rows',scope:'local',constraints:[],criteria:{version:1,description:'Controlled rows',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing');
+ for(const task of work.tasks)if(!task.step)delete task.result;
+ assert.deepEqual(workResultFacts(work),{resultFacts:null,tableCount:1});
+ const checker=work.tasks.find(t=>t.id===work.id+':verifier')!;checker.status='settled';checker.result=JSON.stringify(facts);assert.equal(workResultFacts(work).resultFacts,null);
 });
 test('overlapping task result commands retain one original bounded observation and never create acceptance',async()=>{
  const owner={id:'local-owner',roles:['owner'] as const},mission=createMission({id:'intake',purpose:'Controlled prices',scope:'local',constraints:[],criteria:{version:1,description:'Controlled output',oracle:'fixture/v1'}},owner),{work}=roomTelemetryWork(mission,'pricing');
  const store=new InMemoryStore<typeof mission>(),state={...mission,works:[work]};await store.commit({id:mission.id,commandId:'seed',expectedRevision:0,fingerprint:hash(state),value:state,events:[],outbox:[]});
  const app=new Application(store,[{id:'executor',roles:['executor']}]),envelope={missionId:mission.id,actorId:'executor',commandId:'facts',expectedRevision:1,command:{type:'settle-task' as const,workId:work.id,taskId:work.id+':executor',result:JSON.stringify(facts)}};
- await assert.rejects(app.dispatch({...envelope,commandId:'invalid',command:{...envelope.command,result:JSON.stringify({...facts,other:33})}}),/Invalid bounded/);
+ await assert.rejects(app.dispatch({...envelope,commandId:'invalid',command:{...envelope.command,result:JSON.stringify({...facts,items:[{label:'Files',value:-1}]})}}),/Invalid bounded/);
  const results=await Promise.all([app.dispatch(envelope),app.dispatch(envelope)]);assert.deepEqual(results.map(r=>r.status).sort(),['committed','replayed']);
  const saved=(await store.load(mission.id))!.value.works[0]!;assert.deepEqual(workResultFacts(saved).resultFacts,facts);assert.equal(saved.acceptance,'pending');assert.equal(saved.record,undefined);
  validateMissionLineage({...mission,works:[saved]});
@@ -43,9 +39,9 @@ test('activity and done-screen business procedures retain real steps, host obser
   const fixture=await loadFixture(screen),mission=(fixture.routes['/missions/intake']!.body as any).value;
   const churn=mission.works.find((w:any)=>w.title==='이탈 원인 조사');assert.equal(churn.tasks.filter((t:any)=>t.step).length,5,screen);
   assert.ok(churn.tasks.filter((t:any)=>t.step&&t.status==='settled').every((t:any)=>Number.isSafeInteger(t.endedAt)),screen);
-  const result=workResultFacts(churn).resultFacts;assert.ok(result,screen);assert.equal(result.kind,churn.acceptance==='failed'?'causes':'churn',screen);
+  const result=workResultFacts(churn).resultFacts;assert.ok(result,screen);assert.deepEqual(result.items,churn.acceptance==='failed'?[{label:'기업 고객 원인',value:1,unit:'개'},{label:'근거',value:2,unit:'건'}]:[{label:'해지 사유',value:41,unit:'건'},{label:'기업',value:9,unit:'건'},{label:'그 외',value:32,unit:'건'}],screen);
   assert.equal(churn.record,undefined);if(churn.acceptance==='failed')assert.equal(churn.verdict.status,'failed');
   const rows=(fixture.routes['/assistant/works']!.body as any).works;assert.deepEqual(rows.find((w:any)=>w.workId===churn.id).resultFacts,result,screen);
-  for(const price of mission.works.filter((w:any)=>w.title==='경쟁사 가격')){assert.deepEqual(workResultFacts(price).resultFacts,{format:'massion-facts/v1',kind:'pricing',plans:6,tables:1});assert.equal(price.record,undefined);}
+  for(const price of mission.works.filter((w:any)=>w.title==='경쟁사 가격')){assert.deepEqual(workResultFacts(price).resultFacts,{format:'massion-facts/v1',items:[{label:'요금제',value:6,unit:'개'},{label:'표',value:1,unit:'개'}]});assert.equal(price.record,undefined);}
  }
 });
