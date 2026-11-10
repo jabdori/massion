@@ -155,3 +155,10 @@ test('mail connection in an empty first conversation retains More and the real c
  const connect=button(card,copy('conversation.button.12'));assert.ok(connect);assert.equal(connect.tagName,'BUTTON');
  await connect.fire('click');await settle();assert.equal(app.node('app-connect-panel').hidden,false);assert.equal(app.node('page-settings').hidden,true);assert.equal(state.posts.length,0);
 });
+
+test('a durable pending connection disables token entry after a fresh client read',async()=>{
+ const {app,state}=fixture();state.decisions=[{...decision,connection:{...decision.connection,pending:true}}];await settle();await open(app);
+ assert.equal(app.node('app-connect-token').disabled,true);assert.equal(app.node('app-connect-submit').disabled,true);
+ assert.ok(app.node('app-connect-status').textContent.includes(copy('conversation.text.01')));
+ app.node('app-connect-token').value='private-do-not-resend';await app.submit('app-connect-form');assert.equal(state.posts.length,0);assert.equal(app.node('app-connect-token').value,'');
+});

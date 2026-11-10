@@ -1,0 +1,48 @@
+contract B19 (B19 구성원 · 퀼) vs /Users/code/orca/workspaces/massion/lifecycle-settings/docs/acceptance/rc/snapshots/light/B19.json
+  ok    rail         link     "{member}" -> button "하나"
+  ok    rail         link     "결과물" -> button "결과물"
+  ok    rail         link     "예약" -> button "예약"
+  ok    rail         link     "{work_title}" -> button "GitHub"
+  ok    rail         button   "내 계정" -> button "내 계정"
+  ok    sidebar      text     "설정" -> button "설정"
+  ok    sidebar      textbox  "설정 검색" -> searchbox "설정 검색"
+  ok    sidebar      text     "일반" -> statictext "일반"
+  ok    sidebar      link     "기억" -> button "기억"
+  ok    sidebar      link     "구성원" -> button "구성원"
+  ok    sidebar      link     "기기" -> button "기기"
+  ok    sidebar      link     "연결" -> button "연결"
+  ok    sidebar      link     "사용량" -> button "사용량"
+  ok    sidebar      link     "앱" -> button "앱"
+  ok    sidebar      link     "개선" -> button "개선"
+  ok    sidebar      link     "권한" -> button "권한"
+  ok    settings     link     "구성원" -> button "‹ 구성원"
+  ok    settings     heading  "{member}" -> heading "퀼"
+  ok    settings     link     "메시지 보내기" -> button "메시지 보내기"
+  ok    settings     heading  "스킬" -> heading "스킬"
+  ok    settings     heading  "절차" -> heading "절차"
+  ok    settings     chip     "요약" -> statictext "요약"
+  ok    settings     chip     "확인" -> statictext "확인"
+  ok    settings     chip     "기록" -> statictext "기록"
+  ok    settings     heading  "모델 그룹" -> heading "모델 그룹"
+  ok    settings     text     "조사" -> statictext "조사"
+  ok    settings     link     "설정 ›" -> button "설정 ›"
+  ok    settings     heading  "앱" -> heading "앱"
+  ok    settings     text     "{work_title}" -> statictext "GitHub"
+  ok    settings     link     "열기 ›" -> button "열기 ›"
+  ok    settings     text     "{date}" -> statictext "11월 5일"
+  ok    settings     button   "되돌리기" -> button "되돌리기"
+  ok    settings     button   "되돌리기" -> button "되돌리기"
+  ok    settings     button   "보관" -> button "보관"
+  budget rail         app {"chars":2,"strings":2,"sentences":0,"longest":1} proto {"chars":1,"strings":1,"sentences":0,"longest":1} source visibleTextBudget
+  budget sidebar      app {"chars":21,"strings":10,"sentences":0,"longest":3} proto {"chars":21,"strings":10,"sentences":0,"longest":3} source visibleTextBudget
+  budget settings     app {"chars":249,"strings":46,"sentences":1,"longest":26} proto {"chars":321,"strings":47,"sentences":1,"longest":23} source visibleTextBudget
+  FAIL  missing settings     text     "기본"
+  FAIL  missing settings     text     "기본"
+  FAIL  role   settings     heading  "기억" (text exists without the required role)
+  FAIL  missing settings     link     "퀼과의 대화 ›"
+  FAIL  missing settings     button   "지우기"
+  FAIL  order  settings     heading  "최근 개선" (occurrence already consumed or found earlier)
+  FAIL  role   settings     heading  "예약" (text exists without the required role)
+  FAIL  missing settings     switch   "{work_title} 다시 보기"
+  FAIL  missing settings     switch   "해지 사유 모아 보기"
+FAIL: 9 failures, 0 warnings, 43 required elements

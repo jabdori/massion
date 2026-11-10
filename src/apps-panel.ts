@@ -144,7 +144,7 @@ function settingsAppsView(){
  const k=settingsApps||{apps:[],catalog:[]},a=settingsApp&&k.apps.find(x=>x.id===settingsApp);$('settings-apps-title').hidden=true;if(a)return settingsAppView(a);settingsApp='';
  const head=element('div',undefined,'set-apps-head'),search=element('input');search.id='settings-app-search';search.type='search';search.placeholder=copy('settings.textbox.01');search.setAttribute('aria-label',copy('settings.textbox.01'));head.append(element('h2',copy('ui.apps')),search);
  const member=id=>(chatMembers().find(m=>m.id===id)||{}).name;
- const appRow=(x,meta)=>{const row=element('button',undefined,'set-row'),mark=appsMark(x.name);if(x.name==='GitHub'){mark.textContent='';mark.className+=' set-app-github';}row.type='button';row.id='settings-app-'+x.id;row.append(mark,settingsText(x.name,meta.filter(Boolean).join(' · ')),element('span',x.enabled?copy('ui.panel.on'):copy('ui.panel.off'),'set-side'));const next=element('span','›','set-side');next.setAttribute('aria-hidden','true');row.append(next);row.addEventListener('click',()=>{settingsApp=x.id;renderSettings();});return row;};
+ const appRow=(x,meta)=>{const row=element('button',undefined,'set-row'),mark=appsMark(x.name);if(x.name==='GitHub'){mark.textContent='';mark.className+=' set-app-github';}row.type='button';row.id='settings-app-'+x.id;row.append(mark,settingsText(x.name,[...meta,(x.members||[]).map(m=>m.name).join(', ')].filter(Boolean).join(' · ')),element('span',x.enabled?copy('ui.panel.on'):copy('ui.panel.off'),'set-side'));const next=element('span','›','set-side');next.setAttribute('aria-hidden','true');row.append(next);row.addEventListener('click',()=>{settingsApp=x.id;renderSettings();});return row;};
  const rows=k.apps.filter(x=>x.origin!=='self-made').map(x=>appRow(x,[x.version])),made=k.apps.filter(x=>x.origin==='self-made').map(x=>{const row=element('div',undefined,'set-row'),text=element('span',undefined,'set-text'),meta=element('span',[x.version,copy('ui.panel.made-by',{member:member(x.memberId)||x.memberId})].join(' · '));row.id='settings-app-'+x.id;
   if(x.source){const source=x.source;meta.append(element('span',' · '));if(source.missionId&&source.workId)meta.append(chatButton(source.title+' ›',()=>{if(busy||loading)return;shellShow('chat');paneOpen(source.missionId,source.workId,source.title);void paneSelect(source.missionId+'/'+source.workId);},'set-app-source'));else meta.append(element('span',source.title));}
   text.append(chatButton(x.name,()=>{settingsApp=x.id;renderSettings();},'set-app-name'),meta);row.append(appsMark(x.name),text,element('span',x.enabled?copy('ui.panel.on'):copy('ui.panel.off'),'set-side'));return row;});
@@ -157,16 +157,26 @@ function settingsAppsView(){
 }
 /** B23-github: permissions, what the app adds, versions with roll back, open and turn off. */
 function settingsAppView(a){
- const post=body=>settingsPost('/assistant/apps',{appId:a.id,...body}),p=a.permissions||{},c=a.contributes||{},day=at=>{const d=new Date(at);return copy('ui.date',{month:d.getMonth()+1,day:d.getDate(),weekday:''}).trim();};
+ const feed=settingsApps?.feedId,epoch=connectionEpoch,current=()=>settingsShown==='apps'&&settingsApp===a.id&&settingsApps?.feedId===feed&&chatView?.feedId===feed&&connectionEpoch===epoch;
+ const post=body=>{if(current()&&!settingsBusy)return settingsPost('/assistant/apps',{appId:a.id,...body});},p=a.permissions||{},c=a.contributes||{},day=at=>{const d=new Date(at);return copy('ui.date',{month:d.getMonth()+1,day:d.getDate(),weekday:''}).trim();};
  const back=chatButton('‹ '+copy('ui.apps'),()=>{settingsApp='';renderSettings();},'set-back'),head=element('div',undefined,'set-head'),text=element('div',undefined,'set-head-text');
  const mark=appsMark(a.name);if(a.name==='GitHub'){mark.textContent='';mark.className+=' set-app-github';}text.append(element('h2',a.name),element('span',[a.version,copy('ui.panel.installed-date',{date:day(a.installedAt)})].join(' · ')));head.append(mark,text);
  if(c.page&&a.enabled)head.append(chatButton(copy('settings.link.05'),()=>appOpen(a.id)));head.append(chatButton(a.enabled?copy('settings.button.04'):copy('page.switch.02'),()=>post({action:a.enabled?'disable':'enable'})));
  if(a.update&&chatText(a.update.catalogId))head.append(chatButton(copy('ui.action.update'),async()=>{if(settingsBusy)return;await settingsPost('/assistant/apps',{action:'install',catalogId:a.update.catalogId});await readChat();}));
  const screens=[...(c.page?[c.page.title]:[]),...(c.roomTab?[copy('ui.panel.app-tab',{title:String(c.roomTab.prefix).replace(/\s*#$/,'')})]:[])];
  const permissions=[[copy('ui.panel.tools'),appsJoin([...(p.read||[]),...(p.write||[])])],[copy('settings.text.02'),appsJoin(p.network)],[copy('sidebar.button.14'),appsJoin(p.files)],[copy('settings.text.05'),appsJoin((p.secrets||[]).map(s=>s.label))],[copy('settings.text.04'),appsJoin(p.events)]].map(([l,v])=>settingsPair(l,v));
+ if(a.credential){
+  const credential=a.credential,status=['saved','expired','missing'].includes(credential.state)?copy('ui.apps.credential-'+credential.state):copy('conversation.text.01'),token=permissions[3];
+  token.children[1].textContent=appsJoin((p.secrets||[]).map(s=>s.label+(s.slot===credential.slot?' · '+status:'')));
+  if(['expired','missing'].includes(credential.state)){
+   const reconnect=chatButton(copy('ui.apps.reconnect'),async()=>{if(!current()||settingsLifecycleLocked('app:'+a.id)||reconnect.disabled)return;reconnect.disabled=true;const saved=await settingsLifecyclePost('app:'+a.id,'/assistant/apps',{action:'reconnect',appId:a.id});if(!saved||!current())return;const memberId=a.origin==='self-made'?a.memberId:'';chatOpenThread(memberId||'',chatMembers().find(m=>m.id===memberId)?.name||'');await readChat();},'secondary set-side');
+   reconnect.id='settings-app-reconnect';reconnect.disabled=settingsLifecycleLocked('app:'+a.id)||!current();token.append(reconnect);
+  }
+ }
  const adds=[[copy('ui.panel.member-templates'),appsJoin(c.templates)],[copy('settings.heading.07'),appsJoin(c.skills)],[copy('settings.heading.09'),appsJoin(c.procedures)],[copy('ui.panel.tools'),appsJoin(c.tools)],[copy('ui.panel.screens'),appsJoin(screens)]].map(([l,v])=>settingsPair(l,v));
+ for(const [index,key] of ['templates','skills','procedures','tools'].entries())if(c[key]?.length&&a.members?.length)adds[index].append(element('span',a.members.map(m=>m.name).join(' · '),'set-side'));
  if(c.page&&a.enabled)adds.at(-1).append(chatButton(copy('settings.link.06'),()=>appOpen(a.id),'set-app-open'));
  const versions=(a.versions||[]).slice().sort((x,y)=>y.index-x.index).map(v=>{const row=element('div',undefined,'set-row');row.append(element('span',v.version,'set-version'),element('span',v.current?copy('ui.panel.current-version',{date:day(v.at)}):day(v.at),'set-text'));if(!v.current)row.append(chatButton(copy('settings.button.13'),()=>post({action:'rollback',version:v.index})));return row;});
- return [back,head,...settingsCard(copy('sidebar.heading.01'),permissions),...settingsCard(copy('settings.heading.12'),adds),...settingsCard(copy('settings.heading.04'),versions)];
+ return [back,head,...settingsCard(copy('sidebar.heading.01'),permissions),...settingsCard(copy('settings.heading.12'),adds),...(versions.length?settingsCard(copy('settings.heading.04'),versions):[])];
 }
 `;

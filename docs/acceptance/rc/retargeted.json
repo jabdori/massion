@@ -1,0 +1,22 @@
+[
+  {
+    "screen": "B14-restart",
+    "theme": "dark",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no restart state or restart control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no restart state or restart control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  },
+  {
+    "screen": "B14-restart",
+    "theme": "light",
+    "kind": "gap",
+    "diagnostic": "The production connection summary has no restart state or restart control.",
+    "occurrence": 1,
+    "category": "capability",
+    "reason": "The production connection summary has no restart state or restart control.",
+    "ledger": "docs/acceptance/E3d1/capabilities.md"
+  }
+]

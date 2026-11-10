@@ -22,6 +22,10 @@ import type {SchedulesState} from './schedules.ts';
 import {isPermissionsState,replayPermissions} from './permissions.ts';
 import {isSkillsState,replaySkills} from './skills.ts';
 import {isAppsState,replayApps} from './apps.ts';
+import {isDevicesState,replayDevices} from './devices.ts';
+import type {DevicesState} from './devices.ts';
+import {isConnectionLifecycleState,replayConnectionLifecycle} from './connection-lifecycle.ts';
+import type {ConnectionLifecycleState} from './connection-lifecycle.ts';
 import type {AppsState} from './apps.ts';
 import type {SkillsState} from './skills.ts';
 import type {PermissionsState} from './permissions.ts';
@@ -427,6 +431,8 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
   const previous = new Map<string, Operation<Mission>>();
   const commands = new Set<string>(),skillsHistory=new Map<number,SkillsState>();
   for (const operation of operations) {
+    if (isConnectionLifecycleState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayConnectionLifecycle(operation as unknown as Operation<ConnectionLifecycleState>, previous.get(operation.aggregateId) as unknown as Operation<ConnectionLifecycleState> | undefined); previous.set(operation.aggregateId, operation); continue; }
+    if (isDevicesState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayDevices(operation as unknown as Operation<DevicesState>, previous.get(operation.aggregateId) as unknown as Operation<DevicesState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if(isMonthlyBudgetState(operation.value)){text(operation.commandId,'command ID');ensure(!commands.has(operation.commandId),'duplicate journal command ID');commands.add(operation.commandId);replayMonthlyBudget(operation as unknown as Operation<MonthlyBudgetState>,previous.get(operation.aggregateId) as unknown as Operation<MonthlyBudgetState>|undefined);previous.set(operation.aggregateId,operation);continue;}
     if (isAppsState(operation.value)) { text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replayApps(operation as unknown as Operation<AppsState>, previous.get(operation.aggregateId) as unknown as Operation<AppsState> | undefined); previous.set(operation.aggregateId, operation); continue; }
     if (isSkillsState(operation.value)) { skillsHistory.set(operation.revision,operation.value);text(operation.commandId, 'command ID'); ensure(!commands.has(operation.commandId), 'duplicate journal command ID'); commands.add(operation.commandId); replaySkills(operation as unknown as Operation<SkillsState>, previous.get(operation.aggregateId) as unknown as Operation<SkillsState> | undefined); previous.set(operation.aggregateId, operation); continue; }

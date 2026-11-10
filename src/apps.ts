@@ -1,3 +1,4 @@
+import {callTool as boundedCall} from './tool-call.ts';
 /** Apps on Massion (docs/architecture/apps.md, ADR 0003 §4, §5): manifests, versions pinned by content hash, install and widening decisions, self-made apps. Nothing is deleted. */
 import {DomainError,hash} from './domain.ts';
 import {validMcp,validTools,toolsHash,mcpWidens,requireTool,mcpRequest,MCP_TIMEOUT_MS} from './mcp-apps.ts';
@@ -12,6 +13,7 @@ import type {MembersState} from './members.ts';
 import {CATALOG} from './app-catalog.ts';
 import {runHandler} from './app-sandbox.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+import {FeedAdmissionError} from './storage.ts';
 
 export const APPS_ID=ASSISTANT_CONVERSATION_PREFIX+'apps',APP_FORMAT='massion.app.v1',DECISION_PREFIX='app-decision:',HOST_PREFIX='assistant-app',MAX_APPS=32,MAX_VERSIONS=16,MAX_OPEN=64,MAX_REJECTED=128,MAX_SOURCE=65536;
 export interface AppPermissions {read:string[];write:string[];network:string[];files:string[];secrets:{slot:string;label:string}[];events:string[]}
@@ -22,14 +24,18 @@ export type AppNetwork=(request:{appId:string;url:string;method:string;secret:st
 export interface AppView {frame?:{html:string};github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[];title:string;meta?:string;groups:{title:string;rows:{id:string;title:string;meta?:string;state?:string;github?:import('./github-review.ts').GithubTarget;reviews?:import('./github-review.ts').GithubReview[]}[]}[];fields?:[string,string][]}
 export interface AppCheck {tests:{passed:number;total:number};declaredOnly:boolean;evidence:string}
 export interface AppVersion {hash:string;package:AppPackage;at:number;approvedAt?:number;check?:AppCheck}
-export interface App {id:string;name:string;origin:'catalog'|'self-made';memberId?:string;source?:{missionId:string;workId:string;title:string};versions:AppVersion[];current:number|null;enabled:boolean;installedAt?:number;removedAt?:number}
-export interface AppDecision {id:string;at:number;appId:string;version:number;base:number|null;kind:'install'|'widen';state:'open'|'later'|'done'|'stale';answeredAt?:number;connection?:{commandId:string;state:'pending'|'connected'}}
+export interface App {id:string;name:string;origin:'catalog'|'self-made';memberId?:string;memberIds?:string[];credential?:{slot:string;state:'saved'|'expired';at:number;connectionId:string};source?:{missionId:string;workId:string;title:string};versions:AppVersion[];current:number|null;enabled:boolean;installedAt?:number;removedAt?:number}
+export interface AppDecision {id:string;at:number;appId:string;version:number;base:number|null;kind:'install'|'widen'|'reconnect';state:'open'|'later'|'done'|'stale';answeredAt?:number;connection?:{commandId:string;state:'pending'|'connected'}}
 export interface AppsState {toolCalls?:McpCall[];kind:'apps';id:string;apps:App[];decisions:AppDecision[];rejected:{at:number;memberId:string;name:string;version:string;hash:string;reason:string}[]}
 type Offer={decisionId:string;origin:'catalog'|'self-made';memberId?:string;source?:App['source'];pkg:AppPackage;check?:AppCheck};
 export type AppsCommand =
+ | {type:'bind-app-members';appId:string;memberIds:string[]}
+ | {type:'reconnect-app';appId:string;decisionId:string}
+ | {type:'expire-app-credential';appId:string;connectionId:string}
  | {type:'abandon-app-tool';callId:string}
  | {type:'reconcile-app-tool';appId:string;callId:string;outcome:'done'|'not-done';evidence:string}
- | {type:'begin-app-connect'|'complete-app-connect';decisionId:string;connectionId:string}
+ | {type:'begin-app-connect';decisionId:string;connectionId:string}
+ | {type:'complete-app-connect';decisionId:string;connectionId:string;observeStorage?:true}
  | {type:'claim-app-tool';call:McpCall}
  | {type:'settle-app-tool';callId:string;status:'succeeded'|'failed'|'unknown';result?:unknown}
  | {type:'offer-app'}&Offer
@@ -77,6 +83,7 @@ export const appIdOf=(origin:string,memberId:string|undefined,manifestId:string)
 export const appDecisionId=(commandId:string)=>DECISION_PREFIX+hash(commandId).slice(0,24);
 // The member's own tests gate the offer but are not shown as a check: the producer does not judge (ADR 0003 §5). Only what the host verified is shown.
 const checkLine=(c?:AppCheck)=>c?.declaredOnly?'Declared permissions only':null;
+const connectionSlot=(m:AppManifest)=>m.connection?.slot??(m.permissions.secrets.length===1?m.permissions.secrets[0]!.slot:undefined);
 
 export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor,time:TimeObservation):{value:AppsState;events:unknown[]} {
  ensure(actor&&id(actor.id),'Invalid actor');ensure(exact(time,['observedAt'])&&Number.isSafeInteger(time.observedAt)&&time.observedAt>=0,'Host clock observation unavailable');const at=time.observedAt;
@@ -96,6 +103,20 @@ export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor
   stale(a);state.decisions.push({id:decisionId,at,appId:a.id,version:index,base:a.current,kind:now?'widen':'install',state:'open'});
  };
  switch(command?.type){
+  case 'bind-app-members': {
+   role('owner');ensure(exact(command,['type','appId','memberIds'])&&Array.isArray(command.memberIds)&&command.memberIds.length<=64&&command.memberIds.every(id)&&new Set(command.memberIds).size===command.memberIds.length,'Exact member bindings required');
+   installed(command.appId).memberIds=[...command.memberIds];break;
+  }
+  case 'reconnect-app': {
+   role('owner');ensure(exact(command,['type','appId','decisionId'])&&id(command.decisionId)&&command.decisionId.startsWith(DECISION_PREFIX),'Exact reconnect fields required');const a=installed(command.appId),m=a.versions[a.current!-1]!.package.manifest;
+   ensure(connectionSlot(m),'App has no unambiguous connection slot');ensure(!state.decisions.some(d=>d.appId===a.id&&d.connection?.state==='pending'),'Connection outcome pending; never resend','conflict');
+   ensure(!state.decisions.some(d=>d.appId===a.id&&(d.state==='open'||d.state==='later')),'App decision already open','conflict');ensure(!state.decisions.some(d=>d.id===command.decisionId)&&state.decisions.filter(d=>d.state==='open'||d.state==='later').length<MAX_OPEN,'Decision bound reached or identity reused','conflict');
+   state.decisions.push({id:command.decisionId,at,appId:a.id,version:a.current!,base:a.current,kind:'reconnect',state:'open'});break;
+  }
+  case 'expire-app-credential': {
+   role('assistant');ensure(exact(command,['type','appId','connectionId'])&&id(command.connectionId),'Exact credential observation required');const a=installed(command.appId);
+   ensure(a.credential?.connectionId===command.connectionId,'Credential changed before expiry observation','conflict');a.credential.state='expired';a.credential.at=at;break;
+  }
   case 'offer-app': {
    ensure(exact(command,['type','decisionId','origin','pkg'],['memberId','source','check']),'Exact app offer fields required');const reason=validatePackage(command.pkg);ensure(reason===null,reason!);const h=packageHash(command.pkg);
    if(command.origin==='catalog'){
@@ -121,16 +142,17 @@ export function applyApps(current:AppsState|null,command:AppsCommand,actor:Actor
    role('owner');ensure(exact(command,['type','decisionId','answer']),'Exact decision fields required');const d=state.decisions.find(x=>x.id===command.decisionId);ensure(d,'Unknown decision');
    if(command.answer==='later'){ensure(d.state==='open','Only an open decision is deferred','conflict');d.state='later';d.answeredAt=at;break;}
    if(command.answer==='ask'){ensure(d.state==='later','Only a deferred decision is asked again','conflict');d.state='open';delete d.answeredAt;break;}
-   ensure(command.answer==='act','Unknown answer');ensure(d.state==='open','Only an open decision is answered','conflict');const a=app(d.appId);const target=a.versions[d.version-1]!.package.manifest;ensure(!target.connection||d.base!==null&&a.versions[d.base-1]!.package.manifest.connection?.slot===target.connection.slot,'Use the host connection form for this token','denied');
+   ensure(command.answer==='act','Unknown answer');ensure(d.state==='open','Only an open decision is answered','conflict');const a=app(d.appId);const target=a.versions[d.version-1]!.package.manifest;ensure(d.kind!=='reconnect'&&(!target.connection||d.base!==null&&a.versions[d.base-1]!.package.manifest.connection?.slot===target.connection.slot),'Use the host connection form for this token','denied');
    if(a.current!==d.base){d.state='stale';d.answeredAt=at;break;}
    use(a,d.version);d.state='done';d.answeredAt=at;break;
   }
   case 'begin-app-connect': case 'complete-app-connect': {
-   role('owner');ensure(exact(command,['type','decisionId','connectionId'])&&id(command.connectionId),'Exact connection identity required');
+   role('owner');ensure(exact(command,['type','decisionId','connectionId'],command.type==='complete-app-connect'?['observeStorage']:[])&&id(command.connectionId)&&(command.type!=='complete-app-connect'||command.observeStorage===undefined||command.observeStorage===true),'Exact connection identity required');
    const d=state.decisions.find(d=>d.id===command.decisionId);ensure(d&&d.state==='open','Connection decision is not open','conflict');const a=app(d.appId),m=a.versions[d.version-1]!.package.manifest;
-   ensure(m.connection&&a.current===d.base,'Connection decision changed','conflict');
+   const slot=d.kind==='reconnect'?connectionSlot(m):m.connection?.slot;ensure(slot&&a.current===d.base,'Connection decision changed','conflict');
    if(command.type==='begin-app-connect'){ensure(!d.connection,'Connection outcome already pending; never resend','conflict');d.connection={commandId:command.connectionId,state:'pending'};}
-   else{ensure(d.connection?.commandId===command.connectionId&&d.connection.state==='pending','Original connection claim required','conflict');d.connection.state='connected';use(a,d.version);d.state='done';d.answeredAt=at;}break;
+   // New storage metadata is opt-in so historical completion events replay unchanged.
+   else{ensure(d.connection?.commandId===command.connectionId&&d.connection.state==='pending','Original connection claim required','conflict');d.connection.state='connected';use(a,d.version);if(command.observeStorage)a.credential={slot,state:'saved',at,connectionId:command.connectionId};d.state='done';d.answeredAt=at;}break;
   }
   case 'claim-app-tool': {
    role('assistant');ensure(exact(command,['type','call'])&&exact(command.call,['id','appId','versionHash','name','inputHash','timeoutMs','status'])&&id(command.call.id)&&Number.isSafeInteger(command.call.timeoutMs)&&command.call.timeoutMs>0&&command.call.timeoutMs<=MCP_TIMEOUT_MS&&command.call.status==='pending'&&/^[a-f0-9]{64}$/.test(command.call.inputHash),'Exact pending tool claim required');
@@ -189,9 +211,11 @@ type ToolResult={status:'succeeded'|'failed'|'unknown';result?:unknown;reconcili
 // Shared by service instances in this host, so a read or replay cannot abandon a live attempt.
 const toolFlights=new Map<string,{identity:string;run:Promise<ToolResult>}>();
 const toolFlightKey=(feed:string,callId:string)=>JSON.stringify([feed,callId]);
+export interface AppMember {id:string;name:string;archived?:boolean;archivedAt?:number|null}
 export class AppsService {
- readonly #store:Store<any>;readonly #network?:AppNetwork;readonly #clock:()=>number;readonly #mcp?:McpAdapter;readonly #secrets?:AppSecrets;readonly #timeout:number;readonly #admit:()=>Promise<void>;readonly #connections=new Map<string,{decisionId:string;promise:Promise<{status:string;revision?:number}>}>();readonly #stop=new AbortController();
- constructor(store:Store<any>,options:{network?:AppNetwork;clock?:()=>number;mcp?:McpAdapter;secrets?:AppSecrets;toolTimeoutMs?:number;admit?:()=>Promise<void>}={}){this.#store=store;this.#network=options.network;this.#clock=options.clock??Date.now;this.#mcp=options.mcp;this.#secrets=options.secrets;this.#timeout=options.toolTimeoutMs??MCP_TIMEOUT_MS;ensure(Number.isSafeInteger(this.#timeout)&&this.#timeout>0&&this.#timeout<=MCP_TIMEOUT_MS,'Invalid tool timeout');this.#admit=options.admit??(async()=>{});}
+ readonly #store:Store<any>;readonly #network?:AppNetwork;readonly #clock:()=>number;readonly #mcp?:McpAdapter;readonly #secrets?:AppSecrets;readonly #timeout:number;readonly #admit:()=>Promise<void>;readonly #members?:()=>Promise<AppMember[]>;readonly #connections=new Map<string,{decisionId:string;promise:Promise<{status:string;revision?:number}>}>();readonly #stop=new AbortController();
+ constructor(store:Store<any>,options:{network?:AppNetwork;clock?:()=>number;mcp?:McpAdapter;secrets?:AppSecrets;toolTimeoutMs?:number;admit?:()=>Promise<void>;members?:()=>Promise<AppMember[]>}={}){this.#store=store;this.#network=options.network;this.#clock=options.clock??Date.now;this.#mcp=options.mcp;this.#secrets=options.secrets;this.#members=options.members;this.#timeout=options.toolTimeoutMs??MCP_TIMEOUT_MS;ensure(Number.isSafeInteger(this.#timeout)&&this.#timeout>0&&this.#timeout<=MCP_TIMEOUT_MS,'Invalid tool timeout');this.#admit=options.admit??(async()=>{});}
+ async #availableMembers(){return (await this.#members?.()??[]).filter(m=>m.archived!==true&&m.archivedAt==null).map(m=>({id:m.id,name:m.name}));}
  async #state(){return await this.#store.load(APPS_ID) as Snapshot<AppsState>|null;}
  async #markUnknown(callId:string){
   const call=(await this.#state())?.value.toolCalls?.find(c=>c.id===callId);if(!call||call.status!=='pending')return;
@@ -203,12 +227,21 @@ export class AppsService {
  }
  /** Settings > Apps: installed apps with permissions, contributions and approved versions; the catalog with what is installed. */
  async read(){
-  await this.#recoverPending();const s=await this.#state(),v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState;
-  const apps=v.apps.filter(a=>a.current!==null).map(a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest,bundled=a.origin==='catalog'&&CATALOG.find(c=>c.manifest.id===m.id);
-   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),...bundled&&bundled.manifest.version.localeCompare(m.version,'en',{numeric:true})>0?{update:{catalogId:bundled.manifest.id,version:bundled.manifest.version}}:{},
-    versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};});
+  await this.#recoverPending();let feedId:string|undefined;
+  for(let attempt=0;;attempt++){
+  const state=await this.#store.readState(APPS_ID);feedId??=state.feedId;if(state.feedId!==feedId)throw new FeedAdmissionError();
+  const s=state.snapshot as Snapshot<AppsState>|null,v=s?.value??{apps:[],decisions:[],rejected:[]} as unknown as AppsState,availableMembers=await this.#availableMembers();
+  const apps=await Promise.all(v.apps.filter(a=>a.current!==null).map(async a=>{const cur=a.versions[a.current!-1]!,m=cur.package.manifest,bundled=a.origin==='catalog'&&CATALOG.find(c=>c.manifest.id===m.id);
+   const slot=connectionSlot(m),pending=v.decisions.find(d=>d.appId===a.id&&d.connection?.state==='pending');let credential:{slot:string;state:'saved'|'expired'|'unknown'|'missing';at?:number;connectionId?:string}|null=slot?(pending?{slot,state:'unknown',connectionId:pending.connection!.commandId}:a.credential?.slot===slot?structuredClone(a.credential):{slot,state:'missing'}):null;
+   if(slot&&!pending&&this.#secrets?.has){try{const present=await boundedCall(signal=>this.#secrets!.has!({owner:a.id,slot},signal),{readOnly:true,signal:this.#stop.signal,timeoutMs:5000});ensure(typeof present==='boolean','Secret slot presence unavailable');if(!present)credential={slot,state:'missing'};else if(credential?.state==='missing')credential={slot,state:'saved'};}catch{credential={slot,state:'unknown'};}}
+   return {id:a.id,name:a.name,origin:a.origin,memberId:a.memberId??null,memberIds:[...a.memberIds??[]],members:(a.memberIds??[]).flatMap(id=>availableMembers.filter(m=>m.id===id)),credential,version:m.version,enabled:a.enabled,installedAt:a.installedAt??cur.at,check:checkLine(cur.check),source:a.source?structuredClone(a.source):null,permissions:structuredClone(m.permissions),contributes:structuredClone(m.contributes),...(m.kind==='mcp'?{unresolved:unresolvedCalls(v,a.id)}:{}),...bundled&&bundled.manifest.version.localeCompare(m.version,'en',{numeric:true})>0?{update:{catalogId:bundled.manifest.id,version:bundled.manifest.version}}:{},
+    versions:a.versions.map((x,i)=>({index:i+1,version:x.package.manifest.version,at:x.approvedAt,current:i+1===a.current})).filter(x=>x.at!==undefined).reverse()};}));
   const catalog=CATALOG.map(c=>({id:c.manifest.id,name:c.manifest.name,description:c.manifest.description,installed:v.apps.some(a=>a.id===appIdOf('catalog',undefined,c.manifest.id)&&a.current!==null)}));
-  return {revision:s?.revision??0,apps,catalog};
+  const fresh=await this.#store.readState(APPS_ID);if(fresh.feedId!==feedId)throw new FeedAdmissionError();
+  if((fresh.snapshot?.revision??0)!==(s?.revision??0)&&attempt<2)continue;
+  ensure((fresh.snapshot?.revision??0)===(s?.revision??0),'App state changed during settings read','conflict');
+  return {revision:s?.revision??0,apps,catalog,availableMembers};
+  }
  }
  /** Enabled apps for the rail and Work room tabs. */
  async rail(){await this.#recoverPending();const v=(await this.#state())?.value;return (v?.apps??[]).filter(a=>a.current!==null&&a.enabled).map(a=>{const m=a.versions[a.current!-1]!.package.manifest;return {id:a.id,name:a.name,page:!!m.contributes.page,item:m.handlers.includes('item'),roomTab:m.contributes.roomTab?.prefix??null,...(m.kind==='mcp'?{unresolved:unresolvedCalls(v!,a.id)}:{})};});}
@@ -222,9 +255,9 @@ export class AppsService {
    const detail=a.origin==='self-made'?'Self-made app · Made by '+(members.find(x=>x.id===a.memberId)?.name??a.memberId)+' · '+m.version:a.name+' · '+(d.kind==='widen'&&base?base+' → ':'')+m.version;
    const rows:[string,string][]=a.origin==='self-made'?[['Does',m.description],['Read',joined(p.read)],['Write',joined(p.write)],['Network',joined(p.network)],['Files',joined(p.files)],['Token',joined(p.secrets.map(s=>s.label))],['Events',joined(p.events)],['Check',checkLine(offer.check)??'None'],['Source',a.source?.title??'None']]
     :[['Read',joined(p.read)],['Write',joined(p.write)],['Network',joined(p.network)],['Token',joined(p.secrets.map(s=>s.label))],['Events',joined(p.events)],['Adds',adds(m)]];
-   const install=d.kind==='install',done=d.state==='done',slot=m.connection&&(d.base===null||a.versions[d.base-1]!.package.manifest.connection?.slot!==m.connection.slot)&&p.secrets.find(s=>s.slot===(m.connection as {slot:string}).slot);
+   const install=d.kind==='install',done=d.state==='done',slot=d.kind==='reconnect'?p.secrets.find(s=>s.slot===connectionSlot(m)):m.connection&&(d.base===null||a.versions[d.base-1]!.package.manifest.connection?.slot!==m.connection.slot)&&p.secrets.find(s=>s.slot===(m.connection as {slot:string}).slot);
    if(slot){const labels:Record<string,string>={Read:'settings.chip.01',Write:'ui.apps.write',Network:'settings.text.02',Token:'settings.text.05',Events:'settings.text.04',Adds:'ui.apps.adds'};for(const row of rows){if(labels[row[0]])row[0]=copy(labels[row[0]]!);if(row[1]==='None')row[1]=copy('settings.text.03');}rows.unshift([copy('ui.panel.tools'),m.contributes.tools.length?m.contributes.tools.join(' · '):copy('settings.text.03')]);const added=rows.find(r=>r[0]===copy('ui.apps.adds'));if(added)added[1]=[...(m.contributes.page?[copy('ui.panel.app-page',{title:m.contributes.page.title})]:[]),...(m.contributes.roomTab?[copy('ui.panel.app-tab',{title:m.contributes.roomTab.prefix.replace(/\s*#$/,'')})]:[])].join(' · ')||copy('settings.text.03');}
-   const connection=slot?{appId:a.id,slot:slot.slot,label:slot.label,connected:d.connection?.state==='connected'}:undefined;
+   const connection=slot?{appId:a.id,slot:slot.slot,label:slot.label,connected:d.connection?.state==='connected',...(d.connection?.state==='pending'?{pending:true}:{})}:undefined;
    return [{id:d.id,at:d.answeredAt??d.at,...(d.answeredAt!==undefined?{answeredAt:d.answeredAt}:{}),title:a.name,question:connection?copy('ui.apps.connect-question',{app:a.name}):(install?'Install ':'Update ')+label+'?',detail,rows,...(a.source?{source:structuredClone(a.source)}:{}),action:connection?copy('conversation.button.12'):install?'Install':'Update',...(connection?{connection}:{}),state:d.state as 'open'|'later'|'done',
     ...(done?{line:connection?copy('ui.apps.connected',{app:a.name}):install?label+' installed':label+' updated: '+m.version,...(a.current!==null&&d===latest.get(a.id)?{remove:a.id}:{})}:{})}];});
  }
@@ -278,14 +311,14 @@ export class AppsService {
  }
  async #connect(commandId:string,decisionId:string,token:string):Promise<{status:string;revision?:number}>{
   const feedId=(await this.#store.readState()).feedId;
-  const checkFeed=async()=>{await this.#admit();ensure((await this.#store.readState()).feedId===feedId,'Database changed during connection','conflict');};
-  const s=await this.#state(),d=s?.value.decisions.find(d=>d.id===decisionId),a=d&&s!.value.apps.find(a=>a.id===d.appId),v=a&&a.versions[d!.version-1],slot=v?.package.manifest.connection?.slot;
+  const checkFeed=async()=>{await this.#admit();ensure(!this.#stop.signal.aborted,'Host draining','conflict');ensure((await this.#store.readState()).feedId===feedId,'Database changed during connection','conflict');};
+  const s=await this.#state(),d=s?.value.decisions.find(d=>d.id===decisionId),a=d&&s!.value.apps.find(a=>a.id===d.appId),v=a&&a.versions[d!.version-1],slot=v&&(d?.kind==='reconnect'?connectionSlot(v.package.manifest):v.package.manifest.connection?.slot);
   ensure(d&&a&&v&&slot,'Unknown connection decision');
   if(d.connection){ensure(d.connection.commandId===commandId,'Connection outcome already pending; never resend','conflict');return {status:d.connection.state==='connected'?'replayed':'unknown',revision:s!.revision};}
   ensure(d.state==='open'&&a.current===d.base,'Connection decision changed','conflict');ensure(this.#secrets,'Secret slot adapter unavailable','conflict');if(v.package.manifest.kind==='mcp')ensure(this.#mcp,'MCP adapter unavailable','conflict');ensure(packageHash(v.package)===v.hash,'Package changed after its check','conflict');await this.#admit();
   const claim=await this.#dispatch(commandId,OWNER,{type:'begin-app-connect',decisionId,connectionId:commandId});if(claim.status!=='committed')return {status:'unknown'};
-  try{await checkFeed();const fresh=(await this.#state())?.value.decisions.find(x=>x.id===decisionId);ensure(fresh?.state==='open'&&fresh.connection?.commandId===commandId,'Connection decision changed','conflict');await this.#admit();await this.#secrets.set({owner:a.id,slot},token);}catch{return {status:'unknown'};}finally{token='';}
-  try{await checkFeed();if(v.package.manifest.kind==='mcp'){const server=v.package.manifest.mcp!,adapter=this.#mcp!;const live=await mcpRequest(adapter,a.id,server,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:a.id,server:structuredClone(server),signal}),this.#stop.signal,true);ensure(validTools(live)&&live.every(t=>server.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t]))),'MCP tool list changed; owner approval required','denied');}await checkFeed();const done=await this.#dispatch('connect-result-'+hash(commandId).slice(0,32),OWNER,{type:'complete-app-connect',decisionId,connectionId:commandId});return {status:done.status,revision:done.revision};}catch{return {status:'unknown'};}
+  try{await checkFeed();const fresh=(await this.#state())?.value.decisions.find(x=>x.id===decisionId);ensure(fresh?.state==='open'&&fresh.connection?.commandId===commandId,'Connection decision changed','conflict');await this.#admit();ensure(!this.#stop.signal.aborted,'Host draining','conflict');await this.#secrets.set({owner:a.id,slot},token);}catch{return {status:'unknown'};}finally{token='';}
+  try{await checkFeed();if(v.package.manifest.kind==='mcp'){const server=v.package.manifest.mcp!,adapter=this.#mcp!;const live=await mcpRequest(adapter,a.id,server,this.#timeout,(signal,requestId)=>adapter.list({requestId,appId:a.id,server:structuredClone(server),signal}),this.#stop.signal,true);ensure(validTools(live)&&live.every(t=>server.tools.some(p=>p.name===t.name&&toolsHash([p])===toolsHash([t]))),'MCP tool list changed; owner approval required','denied');}await checkFeed();const done=await this.#dispatch('connect-result-'+hash(commandId).slice(0,32),OWNER,{type:'complete-app-connect',decisionId,connectionId:commandId,observeStorage:true});return {status:done.status,revision:done.revision};}catch{return {status:'unknown'};}
  }
  /** Host step: a new catalog version (update). */
  async offer(input:{commandId:string;pkg:AppPackage;origin:'catalog'}){ensure(input.commandId.startsWith(HOST_PREFIX),'Host command identity required');return this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'offer-app',decisionId:appDecisionId(input.commandId),origin:'catalog',pkg:input.pkg});}
@@ -309,9 +342,11 @@ export class AppsService {
  }
  /** Owner actions from Settings > Apps and the conversation. */
  async act(input:unknown):Promise<CommitResult<AppsState>>{
-  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={install:['catalogId'],disable:['appId'],enable:['appId'],remove:['appId'],rollback:['appId','version'],reconcile:['appId','callId','outcome','evidence']};
+  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={install:['catalogId'],disable:['appId'],enable:['appId'],remove:['appId'],rollback:['appId','version'],reconcile:['appId','callId','outcome','evidence'],'bind-members':['appId','memberIds'],reconnect:['appId']};
   ensure(typeof action==='string'&&Object.hasOwn(fields,action)&&exact(input,['commandId','action',...fields[action]!])&&id(input.commandId),'Exact app action fields required');const commandId=this.#caller(input.commandId);
   if(action==='install'){const pkg=CATALOG.find(c=>c.manifest.id===input.catalogId);ensure(pkg,'Unknown catalog app');return this.#dispatch(commandId,OWNER,{type:'offer-app',decisionId:appDecisionId(commandId),origin:'catalog',pkg:structuredClone(pkg)});}
+  if(action==='bind-members')return this.#dispatch(commandId,OWNER,{type:'bind-app-members',appId:input.appId as string,memberIds:structuredClone(input.memberIds) as string[]});
+  if(action==='reconnect')return this.#dispatch(commandId,OWNER,{type:'reconnect-app',appId:input.appId as string,decisionId:appDecisionId(commandId)});
   if(action==='reconcile'){await this.#recoverPending();return this.#dispatch(commandId,OWNER,{type:'reconcile-app-tool',appId:input.appId as string,callId:input.callId as string,outcome:input.outcome as 'done'|'not-done',evidence:input.evidence as string});}
   if(action==='rollback')return this.#dispatch(commandId,OWNER,{type:'rollback-app',appId:input.appId as string,version:input.version as number,decisionId:appDecisionId(commandId)});
   return this.#dispatch(commandId,OWNER,{type:(action+'-app') as 'disable-app'|'enable-app'|'remove-app',appId:input.appId as string});
@@ -321,12 +356,22 @@ export class AppsService {
   return this.#dispatch(this.#caller(input.commandId),OWNER,{type:'decide-app',decisionId:input.decisionId as string,answer:input.answer as 'act'|'later'|'ask'});
  }
  #caller(commandId:unknown){ensure(id(commandId)&&!commandId.startsWith('assistant-'),'assistant- command identities are reserved for host steps');return commandId;}
+ /** The adapter supplies an observed expiry for the exact credential it used, never token bytes. */
+ async expireCredential(input:{commandId:string;appId:string;connectionId:string}){
+  ensure(exact(input,['commandId','appId','connectionId'])&&id(input.commandId)&&input.commandId.startsWith(HOST_PREFIX),'Exact host credential observation required');
+  return this.#dispatch(input.commandId,ASSISTANT_ACTOR_ID,{type:'expire-app-credential',appId:input.appId,connectionId:input.connectionId});
+ }
  /** Lookup after the load and after an idempotency conflict, CAS on the revision read; a lost command replays by its ID. */
  async #dispatch(commandId:string,actorId:string,command:AppsCommand):Promise<CommitResult<AppsState>>{
   const identity={id:APPS_ID,commandId,fingerprint:fingerprint(actorId,command)},actor:Actor={id:actorId,roles:[actorId===ASSISTANT_ACTOR_ID?'assistant':'owner']};
   for(let attempt=0;attempt<3;attempt++){
    // Load, then look up: a resend overlapping its first request sees that commit instead of failing the reducer on it.
    const snapshot=await this.#state(),prior=await this.#store.lookupOperation(identity);if(prior.status!=='unknown')return prior;
+   if(command.type==='bind-app-members'){
+    ensure(this.#members,'Admitted member lookup unavailable','conflict');const members=await this.#availableMembers();
+    ensure(Array.isArray(command.memberIds)&&command.memberIds.every(memberId=>members.some(m=>m.id===memberId)),'Bindings require admitted nonarchived members');
+   }
+   await this.#admit();ensure(!this.#stop.signal.aborted,'Host draining','conflict');
    const {value,events}=applyApps(snapshot?.value??null,command,actor,{observedAt:this.#clock()});
    const result=await this.#store.commit({id:APPS_ID,expectedRevision:snapshot?.revision??0,commandId,fingerprint:identity.fingerprint,value,events,outbox:[]});
    // Same command, other clock reading: the digest differs, so replay the stored result by its fingerprint.
