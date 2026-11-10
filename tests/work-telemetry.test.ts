@@ -109,3 +109,15 @@ test('a worker acknowledges an owner proposal only before its step starts, prese
  await s.send({type:'append-work-message',workId:'work',messageId:'late',replyTo:null,text:'Too late',stepNote:{taskId:'work:step:0',title:'Rewrite started step'}});
  await assert.rejects(s.send({type:'acknowledge-step-note',workId:'work',messageId:'late'} as unknown as Command,worker.id),/started|queued/);
 });
+
+test('member progress wording is bounded, assignment-bound and durably replayed without acceptance',async()=>{
+ const s=await teamFixture(),wording={summary:'Read 4 files. Comparing sources now.',caption:'Reading complete · comparing',checkCaption:'At least 3 sources'};
+ const command={type:'record-step-progress',workId:'work',taskId:'work:step:0',progress:{done:4,total:11,wording}} as unknown as Command;
+ const before=(await s.store.load(input.id))!,envelope={missionId:input.id,commandId:'wording',expectedRevision:before.revision,actorId:worker.id,command};
+ const results=await Promise.all([s.app.dispatch(envelope),s.app.dispatch(envelope)]);assert.deepEqual(results.map(r=>r.status).sort(),['committed','replayed']);
+ const saved=(await s.store.load(input.id))!.value.works[0]!;assert.deepEqual((saved.tasks.find(t=>t.step)!.progress as any).wording,wording);assert.equal(saved.acceptance,'pending');assert.deepEqual((await s.app.dispatch(envelope) as any).value.works[0],saved);
+ for(const bad of [null,[],{}, {...wording,summary:'x'.repeat(201)},{...wording,caption:'x'.repeat(101)},{...wording,summary:'line\nbreak'},{...wording,summary:'\u202e'},{...wording,summary:'\ud800'},{...wording,summary:' leading'},{...wording,accepted:true}])await assert.rejects(s.send({...command,progress:{done:4,total:11,wording:bad}} as unknown as Command,worker.id),/wording/);
+ await assert.rejects(s.send(command,owner.id),/role|assigned/);
+ await s.send({type:'receipt',workId:'work',effectId:'read',outcome:'unknown',receipt:'Unknown',usage:null},worker.id);
+ await assert.rejects(s.send(command,worker.id),/unknown|Unresolved/);
+});

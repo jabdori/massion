@@ -14,8 +14,7 @@ export function resultFactsFixture(template:ScreenFixture):ScreenFixture {
  for(const original of [...mission.works]){
   const kind=original.title==='이탈 원인 조사'?'churn':original.title==='경쟁사 가격'?'pricing':null;if(!kind)continue;
   let work:Work,conversation:NonNullable<Mission['conversations']>[number]|undefined;
-  if(kind==='pricing'&&original.assistantSource&&original.tasks.some(t=>t.step))work=original;
-  else if(original.assistantSource){
+  if(original.assistantSource){
    const source=kind==='churn'?churnSource(original):roomTelemetryWork(mission,'pricing').work;
    ({work,conversation}=produceWork(original,mission,fixture.now,source));
   }else ({work,conversation}=roomTelemetryWork(mission,kind));

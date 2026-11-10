@@ -5,26 +5,6 @@
   },
   "entries": [
     {
-      "screen": "B2",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B3-run",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B5",
       "theme": "dark",
       "kind": "contract",
@@ -32,16 +12,6 @@
       "occurrence": 1,
       "category": "browser telemetry",
       "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -91,8 +61,8 @@
       "diagnostic": "missing pane button \"확인 대기 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-dark"
+      "reason": "This single-step payment fixture has no assigned member procedure step or member-declared order-history caption. The host retains its actual check/effect evidence and does not infer an order-history count from a progress sentence.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
       "screen": "B7",
@@ -107,52 +77,12 @@
     {
       "screen": "B7-churn",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane button \"확인 대기 원인 정리 후 시작\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "The check bar uses the exact pinned criteria and independent evidence. The prototype business threshold and its matching caption are not produced by this bounded text scenario.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-done",
@@ -207,46 +137,6 @@
     {
       "screen": "B7-fail",
       "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
-      "occurrence": 1,
-      "category": "business-result predicate",
-      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
-      "occurrence": 1,
-      "category": "business-result predicate",
-      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
@@ -263,26 +153,6 @@
       "category": "payment",
       "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-dark"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -445,66 +315,6 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B10-preview",
       "theme": "dark",
       "kind": "contract",
@@ -535,36 +345,6 @@
       "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
     },
     {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B23",
       "theme": "dark",
       "kind": "gap",
@@ -575,26 +355,6 @@
       "ledger": "docs/acceptance/ri/README.md"
     },
     {
-      "screen": "B2",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B3-run",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B5",
       "theme": "light",
       "kind": "contract",
@@ -602,16 +362,6 @@
       "occurrence": 1,
       "category": "browser telemetry",
       "reason": "Typed business results are available. This label requires real browser page-read/order observations from PR #127; worker prose or a result count is not browser evidence.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
@@ -661,8 +411,8 @@
       "diagnostic": "missing pane button \"확인 대기 주문 내역 {count}\"",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "The current exact text Work lacks the named business steps, criteria/event timestamps, browser/payment/receipt facts or member-to-team discussion/table required by this occurrence. Role/order/region failures include cascades from that different procedure/room composition; they remain failures.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-light"
+      "reason": "This single-step payment fixture has no assigned member procedure step or member-declared order-history caption. The host retains its actual check/effect evidence and does not infer an order-history count from a progress sentence.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
       "screen": "B7",
@@ -677,52 +427,12 @@
     {
       "screen": "B7-churn",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane button \"확인 대기 원인 정리 후 시작\"",
-      "occurrence": 1,
-      "category": "business-procedure",
-      "reason": "The check bar uses the exact pinned criteria and independent evidence. The prototype business threshold and its matching caption are not produced by this bounded text scenario.",
-      "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
       "category": "capability",
       "reason": "Typed payment declarations and owner approval now exist. These legacy text fixtures declare no payment intent and contain no real order history, vendor receipt or subscription-CLI connection observation; their prose and token budgets cannot supply those facts.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-done",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-done",
@@ -777,46 +487,6 @@
     {
       "screen": "B7-fail",
       "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\"",
-      "occurrence": 1,
-      "category": "business-result predicate",
-      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing pane button \"확인 실패 근거 {count} 이상\"",
-      "occurrence": 1,
-      "category": "business-result predicate",
-      "reason": "Declared cause/evidence counts are displayed with the actual failed check. The pinned criteria and independent verdict do not establish the prototype threshold of three business grounds; a producer-declared count cannot invent that checking rule.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
       "kind": "gap",
       "diagnostic": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
       "occurrence": 1,
@@ -833,26 +503,6 @@
       "category": "payment",
       "reason": "The typed intent producer supplies declared amount/currency and approval only. This completed-order fixture has no declared intent or real execution/order-history observation; approval is not payment success, and token budgets cannot fill currency slots.",
       "ledger": "docs/acceptance/e3c/after-failures.md#b7-unknown-light"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-unknown",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -1015,66 +665,6 @@
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing sidebar link \"{work_title} 해지 사유 {count}을 기업 {count}, 그 외 {count}으로 나눴어요. 원인을 정리하고 있어요.\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 퀼 {duration} 조사 분류 요약 확인 {progress} · 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B10-preview",
       "theme": "light",
       "kind": "contract",
@@ -1103,36 +693,6 @@
       "category": "Browser session/form",
       "reason": "The adapter only reads pages; it does not fill fields, click or submit. B15 existing form values are observations, not completed form actions. No typed submission effect binds this Work to the generic decision, so the sidebar cannot claim decision-pending.",
       "ledger": "docs/acceptance/browser-runtime/README.md#remaining-contracts"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실행 중 {duration} 조사 분류 요약 확인 나누기 완료 · 원인 정리 중\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
       "screen": "B23",
@@ -1361,8 +921,8 @@
       "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "Member-authored progress is produced. These fixture text Works still have no browser/page-read observation; a narrative note is not browser telemetry.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
       "screen": "B7-churn",
@@ -1371,8 +931,8 @@
       "diagnostic": "No browser/page-read telemetry is produced by these fixture text Works.",
       "occurrence": 1,
       "category": "capability",
-      "reason": "Host admission/task/check timestamps are now produced and rendered. This retained gap names only the still-missing browser, business-specific or room/table producers.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+      "reason": "Member-authored progress is produced. These fixture text Works still have no browser/page-read observation; a narrative note is not browser telemetry.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     },
     {
       "screen": "B7-unknown",
@@ -1747,86 +1307,6 @@
       "ledger": "docs/acceptance/result-facts/README.md#remaining"
     },
     {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "The card displays the producer-declared ordered cause/evidence items and the actual failed check. The prototype instead requires a checker-evidence-only compound card label; the generic items are not rewritten to imitate that label.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "The card displays the producer-declared ordered cause/evidence items and the actual failed check. The prototype instead requires a checker-evidence-only compound card label; the generic items are not rewritten to imitate that label.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "The card displays the producer-declared ordered cause/evidence items and the actual failed check. The prototype instead requires a checker-evidence-only compound card label; the generic items are not rewritten to imitate that label.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 실패 {time} – {time} 조사 분류 요약 확인 확인 실패 · 근거 {count}\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "The card displays the producer-declared ordered cause/evidence items and the actual failed check. The prototype instead requires a checker-evidence-only compound card label; the generic items are not rewritten to imitate that label.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
-      "occurrence": 1,
-      "category": "generic result presentation",
-      "reason": "Declared facts and actual step/check state are present. The prototype requires a scenario-specific sentence or compound card caption. The generic renderer keeps the declared item order and literal labels/values; it does not infer a business narrative or interpret a particular step title.",
-      "ledger": "docs/acceptance/result-facts/README.md#remaining"
-    },
-    {
       "screen": "B4",
       "theme": "dark",
       "kind": "contract",
@@ -2045,6 +1525,166 @@
       "category": "private page retention",
       "reason": "The private-taint fallback explains why details are not retained; the original pane contract has a zero-sentence and 24-character budget.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
+    },
+    {
+      "screen": "B6",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B6",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-done",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 기업 고객 원인 {count}가 근거 {count}이에요. {count}이 안 돼 확인을 못 넘었어요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B7-unknown",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order sidebar link \"{work_title} 요금제 {count}를 표 {count}로 정리했어요. 확인 대기예요.\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing activity view places completed file reads ahead of ongoing Work; the required summary is present but follows a different row order than the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "progress note ordering",
+      "reason": "The member now declares the required text through real step commands. The existing member transcript places this second Work card before the intervening reply/copy action; the text is present but its timeline position differs from the approved contract.",
+      "ledger": "docs/acceptance/member-progress-notes.md#remaining"
     }
   ]
 }

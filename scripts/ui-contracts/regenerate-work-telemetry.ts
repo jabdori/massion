@@ -25,7 +25,7 @@ export function churnSource(original:Work){
   {title:'원인 정리',role:'요약',dependsOn:[2],status:settled?'settled':'active',instruction:'두 묶음 따로 원인을 정리해 줘.',result:settled?JSON.stringify({format:'massion-facts/v1',items:[{label:'기업 고객 원인',value:1,unit:'개'},{label:'근거',value:2,unit:'건'}]}):undefined}
  ];
  const skills=applySkills(null,{type:'write-skill',memberId,kind:'procedure',name:original.title,body:{description:original.title,steps:spec.map(s=>s.title),verify:original.criteria.description}},owner,{observedAt:original.admittedAt??0}).value;
- return {...original,team:memberProcedures(skills,memberId,1),tasks:spec.map((s,index)=>({id:original.id+':step:'+index,parentId:original.id+':executor',status:s.status as Task['status'],...(s.result?{result:s.result}:{}),step:{title:s.title,role:s.role,dependsOn:s.dependsOn.map(i=>original.id+':step:'+i),...(s.instruction?{instruction:s.instruction}:{}),...(s.skipReason?{skipReason:s.skipReason}:{})}}))};
+ return {...original,team:memberProcedures(skills,memberId,1),tasks:spec.map((s,index)=>({id:original.id+':step:'+index,parentId:original.id+':executor',status:s.status as Task['status'],...(s.result?{result:s.result}:{}),...(index===4?{progress:{done:settled?1:0,total:1,at:0,wording:settled?{summary:'기업 고객 원인 1개가 근거 2건이에요. 3건이 안 돼 확인을 못 넘었어요.',caption:'확인 실패 · 근거 2건',checkCaption:'근거 3건 이상'}:{summary:'해지 사유 41건을 기업 9건, 그 외 32건으로 나눴어요. 원인을 정리하고 있어요.',caption:'나누기 완료 · 원인 정리 중',checkCaption:'원인 정리 후 시작'}}}:{}),step:{title:s.title,role:s.role,dependsOn:s.dependsOn.map(i=>original.id+':step:'+i),...(s.instruction?{instruction:s.instruction}:{}),...(s.skipReason?{skipReason:s.skipReason}:{})}}))};
 }
 
 /** Existing fixture text is input; every added observation comes from a domain command. */
@@ -65,6 +65,7 @@ export function produceWork(original:Work,mission:Mission,now:number,teamSource?
  }};
  const settle=(task:Task)=>{for(const effect of effectsFor(task))if(task.step&&effect.status!=='pending')send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status,receipt:effect.receipt!,usage:0,...(effect.providerDispatch?{providerDispatchId:effect.providerDispatch.id}:{})},actorFor(task.id));
   if(task.status==='settled')send({type:'settle-task',workId:original.id,taskId:task.id,result:task.result!},actorFor(task.id));
+  if(task.step&&!task.step.skipReason&&task.progress){const {at,...progress}=task.progress;send({type:'record-step-progress',workId:original.id,taskId:task.id,progress},actorFor(task.id));}
  };
  // Ready workers start together; their host observations preserve the message order.
  const pending=tasks.filter(t=>t.step&&t.status!=='queued');

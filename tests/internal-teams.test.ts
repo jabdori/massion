@@ -56,3 +56,9 @@ test('the check family includes a worker even when the lead is from another fami
  const {w}=work();w.assignments=['openai','anthropic'].map((provider,i)=>({id:'a'+i,actorId:'actor'+i,role:'executor',taskId:i?'w:step:0':'w:executor',model:{provider,model:'model',configVersion:'v1',reason:'fixture',evidenceClass:'fixture'},extensionVersion:'v1'}));
  const check=familyCheck(workProducers(w),{provider:'anthropic',model:'checker'});assert.equal(check.producers.length,2);assert.equal(check.relation,'same-family');
 });
+
+test('planning may declare bounded start wording but cannot invent extra progress fields',()=>{
+ const {w}=work(),note={summary:'Reading the supplied files.',caption:'Reading'},step={role:'Read',title:'Read files',dependsOn:[],progressNote:note};
+ assert.deepEqual((parseTeamPlan(JSON.stringify({steps:[step,{role:'Write',title:'Draft',dependsOn:[0]}]}),w)[0] as any).progressNote,note);
+ for(const progressNote of [{summary:'\n'},{summary:'x'.repeat(201)},{summary:'Ready',done:3}])assert.throws(()=>parseTeamPlan(JSON.stringify({steps:[{...step,progressNote},{role:'Write',title:'Draft',dependsOn:[0]}]}),w),/wording|internal team/);
+});
