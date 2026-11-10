@@ -38,16 +38,6 @@
       "screen": "B6",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-dark"
-    },
-    {
-      "screen": "B6",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
@@ -138,16 +128,6 @@
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "steering-continuation",
-      "reason": "Confirmed steering sets the Work waiting; task progression then rejects it, and the existing failed-candidate reader rejects the unsettled/changed-input case. There is no producing resume path for the illustrated confirmed enterprise steering followed by active/settled churn. Plain discussion and its three Copy controls are supported and present; no pricing-format steering is substituted.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-dark"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 대기 원인 정리 후 시작\"",
       "occurrence": 1,
       "category": "business-procedure",
@@ -162,16 +142,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -288,16 +258,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-dark"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -322,16 +282,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -515,16 +465,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B8-fail",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B8-unknown",
       "theme": "dark",
       "kind": "contract",
@@ -635,26 +575,6 @@
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing dialog:하나 text \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "Device lifecycle",
-      "reason": "No recorded pending-restart/device-updater producer. Existing host readiness is not a restart fact.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host has no device restart command or pending restart state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device restart command or pending restart state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
       "screen": "B9-update",
       "theme": "dark",
       "kind": "contract",
@@ -673,16 +593,6 @@
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "The host has no device updater or update version state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device updater or update version state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
       "screen": "B10-preview",
@@ -725,46 +635,6 @@
       "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
-      "screen": "B13-general",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Notification and installed-version rows are not implemented in production general settings.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Notification and installed-version rows are not implemented in production general settings.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings status \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"다시 시작\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
       "screen": "B15",
       "theme": "dark",
       "kind": "contract",
@@ -803,16 +673,6 @@
       "category": "capability / composition",
       "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
       "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
     },
     {
       "screen": "B18-room-b",
@@ -1008,16 +868,6 @@
       "screen": "B6",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b6-light"
-    },
-    {
-      "screen": "B6",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "dependency",
@@ -1108,16 +958,6 @@
       "screen": "B7-churn",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "steering-continuation",
-      "reason": "Confirmed steering sets the Work waiting; task progression then rejects it, and the existing failed-candidate reader rejects the unsettled/changed-input case. There is no producing resume path for the illustrated confirmed enterprise steering followed by active/settled churn. Plain discussion and its three Copy controls are supported and present; no pricing-format steering is substituted.",
-      "ledger": "docs/acceptance/e3c/after-failures.md#b7-churn-light"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing pane button \"확인 대기 원인 정리 후 시작\"",
       "occurrence": 1,
       "category": "business-procedure",
@@ -1132,16 +972,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/e3c/after-failures.md"
-    },
-    {
-      "screen": "B7-churn",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/e3c/after-failures.md"
     },
     {
@@ -1258,16 +1088,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b7-fail-light"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "missing conversation link \"{work_title} 확인 대기 {duration} 조사 표 정리 확인 표 {count} · 확인 대기\"",
       "occurrence": 1,
       "category": "capability / composition",
@@ -1292,16 +1112,6 @@
       "occurrence": 1,
       "category": "capability",
       "reason": "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
@@ -1485,16 +1295,6 @@
       "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
-      "screen": "B8-fail",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
-    },
-    {
       "screen": "B8-unknown",
       "theme": "light",
       "kind": "contract",
@@ -1605,26 +1405,6 @@
       "ledger": "docs/acceptance/E3d2/residuals.md"
     },
     {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing dialog:하나 text \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "Device lifecycle",
-      "reason": "No recorded pending-restart/device-updater producer. Existing host readiness is not a restart fact.",
-      "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host has no device restart command or pending restart state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device restart command or pending restart state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
-    },
-    {
       "screen": "B9-update",
       "theme": "light",
       "kind": "contract",
@@ -1643,16 +1423,6 @@
       "category": "Activity business facts",
       "reason": "Host progress has make/check task counts, not typed churn counts or these business-step names.",
       "ledger": "docs/acceptance/E3d2/residuals.md"
-    },
-    {
-      "screen": "B9-update",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "The host has no device updater or update version state.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The host has no device updater or update version state.",
-      "ledger": "docs/acceptance/E3d2/capabilities.md"
     },
     {
       "screen": "B10-preview",
@@ -1695,46 +1465,6 @@
       "ledger": "docs/acceptance/rc/README.md#remaining"
     },
     {
-      "screen": "B13-general",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Notification and installed-version rows are not implemented in production general settings.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Notification and installed-version rows are not implemented in production general settings.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings status \"다시 시작 필요\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing settings button \"다시 시작\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Residual capability family: Native preferences/restart. See the linked producer evidence.",
-      "ledger": "docs/acceptance/E3d1/remaining.md"
-    },
-    {
-      "screen": "B13-general-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Production general settings has no notification, installed-version or restart-required state/control.",
-      "ledger": "docs/acceptance/E3d1/capabilities.md"
-    },
-    {
       "screen": "B15",
       "theme": "light",
       "kind": "contract",
@@ -1773,16 +1503,6 @@
       "category": "capability / composition",
       "reason": "Pinned worker roles and counts are produced. The compound card still requires business-specific progress prose or a typed pricing-table count, neither of which is derived from task text.",
       "ledger": "docs/acceptance/procedure-screens/README.md#remaining"
-    },
-    {
-      "screen": "B18-room-b",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"방향 바꿈: {work_title} · {time}\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "The requested confirmed enterprise steering plus continuing/settled Work has no supported continuation. Fixture discussion remains ordinary member text, without inventing confirmed steering.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
     },
     {
       "screen": "B18-room-b",
@@ -2791,26 +2511,6 @@
       "ledger": "docs/acceptance/r-d/README.md#remaining-b6-detail"
     },
     {
-      "screen": "B14-restart",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "A trusted host produces restart-required state; no restart executor is installed.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
-      "screen": "B14-restart",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "A trusted host produces restart-required state; no restart executor is installed.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Trusted host observations produce restart-required state; no restart executor is installed.",
-      "ledger": "docs/acceptance/rc/README.md#remaining"
-    },
-    {
       "screen": "B7-churn",
       "theme": "dark",
       "kind": "contract",
@@ -2869,6 +2569,86 @@
       "category": "pricing-table-and-memory-proposal",
       "reason": "The controlled typed table is now produced and rendered. Only the memory-candidate scenario belongs to R-D and remains outside this slice.",
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B9-update",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "Application update availability is unknown: no release channel or signed manifest is configured; download, signing and publishing remain owner-only.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "dark",
+      "kind": "gap",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B14-restart",
+      "theme": "light",
+      "kind": "gap",
+      "diagnostic": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "occurrence": 1,
+      "category": "capability",
+      "reason": "A CLI restart observation does not identify a supervised CLI process. Massion restart cannot confirm an external CLI restart.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "dark",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
+    },
+    {
+      "screen": "B13-general-restart",
+      "theme": "light",
+      "kind": "contract",
+      "diagnostic": "order settings text \"—\" (occurrence already consumed or found earlier)",
+      "occurrence": 1,
+      "category": "installed version",
+      "reason": "General renders the installed package version from desktop metadata instead of the prototype version dash. A native read failure still displays the dash. R-L explicitly requires truthful installed version.",
+      "ledger": "docs/acceptance/device-lifecycle.md"
     }
   ]
 }

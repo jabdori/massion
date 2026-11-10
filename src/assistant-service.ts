@@ -273,10 +273,10 @@ export class AssistantService {
  /** Only a definite rejection is not recorded. Every other failed write is reconciled without resending. */
  async #steer(steer:AssistantSteer,instruction:string,turnId:string):Promise<SteerResult>{
   if(steer.confirmedBy!==OWNER)throw new DomainError('Owner confirmation required','denied');
-  const {missionId,workId}=steer,app=new Application(this.#ownerStore,[{id:OWNER,roles:['owner']}],this.#clock);let status:SteerResult;
-  try{const result=await app.dispatch({missionId,commandId:'assistant-steer:'+turnId,expectedRevision:steer.expectedRevision!,actorId:OWNER,command:{type:'steer',workId,instruction}});status=result.status==='conflict'?'not_recorded':'recorded';}
-  catch(error){if(refused(error))return 'not_recorded';status=await this.#steerResult(steer,instruction,turnId);if(status==='unknown')this.#unsettled=true;}
-  if(status==='recorded')this.#product.runtime?.interrupt(missionId,workId);return status;
+  const {missionId,workId}=steer,app=new Application(this.#ownerStore,[{id:OWNER,roles:['owner']}],this.#clock);let status:SteerResult,interrupt=true;
+  try{const result=await app.dispatch({missionId,commandId:'assistant-steer:'+turnId,expectedRevision:steer.expectedRevision!,actorId:OWNER,command:{type:'steer',workId,instruction}});status=result.status==='conflict'?'not_recorded':'recorded';if(result.status!=='conflict')interrupt=result.value.works.find(w=>w.id===workId)?.execution!=='active';}
+  catch(error){if(refused(error))return 'not_recorded';status=await this.#steerResult(steer,instruction,turnId);if(status==='unknown')this.#unsettled=true;else if(status==='recorded')interrupt=(await this.#store.load(missionId).catch(()=>null) as Snapshot<Mission>|null)?.value.works.find(w=>w.id===workId)?.execution!=='active';}
+  if(status==='recorded'&&interrupt)this.#product.runtime?.interrupt(missionId,workId);return status;
  }
  async #admit(segment:AssistantSegment,turnId:string,messageId:string,proposal:AssistantProposal,route:AssistantRoute,intakeMissionId:string):Promise<Outcome>{
   const title=proposal.title;
@@ -323,7 +323,7 @@ export class AssistantService {
   const steering=new Map<string,AssistantSteer>();
   for(const t of snapshot?.value.turns??[])if(t.steer){
    const {expectedRevision,confirmedBy,...view}=t.steer,key=state.feedId+':'+number+':'+t.id,known=this.#steeringResults.get(key);
-   if(view.status==='unknown'&&expectedRevision!==undefined){view.status=await this.#steerResult(t.steer,snapshot!.value.messages.find(m=>m.id===t.messageId)!.text,t.id);if(view.status!=='unknown')this.#steeringResults.set(key,view.status);if(view.status==='recorded'&&confirmedBy===OWNER)this.#product.runtime?.interrupt(t.steer.missionId,t.steer.workId);}
+   if(view.status==='unknown'&&expectedRevision!==undefined){view.status=await this.#steerResult(t.steer,snapshot!.value.messages.find(m=>m.id===t.messageId)!.text,t.id);if(view.status!=='unknown')this.#steeringResults.set(key,view.status);if(view.status==='recorded'&&confirmedBy===OWNER&&missions.get(t.steer.missionId)?.value.works.find(w=>w.id===t.steer!.workId)?.execution!=='active')this.#product.runtime?.interrupt(t.steer.missionId,t.steer.workId);}
    if((view.status==='proposed'||view.status==='unknown')&&known)view.status=known;
    if((view.status==='recorded'||view.status==='not_recorded')&&view.status===t.steer.status)this.#steeringResults.delete(key);
    if(view.status==='proposed'&&!missions.get(view.missionId)?.value.works.some(w=>w.id===view.workId&&this.#running(w)))view.status='not_recorded';steering.set(t.id,view);

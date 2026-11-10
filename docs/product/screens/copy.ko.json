@@ -18371,5 +18371,27 @@
    "R-I:B23"
   ],
   "provenance": "B23 recommendation description"
+ },
+ "ui.settings.notifications-on": {
+  "ko": "켜짐",
+  "roles": [
+   "option"
+  ],
+  "used_in": [
+   "B13-general:settings",
+   "B13-general-restart:settings"
+  ],
+  "provenance": "Device-local notification delivery preference"
+ },
+ "ui.settings.notifications-off": {
+  "ko": "꺼짐",
+  "roles": [
+   "option"
+  ],
+  "used_in": [
+   "B13-general:settings",
+   "B13-general-restart:settings"
+  ],
+  "provenance": "Device-local notification delivery preference"
  }
 }
