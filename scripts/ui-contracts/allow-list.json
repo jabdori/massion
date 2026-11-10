@@ -2133,7 +2133,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 1,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -2143,7 +2143,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 2,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -2153,7 +2153,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 3,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -2173,7 +2173,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 1,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -2183,7 +2183,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 2,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
@@ -2193,7 +2193,7 @@
       "diagnostic": "region pane text \"{amount}\" (found in conversation)",
       "occurrence": 3,
       "category": "ephemeral page fallback",
-      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps complete payment amounts in the owner decision; its no-image card omits the three repeated amount blocks.",
+      "reason": "The lead replaced the full DOM block list with a bounded structural summary. B4 keeps the total visible in the owner decision and component amounts in its typed request; its no-image card omits the three repeated amount blocks.",
       "ledger": "docs/acceptance/browser-runtime/README.md#page-card-visual-recheck"
     },
     {
