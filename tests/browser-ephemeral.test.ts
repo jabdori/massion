@@ -255,3 +255,13 @@ test('a percent separator inside a hex candidate cannot bypass masking or refusa
 test('excessively encoded private seeds fail before an observation is committed',async t=>{
  const s=await fixture(t);let secret='ABCD1234';for(let i=0;i<12;i++)secret=Buffer.from(secret).toString('base64');const before=s.journal().head,service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:'ABCD1234',blocks:[],fields:[{label:'Recovery code',type:'text',autocomplete:'',value:secret}]};}},clock:s.clock});t.after(()=>service.drain());await assert.rejects(service.capture(request),/private normalization bound/i);assert.equal(s.journal().head,before);
 });
+
+for(const first of ['WXYZ','ABCD'])test('both hex byte alignments are redacted: '+first,async t=>{
+ const s=await fixture(t),display=Buffer.from(first).toString('hex')+'0'+Buffer.from('WXYZ').toString('hex')+'0',service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,title:display,blocks:[display],fields:[...new Set([first,'WXYZ'])].map(value=>({label:'Security code',type:'text',autocomplete:'',value}))};}},clock:s.clock});t.after(()=>service.drain());await service.capture(request);const observed=await service.read('mission','work');assert.match(observed.session!.page.title,/^(?:••••0)+$/);assert.ok(observed.session!.page.blocks.every(value=>/^(?:••••0)+$/.test(value)));
+ for(const value of [JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes(Buffer.from('WXYZ').toString('hex')),'No shifted private hex suffix may persist');validateMissionJournalLineage(s.journal().operations);
+});
+
+for(const structure of ['reset:ABCD1234','reset：ABCD1234','reset:'+Buffer.from('ABCD1234').toString('base64')])test('decoded structured capability suffixes remain private: '+structure.slice(0,6),async t=>{
+ const s=await fixture(t),address='https://shop.example.com/recover/'+Buffer.from(structure).toString('base64url'),service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:'ABCD1234',blocks:['ABCD1234'],fields:[]};}},clock:s.clock});t.after(()=>service.drain());await service.capture({...request,address});
+ for(const value of [JSON.stringify(await service.read('mission','work')),JSON.stringify(s.journal()),await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts)])assert.ok(!value.includes('ABCD1234'),'Decoded structured suffix must not persist');validateMissionJournalLineage(s.journal().operations);
+});

@@ -38,7 +38,7 @@ export function browserPrivateSeeds(values:string[]){
   if(/%[a-f0-9]{2}/i.test(encoded))try{next.push(decodeURIComponent(encoded));}catch{}
   if(/^[A-Za-z0-9+/_-]+={0,2}$/.test(encoded))try{const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,''));next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));}catch{}
   if(/^(?:[a-f0-9]{2})+$/i.test(encoded))try{next.push(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(encoded.match(/../g)!,pair=>parseInt(pair,16))));}catch{}
-  for(const decoded of next){if(!decoded||seeds.has(decoded))continue;if(depth>=8||seeds.size>=1024)throw Error('Browser private normalization bound exceeded');seeds.add(decoded);queue.push({value:decoded,depth:depth+1});}
+  for(const decoded of next)for(const part of [decoded,...decoded.normalize('NFKC').replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu,'').split(/[/?#:\[\]@!$&'()*+,;=]/)]){if(!part||seeds.has(part))continue;if(depth>=8||seeds.size>=1024)throw Error('Browser private normalization bound exceeded');seeds.add(part);queue.push({value:part,depth:depth+1});}
  }
  return [...seeds];
 }
@@ -67,7 +67,7 @@ export function browserPrivateRanges(value:string,secrets:string[]=[],encodingDe
    const pairs=token.slice(offset).match(/../g)!,bytes=Uint8Array.from(pairs,pair=>parseInt(pair,16)),decoder=new TextDecoder('utf-8',{ignoreBOM:true}),starts:number[]=[],ends:number[]=[];let decoded='',pending=0;
    const append=(part:string,end:number)=>{decoded+=part;for(let i=0;i<part.length;i++){starts.push(pending);ends.push(end);}if(part)pending=end;};
    for(let i=0;i<bytes.length;i++)append(decoder.decode(bytes.subarray(i,i+1),{stream:true}),i+1);append(decoder.decode(),bytes.length);
-   const found=encodedRanges(decoded);if(found.length){for(const [start,end] of found)ranges.push([match.index+digits[offset+starts[start]!*2]!.index,match.index+digits[offset+ends[end-1]!*2-1]!.index+1]);break;}
+   const found=encodedRanges(decoded);if(found.length){for(const [start,end] of found)ranges.push([match.index+digits[offset+starts[start]!*2]!.index,match.index+digits[offset+ends[end-1]!*2-1]!.index+1]);}
   }
  }
  if(decode)for(const match of value.matchAll(/[A-Za-z0-9+/_-](?:[A-Za-z0-9\s\p{P}\p{S}]*[A-Za-z0-9+/_-])?={0,2}/gu)){

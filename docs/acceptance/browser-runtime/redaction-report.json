@@ -21,6 +21,7 @@
   "mixedAlphabetGroupingReflection": true,
   "hexReflection": true,
   "decodedPrivateSeed": true,
+  "structuredDecodedSeed": true,
   "base64UrlReflection": true,
   "nestedBase64Reflection": true,
   "noPrivateQueryValues": true,
