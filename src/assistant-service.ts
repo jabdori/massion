@@ -1,3 +1,5 @@
+import {copy} from './ui-copy.ts';
+import {environmentObservations} from './environment-work-state.ts';
 import {workProgressNote} from './member-progress.ts';
 import {browserSummary} from './browser-runtime.ts';
 import {MembersService} from './members.ts';
@@ -54,7 +56,9 @@ function progress(work:Mission['works'][number]){
 }
 /** Bounded card facts share the pane's pinned steps without copying worker bodies. */
 export function workCardFacts(work:Mission['works'][number]){
- return {progressNote:workProgressNote(work),...workResultFacts(work),fileReads:fileReadCompletions(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null,workerSteps:work.tasks.filter(t=>t.step).map(t=>({step:{title:t.step!.title,role:t.step!.role,...(t.step!.skipReason?{skipReason:t.step!.skipReason}:{})},status:t.status,...(t.progress?{progress:{done:t.progress.done,total:t.progress.total}}:{})}))};
+ const result=workResultFacts(work),definition=work.runtimeRun?.environment?.definition;
+ if(definition){const observed=new Map(environmentObservations(work).sort((a,b)=>a.at-b.at).flatMap(r=>Object.entries(r.observation.facts))),items=definition.facts.filter(f=>typeof observed.get(f.id)==='boolean').slice(0,8).map(f=>({label:clip(f.label,64),value:copy(observed.get(f.id)?'ui.environment.observed':'ui.environment.not-observed')}));result.resultFacts=items.length?{format:'massion-facts/v1',items}:null;}
+ return {progressNote:definition&&result.resultFacts?null:workProgressNote(work),...result,fileReads:fileReadCompletions(work),steps:steps(work),progress:progress(work),evidenceCount:work.verdict?.evidence.length??null,workerSteps:work.tasks.filter(t=>t.step).map(t=>({step:{title:t.step!.title,role:t.step!.role,...(t.step!.skipReason?{skipReason:t.step!.skipReason}:{})},status:t.status,...(t.progress?{progress:{done:t.progress.done,total:t.progress.total}}:{})}))};
 }
 const tokens=(n:unknown)=>n===null||Number.isSafeInteger(n)&&Number(n)>=0;
 

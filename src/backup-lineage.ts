@@ -1,3 +1,4 @@
+import {validateRuntimeEnvironment,environmentWorkEffectId,ENVIRONMENT_WORK_HOST} from './environment-work-state.ts';
 import {validateSecretRequests,SECRET_REQUEST_HOST} from './secret-requests.ts';
 import {isEnvironmentState,replayEnvironment} from './environment-actions.ts';
 import type {EnvironmentState} from './environment-actions.ts';
@@ -224,7 +225,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   if (budget.measured !== null) number(budget.measured, 'budget measurement');
   if (Object.hasOwn(budget, 'unit')) ensure(budget.unit === 'output-tokens', 'unsupported budget unit');
   if (Object.hasOwn(item, 'runtimeRun')) {
-    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['continuationVersion','continuationConfig','resumptions','assembly','steeringVersion','roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
+    const run = object(item.runtimeRun, 'runtime run', ['id', 'authorizationId', 'criteriaHash', 'inputHash', 'mode', 'outputTokenCap'], ['environment','continuationVersion','continuationConfig','resumptions','assembly','steeringVersion','roomVersion','connectionBindings','ownership','toolTimeoutVersion']);
     if(Object.hasOwn(run,'steeringVersion'))ensure(run.steeringVersion===1&&!!item.team,'Invalid steering runtime version');
     if(Object.hasOwn(run,'roomVersion'))ensure(run.roomVersion===1&&!!item.team,'Invalid room runtime version');
     if(Object.hasOwn(run,'toolTimeoutVersion'))ensure(run.toolTimeoutVersion==='tool-timeouts/v1','unsupported tool timeout policy');
@@ -241,7 +242,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
     // Legacy steering retains its admission hash. Versioned continuation repins
     // only through the journaled steer transition; later stopping keeps that pin.
   }
-  validateContinuation(value as Work);
+  validateContinuation(value as Work);validateRuntimeEnvironment(value as Work);
   validateRuntimeInterruption(value as Work);
   const deadlinePendingIds=(value as Work).runtimeInterruption?.pendingEffectIds??[];
   let recoveryPendingIds: string[] = [];
@@ -263,7 +264,7 @@ function validateWork(value: unknown, mission: Mission, memoryKeys: Set<string>)
   }
   const tasks = array(item.tasks, 'tasks'); ensure(tasks.length > 0, 'Work has no root task');
   for (const value of tasks) {
-    const task = object(value, 'task', ['id', 'parentId', 'status'], ['step','result','startedAt','endedAt','progress','procedureEdit']);if(Object.hasOwn(task,'progress')){validateStepProgress(task.progress);ensure(!!task.step,'Progress must bind a worker step');}
+    const task = object(value, 'task', ['id', 'parentId', 'status'], ['environment','step','result','startedAt','endedAt','progress','procedureEdit']);if(Object.hasOwn(task,'progress')){validateStepProgress(task.progress);ensure(!!task.step,'Progress must bind a worker step');}
     for(const key of ['startedAt','endedAt'])if(Object.hasOwn(task,key))integer(task[key],'task time',0);if(Object.hasOwn(task,'step'))validateTeamTask(item as unknown as Work,task as unknown as import('./domain.ts').Task); text(task.id, 'task ID');
     if (task.parentId !== null) text(task.parentId, 'parent task ID'); oneOf(task.status, ['queued', 'active', 'settled'], 'task status');
     if (Object.hasOwn(task, 'result')) text(task.result, 'task result');
@@ -383,6 +384,7 @@ const COMMAND_KEYS: Record<Command['type'], { required: string[]; optional?: str
   'settle-secret-request':{required:['workId','requestId','requestHash','provisionId','status']},
   'record-browser-private-origin':{required:['workId','sessionId','origin']},
   'record-browser-page':{required:['workId','sessionId','navigationId','page']},
+  'record-environment-work':{required:['workId','taskId','environment','dispatchId','inputHash','index','update']},
   'propose-owner-effect':{required:['workId','taskId','stepId','effectId','request']},
   'answer-owner-effect':{required:['workId','effectId','answer'],optional:['requestHash']},
   'dispatch-owner-effect':{required:['workId','effectId','feedId']},
@@ -488,15 +490,37 @@ export function validateMissionJournalLineage(operations: readonly Operation<Mis
       const keys = COMMAND_KEYS[type as Command['type']];
       const command = object(event.command, 'journal command', ['type', ...keys.required], keys.optional) as unknown as Command;
       ensure(event.type === type, 'event and command type mismatch');
-      ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)||command.type==='answer-rule-change'?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
+      ensure(operation.fingerprint === hash({ actorId: actor.id, command, ...(isEffectDecisionCommand(command.type)||command.type==='answer-rule-change'||command.type==='record-environment-work'?{}:{expectedRevision: operation.expectedRevision}) }), 'command fingerprint mismatch');
       if(command.type==='request-secret'||command.type==='settle-secret-request')ensure(actor.id===SECRET_REQUEST_HOST&&operation.commandId.startsWith('assistant-secret-'),'secret host identity mismatch');
       if(command.type==='answer-secret-request')ensure(actor.id==='local-owner'&&operation.commandId===command.provisionId&&!operation.commandId.startsWith('assistant-'),'secret decision identity mismatch');
       if(isEffectDecisionCommand(command.type))ensure(command.type==='answer-owner-effect'?actor.id==='local-owner'&&!operation.commandId.startsWith('assistant-'):actor.id===EFFECT_HOST&&operation.commandId.startsWith(EFFECT_COMMAND_PREFIX),'effect command authority mismatch');
+      if(command.type==='record-environment-work'){
+       ensure(actor.id===ENVIRONMENT_WORK_HOST&&operation.commandId.startsWith('assistant-environment-work:'),'environment Work command authority mismatch');
+       const work=prior.value.works.find(w=>w.id===command.workId),bound=work?.runtimeRun?.environment,step=work?.tasks.find(t=>t.id===command.taskId)?.environment,u=command.update;
+       if(u.kind!=='begin'){
+        const environmentOperation=previous.get('assistant-conversation:environment:'+hash(['local-owner',command.environment])),environment=environmentOperation?.value as unknown as EnvironmentState|undefined;
+        ensure(environment&&isEnvironmentState(environment)&&environment.feedId===bound?.feedId,'environment Work journal is absent or replaced');
+        if(u.kind==='observe'){
+         const event=environmentOperation!.events[0] as {command?:{type?:string;binding?:unknown}};
+         ensure(environmentOperation!.commandId===u.observation.observationId&&event.command?.type==='observe'&&hash(event.command.binding)===hash(u.observation.binding),'environment observation journal binding mismatch');
+        }else{
+         const ref=u.kind==='link'?u.reference:step?.pending,entry=environment.entries.find(e=>e.id===ref?.id),op=step?.plan.operations[command.index];
+         ensure(ref&&entry&&entry.hash===ref.hash&&entry.at===ref.at&&entry.deadline===ref.deadline,'environment Work entry reference mismatch');
+         const request=entry.request;
+         ensure(op?.kind==='act'?request.type==='action'&&request.action.element===op.element&&hash(request.action.input)===hash(op.input):op?.kind==='wait'&&request.type==='wait'&&hash(request.wait)===hash(bound!.definition.waits.find(w=>w.id===op.id)?.request),'environment Work entry does not match its plan');
+         if(u.kind==='link')ensure(u.waiting?entry.status==='waiting':entry.status==='ready','environment Work wait status mismatch');
+         if(u.kind==='resume')ensure(op?.kind==='act'?entry.status==='ready'&&u.approvedAt===entry.updatedAt:entry.status==='completed','environment Work lacks its owner answer or observed transition');
+         if(u.kind==='claim')ensure(entry.status==='ready','environment Work action is not approved');
+         if(u.kind==='complete')ensure(u.result==='delivered'?entry.status==='delivered':entry.status==='completed','environment Work completion lacks its adapter receipt');
+         if(u.kind==='stop')ensure(['declined','cancelled','timed-out','invalidated'].includes(entry.status)||Number((event.time as {observedAt?:number})?.observedAt)>=entry.deadline,'environment Work stop lacks a terminal entry');
+        }
+       }
+      }
       if(command.type==='record-browser-page')ensure(command.page.expectedRevision===operation.expectedRevision&&operation.commandId.startsWith('assistant-browser:'),'browser command identity mismatch');
       checkAssistantSteps(operation, actor.id, command, prior.value, previous as unknown as Map<string, Operation<AssistantSegment>>,skillsHistory);
       const derived = apply(prior.value, command, actor, event.time as import('./memory-expiry.ts').TimeObservation | undefined);
       equal(derived.value, operation.value, 'command/state transition'); equal(derived.events, operation.events, 'command/event transition');
-      equal(operation.outbox, command.type === 'admit-effect' ? [{ type: 'effect-admitted', workId: command.workId, effectId: command.effect.id }] : [], 'command/outbox transition');
+      equal(operation.outbox, command.type === 'admit-effect' ? [{ type: 'effect-admitted', workId: command.workId, effectId: command.effect.id }] : command.type==='record-environment-work'&&command.update.kind==='claim'?[{type:'effect-admitted',workId:command.workId,effectId:environmentWorkEffectId(command.environment,command.taskId,command.index)}]:[], 'command/outbox transition');
     }
     previous.set(operation.aggregateId, operation);
   }

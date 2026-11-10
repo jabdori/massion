@@ -1,3 +1,6 @@
+import {EnvironmentWorkService} from '../src/environment-work-service.ts';
+import {SecretRequestsService} from '../src/secret-requests-service.ts';
+import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import test from 'node:test';
 import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
@@ -199,4 +202,14 @@ test('commit-boundary recovery preserves Work facts, exact selection and single-
   assert.ok(reconcileMonthly(snapshot).every(p=>p.kind==='hold'),'fault-free recovery reaches a fixed point');const known=w.acceptance==='accepted';if(known){assert.equal(reservation.state,'settled');assert.equal((await restarted.read()).reserved,0);}
   assert.ok(s.store instanceof InMemoryStore);const {validateMissionJournalLineage}=await import('../src/backup-lineage.ts');validateMissionJournalLineage(s.store.inspect());
  });
+});
+
+
+test('environment services resolve once per configured runtime creation and remain pinned during a run',async t=>{
+ const s=await setup(t),secrets=new SecretRequestsService(s.store,new InMemorySecretSlots()),first=new EnvironmentWorkService(s.store,s.store,{definitions:[],secrets,intake:()=>undefined}),second=new EnvironmentWorkService(s.store,s.store,{definitions:[],secrets,intake:()=>undefined});
+ let resolutions=0,selected=first;const bound:string[]=[];
+ first.bind=async()=>{bound.push('first');selected=second;return undefined;};second.bind=async()=>{bound.push('second');return undefined;};
+ const runtime=new SelectableTextRuntime(s.store,s.catalog,s.grants,s.artifacts,undefined,undefined,undefined,undefined,()=>{resolutions++;return selected;});
+ runtime.configuration();assert.equal(resolutions,0);assert.equal(runtime.preflight((await s.store.load(s.missionId))!,'work',2,s.choice).ready,true);assert.equal(resolutions,1);assert.deepEqual(bound,[]);
+ const result=await runtime.run(s.missionId,'work','environment-routing',2,s.choice);assert.equal(result.status,'settled');assert.equal(resolutions,2);assert.deepEqual(bound,['first']);
 });

@@ -46,7 +46,8 @@ jobs:
           MASSION_E2E_BROWSER: /usr/bin/google-chrome
         run: |
           "$MASSION_E2E_BROWSER" --version
-          node --test scripts/e2e/browser-*.test.mjs
+          node --test scripts/e2e/browser-*.test.mjs scripts/e2e/environment-work.test.mjs
+          node --test scripts/ui-contracts/environment-work-fixture.test.mjs
           xvfb-run -a python3 scripts/with-surreal.py --timeout 480 -- npm run e2e
       - name: Upload accessibility snapshots, screenshots and report
         if: always()

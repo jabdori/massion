@@ -56,3 +56,22 @@ test('fixture members declare narrative progress through real step commands with
   }
  }
 });
+
+test('environment card facts use the latest persisted booleans and declared labels instead of worker or page prose',async()=>{
+ const {workCardFacts}=await import('../src/assistant-service.ts'),owner={id:'local-owner',roles:['owner'] as const},mission=createMission({id:'intake',purpose:'Fixture',scope:'local',constraints:[],criteria:{version:1,description:'Observe state',oracle:'fixture/v1'}},owner),{work}=roomTelemetryWork(mission,'pricing');
+ const definition={memberId:'member:1',origin:'https://fixture.example',elements:[{id:'button',selector:'#button',role:'button',label:'전송',operations:['click' as const],gates:[]}],facts:[{id:'submitted',selector:'#submitted',state:'present' as const,label:'전송 상태',kind:'state' as const},{id:'confirmed',selector:'#confirmed',state:'present' as const,label:'접수 확인',kind:'order-confirmation' as const}],waits:[],secrets:[]};
+ work.runtimeRun!.environment={id:'environment:1',feedId:'feed:1',definition};
+ const observation=(at:number,confirmed:boolean)=>({index:0,at,kind:'observed' as const,observation:{observationId:'observation:'+at,binding:{environment:'environment:1',surface:'surface:1',origin:definition.origin,generation:1,revision:1},facts:{submitted:true,confirmed,undeclared:true},pageReadId:'page:'+at}});
+ const workers=work.tasks.filter(t=>t.step);for(const [index,task] of workers.slice(0,2).entries())task.environment={inputHash:hash('fixture'),plan:{format:'massion-environment/v1',operations:[{kind:'observe',facts:['submitted','confirmed']}]},cursor:1,records:[observation(index===0?200:100,index!==0)]};
+ workers[0]!.progress={done:1,total:1,at:Date.now(),wording:{summary:'페이지에는 완료라고 표시됨',caption:'완료'}};
+ const before=structuredClone(work),view=workCardFacts(work);assert.equal(view.progressNote,null);assert.deepEqual(view.resultFacts,{format:'massion-facts/v1',items:[{label:'전송 상태',value:'확인됨'},{label:'접수 확인',value:'미확인'}]});assert.deepEqual(work,before);assert.notEqual(work.acceptance,'accepted');assert.equal(work.record,undefined);
+ for(const task of work.tasks)delete task.environment;assert.equal(workCardFacts(work).resultFacts,null,'unobserved environment state must not fall back to worker claims');
+});
+
+test('environment summaries keep the existing eight-fact bounds and full labels remain in the pinned definition',async()=>{
+ const {workCardFacts}=await import('../src/assistant-service.ts'),mission=createMission({id:'intake',purpose:'Fixture',scope:'local',constraints:[],criteria:{version:1,description:'Observe state',oracle:'fixture/v1'}},{id:'local-owner',roles:['owner']}),{work}=roomTelemetryWork(mission,'pricing');
+ const facts=Array.from({length:9},(_,i)=>({id:'fact:'+i,selector:'#fact-'+i,state:'present' as const,label:i?'항목 '+i:'긴 관찰 이름'.repeat(30),kind:'state' as const}));
+ work.runtimeRun!.environment={id:'environment:1',feedId:'feed:1',definition:{memberId:'member:1',origin:'https://fixture.example',elements:[],facts,waits:[],secrets:[]}};
+ const task=work.tasks.find(t=>t.step)!;task.environment={inputHash:hash('fixture'),plan:{format:'massion-environment/v1',operations:[{kind:'observe',facts:facts.map(f=>f.id)}]},cursor:1,records:[{index:0,at:100,kind:'observed',observation:{observationId:'observation:1',binding:{environment:'environment:1',surface:'surface:1',origin:'https://fixture.example',generation:1,revision:1},facts:Object.fromEntries(facts.map(f=>[f.id,true])),pageReadId:'page:1'}}]};
+ const view=workCardFacts(work);assert.equal(view.resultFacts?.items.length,8);assert.ok(parseResultFacts(JSON.stringify(view.resultFacts)));assert.equal(work.runtimeRun!.environment.definition.facts[0]!.label,'긴 관찰 이름'.repeat(30));
+});

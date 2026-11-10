@@ -11,7 +11,7 @@ export function completedEffect(w:Work,e:Effect):Effect|undefined {
 }
 export function canResume(w:Work,at:number):boolean {
  const run=w.runtimeRun,o=currentOwnership(w);
- return !!(!w.secretRequests?.some(r=>r.state!=='provided')&&run?.continuationVersion===1&&w.team&&o&&at>=o.startedAt&&at<o.deadlineAt&&!w.runtimeRecovery&&!w.monthlyBudgetDecision&&!['waiting','cancelled','budget-waiting'].includes(w.execution)&&w.acceptance!=='accepted'&&w.acceptance!=='failed'&&(!w.runtimeInterruption||w.runtimeInterruption.reason==='host-shutdown')&&(!w.blocker||w.runtimeInterruption?.reason==='host-shutdown')&&w.effects.every(e=>completedEffect(w,e)&&!e.ownerDecision));
+ return !!(!w.tasks.some(t=>t.environment)&&!w.secretRequests?.some(r=>r.state!=='provided')&&run?.continuationVersion===1&&w.team&&o&&at>=o.startedAt&&at<o.deadlineAt&&!w.runtimeRecovery&&!w.monthlyBudgetDecision&&!['waiting','cancelled','budget-waiting'].includes(w.execution)&&w.acceptance!=='accepted'&&w.acceptance!=='failed'&&(!w.runtimeInterruption||w.runtimeInterruption.reason==='host-shutdown')&&(!w.blocker||w.runtimeInterruption?.reason==='host-shutdown')&&w.effects.every(e=>completedEffect(w,e)&&!e.ownerDecision));
 }
 export function validateContinuation(w:Work){
  const r=w.runtimeRun;if(!r)return;

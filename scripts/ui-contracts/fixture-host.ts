@@ -23,6 +23,7 @@ import {scheduleScreenFixture} from './schedule-fixture.ts';
 import {binaryScreenFixture} from './binary-fixture.ts';
 import {RESULT_FACT_SCREENS,resultFactsFixture} from './result-facts-fixtures.ts';
 import {fileReadActivityFixture} from './file-read-activity-fixture.ts';
+import {ENVIRONMENT_WORK_SCREENS,recordedEnvironmentWorkFixture} from './environment-work-fixture.ts';
 
 export type FixtureStep={selector:string;action:'click'|'fill';value?:string;readySelector?:string}|{action:'offline';value:'true'|'false';readySelector?:string};
 export interface ScreenFixture {
@@ -74,6 +75,7 @@ export async function loadFixture(screen:string,parents:string[]=[],images?:Reco
  const growth=GROWTH_SCREENS.includes(screen)?await growthFixture(observed):observed;
  const steered=STEERING_SCREENS.includes(screen)?await steeringFixture(growth):growth;
  const memory=MEMORY_SCREENS.includes(screen)?await memoryFixture(steered):steered;
+ if(ENVIRONMENT_WORK_SCREENS.includes(screen))return recordedEnvironmentWorkFixture(memory);
  if(['B22','B22-room','B22-room-steps'].includes(screen))return githubScreenFixture(memory);
  if(screen==='B17')return scheduleScreenFixture(memory);
  return screen==='B10'?binaryScreenFixture(memory):memory;

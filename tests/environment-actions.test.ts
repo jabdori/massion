@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EnvironmentActions} from '../src/environment-actions.ts';
+import type {HostEnvironmentObservation} from '../src/environment-actions.ts';
 import type {EnvironmentAction,EnvironmentObservation,EnvironmentAdapter,ActionInput,OwnerWait,EnvironmentGate} from '../src/environment.ts';
 import {InMemoryStore,CommitOutcomeUnknownError,withAdmissionFeed} from '../src/storage.ts';
 import {HostDrainError} from '../src/runtime-lifetime.ts';
@@ -84,6 +85,66 @@ test('a late poll cannot overwrite cancellation or a newer poll reservation',asy
 test('secret fill persists references only, masks subsequent observations, and erases boundary bytes',async()=>{
  const s=setup([]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});await s.service.execute('step',entry.hash);assert.ok(s.adapter.secretBytes?.every(byte=>byte===0));assert.ok(!JSON.stringify(s.store.inspect()).includes('fixture-private-value'));assert.ok(!JSON.stringify(s.adapter.delivered).includes('fixture-private-value'));const observation=await s.create().observe();assert.deepEqual(observation.structure,[]);assert.equal(observation.image,null);assert.deepEqual(observation.facts,{});
  const other=setup([]);await assert.rejects(other.propose({kind:'type',secret:{owner:'another-owner',slot:'login'}}),/owner/i);await assert.rejects(other.propose({kind:'type',value:'literal-secret'} as any),/fields|secret/i);
+});
+
+test('adapter-free services retain state and owner answers but cannot dispatch observation or execution',async()=>{
+ const s=setup(),entry=await s.propose(),service=new EnvironmentActions(s.store,s.store,undefined,{owner:'local-owner',environment:'fixture',clock:()=>1000});
+ assert.equal((await service.state()).entries[0]!.status,'waiting');await service.answer('approve','step',entry.hash,'approve');const count=s.store.inspect().length;
+ await assert.rejects(service.observe(),/adapter/i);await assert.rejects(service.observeForHost(['confirmed']),/adapter/i);await assert.rejects(service.execute('step',entry.hash),/adapter/i);
+ assert.equal(s.store.inspect().length,count);assert.equal((await service.state()).entries[0]!.status,'ready');await service.answer('cancel','step',entry.hash,'cancel');
+ assert.equal((await service.execute('step',entry.hash)).status,'cancelled');validateMissionJournalLineage(s.store.inspect());
+ const w=setup(),waiting=await w.service.wait('step',wait),offline=new EnvironmentActions(w.store,w.store,undefined,{owner:'local-owner',environment:'fixture',clock:()=>1000}),before=w.store.inspect().length;
+ await assert.rejects(offline.poll('step'),/adapter/i);assert.equal(w.store.inspect().length,before);await offline.answer('cancel','step',waiting.hash,'cancel');
+});
+
+test('host observations project requested own boolean facts and opaque operations even when public observation is private',async()=>{
+ const s=setup([]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});await s.service.execute('step',entry.hash);
+ s.adapter.observation.facts={confirmed:true,other:false};const publicObservation=await s.service.observe();assert.deepEqual(publicObservation.structure,[]);assert.deepEqual(publicObservation.facts,{});assert.equal(publicObservation.image,null);
+ const host:HostEnvironmentObservation=await s.service.observeForHost(['confirmed','missing','toString']);
+ assert.deepEqual(host,{observationId:s.store.inspect().at(-1)!.commandId,binding:s.adapter.observation.binding,facts:{confirmed:true},available:[{id:'control',operations:['click','type','key','select','scroll','submit']}]});
+ const operation=s.store.inspect().at(-1)!,event=operation.events[0] as {command:Record<string,unknown>};assert.equal(event.command.type,'observe');assert.deepEqual(Object.keys(event.command).sort(),['binding','type']);
+ host.available[0]!.operations.length=0;host.binding.revision=999;assert.equal((await s.service.observeForHost([])).available[0]!.operations.length,6);validateMissionJournalLineage(s.store.inspect());
+});
+
+test('host fact selections are bounded unique validated IDs before any adapter or journal dispatch',async()=>{
+ const s=setup();for(const ids of [['confirmed','confirmed'],Array.from({length:65},(_,i)=>'fact-'+i),['bad id'],[1],null] as any[]){await assert.rejects(s.service.observeForHost(ids),/fact|bound|identity/i);}
+ assert.equal(s.adapter.reads,0);assert.equal(s.store.inspect().length,0);
+ const ids=Array.from({length:64},(_,i)=>'fact-'+i);s.adapter.observation.facts=Object.fromEntries(ids.map(id=>[id,true]));assert.equal(Object.keys((await s.service.observeForHost(ids)).facts).length,64);
+});
+
+const paymentGate:EnvironmentGate={kind:'payment',intent:{kind:'payment-intent',payee:'Fixture recipient',amountMinor:100,currency:'USD',purpose:'Fixture service',sourceReference:'work:fixture'}};
+test('host read timeouts retain the environment lane through late reconciliation before payment acknowledgment',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const s=setup([paymentGate]),entry=await s.propose();await s.service.answer('approve','step',entry.hash,'approve');s.adapter.observation.binding.surface='other';
+ let releaseRead!:()=>void,enteredRead!:()=>void,releaseWrite!:()=>void,enteredWrite!:()=>void;const reading=new Promise<void>(r=>enteredRead=r),writing=new Promise<void>(r=>enteredWrite=r);
+ s.adapter.holdRead=async()=>{enteredRead();await new Promise<void>(r=>releaseRead=r);};
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async(input:any)=>{if(input.events[0].command.type==='observe'&&input.events[0].command.binding.surface==='other'){enteredWrite();await new Promise<void>(r=>releaseWrite=r);}return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ const observing=assert.rejects(s.create(owner).observeForHost(['confirmed']),/unavailable/i);await reading;t.mock.timers.tick(20);await observing;
+ let settled=false;const acknowledgment=assert.rejects(s.create().acknowledgePayment('step',entry.hash),/approval|approved|ready/i).finally(()=>{settled=true;});releaseRead();await writing;
+ try{await new Promise<void>(r=>setImmediate(r));assert.equal(settled,false);assert.equal((await s.read()).entries[0]!.status,'ready');}finally{releaseWrite();}await acknowledgment;
+ assert.equal((await s.read()).entries[0]!.status,'invalidated');assert.equal(s.adapter.delivered.length,0);validateMissionJournalLineage(s.store.inspect());
+});
+
+test('payment acknowledgment retires only approved intents, replays portably, and never enables execution or adapter calls',async()=>{
+ const s=setup([paymentGate]),entry=await s.propose({kind:'type',secret:{owner:'local-owner',slot:'login'}});
+ await assert.rejects(s.service.acknowledgePayment('step',entry.hash),/approval|approved|ready/i);await s.service.answer('approve','step',entry.hash,'approve');
+ const reads=s.adapter.reads;let secrets=0;const offline=new EnvironmentActions(s.store,s.store,undefined,{owner:'local-owner',environment:'fixture',clock:()=>1000,resolveSecret:async()=>{secrets++;throw Error('Unexpected secret');}});
+ await assert.rejects(offline.acknowledgePayment('step',hash('changed')),/hash|conflict/i);
+ const results=await Promise.all([offline,s.service,s.create()].map(service=>service.acknowledgePayment('step',entry.hash)));assert.ok(results.every(e=>e.status==='completed'));
+ const count=s.store.inspect().length;assert.equal((await offline.acknowledgePayment('step',entry.hash)).status,'completed');assert.equal(s.store.inspect().length,count);
+ await assert.rejects(s.service.execute('step',entry.hash),/payment/i);await assert.rejects(offline.execute('step',entry.hash),/payment/i);assert.equal(s.adapter.reads,reads);assert.equal(s.adapter.delivered.length,0);assert.equal(secrets,0);assert.equal((await s.read()).tainted,false);
+ const operation=s.store.inspect().at(-1)!,event=operation.events[0] as {actor:string;command:unknown};assert.equal(event.actor,'environment-host');assert.deepEqual(event.command,{type:'acknowledge-payment',stepId:'step',hash:entry.hash});assert.deepEqual(operation.outbox,[]);validateMissionJournalLineage(s.store.inspect());
+ const serialized=await exportPortableBackup({exportJournal:async()=>({schemaVersion:2,head:count,operations:[...s.store.inspect()]})},new TextArtifactStore('/private/tmp/ru1-no-artifacts'));assert.equal((parsePortableBackup(serialized).journal.operations.at(-1)!.value as any).entries[0].status,'completed');
+ const tampered=s.store.inspect();tampered.at(-1)!.value.entries[0].status='delivered';assert.throws(()=>validateMissionJournalLineage(tampered),/transition/i);
+ await s.service.propose('next','control',{kind:'click'});assert.equal((await s.read()).entries[1]!.status,'waiting');
+ const nonpayment=setup([]),action=await nonpayment.propose();await assert.rejects(nonpayment.service.acknowledgePayment('step',action.hash),/payment/i);assert.equal((await nonpayment.read()).entries[0]!.status,'ready');
+});
+
+test('payment acknowledgment honors original deadline, feed admission and the drain-aware owner store',async()=>{
+ const expired=setup([paymentGate]),entry=await expired.propose();await expired.service.answer('approve','step',entry.hash,'approve');expired.tick(300000);assert.equal((await expired.service.acknowledgePayment('step',entry.hash)).status,'timed-out');validateMissionJournalLineage(expired.store.inspect());
+ const s=setup([paymentGate]),pending=await s.propose();await s.service.answer('approve','step',pending.hash,'approve');
+ await assert.rejects(withAdmissionFeed('replaced',()=>s.service.acknowledgePayment('step',pending.hash)),/feed/i);
+ const owner=new Proxy(s.store,{get(target,key){if(key==='commit')return async()=>{throw new HostDrainError();};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ await assert.rejects(s.create(owner).acknowledgePayment('step',pending.hash),HostDrainError);assert.equal((await s.read()).entries[0]!.status,'ready');
 });
 
 test('malformed observations and wait bounds fail closed without recording untrusted bytes',async()=>{

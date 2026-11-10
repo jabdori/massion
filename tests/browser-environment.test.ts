@@ -4,6 +4,7 @@ import {BrowserEnvironment,validateBrowserEnvironment} from '../src/browser-envi
 import type {BrowserEnvironmentConfig,BrowserControl} from '../src/browser-environment.ts';
 import {EnvironmentActions} from '../src/environment-actions.ts';
 import {InMemoryStore} from '../src/storage.ts';
+import type {EnvironmentBinding} from '../src/environment.ts';
 
 const config:BrowserEnvironmentConfig={environment:'browser-fixture',origin:'https://fixture.example',elements:[
  {id:'field',selector:'#field',role:'textbox',label:'Private input',operations:['type'],gates:[]},
@@ -67,4 +68,50 @@ test('unsupported click targets are excluded from capabilities and return a type
  const s=fixture();s.unsupported();const observation=await s.adapter.observe(new AbortController().signal);assert.ok(!observation.structure.find(e=>e.id==='continue')?.operations.includes('click'));
  await assert.rejects(s.adapter.act({binding:observation.binding,element:'continue',input:{kind:'click'},gates:[{kind:'irreversible-submit'}]},{signal:new AbortController().signal}),e=>e instanceof Error&&'code' in e&&e.code==='unsupported-target');
  assert.equal(s.calls.filter(c=>c.includes('"operation":"act"')).length,0);
+});
+
+test('observed pages are sanitized origin-only clones of the exact last observation without physical reads',async()=>{
+ const s=fixture(),signal=new AbortController().signal;assert.throws(()=>s.adapter.observedPage({environment:'none'} as EnvironmentBinding),/observation|binding|page|fields/i);
+ s.page.title='Public title token=hidden';s.page.blocks=['Public paragraph'];const o=await s.adapter.observe(signal),calls=s.calls.length,page=s.adapter.observedPage(o.binding);
+ assert.equal(s.calls.length,calls);assert.equal(page.address,config.origin);assert.ok(!JSON.stringify(page).includes('hidden'));assert.ok(!Object.hasOwn(page,'screenshot'));assert.deepEqual(page.blocks,['Public paragraph']);
+ page.blocks.push('consumer mutation');page.fields.push({label:'Name',value:'mutated',type:'text',autocomplete:''});s.page.blocks.push('renderer mutation');
+ assert.deepEqual(s.adapter.observedPage(o.binding).blocks,['Public paragraph']);assert.deepEqual(s.adapter.observedPage(o.binding).fields,[]);
+ for(const patch of [{environment:'other'},{surface:'other'},{origin:'https://other.example'},{generation:2},{revision:2},{extra:true}])assert.throws(()=>s.adapter.observedPage({...o.binding,...patch}),/observation|binding|fields/i);
+ s.change();const next=await s.adapter.observe(signal);assert.throws(()=>s.adapter.observedPage(o.binding),/observation|binding/i);assert.equal(s.adapter.observedPage(next.binding).address,config.origin);
+ const read=await s.adapter.read({address:config.origin,sessionId:'unused',signal});assert.equal(read.address,config.origin);assert.throws(()=>s.adapter.observedPage(next.binding),/observation|binding|page/i);
+});
+
+test('private cached pages contain no text, fields, screenshots or URL secrets',async()=>{
+ const s=fixture();s.private();s.page.title='synthetic-private-title';s.page.blocks=['synthetic-private-bytes'];const o=await s.adapter.observe(new AbortController().signal),page=s.adapter.observedPage(o.binding);
+ assert.deepEqual(page,{address:config.origin,title:'',blocks:[],fields:[],privateFields:1,privateSession:true});assert.ok(!JSON.stringify(page).includes('synthetic-private'));assert.ok(!Object.hasOwn(page,'screenshot'));
+});
+
+test('cache is cleared before resolving secrets and failed delivery cannot revive a public page',async()=>{
+ const s=fixture(),o=await s.adapter.observe(new AbortController().signal);let called=false;
+ await assert.rejects(s.adapter.act({binding:o.binding,element:'field',input:{kind:'type',secret:{owner:'local-owner',slot:'private'}},gates:[]},{signal:new AbortController().signal,secret:async()=>{called=true;assert.throws(()=>s.adapter.observedPage(o.binding),/observation|page/i);throw Error('synthetic-private-error');}}));
+ assert.equal(called,true);assert.throws(()=>s.adapter.observedPage(o.binding),/observation|page/i);const next=await s.adapter.observe(new AbortController().signal);assert.equal(s.adapter.observedPage(next.binding).privateSession,true);assert.equal(s.adapter.observedPage(next.binding).title,'');
+});
+
+for(const failure of ['error','malformed','abort','close'] as const)test(`cached pages are unavailable after ${failure} and late reads cannot revive them`,async()=>{
+ let mode:'ok'|'held'='ok',release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+ const control:BrowserControl={async evaluate(){if(mode==='held'){entered();await gate;if(failure==='error')throw Error('synthetic-private-error');}return {document:'document',revision:1,available:['field'],unsupportedClicks:[],facts:failure==='malformed'&&mode==='held'?{confirmed:'private'}:{confirmed:false},page:{address:config.origin+'/private?token=hidden',title:'Public title',blocks:['Public paragraph'],fields:[]}};},async close(){}};
+ const adapter=new BrowserEnvironment(control,config),first=await adapter.observe(new AbortController().signal);assert.equal(adapter.observedPage(first.binding).title,'Public title');mode='held';const controller=new AbortController();
+ const reading=assert.rejects(adapter.observe(controller.signal));await ready;assert.throws(()=>adapter.observedPage(first.binding),/observation|page/i);
+ if(failure==='close')await adapter.close();if(failure==='abort')controller.abort();release();await reading;assert.throws(()=>adapter.observedPage(first.binding),/observation|page|closed/i);
+ if(failure==='close'){await assert.rejects(adapter.observe(new AbortController().signal),/closed|unavailable/i);assert.throws(()=>adapter.observedPage(first.binding));}
+ else{mode='ok';const next=await adapter.observe(new AbortController().signal);assert.equal(adapter.observedPage(next.binding).privateSession,true);assert.equal(adapter.observedPage(next.binding).title,'');}
+});
+
+test('closing an idle environment and pre-aborted reads immediately discard the cached page',async()=>{
+ for(const kind of ['close','abort'] as const){const s=fixture(),o=await s.adapter.observe(new AbortController().signal);
+  if(kind==='close')await s.adapter.close();else{const controller=new AbortController();controller.abort();await assert.rejects(s.adapter.observe(controller.signal));}
+  assert.throws(()=>s.adapter.observedPage(o.binding),/observation|page|closed/i);
+ }
+});
+
+test('an older public read cannot restore a cached page after a newer observation fails',async()=>{
+ let calls=0,release!:()=>void,entered!:()=>void;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+ const adapter=new BrowserEnvironment({async evaluate(){calls++;if(calls===1){entered();await gate;}else throw Error('synthetic-private-error');return {document:'old-document',revision:1,available:[],unsupportedClicks:[],facts:{},page:{address:config.origin,title:'Old public title',blocks:[],fields:[]}};},async close(){}},config);
+ const old=assert.rejects(adapter.observe(new AbortController().signal));await ready;await assert.rejects(adapter.observe(new AbortController().signal));release();await old;
+ assert.throws(()=>adapter.observedPage({environment:config.environment,surface:'unknown',origin:config.origin,generation:1,revision:1}),/observation|binding/i);
 });

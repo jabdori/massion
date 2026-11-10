@@ -8,8 +8,8 @@ import type {Node} from './support/workbench-client.ts';
 
 const descendants=(node:Node):Node[]=>[node,...node.children.flatMap(descendants)];
 const hasClass=(node:Node,name:string)=>node.className.split(' ').includes(name);
-async function scene(screen:string,rejectStatus=405){
- const fixture=await loadFixture(screen),posted:string[]=[];
+async function scene(screen:string,rejectStatus=405,legacy=false){
+ const fixture=await loadFixture(screen,legacy?['legacy-unit']:[]),posted:string[]=[];
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){posted.push(path);return reply({error:'Read-only fixture',...(rejectStatus===409?{status:'conflict',reason:'revision'}:{})},rejectStatus);}
   const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);
@@ -95,7 +95,7 @@ test('a failed verdict marks only its bound verification task as failed',async()
 });
 
 test('a queued verifier never inherits another task verdict',async()=>{
- const {app,nodes,work}=await scene('B7-done');
+ const {app,nodes,work}=await scene('B7-done',405,true);
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'queued'});renderMission()}`,app.context);
  const other=nodes().find(n=>n.id.endsWith('-other-review-task'))!;
  assert.ok(other);assert.ok(!other.children.some(n=>hasClass(n,'room-step-status')));
@@ -141,13 +141,13 @@ test('conversation and procedure counts use the same child tasks and failed chec
  const {app,nodes,work}=await scene('B7-fail');
  const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent;
  assert.equal(count,'5/5');
- const active=await scene('B7');
+ const active=await scene('B7',405,true);
  const card=active.app.all().find(n=>n.className==='chat-card'&&n.textContent.includes(active.work.title))!;
  assert.ok(card);assert.equal(descendants(card).find(n=>hasClass(n,'chat-steps'))?.textContent,active.nodes().find(n=>hasClass(n,'room-progress'))!.textContent);
 });
 
 test('legacy procedures list exactly the child tasks counted by their progress',async()=>{
- const {nodes,work}=await scene('B7'),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
+ const {nodes,work}=await scene('B7',405,true),steps=nodes().find(n=>hasClass(n,'room-steps'))!;
  assert.equal(steps.children.length,work.tasks.filter((task:any)=>task.parentId!==null).length);
  assert.ok(!steps.children.some(n=>n.children[1]?.textContent===work.title));
 });

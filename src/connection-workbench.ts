@@ -1,3 +1,4 @@
+import type {EnvironmentWorkService} from './environment-work-service.ts';
 import type {SourceSecretSlots} from './source-secret-slots.ts';
 import {credentialFailure} from './provider-credentials.ts';
 import {Application} from './application.ts';
@@ -51,7 +52,7 @@ export const isCliProvider=(id:string)=>id==='claude-code-cli'||id==='codex-cli'
 export interface ConnectionInput {id:string;label:string;providerType:ProviderType;baseUrl:string;mode:'https'|'local-http-mock';secretRef?:string}
 export interface HostConnectionBindings {revision:string;bindingHash:string;connections:{input:ConnectionInput;models:readonly string[]}[]}
 export type CredentialStorage='saved'|'missing'|'unknown';
-interface ConnectionOptions {drainSecretSources?:()=>Promise<void>;stopSecretSources?:()=>void;secretSource?:(connectionId:string)=>ReturnType<SourceSecretSlots['describe']>|null;credentialStored?:(connectionId:string,signal:AbortSignal)=>Promise<CredentialStorage>;replaceCredential?:(connectionId:string,apiKey:string)=>Promise<void>;replaceableConnectionIds?:readonly string[];discriminatorTimeoutMs?:number;transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
+interface ConnectionOptions {environment?:()=>EnvironmentWorkService|undefined;drainSecretSources?:()=>Promise<void>;stopSecretSources?:()=>void;secretSource?:(connectionId:string)=>ReturnType<SourceSecretSlots['describe']>|null;credentialStored?:(connectionId:string,signal:AbortSignal)=>Promise<CredentialStorage>;replaceCredential?:(connectionId:string,apiKey:string)=>Promise<void>;replaceableConnectionIds?:readonly string[];discriminatorTimeoutMs?:number;transport:HttpProviderTransport;cliRunner?:CliRunner;cliLaunchers?:Partial<Record<CliProtocol,CliLauncher>>;resolveCredential?:CredentialResolver;allowFixture?:boolean;allowLiveExecution?:boolean;discoveryTimeoutMs?:number;hostBindings?:HostConnectionBindings;settings?:HostSettingsStore}
 export interface DiscoveredModel {id:string;label:string;outputTokenLimit:number|null}
 interface ConnectionState {input:ConnectionInput;configHash:string;models:DiscoveredModel[];discovery:'not-requested'|'models-discovered'|'discovery-failed';generation:number}
 function ensure(v:unknown,m:string):asserts v {if(!v)throw new DomainError(m);}
@@ -161,7 +162,7 @@ export class ConnectionWorkbench implements WorkRuntime {
   const shadowStore=new Proxy(store,{get(target,key){if(key==='commit')return (command:Parameters<typeof store.commit>[0])=>write(()=>target.commit(command));const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
   const moderator=new DiscriminatorService(shadowStore,async id=>{const resolved=await this.resolveDiscriminator(id);if(resolved&&work.assignments.some(a=>a.model.provider===resolved.adapter.pin.provider&&a.model.model===resolved.adapter.pin.model)){resolved.release();return null;}return resolved;},Date.now,{timeoutMs:this.#options.discriminatorTimeoutMs,signal:AbortSignal.any([signal,this.#shadowStop.signal])});
   const job=moderator.ask(missionId,group.id,input);this.#shadowJobs.add(job);try{return await job;}finally{this.#shadowJobs.delete(job);}
- },action=>this.serializeRuntimeWrite(action),this.#waitCredential);}
+ },action=>this.serializeRuntimeWrite(action),this.#waitCredential,this.#options.environment);}
  /** ADR 0003 §7: any group, the derived default included, holding an available different-family checker within the cap. */
  #differentFamilyAvailable(producers:readonly {provider:string;model:string}[],outputTokenCap:number){return [DEFAULT_GROUP,...this.#groups.filter(g=>g.role!=='discriminator').map(g=>g.id)].some(id=>{const c=this.#choose(id,{outputTokenCap,producers});return c.status==='chosen'&&c.relation==='different-family';});}
  configuration(){const defaultRoutes=this.#routeViews();return {...this.router().configuration(),defaultRoutes,modelGroups:structuredClone(this.#groups),representative:structuredClone(this.#representative),selectionRequired:!defaultRoutes.some(r=>r.status==='active')};}

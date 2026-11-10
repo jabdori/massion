@@ -194,3 +194,51 @@ test('an old receipt lock cannot hide or block a typed intent decision',async()=
  const {app}=fixture(d);await settle();runInContext("storage.set(chatEffectReceiptKey(chatDecisions()[0]),'unknown');renderChat()",app.context);
  assert.ok(button(app.node('chat-log'),'승인'));await button(app.node('chat-log'),'승인').fire('click');assert.equal(posts(app).length,1);
 });
+
+function environmentDecision(kind='action',deadline=Date.now()+60000){return {id:'environment-decision:one',at,title:'양식 작성',question:kind==='action'?'전송을 승인할까요?':'기기에서 확인',rows:[['대상','양식 전송']],action:'승인',state:'open',line:'승인됨',environment:{missionId:'mission:1',workId:'work:1',taskId:'task:1',entryId:'entry:1',requestHash:'a'.repeat(64),kind,deadline,status:kind==='action'?'awaiting-owner':'owner-action-needed',memberId:'member:1'}};}
+
+test('environment actions in a member thread send only the exact hash-bound approve or reject answer',async()=>{
+ for(const answer of ['act','reject']){
+  const d=environmentDecision(),{app,state}=fixture(d);state.memberDecisions=[d];await settle();runInContext("chatOpenThread('member:1','민수')",app.context);await settle();
+  const card=find(app,'chat-decision-'+d.id);assert.deepEqual(descendants(card).filter(n=>n.tagName==='BUTTON').map(n=>n.textContent),['승인','거절']);
+  const control=button(card,answer==='act'?'승인':'거절');await Promise.all([control.fire('click'),control.fire('click')]);await settle();
+  assert.equal(posts(app).length,1);const body=JSON.parse(posts(app)[0]!.options.body);assert.deepEqual(body,{commandId:body.commandId,decisionId:d.id,requestHash:'a'.repeat(64),answer});assert.equal(posts(app)[0]!.options.headers['X-Massion-Feed'],'feed:a');
+ }
+});
+
+test('owner action waits only allow cancellation and cannot be approved through a direct call',async()=>{
+ const d=environmentDecision('owner-action'),{app}=fixture(d);await settle();const card=find(app,'chat-decision-'+d.id);
+ assert.deepEqual(descendants(card).filter(n=>n.tagName==='BUTTON').map(n=>n.textContent),['취소']);
+ await runInContext("chatDecide('environment-decision:one','act')",app.context);await runInContext("chatDecide('environment-decision:one','later')",app.context);assert.equal(posts(app).length,0);
+ await button(card,'취소').fire('click');await settle();assert.equal(JSON.parse(posts(app)[0]!.options.body).answer,'reject');
+});
+
+test('environment approval expires locally at the pinned deadline while cancellation stays available',async()=>{
+ let now=Date.now();const d=environmentDecision('action',now+5000),{app,state}=fixture(d);await settle();app.context.Date=class extends Date{static now(){return now;}};
+ const timers=new Map<number,{run:()=>void;delay:number}>();let next=0;app.context.setTimeout=(run:()=>void,delay:number)=>{timers.set(++next,{run,delay});return next;};app.context.clearTimeout=(id:number)=>timers.delete(id);
+ runInContext('chatScheduleRead()',app.context);const timer=timers.get(runInContext('chatPendingTimer',app.context))!;assert.equal(timer.delay,5000);
+ let release!:()=>void;state.readHold=new Promise<void>(r=>{release=r;});now+=5000;timer.run();
+ try{const card=find(app,'chat-decision-'+d.id);assert.equal(button(card,'승인').disabled,true);assert.equal(button(card,'거절').disabled,false);await button(card,'승인').fire('click');assert.equal(posts(app).length,0);}
+ finally{state.readHold=null;release();await settle();}
+});
+
+test('environment decisions fence changed hashes, feeds, selected threads and delayed answer responses',async()=>{
+ const d=environmentDecision(),{app,state}=fixture(d);state.memberDecisions=[d];await settle();const old=button(find(app,'chat-decision-'+d.id),'승인');
+ state.decisions=[{...d,environment:{...d.environment,requestHash:'b'.repeat(64)}}];await refresh(app);await old.fire('click');assert.equal(posts(app).length,0);
+ const beforeFeed=button(find(app,'chat-decision-'+d.id),'승인');state.feed='feed:b';await refresh(app);await beforeFeed.fire('click');assert.equal(posts(app).length,0);
+ let release!:()=>void;state.hold=new Promise<void>(r=>{release=r;});await button(find(app,'chat-decision-'+d.id),'승인').fire('click');await settle();
+ runInContext("chatOpenThread('member:1','민수')",app.context);await settle();const reads=app.calls.length;release();await settle();assert.equal(app.calls.length,reads);assert.equal(posts(app).length,1);
+});
+
+test('environment refresh callbacks cannot read or render after thread or feed replacement',async()=>{
+ for(const change of ['thread','feed']){
+  const d=environmentDecision(),{app,state}=fixture(d);await settle();const timers:(()=>void)[]=[];app.context.setTimeout=(run:()=>void)=>{timers.push(run);return timers.length;};app.context.clearTimeout=()=>{};
+  runInContext('chatScheduleRead()',app.context);assert.ok(timers.length);const stale=timers[0]!;
+  if(change==='thread'){state.memberDecisions=[d];runInContext("chatOpenThread('member:1','민수')",app.context);await settle();}else{state.feed='feed:b';await refresh(app);}
+  const reads=app.calls.length;stale();await settle();assert.equal(app.calls.length,reads);
+ }
+});
+
+test('environment waits use the existing decision-pending sidebar status',async()=>{
+ const {app}=fixture(environmentDecision());await settle();assert.equal(runInContext("shellWorkLabel({missionId:'mission:1',workId:'work:1',execution:'waiting',acceptance:'pending',unknown:false})",app.context),'결정 대기');
+});
