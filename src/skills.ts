@@ -7,11 +7,18 @@ import {MEMBERS_ID} from './members.ts';
 import type {MembersState} from './members.ts';
 import {familyCheck,modelFamily,supportsAutomaticAdoption} from './model-family.ts';
 import type {CommitResult,Operation,Snapshot,Store} from './storage.ts';
+import {copy} from './ui-copy.ts';
 
 export const SKILLS_ID=ASSISTANT_CONVERSATION_PREFIX+'skills',MAX_SKILLS=64,MAX_VERSIONS=16,MAX_CANDIDATES=512,UNUSED_MS=30*86400000,TRIGGERS=['correction','dead-end','repeat'] as const,HOST_PREFIX='assistant-skill',DECISION_PREFIX='skill-decision:';
 export type SkillKind='skill'|'procedure';
 export interface SkillBody {description:string;steps:string[];verify:string}
-export interface SkillVersion {version:number;hash:string;body:SkillBody;author:'owner'|'member';candidateId?:string;at:number}
+export interface SkillVersion {version:number;hash:string;body:SkillBody;author:'owner'|'member';candidateId?:string;builtin?:{id:string;version:number};at:number}
+export const BUILTIN_SKILLS={
+ 'read-sources':{version:1,name:copy('ui.builtin.read-sources'),body:{description:'Read the supplied sources',steps:['Open the supplied source','Retain exact source references'],verify:'Every reference identifies a supplied source'}},
+ 'summarize-evidence':{version:1,name:copy('ui.builtin.summarize-evidence'),body:{description:'Summarize with evidence',steps:['Summarize observed facts','Attach the supporting source to each claim'],verify:'Each claim has supporting evidence'}},
+ 'read-code':{version:1,name:copy('ui.builtin.read-code'),body:{description:'Read the relevant code',steps:['Read the implementation and its callers','Inspect the existing tests'],verify:'The explanation matches the inspected code'}},
+ 'run-tests':{version:1,name:copy('ui.builtin.run-tests'),body:{description:'Run the relevant existing tests',steps:['Identify the relevant test command','Run it and retain its output'],verify:'Report the observed result and any unrun checks'}}
+} satisfies Record<string,{version:number;name:string;body:SkillBody}>;
 export interface Skill {id:string;memberId:string;kind:SkillKind;name:string;path:string;versions:SkillVersion[];current:number|null;archivedAt?:number;usedAt:number}
 export interface SkillEvaluation {check:CheckFamily;cases:number;baseline:number;candidate:number;heldOut:{cases:number;baseline:number;candidate:number};evidence:string}
 export interface Candidate {id:string;at:number;memberId:string;skillId:string;kind:SkillKind;name:string;body:SkillBody;hash:string;base:number|null;trigger:typeof TRIGGERS[number];source:{missionId:string;workId:string;recordId:string;title:string};producer:ModelIdentity;state:'pending'|'rejected'|'unchecked'|'deciding'|'later'|'adopted'|'dropped';reason?:string;evaluation?:SkillEvaluation;answeredAt?:number}
@@ -23,7 +30,7 @@ export type SkillsCommand =
  | {type:'decide-skill';candidateId:string;answer:'act'|'later'|'ask'}
  | {type:'revert-skill'|'restore-skill'|'use-skill';skillId:string}
  | {type:'drop-candidate';candidateId:string}
- | {type:'write-skill';memberId:string;kind:SkillKind;name:string;body:SkillBody}
+ | {type:'write-skill';memberId:string;kind:SkillKind;name:string;body:SkillBody;builtin?:{id:string;version:number}}
  | {type:'archive-unused'};
 /** What the producer (the member's model) drafts from a pointer to the finished Work; what the evaluator returns: scores and the checker model it ran (null only for a host program). Neither writes, and neither states a family. */
 export type SkillProducer=(pointer:{memberId:string;trigger:string;work:Candidate['source']})=>Promise<{kind:string;name:string;body:SkillBody;model:{provider:string;model:string}}>;
@@ -112,10 +119,11 @@ export function applySkills(current:SkillsState|null,command:SkillsCommand,actor
   case 'restore-skill': {role('owner');ensure(exact(command,['type','skillId']),'Exact skill fields required');const s=skill(command.skillId);ensure(s.archivedAt!==undefined,'Only an archived skill is restored','conflict');delete s.archivedAt;s.usedAt=at;change('restored',s,s.current,s.current);break;}
   case 'drop-candidate': {role('owner');ensure(exact(command,['type','candidateId']),'Exact candidate fields required');const c=candidate(command.candidateId);ensure(c.state==='unchecked','Only an unchecked candidate is dropped','conflict');c.state='dropped';c.answeredAt=at;break;}
   case 'write-skill': {
-   role('owner');ensure(exact(command,['type','memberId','kind','name','body'])&&id(command.memberId)&&line(command.name,64)&&(command.kind==='skill'||command.kind==='procedure'),'Exact skill fields required');
+   role('owner');ensure(exact(command,['type','memberId','kind','name','body',...(Object.hasOwn(command,'builtin')?['builtin']:[])])&&id(command.memberId)&&line(command.name,64)&&(command.kind==='skill'||command.kind==='procedure'),'Exact skill fields required');
+   if(Object.hasOwn(command,'builtin')){const b=command.builtin,c=b&&Object.hasOwn(BUILTIN_SKILLS,b.id)?BUILTIN_SKILLS[b.id as keyof typeof BUILTIN_SKILLS]:undefined;ensure(exact(b,['id','version'])&&c&&b.version===c.version&&command.kind==='skill'&&command.name===c.name&&hash(command.body)===hash(c.body),'Exact builtin skill provenance required');}
    // The owner may write freely except the format and secrets: a secret would be stored in the journal and backups.
    // Body and name are checked separately, so an allowed warning in one cannot hide a secret in the other.
-   const refused=[scanSkill(command.body),scanName(command.name)].find(r=>r!==null&&(r.startsWith('Format')||r==='Hard-coded secret'));ensure(!refused,refused??'');version(target(command.memberId,command.kind,command.name),command.body,'owner');break;
+   const refused=[scanSkill(command.body),scanName(command.name)].find(r=>r!==null&&(r.startsWith('Format')||r==='Hard-coded secret'));ensure(!refused,refused??'');const s=target(command.memberId,command.kind,command.name);version(s,command.body,'owner');if(command.builtin)s.versions.at(-1)!.builtin=structuredClone(command.builtin);break;
   }
   case 'use-skill': {
    // Checked again when a Work loads it: the body hash and the scan, so a changed or newly flagged skill is not loaded.
@@ -153,7 +161,7 @@ export class SkillsService {
  /** The member page and Settings > Improvements read. */
  async read(){
   const s=await this.#state(),v=s?.value??{skills:[],candidates:[],changes:[]} as unknown as SkillsState,cand=(cid?:string)=>v.candidates.find(c=>c.id===cid);
-  const skills=v.skills.map(k=>{const cur=k.current===null?k.versions.at(-1)!:k.versions[k.current-1]!;return {id:k.id,memberId:k.memberId,kind:k.kind,name:k.name,path:k.path,version:cur.version,author:cur.author,at:cur.at,state:k.archivedAt!==undefined?'archived':k.current===null?'off':'active',steps:[...cur.body.steps]};});
+  const skills=v.skills.map(k=>{const cur=k.current===null?k.versions.at(-1)!:k.versions[k.current-1]!;return {id:k.id,memberId:k.memberId,kind:k.kind,name:k.name,path:k.path,version:cur.version,author:cur.author,...(cur.builtin?{builtin:structuredClone(cur.builtin)}:{}),at:cur.at,state:k.archivedAt!==undefined?'archived':k.current===null?'off':'active',steps:[...cur.body.steps]};});
   const reverted=new Map<string,{to:number|null;at:number}>();
   for(const [i,c] of v.changes.entries()){if(c.type==='reverted'){const a=v.changes.slice(0,i).findLast(x=>x.skillId===c.skillId&&x.type==='adopted'&&x.to===c.from);if(a)reverted.set(a.id,{to:c.to,at:c.at});}}
   const improvements=v.changes.map(c=>{const k=v.skills.find(x=>x.id===c.skillId)!,e=cand(c.candidateId);
@@ -199,8 +207,12 @@ export class SkillsService {
  async archiveUnused(){return this.#dispatch(HOST_PREFIX+'-archive:'+this.#clock(),ASSISTANT_ACTOR_ID,{type:'archive-unused'});}
  /** Owner actions from the member page and Settings > Improvements. */
  async act(input:unknown):Promise<CommitResult<SkillsState>>{
-  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={revert:['skillId'],restore:['skillId'],drop:['candidateId'],write:['memberId','kind','name','body']};
+  const action=(input as {action?:unknown})?.action,fields:Record<string,string[]>={revert:['skillId'],restore:['skillId'],drop:['candidateId'],write:['memberId','kind','name','body'],builtin:['memberId','builtinId']};
   ensure(typeof action==='string'&&Object.hasOwn(fields,action)&&exact(input,['commandId','action',...fields[action]!])&&id(input.commandId),'Exact skill action fields required');const commandId=this.#caller(input.commandId);
+  if(action==='builtin'){
+   ensure(typeof input.builtinId==='string'&&Object.hasOwn(BUILTIN_SKILLS,input.builtinId),'Unknown builtin skill');const c=BUILTIN_SKILLS[input.builtinId as keyof typeof BUILTIN_SKILLS],command:SkillsCommand={type:'write-skill',memberId:input.memberId as string,kind:'skill',name:c.name,body:structuredClone(c.body),builtin:{id:input.builtinId,version:c.version}},prior=await this.#store.lookupOperation({id:SKILLS_ID,commandId,fingerprint:fingerprint(OWNER,command)});if(prior.status!=='unknown')return prior;
+   const members=(await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined;ensure(members?.members.some(m=>m.id===input.memberId&&m.archivedAt===undefined),'Unknown or archived member');return this.#dispatch(commandId,OWNER,command);
+  }
   if(action==='write'){const members=(await this.#store.load(MEMBERS_ID))?.value as MembersState|undefined;ensure(members?.members.some(m=>m.id===input.memberId),'Unknown member');}
   if(action==='write')return this.#dispatch(commandId,OWNER,{type:'write-skill',memberId:input.memberId as string,kind:input.kind as SkillKind,name:input.name as string,body:input.body as SkillBody});
   return this.#dispatch(commandId,OWNER,action==='drop'?{type:'drop-candidate',candidateId:input.candidateId as string}:{type:action==='revert'?'revert-skill':'restore-skill',skillId:input.skillId as string});
