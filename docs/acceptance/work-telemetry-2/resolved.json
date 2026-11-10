@@ -1,0 +1,162 @@
+[
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{count}\"",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "region pane text \"기본\" (found in composer)",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 2,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 3,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 4,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 5,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "dark",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 6,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{count}\"",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "region pane text \"기본\" (found in composer)",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 1,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 2,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 3,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 4,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 5,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  },
+  {
+    "screen": "B18-room-b",
+    "theme": "light",
+    "kind": "contract",
+    "diagnostic": "missing pane text \"{amount}\"",
+    "occurrence": 6,
+    "category": "monthly-pricing-table",
+    "reason": "The owner explicitly left the monthly pricing table outside R-A. Step counts, notes and worker exchanges are now produced, but no typed price-table rows or amount cells are inferred from their prose.",
+    "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
+  }
+]
