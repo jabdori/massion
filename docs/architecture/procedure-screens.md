@@ -23,3 +23,16 @@ Run related tests and typecheck locally; CI owns the full suite and screen gate.
 Publish one PR on `feat/procedure-screens`, follow CI and current-head Codex review,
 and do not merge. Connection/member/app lifecycle and browser runtime are outside
 this branch. PR #136 owns skipped-step glyph/time presentation.
+
+## Lead review corrections
+
+Admission and runtime start are separate observations even when their formatted
+minute is equal. Label them "Work admitted" and "Run started" in the expanded
+flow. Do not emit a start event from the admission-time fallback; old Work with
+only admission evidence has no observed run start. Add one regression covering
+both equal-minute observations and the absence of a real start.
+
+The telemetry generator owns only B7-churn, B7-fail, B18-room-b and B22-room-steps.
+Its command must not rewrite B5 or the printer/payment B7 variants, nor sweep
+unrelated fixture readers. Keep the new main table parser and check observation
+times when resolving the merge, and recapture the affected contracts before push.

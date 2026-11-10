@@ -1,0 +1,253 @@
+{
+  "blocking": false,
+  "rows": [
+    {
+      "screen": "B7-fail",
+      "theme": "dark",
+      "passed": 72,
+      "failed": 6,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-fail.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "dark",
+      "passed": 28,
+      "failed": 3,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "dark",
+      "passed": 33,
+      "failed": 3,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "dark",
+      "passed": 34,
+      "failed": 2,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "dark",
+      "passed": 30,
+      "failed": 6,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B8-unknown.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "dark",
+      "passed": 70,
+      "failed": 4,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No browser/page-read telemetry is produced by these fixture text Works.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B7-churn.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "dark",
+      "passed": 66,
+      "failed": 3,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/dark/B18-room-b.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "dark",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/dark/B22-room-steps.png"
+    },
+    {
+      "screen": "B7-fail",
+      "theme": "light",
+      "passed": 72,
+      "failed": 6,
+      "warnings": 2,
+      "required": 78,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-fail.png"
+    },
+    {
+      "screen": "B8",
+      "theme": "light",
+      "passed": 28,
+      "failed": 3,
+      "warnings": 2,
+      "required": 31,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8.png"
+    },
+    {
+      "screen": "B8-done",
+      "theme": "light",
+      "passed": 33,
+      "failed": 3,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-done.png"
+    },
+    {
+      "screen": "B8-fail",
+      "theme": "light",
+      "passed": 34,
+      "failed": 2,
+      "warnings": 3,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-fail.png"
+    },
+    {
+      "screen": "B8-unknown",
+      "theme": "light",
+      "passed": 30,
+      "failed": 6,
+      "warnings": 2,
+      "required": 36,
+      "visualFailures": [],
+      "gaps": [
+        "These text-only Works have no named business procedure or browser/page-read telemetry.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B8-unknown.png"
+    },
+    {
+      "screen": "B7-churn",
+      "theme": "light",
+      "passed": 70,
+      "failed": 4,
+      "warnings": 2,
+      "required": 74,
+      "visualFailures": [],
+      "gaps": [
+        "No browser/page-read telemetry is produced by these fixture text Works.",
+        "No host producer supplies payment approval, payment amounts, order history, vendor receipts or subscription-CLI connection proof for these text-only Works.",
+        "Confirmed enterprise steering followed by continued active/settled churn has no producing continuation path: domain steer sets waiting and settle-task rejects waiting; plain member exchanges and all three Copy controls are supported."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B7-churn.png"
+    },
+    {
+      "screen": "B18-room-b",
+      "theme": "light",
+      "passed": 66,
+      "failed": 3,
+      "warnings": 2,
+      "required": 69,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,460,78] (2px tolerance)",
+        "region main: [300,44,540,856] != [300,44,500,856] (2px tolerance)"
+      ],
+      "gaps": [
+        "The memory-candidate row belongs to R-D. Prices are controlled table fixture inputs, not external observations."
+      ],
+      "errors": [],
+      "pair": "pairs/light/B18-room-b.png"
+    },
+    {
+      "screen": "B22-room-steps",
+      "theme": "light",
+      "passed": 48,
+      "failed": 1,
+      "warnings": 0,
+      "required": 49,
+      "visualFailures": [
+        "region composer: [324,808,492,78] != [320,808,500,78] (2px tolerance)"
+      ],
+      "gaps": [],
+      "errors": [],
+      "pair": "pairs/light/B22-room-steps.png"
+    }
+  ]
+}

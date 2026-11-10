@@ -73,3 +73,41 @@ outcome before a Mission was loaded. The caption now uses the existing running
 Work predicate, preserving unknown, blocked, cancelled and budget-waiting labels.
 The new regression first reproduced the overwrite, then the related surface batch
 passed all 124 tests; typecheck passed. No producer, criterion or allowance changed.
+
+## Lead review corrections
+
+The two identical first flow rows were distinct admission and runtime-start
+observations. Their host times remain unchanged; their real labels are now
+`작업 접수` and `실행 시작`. When only admission is observed, no start row is
+inferred from the header's fallback time. One new regression first reproduced
+the duplicate labels, then passed both the equal-minute and admission-only cases.
+The related integration batch passed all 92 tests and typecheck passed.
+
+The CLI `node scripts/ui-contracts/regenerate-work-telemetry.ts` now owns only
+`B7-churn`, `B7-fail`, `B18-room-b` and `B22-room-steps`. It no longer regenerates
+B5 or printer/payment B7 variants, nor scans unrelated artifact readers. Running
+the committed command twice produced identical bytes and left all 71 unowned
+fixtures unchanged. The one changed owned fixture, B7-churn, now retains main's
+typed pricing output from its existing producer.
+
+Merged main without rebasing, retaining main's table parser, predicate observation
+times, member attribution and diagnostic removals. The current baseline is
+398 entries on main and 308 on this branch: the original 90 removals survive.
+Two existing B7-churn pricing-card residuals change from missing-card to
+card-order diagnostics because the typed card now exists. `lead-remapped.json`
+records the old/new identities; the inherited request history is preserved.
+No extra occurrence is allowed. `lead-scoped-gate.json` has zero new, stale or
+infrastructure failures for eight screens in both themes; outputs are in
+`lead-checks/` and `lead-capture.json`.
+
+Headless flow interactions passed in both themes at 1440px and 390px. The updated
+`B7-fail-{dark,light}-{expanded,mobile-expanded}.png` screenshots show the two
+distinct labels together, with matching `B7-fail-{theme}-flow.snapshot.txt` and
+`lead-flow-interactions.json`. Main's typed-table verifier now also asserts actual
+visibility in compact, expanded and mobile views, rather than only reading hidden
+DOM cells. It first caught a merge regression hiding the expanded table; the
+merged styles preserve visible tables and keep ordinary compact messages hidden.
+Both table interaction runs pass.
+
+The optional `확인 실패 / 아님` copy polish is deferred because `아님` is pinned
+by the existing B8-fail contract; changing that vocabulary is outside these fixes.

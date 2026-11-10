@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
-import {readFile,readdir,writeFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {apply,hash,canonical,workInputHash,observesWork,endsWork} from '../../src/domain.ts';
 import type {Actor,Command,Mission,Work,Task} from '../../src/domain.ts';
 import {regenerateRoomScreens,roomTelemetryWork} from './room-telemetry-fixtures.ts';
-import {Application} from '../../src/application.ts';
-import {InMemoryStore} from '../../src/storage.ts';
 import {parseTeamPlan,teamCallCount} from '../../src/internal-teams.ts';
 import {loadFixture} from './fixture-host.ts';
 import {applySkills} from '../../src/skills.ts';
@@ -105,32 +103,7 @@ export async function regenerate(screen:string){
  if(input.extends){const parent=await loadFixture(input.extends,['regeneration-source']);(fixture as any).extends=input.extends;fixture.routes=Object.fromEntries(Object.entries(fixture.routes).filter(([key,route])=>JSON.stringify(route)!==JSON.stringify(parent.routes[key])));}
  await writeFile(new URL(screen+'.json',directory),JSON.stringify(fixture,null,2)+'\n');
 }
-export async function regenerateException(){
- const fixture=await json(new URL('B5.json',directory)),snapshot=fixture.routes['/missions/intake'].body;
- const store=new InMemoryStore<Mission>(),app=new Application(store,[owner,{id:'executor',roles:['executor']},{id:'representative',roles:['representative']}],()=>fixture.now);
- const {id,purpose,scope,constraints,criteria}=snapshot.value;await app.create({id,purpose,scope,constraints,criteria},owner.id,'b5-create');let n=0;
- const send=async(command:Command,actorId=owner.id)=>{const result=await app.dispatch({missionId:id,commandId:'b5-'+(++n),expectedRevision:(await store.load(id))!.revision,actorId,command});assert.equal(result.status,'committed');};
- for(const original of snapshot.value.works as Work[]){
-  await send({type:'admit-work',workId:original.id,title:original.title,budget:original.budget.limit});
-  if(original.runtimeRun){const work=(await store.load(id))!.value.works.find(w=>w.id===original.id)!;await send({type:'activate-runtime',workId:work.id,run:{...original.runtimeRun,inputHash:workInputHash(work)}});}
-  for(const assignment of original.assignments)await send({type:'assign',workId:original.id,assignment});
-  for(const effect of original.effects){await send({type:'admit-effect',workId:original.id,effect:{id:effect.id,taskId:effect.taskId,status:'pending',target:effect.target,authority:effect.authority},reserve:original.budget.reserved},'executor');await send({type:'receipt',workId:original.id,effectId:effect.id,outcome:effect.status as 'unknown'|'succeeded',receipt:effect.receipt!,usage:original.budget.measured},'executor');}
-  if(original.runtimeInterruption)await send({type:'expire-runtime',workId:original.id,runId:original.runtimeRun!.id,dispatchId:original.runtimeInterruption.dispatchId,observedAt:original.runtimeInterruption.observedAt},'representative');
- }
- const committed=(await store.load(id))!;
- for(const route of Object.values(fixture.routes) as any[]){if(route.body?.value?.id===id)route.body=committed;if(route.body?.snapshot?.value?.id===id)route.body.snapshot=committed;}
- await writeFile(new URL('B5.json',directory),JSON.stringify(fixture,null,2)+'\n');
-}
-
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
- await regenerateException();
- for(const screen of ['B7','B7-churn','B7-done','B7-fail','B7-unknown'])await regenerate(screen);
- const alias=(await json(new URL('./work-telemetry-inputs.json',import.meta.url)))['B18-room-b'].template;alias.gaps=alias.gaps.map((gap:string)=>gap.replace('business procedure steps, per-step timestamps, typed pricing table','business procedure steps, typed pricing table'));await writeFile(new URL('B18-room-b.json',directory),JSON.stringify(alias,null,2)+'\n');
+ for(const screen of ['B7-churn','B7-fail'])await regenerate(screen);
  await regenerateRoomScreens();
- // Inherited readers must still name each descendant's own retained Record.
- for(const file of await readdir(directory))if(file.endsWith('.json')){
-  const path=new URL(file,directory),raw=await json(path),fixture=await loadFixture(raw.screen,['regeneration-source']),mission=(fixture.routes['/missions/intake']?.body as any)?.value;let changed=false;
-  for(const [key,route] of Object.entries(fixture.routes) as [string,any][]){const record=mission?.works.find((w:Work)=>w.id===route.body?.workId)?.record;if(key.includes('/record-artifact?')&&record&&route.body.recordChecksum!==record.checksum){(raw.routes??={})[key]={...route,body:{...route.body,recordChecksum:record.checksum}};changed=true;}}
-  if(changed)await writeFile(path,JSON.stringify(raw,null,2)+'\n');
- }
 }

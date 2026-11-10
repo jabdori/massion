@@ -52,6 +52,17 @@ test('expanded cards keep labelled value rows, distinct effects and real flow en
  for(const row of flow.children){assert.ok(row.children.some(n=>hasClass(n,'room-flow-dot')));assert.notEqual(row.textContent,'대화');}
 });
 
+test('flow distinguishes admission from run start in the same minute and never invents an admission-only start',async()=>{
+ const {app,nodes,work}=await scene('B7-fail'),flow=()=>nodes().find(n=>hasClass(n,'room-flow'))!;
+ const start=work.runtimeRun.ownership.startedAt;
+ assert.equal(runInContext('chatTime('+work.admittedAt+')',app.context),runInContext('chatTime('+start+')',app.context));
+ assert.deepEqual(flow().children.slice(0,2).map(n=>n.children[2]!.textContent),['작업 접수','실행 시작']);
+ assert.deepEqual(flow().children.slice(0,2).map(n=>n.children[0]!.textContent),[work.admittedAt,start].map(at=>runInContext('chatTime('+at+')',app.context)));
+ runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)});delete w.runtimeRun;for(const task of w.tasks)delete task.startedAt;for(const row of shellWorks)if(row.workId===w.id)row.startedAt=null;renderMission();}`,app.context);
+ assert.equal(flow().children.filter(n=>n.children[2]!.textContent==='작업 접수').length,1);
+ assert.equal(flow().children.filter(n=>n.children[2]!.textContent==='실행 시작').length,0);
+});
+
 test('the connection strip resolves pinned production labels and never falls back to a fixture provider tag',async()=>{
  const {app,nodes,work}=await scene('B7');
  runInContext(`runtimeConfiguration={connections:[{id:'profile:live',configHash:'pin',revision:'connection-hash',providerKind:'openai',label:'Selected model'}]};connectionCatalog={connections:[{label:'운영 연결',configHash:'connection-hash',providerType:'openai'}]};snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).runtimeRun.connectionBindings={executor:{profileId:'profile:live',configHash:'pin'},verifier:{profileId:'profile:live',configHash:'pin'}};renderMission()`,app.context);
