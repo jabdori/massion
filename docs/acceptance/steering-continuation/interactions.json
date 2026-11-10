@@ -1,0 +1,42 @@
+[
+  {
+    "screen": "B7-churn",
+    "theme": "dark",
+    "link": "방향 바꿈: 이탈 원인 조사 · 14:09",
+    "opensExactWork": true,
+    "telemetry": true,
+    "expanded": true,
+    "check": true,
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "dark",
+    "link": "방향 바꿈: 이탈 원인 조사 · 14:09",
+    "opensExactWork": true,
+    "telemetry": true,
+    "expanded": true,
+    "check": true,
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B7-churn",
+    "theme": "light",
+    "link": "방향 바꿈: 이탈 원인 조사 · 14:09",
+    "opensExactWork": true,
+    "telemetry": true,
+    "expanded": true,
+    "check": true,
+    "mobileOverflow": false
+  },
+  {
+    "screen": "B7-fail",
+    "theme": "light",
+    "link": "방향 바꿈: 이탈 원인 조사 · 14:09",
+    "opensExactWork": true,
+    "telemetry": true,
+    "expanded": true,
+    "check": true,
+    "mobileOverflow": false
+  }
+]

@@ -60,7 +60,7 @@ export async function steeringFixture(template:ScreenFixture){
  for(const [path,response] of Object.entries(fixture.routes)){
   const body=response.body as any;
   for(const row of [...(body?.works??[]),...(body?.turns??[]).flatMap((t:any)=>t.work?[t.work]:[])])if(row.workId===final.id){row.startedAt=final.runtimeRun!.ownership!.startedAt;row.endedAt=final.endedAt??null;row.execution=final.execution;row.acceptance=final.acceptance;row.steps={done:final.tasks.filter(t=>t.step&&t.status==='settled').length,total:final.tasks.filter(t=>t.step).length};}
-  if(body?.value?.id===mission.id){const index=body.value.works.findIndex((w:Work)=>w.id===final.id);if(index>=0)body.value.works[index]=structuredClone(final);}
+  for(const value of [body?.value,body?.snapshot?.value])if(value?.id===mission.id){const index=value.works.findIndex((w:Work)=>w.id===final.id);if(index>=0)value.works[index]=structuredClone(final);}
   if(path.startsWith(memberPath)&&body.segment){const index=body.segment.messages.findIndex((m:any)=>m.id===owner.id);if(index>=0){const oldTurn=body.turns.find((t:any)=>t.messageId===owner.id);body.segment.messages.splice(index,2,...structuredClone(generated.segment!.messages));body.turns=body.turns.filter((t:any)=>t.id!==oldTurn?.id);body.turns.push(structuredClone(generated.turns[0]));}}
   if(path.includes('/rejected-artifact?')&&body.workId===final.id){const value=await readRejectedText(store,{read:async()=>body.content},mission.id,final.id,{binding:hash(final),artifactVersion:final.artifact!.version,artifactSha256:final.artifact!.sha256});delete fixture.routes[path];const url=new URL(path,'http://fixture');url.searchParams.set('binding',hash(final));fixture.routes[url.pathname+url.search]={status:200,body:{...body,...value}};}
  }

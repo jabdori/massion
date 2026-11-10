@@ -793,3 +793,18 @@ test('continued steering retains restart no-replay and refuses unsafe or legacy 
  assert.equal((await restarted.run('intake',w.id,'restart',snapshot.revision)).status,'already-started');assert.equal(f.calls.length,calls);
  validateMissionJournalLineage(f.store.inspect() as any);
 });
+
+for(const stage of ['receipt','settle-task','record-step-progress'])test(`steering racing a worker ${stage} retains its outcome without another provider call`,async t=>{
+ const f=await setup(t);await f.admit();let raced=false;const commit=f.store.commit.bind(f.store);
+ f.store.commit=async input=>{
+  const event=input.events[0] as any,w=input.value.works?.at(-1),command=event?.command;
+  if(!raced&&event?.type===stage&&w?.runtimeRun?.steeringVersion===1&&(stage==='receipt'?command.effectId.endsWith(':step:0'):command.taskId.endsWith(':step:0'))){
+   raced=true;await f.product.intervene('intake',{commandId:'race-worker-'+stage,expectedRevision:(await f.store.load('intake'))!.revision,command:{type:'steer',workId:w.id,instruction:'Enterprise customers'}});
+  }
+  return commit(input);
+ };
+ const before=f.calls.length;f.script.push(v2('On it.','Enterprise churn','Quill'));await f.say(f.assistant,'Find churn');await f.assistant.idle();
+ const w=(await f.intake()).works.at(-1)!;assert.equal(raced,true);assert.equal(w.acceptance,'accepted');assert.equal(f.calls.length-before,7);assert.ok(w.effects.every(e=>e.status==='succeeded'));
+ assert.equal(f.workPrompts.filter(p=>p.binding?.workId===w.id&&p.step?.title==='Read inputs').length,1);
+ validateMissionJournalLineage(f.store.inspect() as any);
+});

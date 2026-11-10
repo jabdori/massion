@@ -32,15 +32,16 @@ allowances are removed; later-stage steering and unrelated screen gaps remain.
 
 ## Implementation plan
 
-- [ ] Add failing runtime tests for owner steering during a worker, duplicate
+- [x] Add failing runtime tests for owner steering during a worker, duplicate
   confirmation, admission races, late steering, unknown effects and journal replay.
-- [ ] Extend domain/run validation and backup lineage; preserve legacy journals.
-- [ ] Bind fresh runtime prompts and owner interruption decisions to committed
+- [x] Extend domain/run validation and backup lineage; preserve legacy journals.
+- [x] Bind fresh runtime prompts and owner interruption decisions to committed
   state. Reuse ownerStore and existing feed/request-generation UI guards.
-- [ ] Produce confirmed active/settled fixtures and run scoped headless screen
+- [x] Produce confirmed active/settled fixtures and run scoped headless screen
   flows; remove exact resolved allowances and record the count.
-- [ ] Run related tests and typecheck. Push the PR and resolve CI/Codex findings
-  on the current head (up to four rounds). Do not merge.
+- [x] Run related tests and typecheck. Push the PR and resolve CI/Codex findings
+  on the current head (up to four rounds). Do not merge. The current-head review
+  loop is tracked in PR #137 and remains open until its checks and receipt pass.
 
 ## Scope
 
@@ -48,3 +49,5 @@ Own steering domain/application behavior, configured text runtime, confirmation
 integration, lineage tests and affected screen producers. Do not change connection,
 app/member lifecycle settings, browser runtime, app-frame behavior, procedure
 editing or unrelated telemetry. No real model/network execution is required.
+
+Evidence and bounded follow-ups: [R-F checks](../acceptance/steering-continuation/README.md).

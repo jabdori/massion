@@ -204,7 +204,12 @@ export class ConfiguredTextRuntime implements WorkRuntime {
   return result;
  }
  private async send(missionId:string,command:Command,actorId:string,commandId:string=randomUUID()){
-  const result=await this.dispatch(missionId,command,actorId,commandId);if(result.status==='conflict')throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');return result.value;
+  for(let attempt=0;;attempt++){
+   const result=await this.dispatch(missionId,command,actorId,commandId);if(result.status!=='conflict')return result.value;
+   // A definite revision refusal can retry journal-only progression, never the call.
+   if(result.reason==='revision'&&attempt<2&&['receipt','settle-task','record-step-progress','assign','delegate'].includes(command.type)&&'workId' in command&&(await this.current(missionId,command.workId)).work.runtimeRun?.steeringVersion===1)continue;
+   throw new DomainError('Concurrent transition rejected; refresh, do not replay an effect');
+  }
  }
  private async block(missionId:string,workId:string,reason:string,code:'provider_failed'|'budget_exceeded'|'verification_failed'='provider_failed'){
   const {work}=await this.current(missionId,workId);if(work.execution!=='cancelled'&&work.execution!=='waiting')await this.send(missionId,{type:'block-work',workId,blocker:{code,detail:reason}},'runtime-representative');

@@ -7,8 +7,8 @@ import type {Node} from './support/workbench-client.ts';
 
 const descendants=(node:Node):Node[]=>[node,...node.children.flatMap(descendants)];
 const hasClass=(node:Node,name:string)=>node.className.split(' ').includes(name);
-async function scene(screen:string,rejectStatus=405){
- const fixture=await loadFixture(screen),posted:string[]=[];
+async function scene(screen:string,rejectStatus=405,legacy=false){
+ const fixture=await loadFixture(screen,legacy?['legacy-test']:[]),posted:string[]=[];
  const app=harness(async(path,options)=>{
   if(options?.method==='POST'){posted.push(path);return reply({error:'Read-only fixture',...(rejectStatus===409?{status:'conflict',reason:'revision'}:{})},rejectStatus);}
   const r=fixture.routes[path]??(path.startsWith('/events?')?fixture.routes['/events']:undefined);
@@ -30,7 +30,7 @@ for(const [screen,status] of [['B7','확인 대기'],['B7-done','확인 완료']
 });
 
 for(const screen of ['B7-done','B7-fail','B7-unknown'] as const)test(screen+' is terminal and cannot offer Stop',async()=>{
- const {nodes,work}=await scene(screen);
+ const {nodes,work}=await scene(screen,405,screen==='B7-fail');
  assert.ok(!nodes().some(n=>n.id==='work-room-stop-'+work.id));
  const markers=nodes().filter(n=>hasClass(n,'room-step-marker'));
  if(screen==='B7-unknown'){assert.ok(markers.some(n=>hasClass(n,'unknown')));assert.ok(nodes().some(n=>hasClass(n,'room-step-status')&&n.textContent==='결과 모름'));}
@@ -42,7 +42,7 @@ for(const screen of ['B7-done','B7-fail','B7-unknown'] as const)test(screen+' is
 });
 
 test('expanded cards keep labelled value rows, distinct effects and real flow entries',async()=>{
- const {app,nodes}=await scene('B7-fail');await app.node('pane-widen').fire('click');
+ const {app,nodes}=await scene('B7-fail',405,true);await app.node('pane-widen').fire('click');
  const detail=nodes().find(n=>hasClass(n,'room-detail'))!,groups=descendants(detail).filter(n=>hasClass(n,'room-fields'));
  assert.equal(groups.length,4);
  for(const group of groups)for(const row of group.children){assert.equal(row.children[0]?.tagName,'DT');assert.equal(row.children[1]?.tagName,'DD');}
@@ -60,8 +60,8 @@ test('the connection strip resolves pinned production labels and never falls bac
  runInContext("runtimeConfiguration.connections[0].configHash='new-pin';renderMission()",app.context);assert.equal(connection(),'알 수 없음');
 });
 
-test('a failed verdict marks only its bound verification task as failed',async()=>{
- const {app,nodes,work}=await scene('B7-fail');
+test('a legacy failed verdict marks only its bound verification task as failed',async()=>{
+ const {app,nodes,work}=await scene('B7-fail',405,true);
  runInContext(`{const w=snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}),other={...w.assignments.find(a=>a.role==='verifier'),id:'other-review',taskId:'other-review-task'};w.assignments.push(other);w.tasks.push({id:other.taskId,parentId:w.tasks[0].id,status:'settled'});renderMission()}`,app.context);
  assert.equal(nodes().filter(n=>hasClass(n,'room-step-marker')&&hasClass(n,'failed')).length,1);
  assert.equal(nodes().find(n=>hasClass(n,'room-progress'))!.textContent,'2/3');
@@ -86,8 +86,8 @@ for(const [screen,panel] of [['B7-done','record-text-summary'],['B7-fail','rejec
  const {nodes,work}=await scene(screen!);assert.ok(nodes().some(n=>n.id==='work-'+panel+'-'+work.id));assert.ok(!nodes().some(n=>n.id==='work-evidence-summary-'+work.id));
 });
 
-test('failed procedure rows show only the current bound verdict evidence',async()=>{
- const {app,nodes,work}=await scene('B7-fail');
+test('legacy failed procedure rows show only the current bound verdict evidence',async()=>{
+ const {app,nodes,work}=await scene('B7-fail',405,true);
  const failed=()=>nodes().find(n=>hasClass(n,'room-step')&&hasClass(n,'failed'))!;
  assert.equal(failed().children.find(n=>hasClass(n,'room-step-status'))?.textContent,work.verdict.evidence.map((e:any)=>e.detail).join(' · '));
  runInContext(`snapshot.value.works.find(w=>w.id===${JSON.stringify(work.id)}).verdict.artifactSha256='stale';renderMission()`,app.context);
@@ -99,8 +99,8 @@ for(const [screen,word] of [['B8-done','맞음'],['B8-fail','아님']] as const)
  assert.equal(descendants(group).filter(n=>hasClass(n,'room-field-note'))[0]?.textContent,word);
 });
 
-test('conversation and procedure counts use the same child tasks and failed check state',async()=>{
- const {app,nodes,work}=await scene('B7-fail');
+test('legacy conversation and procedure counts use the same child tasks and failed check state',async()=>{
+ const {app,nodes,work}=await scene('B7-fail',405,true);
  const count=nodes().find(n=>hasClass(n,'room-progress'))!.textContent;
  assert.equal(count,'1/2');
  const active=await scene('B7');
@@ -116,8 +116,8 @@ test('legacy procedures list exactly the child tasks counted by their progress',
 
 for(const screen of ['B8-done','B8-fail'])test(screen+' keeps raw execution results behind deliberate flow disclosures',async()=>{
  const {nodes,work}=await scene(screen),flow=nodes().find(n=>hasClass(n,'room-flow'))!;
- for(const task of work.tasks.filter((task:any)=>task.result)){
-  const detail=descendants(flow).find(n=>n.tagName==='DETAILS'&&n.textContent.includes(task.result));
+ for(const task of work.tasks.filter((task:any)=>task.result&&(!work.team||task.step))){
+  const detail=(work.team?nodes():descendants(flow)).find(n=>n.tagName==='DETAILS'&&n.textContent.includes(task.result));
   assert.ok(detail,'task result has a disclosure');assert.equal(detail.open,false);
   assert.ok(detail.children.some(n=>n.tagName==='SUMMARY'&&n.textContent.length>0));
   assert.equal(detail.children.find(n=>n.tagName==='PRE')?.textContent,task.result);

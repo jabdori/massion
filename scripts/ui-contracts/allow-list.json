@@ -528,10 +528,10 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "missing pane text \"기록\"",
+      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "reason": "Confirmed steering now produces a pinned research step, times and a failed check. The existing team renderer places the Record row before the requested later pane sequence; that layout gap remains. This is the same unfulfilled Record-row contract, not a new capability exception.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -658,16 +658,6 @@
       "screen": "B7-fail",
       "theme": "dark",
       "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 8,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 4,
       "category": "capability / composition",
@@ -680,16 +670,6 @@
       "kind": "contract",
       "diagnostic": "missing pane text \"요약\"",
       "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 9,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
@@ -2168,10 +2148,10 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "missing pane text \"기록\"",
+      "diagnostic": "order pane text \"기록\" (occurrence already consumed or found earlier)",
       "occurrence": 1,
       "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
+      "reason": "Confirmed steering now produces a pinned research step, times and a failed check. The existing team renderer places the Record row before the requested later pane sequence; that layout gap remains. This is the same unfulfilled Record-row contract, not a new capability exception.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
     },
     {
@@ -2298,16 +2278,6 @@
       "screen": "B7-fail",
       "theme": "light",
       "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 8,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
       "diagnostic": "region pane button \"복사\" (found in conversation)",
       "occurrence": 4,
       "category": "capability / composition",
@@ -2320,16 +2290,6 @@
       "kind": "contract",
       "diagnostic": "missing pane text \"요약\"",
       "occurrence": 2,
-      "category": "capability / composition",
-      "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
-      "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"{time}\" (occurrence already consumed or found earlier)",
-      "occurrence": 9,
       "category": "capability / composition",
       "reason": "Host telemetry fields are supported. This retained occurrence still depends on the prototype business-specific procedure, worker-message sequence, browser/payment fact, pricing table or memory proposal absent from this fixture. Q13 has four real steps; generic legacy tasks do not establish those business facts. Conversation transcript remains separate from the Work pane.",
       "ledger": "docs/acceptance/work-telemetry/README.md#residuals"
@@ -3728,22 +3688,6 @@
       ]
     },
     {
-      "screen": "B7-fail",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "legacy worker-role and room-order limitation",
-      "reason": "The generic Q13 output renderer now puts the recorded role before its producing member. This legacy B7-fail fixture has root/executor/verifier tasks and no Task.step metadata or worker room-message sequence, so the second required research-role occurrence still has no identity-bound producer. A role is not inferred from the Work title or fabricated as a room message.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#legacy-research-role-order",
-      "sources": [
-        "src/work-room-panel.ts:59",
-        "src/work-room-panel.ts:70",
-        "scripts/ui-contracts/fixtures/B7-fail.json:626",
-        "docs/product/screens/contracts/B7-fail.json"
-      ]
-    },
-    {
       "screen": "B7-done",
       "theme": "light",
       "kind": "contract",
@@ -3836,22 +3780,6 @@
         "src/domain.ts:317",
         "src/configured-runtime.ts:263",
         "src/work-room-panel.ts:84"
-      ]
-    },
-    {
-      "screen": "B7-fail",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "order pane text \"조사\" (occurrence already consumed or found earlier)",
-      "occurrence": 2,
-      "category": "legacy worker-role and room-order limitation",
-      "reason": "The generic Q13 output renderer now puts the recorded role before its producing member. This legacy B7-fail fixture has root/executor/verifier tasks and no Task.step metadata or worker room-message sequence, so the second required research-role occurrence still has no identity-bound producer. A role is not inferred from the Work title or fabricated as a room message.",
-      "ledger": "docs/acceptance/pane-step-times/README.md#legacy-research-role-order",
-      "sources": [
-        "src/work-room-panel.ts:59",
-        "src/work-room-panel.ts:70",
-        "scripts/ui-contracts/fixtures/B7-fail.json:626",
-        "docs/product/screens/contracts/B7-fail.json"
       ]
     },
     {
