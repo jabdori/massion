@@ -16744,6 +16744,18 @@
   ],
   "provenance": "Approved B8/B8-done artboard, imported for E3c."
  },
+ "ui.room.admitted": {
+  "ko": "작업 접수",
+  "roles": ["text"],
+  "used_in": ["B8:pane"],
+  "provenance": "PR #141 lead review: distinguish the recorded Work admission from runtime start."
+ },
+ "ui.room.run-started": {
+  "ko": "실행 시작",
+  "roles": ["text"],
+  "used_in": ["B8:pane"],
+  "provenance": "PR #141 lead review: label an observed runtime or task start, never an admission-time fallback."
+ },
  "ui.room.flow": {
   "ko": "흐름",
   "roles": [
