@@ -901,3 +901,17 @@ test('late confirmed steering and resumed checkpoints retain complete portable j
  assert.equal((await connections.resume('intake',running.work.id)).status,'settled');const w=(await f.intake()).works.at(-1)!;
  assert.equal(w.artifact!.version,2);assert.equal(w.runtimeRun!.resumptions!.length,1);assert.equal(w.instructions![0]!.text,'Annual plans only.');validateMissionJournalLineage(f.store.inspect());
 });
+
+test('a leading roster mention calls that member and persists typed attribution in the Representative thread',async t=>{
+ const f=await setup(t),member=await f.admit();
+ f.script.push(v1('A direct member answer.'));
+ await f.say(f.assistant,'@Quill Explain rounding.');
+ const view=await f.assistant.read(),reply=view.segment!.messages.at(-1)!;
+ assert.deepEqual(reply.member,{id:member.id,name:member.name});
+ assert.equal(f.prompts.at(-1)!.prompt.member.name,member.name);
+ f.script.push(v1('Back to the Representative.'));await f.say(f.assistant,'Continue.');
+ assert.deepEqual(f.prompts.at(-1)!.prompt.history.at(-1).member,{id:member.id,name:member.name});
+ assert.equal((await f.members.read()).decisions.at(-1)!.undoable,false);
+ await assert.rejects(f.members.act({commandId:'undo-used',action:'undo',memberId:member.id}),/undo/i);
+ validateMissionJournalLineage(f.store.inspect());
+});

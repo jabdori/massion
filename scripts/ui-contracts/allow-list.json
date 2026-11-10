@@ -415,16 +415,6 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B11-quill",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B13",
       "theme": "dark",
       "kind": "contract",
@@ -623,26 +613,6 @@
       "category": "composition",
       "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-dark"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "dark",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"되돌리기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member admission has no undo transition; retain the existing stored member link.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-hana-dark"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "dark",
-      "kind": "gap",
-      "diagnostic": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B23",
@@ -1065,16 +1035,6 @@
       "ledger": "docs/acceptance/work-telemetry-2/README.md#residuals"
     },
     {
-      "screen": "B11-quill",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Representative-thread messages have no member attribution field; the answer text renders without the contract Quill byline.",
-      "ledger": "docs/acceptance/e3b/after-failures.md"
-    },
-    {
       "screen": "B13",
       "theme": "light",
       "kind": "contract",
@@ -1273,26 +1233,6 @@
       "category": "composition",
       "reason": "Shared compact Work geometry is 600px pane / 540px conversation with a 24px composer gutter (B7); B18-room-b requires a distinct 640px team-room pane / 500px conversation and 20px gutter. This is deferred composition work, not a missing ability to render widths or a checker error.",
       "ledger": "docs/acceptance/E3e/residuals.md#b18-room-b-light"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "light",
-      "kind": "contract",
-      "diagnostic": "missing conversation link \"되돌리기\"",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Member admission has no undo transition; retain the existing stored member link.",
-      "ledger": "docs/acceptance/E3e/residuals.md#b21-done-hana-light"
-    },
-    {
-      "screen": "B21-done-hana",
-      "theme": "light",
-      "kind": "gap",
-      "diagnostic": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "occurrence": 1,
-      "category": "capability",
-      "reason": "Undo of an admitted member is not implemented; the stored member conversation link is available.",
-      "ledger": "docs/acceptance/E3e/capabilities.md"
     },
     {
       "screen": "B23",

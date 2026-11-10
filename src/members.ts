@@ -15,19 +15,19 @@ import {representativeName} from './surface-shell.ts';
 
 /** Under the reserved conversation prefix, so no Mission can take this ID and Mission readers refuse it. */
 export const MEMBERS_ID=ASSISTANT_CONVERSATION_PREFIX+'members',MEMBER_SHAPES=['round','square','drop','hex','diamond','cloud','clover','tri'] as const,MAX_MEMBERS=32,MAX_DECISIONS=32,LATER_MS=30*86400000;
-export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number;archivedAt?:number}
+export interface Member {id:string;name:string;look:{shape:string;color:string};home:string;modelGroup:string;skills:string[];procedures:string[];decisionId:string;admittedAt:number;archivedAt?:number;admissionOpen?:true}
 export interface MemberBuiltinSkill {id:string;name:string;version:number;hash:string;builtin:{id:string;version:number}}
 export interface MemberMemoryRead {id:string;version:number;name?:string;content:string;missionId:string;missionRevision:number;sourceSegment:number;sourceTurnId:string;at:number}
 export interface MemberRead {id:string;name:string;look:{shape:string;color:string};modelGroup:string;admittedAt:number;archivedAt:number|null;lastActiveAt:number|null;workCount:number;completedWorkCount:number;openWorkCount:number;unknownWorkCount:number;messageCount:number;scheduleCount:number;builtinSkills:MemberBuiltinSkill[];memories:MemberMemoryRead[];schedules:{id:string;title:string;active:boolean;nextAt:number}[]}
-export interface MemberDecision {id:string;at:number;topic:string;works:{title:string}[];count:number;handoff?:string;modelGroup:'default';state:'open'|'later'|'done';answeredAt?:number;memberId?:string}
+export interface MemberDecision {id:string;at:number;topic:string;works:{title:string}[];count:number;handoff?:string;modelGroup:'default';state:'open'|'later'|'done';answeredAt?:number;memberId?:string;undoneAt?:number}
 export interface MembersState {kind:'members';id:string;members:Member[];decisions:MemberDecision[]}
 export type MembersCommand =
  | {type:'propose-member';decisionId:string;topic:string;works:{title:string}[];count:number;handoff?:string}
  | {type:'set-member-group';memberId:string;modelGroup:string}
- | {type:'archive-member'|'unarchive-member';memberId:string}
+ | {type:'archive-member'|'unarchive-member'|'undo-member-admission'|'use-member';memberId:string}
  | {type:'defer-member';decisionId:string}
  | {type:'reopen-member';decisionId:string}
- | {type:'admit-member';decisionId:string;memberId:string;name:string;shape:string};
+ | {type:'admit-member';decisionId:string;memberId:string;name:string;shape:string;undoable?:true};
 export const memberThread=(memberId:string)=>'member:'+memberId;
 export const isMembersState=(value:unknown):value is MembersState=>!!value&&typeof value==='object'&&(value as {kind?:unknown}).kind==='members';
 function ensure(condition:unknown,message:string,code:'invalid'|'denied'|'conflict'='invalid'):asserts condition {if(!condition)throw new DomainError(message,code);}
@@ -61,17 +61,21 @@ export function applyMembers(current:MembersState|null,command:MembersCommand,ac
   case 'defer-member': {role('owner');ensure(exact(command,['type','decisionId']),'Exact defer fields required');const d=decision(command.decisionId);ensure(d.state==='open','Only an open decision is deferred','conflict');d.state='later';d.answeredAt=at;break;}
   case 'reopen-member': {role('owner');ensure(exact(command,['type','decisionId']),'Exact reopen fields required');const d=decision(command.decisionId);ensure(d.state==='later','Only a deferred decision is asked again','conflict');ensure(!state.decisions.some(x=>x.state==='open'),'Another admission decision is open','conflict');d.state='open';delete d.answeredAt;break;}
   case 'admit-member': {
-   role('owner');ensure(exact(command,['type','decisionId','memberId','name','shape'])&&id(command.memberId),'Exact admission fields required');const d=decision(command.decisionId);ensure(d.state==='open','Only an open decision admits a member','conflict');
+   role('owner');ensure(exact(command,['type','decisionId','memberId','name','shape',...(command.undoable===true?['undoable']:[])])&&id(command.memberId),'Exact admission fields required');const d=decision(command.decisionId);ensure(d.state==='open','Only an open decision admits a member','conflict');
    ensure(line(command.name,32)&&!same(command.name,representativeName)&&!state.members.some(m=>same(m.name,command.name)),'Invalid or taken name');ensure((MEMBER_SHAPES as readonly string[]).includes(command.shape),'Unknown shape');
    ensure(!state.members.some(m=>m.id===command.memberId),'Member already exists');ensure(state.members.length<MAX_MEMBERS,'Member bound reached','conflict');
    // The host picks the colour; the owner sets only a name and a shape (ADR 0003 §8).
-   state.members.push({id:command.memberId,name:command.name,look:{shape:command.shape,color:'agent-'+(state.members.length%7+1)},home:'members/'+command.memberId,modelGroup:d.modelGroup,skills:[],procedures:[],decisionId:d.id,admittedAt:at});
+   state.members.push({id:command.memberId,name:command.name,look:{shape:command.shape,color:'agent-'+(state.members.length%7+1)},home:'members/'+command.memberId,modelGroup:d.modelGroup,skills:[],procedures:[],decisionId:d.id,admittedAt:at,...(command.undoable?{admissionOpen:true as const}:{})});
    d.state='done';d.answeredAt=at;d.memberId=command.memberId;break;
   }
-  case 'set-member-group': {role('owner');ensure(exact(command,['type','memberId','modelGroup'])&&id(command.memberId)&&id(command.modelGroup),'Exact member group fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member,'Unknown member');member.modelGroup=command.modelGroup;break;}
+  case 'set-member-group': {role('owner');ensure(exact(command,['type','memberId','modelGroup'])&&id(command.memberId)&&id(command.modelGroup),'Exact member group fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member,'Unknown member');member.modelGroup=command.modelGroup;delete member.admissionOpen;break;}
+  case 'use-member': case 'undo-member-admission': {
+   role('owner');ensure(exact(command,['type','memberId'])&&id(command.memberId),'Exact member undo fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member&&member.archivedAt===undefined&&member.admissionOpen===true,'Member admission undo window is closed','conflict');
+   delete member.admissionOpen;if(command.type==='undo-member-admission'){ensure(at>=member.admittedAt,'Undo time precedes admission');member.archivedAt=at;decision(member.decisionId).undoneAt=at;}break;
+  }
   case 'archive-member': case 'unarchive-member': {
    role('owner');ensure(exact(command,['type','memberId'])&&id(command.memberId),'Exact member archive fields required');const member=state.members.find(m=>m.id===command.memberId);ensure(member,'Unknown member');
-   if(command.type==='archive-member'){ensure(member.archivedAt===undefined,'Member is already archived','conflict');ensure(at>=member.admittedAt,'Archive time precedes admission');member.archivedAt=at;}
+   if(command.type==='archive-member'){ensure(member.archivedAt===undefined,'Member is already archived','conflict');ensure(at>=member.admittedAt,'Archive time precedes admission');member.archivedAt=at;delete member.admissionOpen;}
    else {ensure(member.archivedAt!==undefined,'Member is not archived','conflict');delete member.archivedAt;}break;
   }
   default: throw new DomainError('Unknown command');
@@ -92,12 +96,12 @@ export function replayMembers(operation:Operation<MembersState>,prior:Operation<
 /** The card shape of conversation-cards.md, plus `form: 'member'` so Add member asks for a name and a shape first. */
 function card(state:MembersState,d:MemberDecision){
  const named=d.works.map(w=>w.title).join(' · '),titles=d.count>d.works.length?copy('ui.member-work-more',{titles:named,count:d.count-d.works.length}):named,member=state.members.find(m=>m.id===d.memberId);
- return {id:d.id,at:d.at,title:d.topic,question:copy('ui.member-proposal-question',{topic:d.topic,count:d.count}),rows:[[copy('ui.this-month'),titles],...(d.handoff?[[copy('ui.member-work'),d.handoff]]:[]),[copy('settings.heading.03'),copy('settings.text.01')]],action:'Add member',form:'member',state:d.state,...(d.state==='done'?{line:copy('ui.member-added',{member:member?.name??d.topic}),...(member?{memberId:member.id}:{})}:{})};
+ return {id:d.id,at:d.at,title:d.topic,question:copy('ui.member-proposal-question',{topic:d.topic,count:d.count}),rows:[[copy('ui.this-month'),titles],...(d.handoff?[[copy('ui.member-work'),d.handoff]]:[]),[copy('settings.heading.03'),copy('settings.text.01')]],action:'Add member',form:'member',state:d.state,...(d.state==='done'?{line:copy('ui.member-added',{member:member?.name??d.topic}),...(member?{memberId:member.id,undoable:member.admissionOpen===true&&member.archivedAt===undefined}:{}),...(d.undoneAt!==undefined?{line:copy('ui.member-admission-undone',{member:member?.name??d.topic}),undone:true}:{})}:{})};
 }
 const OWNER='local-owner';
 function lifecycleCommand(input:unknown):{commandId:string;command:MembersCommand}{
- ensure(exact(input,['commandId','action','memberId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&['archive','unarchive'].includes(input.action as string),'Exact member lifecycle fields required');
- return {commandId:input.commandId,command:{type:input.action==='archive'?'archive-member':'unarchive-member',memberId:input.memberId}};
+ ensure(exact(input,['commandId','action','memberId'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&['archive','unarchive','undo'].includes(input.action as string),'Exact member lifecycle fields required');
+ return {commandId:input.commandId,command:{type:input.action==='undo'?'undo-member-admission':input.action==='archive'?'archive-member':'unarchive-member',memberId:input.memberId}};
 }
 export class MembersService {
  readonly #groupWrites=new Map<string,Promise<CommitResult<MembersState>>>();
@@ -150,6 +154,11 @@ export class MembersService {
   throw new DomainError('Database changed during member read','conflict');
  }
  async member(memberId:string){return (await this.#state())?.value.members.find(m=>m.id===memberId);}
+ /** Close undo before any member turn or Work admission; the same aggregate CAS fences a racing undo. */
+ async use(memberId:string){
+  const member=await this.member(memberId);ensure(member&&member.archivedAt===undefined,'Member unavailable','conflict');
+  if(member.admissionOpen){const result=await this.#dispatch('assistant-member-use:'+memberId,OWNER,{type:'use-member',memberId});ensure(result.status==='committed'||result.status==='replayed','Member use was not committed','conflict');}
+ }
  async act(input:unknown):Promise<CommitResult<MembersState>>{
   const {commandId,command}=lifecycleCommand(input);return this.#dispatch(commandId,OWNER,command);
  }
@@ -173,7 +182,9 @@ export class MembersService {
   const act=(input as {answer?:unknown})?.answer==='act';ensure(exact(input,act?['commandId','decisionId','answer','member']:['commandId','decisionId','answer'])&&id(input.commandId)&&id(input.decisionId)&&['act','later','ask'].includes(input.answer as string),'Exact decision answer fields required'+(act?' with a name and a shape':''));
   const decisionId=input.decisionId as string;if(!act)return this.#dispatch(input.commandId,OWNER,{type:input.answer==='later'?'defer-member':'reopen-member',decisionId});
   const member=input.member;ensure(exact(member,['name','shape'])&&typeof member.name==='string'&&typeof member.shape==='string','A name and a shape are required');
-  return this.#dispatch(input.commandId,OWNER,{type:'admit-member',decisionId,memberId:admittedMemberId(input.commandId),name:member.name,shape:member.shape});
+  const command:Extract<MembersCommand,{type:'admit-member'}>={type:'admit-member',decisionId,memberId:admittedMemberId(input.commandId),name:member.name,shape:member.shape};
+  const legacy=await this.#store.lookupOperation({id:MEMBERS_ID,commandId:input.commandId,fingerprint:fingerprint(OWNER,command)});if(legacy.status==='committed'||legacy.status==='replayed')return legacy;
+  return this.#dispatch(input.commandId,OWNER,{...command,undoable:true});
  }
  async setGroup(input:unknown,connections:ConnectionWorkbench):Promise<CommitResult<MembersState>>{
   ensure(exact(input,['commandId','memberId','modelGroup'])&&id(input.commandId)&&!input.commandId.startsWith('assistant-')&&id(input.memberId)&&id(input.modelGroup),'Exact member group fields required');
