@@ -729,3 +729,13 @@ for(const kind of ['application/pdf','image/png'])test(`multi-step member Work c
  const w=(await f.intake()).works.at(-1)!;assert.equal(w.acceptance,'accepted',JSON.stringify({execution:w.execution,blocker:w.blocker}));assert.equal(w.artifact!.kind,kind);assert.equal(w.room!.artifact.sha256,w.artifact!.sha256);assert.equal(w.record!.room!.artifact.sha256,w.artifact!.sha256);
  const bytes=Buffer.from(w.room!.artifact.base64!,'base64');assert.equal(createHash('sha256').update(bytes).digest('hex'),w.artifact!.sha256);assert.equal(w.room!.messages[1]!.status,'admitted');assert.ok(w.room!.messages.every(m=>Number.isSafeInteger(m.at)));assert.equal(w.verdict!.status,'passed');assert.ok(w.verdict!.predicates?.length);
 });
+
+test('a host-bound scheduled request assigns only its persisted member despite another model proposal',async t=>{
+ const f=await setup(t),quill=await f.admit();f.script.push(v2('On it.','Scheduled review','Someone else'));
+ const view=await f.assistant.read(),input={commandId:'schedule-work:member-bound',segment:view.head,expectedRevision:view.segment!.revision,text:'Review the supplied records for Quill'};
+ await f.assistant.send(input,quill.id);await f.assistant.idle();const work=(await f.intake()).works.at(-1)!;
+ assert.equal(work.assistantSource?.memberId,quill.id);assert.equal(work.title,'Scheduled review');
+ const calls=f.prompts.length;assert.equal((await f.assistant.send(input,quill.id)).message.status,'replayed');assert.equal(f.prompts.length,calls);
+ const fresh=await f.assistant.read();await assert.rejects(f.assistant.send({...input,commandId:'schedule-work:missing',segment:fresh.head,expectedRevision:fresh.segment!.revision},'missing'),/member/i);
+ validateMissionJournalLineage(f.store.inspect());
+});
