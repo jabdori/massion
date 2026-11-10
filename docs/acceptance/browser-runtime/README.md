@@ -4,7 +4,7 @@ The lead replaced the attempted clean-image guarantee with a non-persistence rul
 
 ## Lifetime and presentation
 
-Images enter a bounded in-memory map only after a confirmed observation commit and an authoritative active-Work check. Storage writes invalidate them before leaving active or changing inputs; completion/uncertain write notification, runtime deadline, feed change, host drain and restart also discard them. A replay does not recapture. Live queries alone merge images into their no-store response; the client never persists them and clears its view on disconnect, navigation or state change.
+Images enter a bounded in-memory map only after a confirmed observation commit and an authoritative active-Work check. Storage writes invalidate them before leaving active or changing inputs; completion/uncertain write notification, runtime deadline, feed change, host drain and restart also discard them. A same-process replay does not recapture; a restarted service requires observation lookup instead. Live queries alone merge images into their no-store response; the client never persists them and clears its view on disconnect, navigation or state change.
 
 B15 uses live images while active. B4 payment approval is `waiting`, so it uses sanitized structural text/fields with the domain-only pill. Ended/restarted Work likewise displays structure without an image. B7 page-read activity and R-A named steps remain.
 
@@ -62,7 +62,7 @@ All 372 related browser/privacy/procedure/member/telemetry/table/settings tests 
 
 ## Origin-only persistence and latest main
 
-Observed addresses now retain only origins. Commands retain a navigation hash for idempotency, so another path cannot reuse a read identity after restart, while reset/magic-link tokens never enter observations, journal commands or portable backups. URL components are treated as private in reflected text/labels too; this can conservatively mask public route words. Fixed fixture source addresses are declared inputs, separate from observed origin-only metadata.
+Observed addresses now retain only origins. Commands retain a random navigation identity, while exact request bindings stay in memory. Same-process retries reuse that identity; after restart callers read the retained observation and capture replay is refused without invoking the adapter. Raw reset/magic-link tokens and their guessable URL digests never enter observations, journal commands or portable backups. URL components are treated as private in reflected text/labels too; this can conservatively mask public route words. Fixed fixture source addresses are declared inputs, separate from observed origin-only metadata.
 
 Merged #137 steering continuation and #143 device lifecycle without removing either producer or exception-removal set. The 176 related browser/steering/device/desktop tests and typecheck pass. Twenty-two affected screen/theme captures have no new, stale or infrastructure diagnostics: [merged gate](steering-device-merge-gate.json).
 
@@ -75,3 +75,7 @@ URL privacy also covers bare/encoded query names and fragment parts, not just qu
 Complex accessible-label sources now fail closed instead of borrowing a benign field name. Referenced names, nested/alternative/generated/hidden labels and unsupported ARIA metadata are conservatively masked; benign values require explicit simple text labeling. The actual image-alt reference, nested-alt and nested-ARIA fixtures exposed their distinct values before the fix and are masked afterward. The 106 affected tests, typecheck and in-memory PNG proof pass; reference-page hashes remain unchanged.
 
 Merged #145 steering resume. Browser-only authority and lineage validation coexist with continuation commands/validation, and host drain awaits both startup resumption and browser cleanup. Continuations retain the original deadline; no pixels are reconstructed from durable state. The 196 related checks pass (2 environment-dependent skips), and typecheck completes successfully.
+
+## Offline-verifier regression
+
+A six-digit capability path is absent from journal/backup both as plaintext and as its former URL digest. Runtime image hashes are HMAC-SHA-256 tags with a fresh RAM-only key, not public offline verifiers. Tests cover deterministic tags within one service, different tags under different keys, missing-key refusal, same-process replay and restart metadata-only lookup. Public fixture source-image hashes are explicitly separated from runtime tags.

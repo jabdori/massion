@@ -23,13 +23,13 @@ test('sanitized observations omit credentials, query secrets, payment and passwo
  assert.doesNotMatch(JSON.stringify(page),/hunter2|4111|abc123secret|user:password|token=private/);
  assert.throws(()=>sanitizePage({...raw,blocks:['x'.repeat(20000)]}),/bound|Invalid/);
 });
-test('overlapping identical reads commit once, replay after restart, and preserve journal lineage',async()=>{
+test('overlapping identical reads commit once, retain metadata after restart, and preserve journal lineage',async()=>{
  let calls=0,release!:()=>void;const held=new Promise<void>(r=>release=r);
  const s=await setup(async()=>{calls++;await held;return raw;});const a=s.service.capture(request),b=s.service.capture({...request});release();
  const results=await Promise.all([a,b]);assert.ok(results.every(r=>['committed','replayed'].includes(r.status)));assert.equal(calls,1);
  const read=await s.service.read('intake','work');assert.equal(read.session?.pagesRead,1);assert.equal(read.session?.page.title,'주문 확인');
  const restarted=new BrowserSessions(s.store,s.store,{adapter:{async read(){throw Error('Replay invoked adapter');}},clock:()=>now});
- assert.equal((await restarted.capture(request)).status,'replayed');validateMissionJournalLineage(s.store.inspect());
+ await assert.rejects(restarted.capture(request),/identity.*unavailable/i);assert.equal((await restarted.read('intake','work')).session?.pagesRead,1);validateMissionJournalLineage(s.store.inspect());
  await assert.rejects(restarted.capture({...request,address:'https://shop.example.com/other'}),/identity|conflict/i);
 });
 test('drain-aware owner store refuses a write resumed after a read',async()=>{
@@ -63,7 +63,7 @@ test('raw URL secret values are removed from retained page text and form labels'
 test('unknown commit remains unsettled during drain and a durable result is read back without another read',async()=>{
  let calls=0;const s=await setup(async()=>{calls++;return raw;}),commit=s.store.commit.bind(s.store);s.store.commit=async input=>{await commit(input);const e=new Error('Unknown fixture commit');e.name='CommitOutcomeUnknownError';throw e;};
  await assert.rejects(s.service.capture(request),/Unknown fixture commit/);await assert.rejects(s.service.drain(),/unsettled/i);s.store.commit=commit;
- const restored=new BrowserSessions(s.store,s.store,{adapter:{async read(){calls++;return raw;}}});assert.equal((await restored.capture(request)).status,'replayed');assert.equal(calls,1);
+ const restored=new BrowserSessions(s.store,s.store,{adapter:{async read(){calls++;return raw;}}});await assert.rejects(restored.capture(request),/identity.*unavailable/i);assert.equal((await restored.read('intake','work')).session?.pagesRead,1);assert.equal(calls,1);
 });
 test('HTTP and protocol queries return only stored sanitized pages and expose no browser action route',async t=>{
  const {createWorkbench}=await import('../src/server.ts'),s=await setup(),server=createWorkbench(s.store,'.',{browserAdapter:{async read(){return {...raw,fields:[{label:'Card',type:'text',value:'4111111111111111',autocomplete:'cc-number'}]};}},scheduleIntervalMs:0});

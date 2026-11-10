@@ -13,7 +13,7 @@
       "이용 하루 전까지 취소 가능"
     ],
     "fields": [],
-    "imageHash": "255583d6370ef8d560b0905183d51feba61ad61b10f0f7d1f18078d722102e71",
+    "sourceImageHash": "255583d6370ef8d560b0905183d51feba61ad61b10f0f7d1f18078d722102e71",
     "sourceAddress": "https://library.example.com/guide",
     "sourceSha256": "9b3c3a6192ba81c13ea9f67b3c95bb2903cc8af42abc55ff68631b70246a251a"
   },
@@ -32,7 +32,7 @@
       "15:00–17:00 · 4명"
     ],
     "fields": [],
-    "imageHash": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c",
+    "sourceImageHash": "2085925ed339af287067f14d4c530ce86f53ea63e26b54c109983d76da12881c",
     "sourceAddress": "https://library.example.com/availability",
     "sourceSha256": "f34cd72ae75af637b19ed6193746e61be3611923fd4c5ffc753972cd1ed6416c"
   },
@@ -79,7 +79,7 @@
         "masked": false
       }
     ],
-    "imageHash": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58",
+    "sourceImageHash": "8d6daffaab82d04bfa79b89a28ef951499ce90683b4007226b451d931c659d58",
     "sourceAddress": "https://library.example.com/apply",
     "sourceSha256": "0d204a566b90631ce2b8a9b82ed6313184690f98bb463b4d1a09439072847ac0"
   },
@@ -111,7 +111,7 @@
         "masked": true
       }
     ],
-    "imageHash": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551",
+    "sourceImageHash": "1f50ff6a608c80bbb047e7351b9ae4bafd68f86d235fbec4e27b3c50cbb08551",
     "sourceAddress": "https://shop.example.com/checkout",
     "sourceSha256": "1d814bb033013d83a37111cfb69993562d2f278b78650e91c95734c731ba0355"
   }

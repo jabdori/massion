@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHmac,randomBytes,randomUUID} from 'node:crypto';
 import {Application} from './application.ts';
 import {DomainError,hash,workInputHash} from './domain.ts';
 import type {Actor,Mission,Work} from './domain.ts';
@@ -14,7 +14,7 @@ export interface BrowserPage {imageHash?:string;readId:string;expectedRevision:n
 export interface BrowserSession {id:string;pages:BrowserPage[]}
 export function browserSummary(w:Work){const pages=w.browserSession?.pages;return pages?.length?{startedAt:pages[0]!.at,pagesRead:pages.length}:undefined;}
 export interface BrowserAdapter {read(input:{address:string;sessionId:string;signal:AbortSignal}):Promise<RawBrowserPage>}
-export type BrowserCommand={type:'record-browser-page';workId:string;sessionId:string;requestHash:string;page:BrowserPage};
+export type BrowserCommand={type:'record-browser-page';workId:string;sessionId:string;navigationId:string;page:BrowserPage};
 type Capture={missionId:string;workId:string;readId:string;address:string};
 function ensure(v:unknown,message:string):asserts v {if(!v)throw new DomainError(message);}
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(v);
@@ -56,7 +56,7 @@ export function validateBrowserScreenshot(image:unknown):asserts image is Browse
  const bytes=Buffer.from(image.data,'base64');ensure(bytes.length>=57&&bytes.toString('base64')===image.data&&bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))&&bytes.readUInt32BE(8)===13&&bytes.toString('ascii',12,16)==='IHDR'&&bytes.subarray(-12).equals(Buffer.from('0000000049454e44ae426082','hex')),'Invalid browser screenshot PNG');
  ensure(Number.isSafeInteger(image.width)&&Number.isSafeInteger(image.height)&&image.width>0&&image.height>0&&image.width<=2048&&image.height<=2048&&bytes.readUInt32BE(16)===image.width&&bytes.readUInt32BE(20)===image.height,'Invalid browser screenshot dimensions');
 }
-export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'title'|'blocks'|'fields'|'imageHash'>{
+export function sanitizePage(raw:RawBrowserPage,imageKey?:Uint8Array):Pick<BrowserPage,'address'|'title'|'blocks'|'fields'|'imageHash'>{
  exact(raw,['address','title','blocks','fields',...(Object.hasOwn(raw,'screenshot')?['screenshot']:[])]);if(Object.hasOwn(raw,'screenshot'))validateBrowserScreenshot(raw.screenshot);ensure(text(raw.address)&&text(raw.title)&&Array.isArray(raw.blocks)&&raw.blocks.length<=64&&raw.blocks.every(s=>text(s,4000))&&Array.isArray(raw.fields)&&raw.fields.length<=64,'Invalid browser page bound');
  for(const f of raw.fields){exact(f,['label','type','value','autocomplete',...(Object.hasOwn(f,'name')?['name']:[])]);ensure([f.label,f.type,f.value,f.autocomplete,...(Object.hasOwn(f,'name')?[f.name]:[])].every(s=>text(s,4000)),'Invalid browser form bound');}
  browserAddress(raw.address);const url=new URL(raw.address),urlSecrets=browserUrlSecrets(raw.address);
@@ -64,22 +64,23 @@ export function sanitizePage(raw:RawBrowserPage):Pick<BrowserPage,'address'|'tit
  const secrets=[...new Set([...urlSecrets,...raw.fields.filter((_,i)=>masked[i]).map(f=>f.value)].filter(Boolean))].sort((a,b)=>b.length-a.length);
  const clean=(s:string)=>browserText(s,secrets);
  const result={address:url.origin,title:clean(raw.title),blocks:raw.blocks.map(clean),fields:raw.fields.filter(f=>f.type!=='hidden').map(f=>({label:clean(f.label||f.name||f.autocomplete),value:masked[raw.fields.indexOf(f)]?'••••':clean(f.value),masked:masked[raw.fields.indexOf(f)]!}))};
- ensure(JSON.stringify(result).length<=24000,'Browser page bound exceeded');return {...result,...(raw.screenshot?{imageHash:createHash('sha256').update(Buffer.from(raw.screenshot.data,'base64')).digest('hex')}:{})};
+ ensure(JSON.stringify(result).length<=24000,'Browser page bound exceeded');if(raw.screenshot)ensure(imageKey?.byteLength===32,'Browser image key required');return {...result,...(raw.screenshot?{imageHash:'hmac-sha256:'+createHmac('sha256',imageKey!).update(Buffer.from(raw.screenshot.data,'base64')).digest('hex')}:{})};
 }
 export function validateBrowserSession(value:unknown):asserts value is BrowserSession{
  exact(value,['id','pages']);ensure(id(value.id)&&Array.isArray(value.pages)&&value.pages.length>0&&value.pages.length<=32,'Invalid browser session');let at=-1;const ids=new Set<string>();
- for(const p of value.pages){exact(p,['readId','expectedRevision','inputHash','at','address','title','blocks','fields',...(Object.hasOwn(p,'imageHash')?['imageHash']:[])]);if(Object.hasOwn(p,'imageHash'))ensure(typeof p.imageHash==='string'&&/^[a-f0-9]{64}$/.test(p.imageHash),'Invalid browser image hash');ensure(id(p.readId)&&!ids.has(p.readId)&&Number.isSafeInteger(p.expectedRevision)&&p.expectedRevision>0&&/^[a-f0-9]{64}$/.test(p.inputHash)&&Number.isSafeInteger(p.at)&&p.at>=at&&p.address===new URL(browserAddress(p.address)).origin&&text(p.title)&&Array.isArray(p.blocks)&&p.blocks.length<=64&&p.blocks.every((s:unknown)=>text(s,4000))&&Array.isArray(p.fields)&&p.fields.length<=64,'Invalid browser page');
+ for(const p of value.pages){exact(p,['readId','expectedRevision','inputHash','at','address','title','blocks','fields',...(Object.hasOwn(p,'imageHash')?['imageHash']:[])]);if(Object.hasOwn(p,'imageHash'))ensure(typeof p.imageHash==='string'&&/^hmac-sha256:[a-f0-9]{64}$/.test(p.imageHash),'Invalid browser image hash');ensure(id(p.readId)&&!ids.has(p.readId)&&Number.isSafeInteger(p.expectedRevision)&&p.expectedRevision>0&&/^[a-f0-9]{64}$/.test(p.inputHash)&&Number.isSafeInteger(p.at)&&p.at>=at&&p.address===new URL(browserAddress(p.address)).origin&&text(p.title)&&Array.isArray(p.blocks)&&p.blocks.length<=64&&p.blocks.every((s:unknown)=>text(s,4000))&&Array.isArray(p.fields)&&p.fields.length<=64,'Invalid browser page');
   for(const f of p.fields){exact(f,['label','value','masked']);ensure(text(f.label,4000)&&text(f.value,4000)&&typeof f.masked==='boolean'&&(!f.masked||f.value==='••••')&&(f.masked||!maskBrowserField({label:f.label,type:'text',autocomplete:''}))&&browserText(f.label)===f.label&&browserText(f.value)===f.value,'Invalid browser form');}ensure(browserText(p.title)===p.title&&p.blocks.every((s:string)=>browserText(s)===s),'Invalid browser redaction');ensure(JSON.stringify(p).length<=25000,'Browser page bound exceeded');at=p.at;ids.add(p.readId);
  }
 }
 function current(w:Work,at:number){ensure(w.acceptance==='pending'&&!['cancelled','settled'].includes(w.execution)&&!w.runtimeInterruption&&!w.runtimeRecovery,'Work no longer admits browser observations');ensure(!w.runtimeRun?.ownership||at<w.runtimeRun.ownership.deadlineAt,'Browser runtime deadline expired');}
 export function applyBrowserPage(w:Work,c:BrowserCommand,actor:Actor){
- ensure(actor.id===BROWSER_HOST&&actor.roles.includes('representative'),'Only browser host authority records observations');exact(c,['type','workId','sessionId','requestHash','page']);ensure(typeof c.requestHash==='string'&&/^[a-f0-9]{64}$/.test(c.requestHash),'Invalid browser request hash');validateBrowserSession({id:c.sessionId,pages:[c.page]});current(w,c.page.at);ensure(c.page.inputHash===workInputHash(w),'Work input changed');
+ ensure(actor.id===BROWSER_HOST&&actor.roles.includes('representative'),'Only browser host authority records observations');exact(c,['type','workId','sessionId','navigationId','page']);ensure(id(c.navigationId),'Invalid browser navigation identity');validateBrowserSession({id:c.sessionId,pages:[c.page]});current(w,c.page.at);ensure(c.page.inputHash===workInputHash(w),'Work input changed');
  if(w.browserSession){ensure(w.browserSession.id===c.sessionId,'Browser session changed');ensure(w.browserSession.pages.length<32&&!w.browserSession.pages.some(p=>p.readId===c.page.readId),'Browser read identity conflict or bound');ensure(c.page.at>=w.browserSession.pages.at(-1)!.at,'Browser clock moved backwards');}
  else w.browserSession={id:c.sessionId,pages:[]};w.browserSession.pages.push(structuredClone(c.page));validateBrowserSession(w.browserSession);
 }
 function live(w:Work|undefined,at:number){return !!w&&w.execution==='active'&&w.acceptance==='pending'&&!w.runtimeInterruption&&!w.runtimeRecovery&&(!w.runtimeRun?.ownership||at<w.runtimeRun.ownership.deadlineAt);}
 export class BrowserSessions {
+ readonly #imageKey=randomBytes(32);readonly #bindings=new Map<string,{identity:string;navigationId:string}>();
  readonly #pendingImages=new Set<{missionId:string;workId:string;inputHash:string;valid:boolean}>();
  readonly #images=new Map<string,{missionId:string;workId:string;feedId:string;inputHash:string;imageHash:string;image:BrowserScreenshot;timer?:ReturnType<typeof setTimeout>}>();readonly #unsubscribe?:()=>void;#writes=0;
  #drop(key:string){const image=this.#images.get(key);if(image)clearTimeout(image.timer);this.#images.delete(key);}
@@ -94,17 +95,20 @@ export class BrowserSessions {
   const promise=this.#capture(input,()=>this.#generation.get(workKey)===generation).finally(()=>this.#active.delete(key));this.#active.set(key,{identity,promise});return promise;
  }
  async #capture(input:Capture,isCurrent:()=>boolean):Promise<CommitResult<Mission>>{
-  if(this.#draining)throw new HostDrainError();const state=await this.#store.readState(input.missionId),snapshot=state.snapshot,w=snapshot?.value.works.find(w=>w.id===input.workId);ensure(snapshot&&w,'Unknown browser Work');
+  if(this.#draining)throw new HostDrainError();const state=await this.#store.readState(input.missionId),snapshot=state.snapshot,w=snapshot?.value.works.find(w=>w.id===input.workId);if(this.#draining)throw new HostDrainError();ensure(snapshot&&w,'Unknown browser Work');
   const sessionId=w.browserSession?.id??'browser:'+hash([state.feedId,input.missionId,input.workId]).slice(0,32),existing=w.browserSession?.pages.find(p=>p.readId===input.readId);
+  const bindingKey=JSON.stringify([state.feedId,input.missionId,input.workId,input.readId]),identity=hash(input);let binding=this.#bindings.get(bindingKey);
+  if(binding)ensure(binding.identity===identity,'Browser read identity conflict');else {ensure(!existing,'Browser read identity binding unavailable; use retained observation');binding={identity,navigationId:randomUUID()};this.#bindings.set(bindingKey,binding);while(this.#bindings.size>256)this.#bindings.delete(this.#bindings.keys().next().value!);}
+  const navigationId=binding.navigationId;
   const admitted=new Proxy(this.#owner,{get:(target,key)=>{if(key==='commit')return (input:Parameters<typeof target.commit>[0])=>{ensure(isCurrent(),'Browser read superseded');current(w,this.#clock());return target.commit(input);};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),app=new Application(admitted,[{id:BROWSER_HOST,roles:['representative']}]);
-  const dispatch=(page:BrowserPage)=>withAdmissionFeed(state.feedId,()=>app.dispatch({missionId:input.missionId,commandId:'assistant-browser:'+hash([input.missionId,input.workId,input.readId]).slice(0,48),expectedRevision:page.expectedRevision,actorId:BROWSER_HOST,command:{type:'record-browser-page',workId:input.workId,sessionId,requestHash:hash(input.address),page}}));
+  const dispatch=(page:BrowserPage)=>withAdmissionFeed(state.feedId,()=>app.dispatch({missionId:input.missionId,commandId:'assistant-browser:'+hash([input.missionId,input.workId,input.readId]).slice(0,48),expectedRevision:page.expectedRevision,actorId:BROWSER_HOST,command:{type:'record-browser-page',workId:input.workId,sessionId,navigationId,page}}));
   if(existing){ensure(existing.address===new URL(input.address).origin,'Browser read identity conflict');const result=await dispatch(existing);ensure(result.status!=='conflict','Browser read identity conflict');return result;}
   current(w,this.#clock());ensure((w.browserSession?.pages.length??0)<32,'Browser session page bound exceeded');ensure(this.#adapter,'Browser adapter unavailable');const controller=new AbortController();this.#controllers.add(controller);const pending={missionId:input.missionId,workId:input.workId,inputHash:workInputHash(w),valid:true};this.#pendingImages.add(pending);
   try{
    if(this.#draining)throw new HostDrainError();const raw=await callTool(signal=>{const read=Promise.resolve().then(()=>this.#adapter!.read({address:input.address,sessionId,signal}));this.#reads.add(read);void read.then(()=>this.#reads.delete(read),()=>this.#reads.delete(read));return read;},{readOnly:true,signal:controller.signal,timeoutMs:TOOL_TIMEOUT_MS});
-   ensure(isCurrent(),'Browser read superseded');if(this.#draining)throw new HostDrainError();const fresh=await this.#store.readState(input.missionId);if(fresh.feedId!==state.feedId)throw new FeedAdmissionError();ensure(fresh.snapshot?.revision===snapshot.revision,'Work revision changed during browser read');
+   ensure(isCurrent(),'Browser read superseded');if(this.#draining)throw new HostDrainError();const fresh=await this.#store.readState(input.missionId);if(fresh.feedId!==state.feedId)throw new FeedAdmissionError();if(this.#draining)throw new HostDrainError();ensure(fresh.snapshot?.revision===snapshot.revision,'Work revision changed during browser read');
    ensure(browserAddress(raw.address)===input.address,'Browser address changed during read');
-   const page:BrowserPage={readId:input.readId,expectedRevision:snapshot.revision,inputHash:workInputHash(w),at:this.#clock(),...sanitizePage(raw)},screenshot=raw.screenshot&&structuredClone(raw.screenshot);ensure(page.address===new URL(input.address).origin,'Browser origin changed during read');current(w,page.at);const result=await dispatch(page);
+   const page:BrowserPage={readId:input.readId,expectedRevision:snapshot.revision,inputHash:workInputHash(w),at:this.#clock(),...sanitizePage(raw,this.#imageKey)},screenshot=raw.screenshot&&structuredClone(raw.screenshot);ensure(page.address===new URL(input.address).origin,'Browser origin changed during read');current(w,page.at);const result=await dispatch(page);
    if(result.status==='committed'&&screenshot&&this.#unsubscribe&&!this.#draining){const writes=this.#writes,latest=await this.#store.readState(input.missionId),active=latest.snapshot?.value.works.find(w=>w.id===input.workId);if(pending.valid&&isCurrent()&&!this.#draining&&writes===this.#writes&&latest.feedId===state.feedId&&live(active,this.#clock())&&workInputHash(active!)===page.inputHash&&active!.browserSession?.pages.some(p=>p.readId===page.readId&&p.imageHash===page.imageHash)){
     const key=JSON.stringify([input.missionId,input.workId,page.readId]);this.#drop(key);const image={missionId:input.missionId,workId:input.workId,feedId:state.feedId,inputHash:page.inputHash,imageHash:page.imageHash!,image:screenshot,timer:undefined as ReturnType<typeof setTimeout>|undefined};
     const deadline=active!.runtimeRun?.ownership?.deadlineAt;if(deadline!==undefined){image.timer=setTimeout(()=>this.#drop(key),Math.max(0,Math.min(2147483647,deadline-this.#clock())));image.timer.unref();}this.#images.set(key,image);
@@ -115,6 +119,6 @@ export class BrowserSessions {
  async read(missionId:string,workId:string){const state=await this.#store.readState(missionId),w=state.snapshot?.value.works.find(w=>w.id===workId);this.#prune(missionId,state.snapshot?.value);for(const [key,image] of this.#images)if(image.feedId!==state.feedId)this.#drop(key);ensure(w,'Unknown browser Work');const s=w.browserSession;if(s)validateBrowserSession(s);
   const pages=s?.pages.map(page=>{const image=this.#images.get(JSON.stringify([missionId,workId,page.readId]));return {...structuredClone(page),...(!this.#draining&&live(w,this.#clock())&&image&&image.imageHash===page.imageHash?{screenshot:structuredClone(image.image)}:{})};});
   return {feedId:state.feedId,revision:state.snapshot!.revision,session:s&&pages?{id:s.id,active:live(w,this.#clock())&&!this.#draining,startedAt:s.pages[0]!.at,pagesRead:s.pages.length,page:pages.at(-1)!,pages}:null};}
- beginDrain(){this.#draining=true;this.#unsubscribe?.();for(const key of this.#images.keys())this.#drop(key);for(const c of this.#controllers)c.abort();}
+ beginDrain(){this.#draining=true;this.#bindings.clear();this.#imageKey.fill(0);this.#unsubscribe?.();for(const key of this.#images.keys())this.#drop(key);for(const c of this.#controllers)c.abort();}
  async drain(){this.beginDrain();await Promise.allSettled([...this.#active.values()].map(v=>v.promise));await Promise.allSettled([...this.#reads]);if(this.unsettled)throw Error('Browser bookkeeping is unsettled');}
 }

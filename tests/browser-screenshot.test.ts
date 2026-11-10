@@ -6,7 +6,7 @@ const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCA
 const screenshot={mimeType:'image/png' as const,data:png,width:1,height:1};
 const raw={address:'https://shop.example.com/checkout',title:'Order',blocks:['Order'],fields:[],screenshot};
 test('persisted observations contain an image hash, never image bytes',()=>{
- const page=sanitizePage(raw);assert.equal('screenshot' in page,false);assert.match(page.imageHash!,/^[a-f0-9]{64}$/);
+ const key=Buffer.alloc(32,1),page=sanitizePage(raw,key);assert.equal('screenshot' in page,false);assert.match(page.imageHash!,/^hmac-sha256:[a-f0-9]{64}$/);assert.throws(()=>sanitizePage(raw),/key/i);assert.equal(sanitizePage(raw,key).imageHash,page.imageHash);assert.notEqual(sanitizePage(raw,Buffer.alloc(32,2)).imageHash,page.imageHash);
  for(const image of [{...screenshot,mimeType:'image/svg+xml'},{...screenshot,width:2},{...screenshot,data:'data:image/png;base64,'+png},{...screenshot,data:'a'.repeat(400000)}])assert.throws(()=>sanitizePage({...raw,screenshot:image} as any),/screenshot|image/i);
  const recorded={readId:'read:1',expectedRevision:1,inputHash:'a'.repeat(64),at:1,...page};assert.doesNotThrow(()=>validateBrowserSession({id:'session',pages:[recorded]}));assert.throws(()=>validateBrowserSession({id:'session',pages:[{...recorded,screenshot}]}),/browser/i);
  assert.equal(sanitizePage({address:raw.address,title:'Legacy',blocks:[],fields:[]}).imageHash,undefined);

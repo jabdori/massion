@@ -21,7 +21,7 @@ const sentinel='ephemeral-private-sentinel-7e32';
 // PNG의 tEXt 청크에도 표식을 넣어 이미지 자체의 영속화를 검출합니다.
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAJ3RFWHRDb21tZW50AGVwaGVtZXJhbC1wcml2YXRlLXNlbnRpbmVsLTdlMzL0V3VCAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
 const screenshot={mimeType:'image/png' as const,data:png,width:1,height:1};
-const imageBytes=Buffer.from(png,'base64'),imageHash=createHash('sha256').update(imageBytes).digest('hex');
+const imageBytes=Buffer.from(png,'base64'),unkeyedImageHash=createHash('sha256').update(imageBytes).digest('hex');
 const raw:RawBrowserPage={address,title:'Checkout '+sentinel,blocks:['Private value: '+sentinel,'Quantity: 2'],fields:[{label:'Password',type:'password',value:sentinel,autocomplete:'current-password'},{label:'Quantity',type:'number',value:'2',autocomplete:''}],screenshot};
 const request={missionId:'mission',workId:'work',readId:'page:1',address};
 const model={provider:'fixture',model:'deterministic',configVersion:'v1',reason:'In-memory browser fixture',evidenceClass:'fixture' as const};
@@ -57,7 +57,7 @@ function noPrivateBytes(value:string|Buffer,label:string){
 }
 async function imageVisible(service:BrowserSessions,expected:boolean){
  const session=(await service.read('mission','work')).session;
- assert.ok(session);assert.equal(session.page.imageHash,imageHash);
+ assert.ok(session);assert.match(session.page.imageHash!,/^hmac-sha256:[a-f0-9]{64}$/);assert.ok(!session.page.imageHash!.includes(unkeyedImageHash));
  assert.equal(session.page.screenshot?.data===png,expected,'Latest page live image visibility');
  assert.equal(session.pages.some(page=>Object.hasOwn(page,'screenshot')),expected,'Page history live image visibility');
  if(!expected)assert.equal(Object.hasOwn(session.page,'screenshot'),false);
@@ -70,7 +70,7 @@ test('active images stay out of settled artifacts, accepted Records, journals an
  const live=(await s.service.read('mission','work')).session!;assert.equal(live.pagesRead,2);
  assert.equal(live.pages.every(page=>page.screenshot?.data===png),true,'Every active page exposes its transient image');
  const page=(await s.store.load('mission'))!.value.works[0]!.browserSession!.pages[0]!;
- assert.equal(page.imageHash,imageHash);assert.equal(page.fields[0]!.masked,true);assert.equal(page.fields[0]!.value==='••••',true);
+ const imageHash=page.imageHash!;assert.match(imageHash,/^hmac-sha256:[a-f0-9]{64}$/);assert.equal(live.pages.every(p=>p.imageHash===imageHash),true);assert.equal(page.fields[0]!.masked,true);assert.equal(page.fields[0]!.value==='••••',true);
  assert.equal(page.fields[1]!.value==='2',true);noPrivateBytes(JSON.stringify(page),'Durable page');
  await s.send({type:'receipt',workId:'work',effectId:'effect',outcome:'succeeded',receipt:'Fixture observation completed',usage:1},'executor');
  await imageVisible(s.service,true);
@@ -96,7 +96,7 @@ test('a restarted service and command replay cannot recover images still visible
  const s=await fixture(t);await s.service.capture(request);const head=s.journal().head;
  const restarted=new BrowserSessions(s.store,s.store,{adapter:{async read(){throw Error('Replay must not invoke the browser adapter');}},clock:s.clock});t.after(()=>restarted.drain());
  await imageVisible(restarted,false);await imageVisible(s.service,true);
- assert.equal((await restarted.capture(request)).status,'replayed');await imageVisible(restarted,false);await imageVisible(s.service,true);
+ await assert.rejects(restarted.capture(request),/identity.*unavailable/i);await imageVisible(restarted,false);await imageVisible(s.service,true);
  assert.equal((await s.service.capture(request)).status,'replayed');assert.equal(s.calls(),1);assert.equal(s.journal().head,head);
  noPrivateBytes(JSON.stringify(s.journal()),'Replayed journal');
 });
@@ -175,12 +175,12 @@ test('a held observation commit cannot resurrect pixels after Work stops and rea
 test('restart refuses legacy image-bearing state rather than reviving durable pixels',async t=>{const s=await fixture(t);await s.service.capture(request);const snapshot=(await s.store.load('mission'))!;Object.assign(snapshot.value.works[0]!.browserSession!.pages[0]!,{screenshot});await s.store.commit({id:'mission',expectedRevision:snapshot.revision,commandId:'legacy-fixture',fingerprint:'legacy-fixture',value:snapshot.value,events:[],outbox:[]});const restarted=new BrowserSessions(s.store,s.store);t.after(()=>restarted.drain());await assert.rejects(restarted.read('mission','work'),/browser/i);});
 
 test('capability paths never enter observations, commands or portable backups',async t=>{
- const s=await fixture(t),token='M4G1CL1NK7e32Bearer',address='https://shop.example.com/reset/'+token;
+ const s=await fixture(t),token='042731',address='https://shop.example.com/verify/'+token;
  const service=new BrowserSessions(s.store,s.store,{adapter:{async read(){return {...raw,address,title:'Reset '+token,blocks:['Capability '+token],fields:[]};}},clock:s.clock});t.after(()=>service.drain());
  const input={...request,readId:'capability',address};await service.capture(input);const read=await service.read('mission','work');assert.equal(read.session!.page.address,'https://shop.example.com');assert.ok(!JSON.stringify(read).includes(token));
- const restarted=new BrowserSessions(s.store,s.store,{clock:s.clock});t.after(()=>restarted.drain());assert.equal((await restarted.capture(input)).status,'replayed');await assert.rejects(restarted.capture({...input,address:'https://shop.example.com/reset/another-token'}),/identity|conflict/i);
+ assert.equal((await service.capture(input)).status,'replayed');await assert.rejects(service.capture({...input,address:'https://shop.example.com/verify/042732'}),/identity/i);const restarted=new BrowserSessions(s.store,s.store,{clock:s.clock});t.after(()=>restarted.drain());await assert.rejects(restarted.capture(input),/identity.*unavailable/i);assert.equal((await restarted.read('mission','work')).session!.page.address,'https://shop.example.com');await assert.rejects(restarted.capture({...input,address:'https://shop.example.com/reset/another-token'}),/identity|conflict/i);
  await s.send({type:'receipt',workId:'work',effectId:'effect',outcome:'succeeded',receipt:'Read complete',usage:1},'executor');await s.send({type:'settle-task',workId:'work',taskId:'work:root',result:'Origin only'},'executor');
- const backup=await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts);for(const serialized of [JSON.stringify(s.journal()),backup]){assert.ok(!serialized.includes(token));assert.ok(!serialized.includes('/reset/'));}validateMissionJournalLineage(s.journal().operations);
+ const backup=await exportPortableBackup({exportJournal:async()=>s.journal()},s.artifacts);for(const serialized of [JSON.stringify(s.journal()),backup]){assert.ok(!serialized.includes(token));assert.ok(!serialized.includes('/verify/'));assert.ok(!serialized.includes(hash(address)),'No offline URL verifier');assert.ok(!serialized.includes(unkeyedImageHash),'No offline image verifier');}validateMissionJournalLineage(s.journal().operations);
 });
 
 for(const part of ['?M4G1CL1NK7e32Bearer','?%4D4G1CL1NK7e32Bearer=value','#route?key=M4G1CL1NK7e32Bearer'])test('URL names and fragment parts never persist '+part[0],async t=>{
