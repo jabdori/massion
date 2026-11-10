@@ -20,6 +20,7 @@ const outcome=(request:SecretRequest|undefined):Outcome=>({status:request?.state
 /** Construct with the drain-aware owner store. The model-facing outcome has exactly one safe status. */
 export class SecretRequestsService {
  readonly #store:Store<Mission>;readonly #own:SecretSlots;readonly #vaults:Partial<Record<'onepassword',ExternalVault>>;readonly #app:Application;readonly #stop=new AbortController();readonly #active=new Set<Promise<unknown>>();
+ readonly #writes=new Set<Promise<void>>();readonly #provisions=new Set<string>();#uncertainWrite=false;
  constructor(ownerStore:Store<Mission>,own:SecretSlots,vaults:Partial<Record<'onepassword',ExternalVault>>={}){this.#store=ownerStore;this.#own=own;this.#vaults={...vaults};this.#app=new Application(ownerStore,[{id:'local-owner',roles:['owner']},{id:SECRET_REQUEST_HOST,roles:['representative']}]);}
  #admit(){if(this.#stop.signal.aborted)throw new HostDrainError();}
  async offer(input:{commandId:string;missionId:string;workId:string;expectedRevision:number;requestId:string;declaration:SecretDeclaration}){
@@ -34,7 +35,7 @@ export class SecretRequestsService {
  answer(input:unknown){const run=this.#answer(input);this.#active.add(run);void run.then(()=>this.#active.delete(run),()=>this.#active.delete(run));return run;}
  async #answer(raw:unknown):Promise<Outcome>{
   ensure(exact(raw,['commandId','missionId','workId','expectedRevision','requestId','requestHash','answer'],['selections','values'])&&['provide','decline'].includes(raw.answer)&&id(raw.commandId)&&!raw.commandId.startsWith('assistant-')&&id(raw.missionId)&&id(raw.workId)&&id(raw.requestId));
-  const input=structuredClone(raw),values=input.values??{};ensure(exact(values,Object.keys(values)));
+  const input=structuredClone(raw),values=input.values??{},provisionKey=JSON.stringify([input.missionId,input.commandId]);ensure(exact(values,Object.keys(values)));
   try{
    this.#admit();const read=await this.#store.readState(input.missionId),work=read.snapshot?.value.works.find(w=>w.id===input.workId),request=work?.secretRequests?.find(r=>r.id===input.requestId);ensure(request&&request.requestHash===input.requestHash);
    const selections:SecretSelection[]=input.answer==='provide'?input.selections:[];
@@ -43,17 +44,19 @@ export class SecretRequestsService {
    }else ensure(input.selections===undefined&&input.values===undefined);
    const claimed=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:input.commandId,expectedRevision:input.expectedRevision,actorId:'local-owner',command:{type:'answer-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,answer:input.answer,selections}}));
    ensure(claimed.status!=='conflict');if(claimed.status!=='committed'||input.answer==='decline')return outcome((await this.#store.load(input.missionId))?.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));
+   this.#provisions.add(provisionKey);
    let status:'provided'|'unavailable'='unavailable';
    try{await callTool(async signal=>{
     for(const selection of selections){
      await this.#pending(input,read.feedId);signal.throwIfAborted();const source=selection.source;
      if(source.kind==='external-ref')continue;
      let value:string;if(source.kind==='own')value=values[selection.slot];else {const adapter=this.#vaults[source.vendor];if(!adapter)throw new SecretSourceError('cli-missing');value=await adapter.read(source.reference,signal);}
-     validateSecretValue(value);await this.#pending(input,read.feedId);signal.throwIfAborted();await this.#own.set(requestSecretSlot(input.missionId,input.workId,input.requestId,selection.slot),value);
+     validateSecretValue(value);await this.#pending(input,read.feedId);signal.throwIfAborted();const write=this.#own.set(requestSecretSlot(input.missionId,input.workId,input.requestId,selection.slot),value);this.#writes.add(write);
+     try{await write;}catch{this.#uncertainWrite=true;throw new SecretSourceError('unavailable');}finally{this.#writes.delete(write);}
     }
     await this.#pending(input,read.feedId);signal.throwIfAborted();
    },{signal:this.#stop.signal,timeoutMs:5000});status='provided';}catch{}
-   try{const snapshot=await this.#store.load(input.missionId);ensure(snapshot);this.#admit();const settled=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:'assistant-secret-settle-'+hash(input.commandId).slice(0,32),expectedRevision:snapshot.revision,actorId:SECRET_REQUEST_HOST,command:{type:'settle-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,status}}));return settled.status==='conflict'?{status:'unavailable'}:outcome(settled.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));}catch{return {status:'unavailable'};}
+   try{const snapshot=await this.#store.load(input.missionId);ensure(snapshot);this.#admit();const settled=await withAdmissionFeed(read.feedId,()=>this.#app.dispatch({missionId:input.missionId,commandId:'assistant-secret-settle-'+hash(input.commandId).slice(0,32),expectedRevision:snapshot.revision,actorId:SECRET_REQUEST_HOST,command:{type:'settle-secret-request',workId:input.workId,requestId:input.requestId,requestHash:input.requestHash,provisionId:input.commandId,status}}));if(settled.status==='conflict')return {status:'unavailable'};this.#provisions.delete(provisionKey);return outcome(settled.value.works.find(w=>w.id===input.workId)?.secretRequests?.find(r=>r.id===input.requestId));}catch{return {status:'unavailable'};}
   }finally{for(const key of Object.keys(values))delete values[key];}
  }
  async #pending(input:Record<string,any>,feedId:string){
@@ -64,7 +67,7 @@ export class SecretRequestsService {
  slots(missionId:string,workId:string,requestId:string,memberId:string,purpose:string):SecretSlots {
   const authorize=async(secret:SecretSlot,expected?:{feedId:string;requestHash:string;provisionId:string})=>{
    this.#admit();checkSlot(secret);const read=await this.#store.readState(missionId),work=read.snapshot?.value.works.find(w=>w.id===workId),request=work?.secretRequests?.find(r=>r.id===requestId);
-   if(!work||work.execution==='cancelled'||work.acceptance==='accepted'||work.runtimeInterruption||work.runtimeRecovery||request?.state!=='provided'||request.declaration.memberId!==memberId||request.declaration.purpose!==purpose||secret.owner!==requestSecretSlot(missionId,workId,requestId,secret.slot).owner)throw new SecretSourceError('grant-required');
+   if(!work||!['queued','active'].includes(work.execution)||work.blocker||work.monthlyBudgetDecision||work.secretRequests?.some(r=>r.state!=='provided')||work.acceptance==='accepted'||work.runtimeInterruption||work.runtimeRecovery||request?.state!=='provided'||request.declaration.memberId!==memberId||request.declaration.purpose!==purpose||secret.owner!==requestSecretSlot(missionId,workId,requestId,secret.slot).owner)throw new SecretSourceError('grant-required');
    const selection=request.selections?.find(s=>s.slot===secret.slot);if(!selection||expected&&(read.feedId!==expected.feedId||request.requestHash!==expected.requestHash||request.provisionId!==expected.provisionId))throw new SecretSourceError('grant-required');
    return {feedId:read.feedId,requestHash:request.requestHash,provisionId:request.provisionId!,selection};
   };
@@ -75,5 +78,5 @@ export class SecretRequestsService {
   },{readOnly:true,signal:AbortSignal.any([this.#stop.signal,...(signal?[signal]:[])]),timeoutMs:5000});}catch(error){throw error instanceof SecretSourceError?error:new SecretSourceError('unavailable');}},set:async()=>{throw new SecretSourceError('permission-denied');},delete:async()=>{throw new SecretSourceError('permission-denied');}};
  }
  beginDrain(){this.#stop.abort();}
- async drain(){this.beginDrain();await Promise.allSettled([...this.#active]);}
+ async drain(){this.beginDrain();await Promise.allSettled([...this.#active]);if(this.#writes.size||this.#provisions.size||this.#uncertainWrite)throw new Error('Secret provision is unsettled');}
 }

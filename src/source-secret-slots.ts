@@ -11,6 +11,7 @@ export class SourceSecretSlots implements SecretSlots {
  readonly #own:SecretSlots;readonly #bindings:SecretBinding[];readonly #permissions:PermissionsService;readonly #consumer:SecretConsumer;readonly #purpose:string;readonly #vaults:Partial<Record<'onepassword',ExternalVault>>;
  readonly #states=new Map<string,SecretSourceCode|'unverified'|'ready'>();
  readonly #generations=new Map<string,number>();readonly #stop=new AbortController();
+ readonly #writes=new Set<Promise<void>>();readonly #imports=new Set<string>();#uncertainWrite=false;
  constructor(own:SecretSlots,bindings:SecretBinding[],permissions:PermissionsService,consumer:SecretConsumer,purpose:string,vaults:Partial<Record<'onepassword',ExternalVault>>={}){
   this.#own=own;this.#bindings=bindings.map(b=>{checkSlot(b.secret);return {secret:structuredClone(b.secret),source:validateSecretSource(b.source)};});this.#permissions=permissions;this.#consumer=structuredClone(consumer);this.#purpose=purpose;this.#vaults={...vaults};
   if(bindings.length>64||new Set(bindings.map(b=>JSON.stringify([b.secret.owner,b.secret.slot]))).size!==bindings.length)throw new SecretSourceError('unavailable');
@@ -31,8 +32,9 @@ export class SourceSecretSlots implements SecretSlots {
    else {
     let imported=await this.#permissions.imported(secret,digest);
     if(!imported){const claim=await this.#permissions.claimImport(secret,digest,grant);if(claim.status==='committed'){
-     try{const resolved=await this.#external(b.source,signal);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');await this.#own.set(secret,resolved);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');const done=await this.#permissions.settleImport(secret,digest,grant.feedId,'completed');if(done.status==='conflict')throw new SecretSourceError('import-unavailable');}
-     catch(error){try{await this.#permissions.settleImport(secret,digest,grant.feedId,'unavailable');}catch{}throw error instanceof SecretSourceError?error:new SecretSourceError('import-unavailable');}
+     const importKey=JSON.stringify([secret.owner,secret.slot,digest]);this.#imports.add(importKey);
+     try{const resolved=await this.#external(b.source,signal);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');await this.#write(secret,resolved);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');const done=await this.#permissions.settleImport(secret,digest,grant.feedId,'completed');if(done.status==='conflict')throw new SecretSourceError('import-unavailable');this.#imports.delete(importKey);}
+     catch(error){try{const settled=await this.#permissions.settleImport(secret,digest,grant.feedId,'unavailable');if(settled.status!=='conflict')this.#imports.delete(importKey);}catch{}throw error instanceof SecretSourceError?error:new SecretSourceError('import-unavailable');}
     }imported=await this.#permissions.imported(secret,digest);}
     if(imported?.status!=='completed')throw new SecretSourceError('import-unavailable');value=await this.#own.read(secret,signal);
    }
@@ -41,7 +43,9 @@ export class SourceSecretSlots implements SecretSlots {
  }
  async #external(source:Exclude<SecretSource,{kind:'own'}>,signal?:AbortSignal){const adapter=this.#vaults[source.vendor];if(!adapter)throw new SecretSourceError('cli-missing');const value=await adapter.read(source.reference,signal);validateSecretValue(value);return value;}
  async has(secret:SecretSlot,signal?:AbortSignal){const b=this.#binding(secret),grant=await this.#authorize(b);if(b.source.kind==='external-ref')throw new SecretSourceError('unavailable');if(b.source.kind==='import'&&(await this.#permissions.imported(secret,sourceHash(b.source)))?.status!=='completed')return false;const result=await this.#own.has?.(secret,signal);await this.#authorize(b,grant);if(signal?.aborted)throw new SecretSourceError('cancelled');if(typeof result!=='boolean')throw new SecretSourceError('unavailable');return result;}
- async set(secret:SecretSlot,value:string){const b=this.#binding(secret);if(b.source.kind!=='own')throw new SecretSourceError('permission-denied');validateSecretValue(value);await this.#authorize(b);await this.#own.set(secret,value);}
+ async #write(secret:SecretSlot,value:string){if(this.#stop.signal.aborted)throw new SecretSourceError('cancelled');const write=this.#own.set(secret,value);this.#writes.add(write);try{await write;}catch{this.#uncertainWrite=true;throw new SecretSourceError('import-unavailable');}finally{this.#writes.delete(write);}}
+ async set(secret:SecretSlot,value:string){const b=this.#binding(secret);if(b.source.kind!=='own')throw new SecretSourceError('permission-denied');validateSecretValue(value);await this.#authorize(b);await this.#write(secret,value);}
  async delete(_secret:SecretSlot):Promise<void>{throw new SecretSourceError('permission-denied');}
  beginDrain(){this.#stop.abort();}
+ async drain(){this.beginDrain();if(this.#writes.size||this.#imports.size||this.#uncertainWrite)throw new Error('Secret source write is unsettled');}
 }

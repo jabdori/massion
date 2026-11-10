@@ -12,6 +12,7 @@ import {TextArtifactStore} from '../src/text-artifacts.ts';
 import {harness,reply} from './support/workbench-client.ts';
 import {InMemorySecretSlots} from '../src/secret-slots.ts';
 import {PermissionsService} from '../src/permissions.ts';
+import {createWorkbench} from '../src/server.ts';
 const manifest=()=>({version:1,revision:'owner-v1',mode:'https',connections:[{id:'account',label:'Owner account',providerType:'compatible',baseUrl:'https://owner.example/v1/',models:['exec','review'],credential:{ref:'owner-ref',environment:'OWNER_MODEL_SECRET'}}]});
 async function root(t:test.TestContext){const root=await mkdtemp(join(tmpdir(),'massion-host-binding-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
 
@@ -83,4 +84,13 @@ test('source manifests reach the normal host resolver only after a durable exact
  assert.doesNotMatch(JSON.stringify([manager.list(),store.inspect(),manager.secretSource(c.id)]),/fixture-vault-value|op:\/\//);
  assert.equal(manager.canReplaceKey(c.id),false,'external references cannot be overwritten by API key repair');
  for(const credential of [{ref:'owner-ref',environment:'ENV',source},{ref:'owner-ref',slot:'api-key',source:{...source,value:'private'}}])assert.throws(()=>parseHostManifest({...raw,connections:[{...raw.connections[0],credential}]}));
+});
+
+test('a pending imported slot write also makes host drain unsettled',async t=>{
+ const directory=await root(t),store=new InMemoryStore<Mission>(),own=new InMemorySecretSlots(),raw=manifest() as any;raw.connections[0].credential={ref:'owner-ref',slot:'api-key',source:{kind:'import',vendor:'onepassword',reference:'op://v/i/f'}};
+ let reached!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{reached=r;}),held=new Promise<void>(r=>{release=r;});own.set=async()=>{reached();await held;};
+ const connections=createHostConnections(store,new TextArtifactStore(directory),{manifest:parseHostManifest(raw),allowLiveExecution:false},{secrets:own,readEnvironment:()=>undefined,vaults:{onepassword:{read:async()=> 'fixture-import'}},transport:async()=>assert.fail('No send during drain')}),connection=connections.list().connections[0]!,{kind,state,...binding}=connections.secretSource(connection.id)!;
+ await new PermissionsService(store).act({commandId:'allow-import',action:'grant-secret',...binding});
+ const server=createWorkbench(store,directory,{connections,secretSlots:own,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const discovery=connections.discover(connection.id,connection.configHash);await started;
+ try{assert.equal((await server.drain()).status,'unsettled');assert.equal((await discovery).status,'stale');}finally{release();await held;}
 });

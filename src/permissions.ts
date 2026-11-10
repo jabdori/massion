@@ -18,7 +18,7 @@ export type AllowKind=keyof typeof ALLOW_KINDS;
 export interface PermissionRule {id:string;what:string;kind:AllowKind;at:number}
 export interface SecretConsumer {kind:'connection'|'member';id:string}
 export interface SecretGrant {id:string;secret:SecretSlot;sourceHash:string;consumer:SecretConsumer;purpose:string;at:number}
-export interface SecretImport {id:string;secret:SecretSlot;sourceHash:string;grantId:string;at:number;status:'pending'|'completed'|'unavailable'}
+export interface SecretImport {id:string;secret:SecretSlot;sourceHash:string;grantId:string;at:number;status:'pending'|'completed'|'unavailable'|'superseded'}
 export interface PermissionsState {kind:'permissions';id:string;rules:PermissionRule[];secretGrants?:SecretGrant[];secretImports?:SecretImport[]}
 export type PermissionsCommand = {type:'allow-rule';ruleId:string;what:string;kind:AllowKind} | {type:'remove-rule';ruleId:string}
  | ({type:'grant-secret'}&Omit<SecretGrant,'at'>) | {type:'revoke-secret';grantId:string}
@@ -39,12 +39,15 @@ export function applyPermissions(current:PermissionsState|null,command:Permissio
    ensure(exact(command,['type','id','secret','sourceHash','consumer','purpose'])&&id(command.id)&&typeof command.sourceHash==='string'&&/^[a-f0-9]{64}$/.test(command.sourceHash)&&exact(command.consumer,['kind','id'])&&['member','connection'].includes(command.consumer.kind)&&id(command.consumer.id)&&line(command.purpose),'Exact secret grant required');checkSlot(command.secret);
    const grants=state.secretGrants??=[];ensure(grants.length<MAX_RULES&&!grants.some(g=>g.id===command.id||hash([g.secret,g.sourceHash,g.consumer,g.purpose])===hash([command.secret,command.sourceHash,command.consumer,command.purpose])),'Secret grant already exists or limit reached','conflict');
    ensure(!grants.some(g=>hash(g.secret)===hash(command.secret)&&g.sourceHash!==command.sourceHash),'Revoke the previous source before changing a shared secret slot','conflict');
+   const imports=(state.secretImports??[]).filter(i=>hash(i.secret)===hash(command.secret));
+   ensure(!imports.some(i=>i.sourceHash!==command.sourceHash&&['pending','unavailable'].includes(i.status)),'Unresolved import prevents reuse of this slot','conflict');
+   for(const imported of imports)if(imported.sourceHash!==command.sourceHash&&imported.status==='completed')imported.status='superseded';
    const {type,...grant}=command;grants.push({...structuredClone(grant),at:time.observedAt});break;
   }
   case 'revoke-secret': {ensure(exact(command,['type','grantId'])&&id(command.grantId),'Exact secret revocation required');const at=(state.secretGrants??[]).findIndex(g=>g.id===command.grantId);ensure(at>=0,'Unknown secret grant','conflict');state.secretGrants!.splice(at,1);break;}
   case 'claim-secret-import': {
    ensure(exact(command,['type','importId','grantId'])&&id(command.importId)&&id(command.grantId),'Exact import claim required');const grant=state.secretGrants?.find(g=>g.id===command.grantId);ensure(grant,'Secret grant required','denied');
-   const imports=state.secretImports??=[];ensure(imports.length<128&&!imports.some(i=>i.id===command.importId||hash(i.secret)===hash(grant.secret)&&i.status!=='completed'),'Import already claimed; never resend','conflict');
+   const imports=state.secretImports??=[];ensure(imports.length<128&&!imports.some(i=>i.id===command.importId||hash(i.secret)===hash(grant.secret)&&['pending','unavailable'].includes(i.status)),'Import already claimed; never resend','conflict');
    ensure(command.importId===secretImportId(grant.secret,grant.sourceHash),'Import identity mismatch');imports.push({id:command.importId,secret:structuredClone(grant.secret),sourceHash:grant.sourceHash,grantId:grant.id,at:time.observedAt,status:'pending'});break;
   }
   case 'settle-secret-import': {

@@ -73,3 +73,21 @@ test('HTTP owner provision fences the feed and drain; open requests survive a ho
  assert.equal((await new SecretRequestsService(f.store,f.own).read('mission','work')).requests[0]!.state,'open');
  assert.doesNotMatch(JSON.stringify(f.store.inspect()),/fixture-password|fixture-id/);
 });
+
+test('owner pause revokes a request capability before and during a secret read',async()=>{
+ for(const during of [false,true]){
+  const f=await fixture();await f.service.answer(f.answer);const slots=f.service.slots('mission','work','request-one','member-one',declaration.purpose),secret=requestSecretSlot('mission','work','request-one','password');
+  const pause=async()=>f.app.dispatch({missionId:'mission',commandId:'pause',expectedRevision:(await f.store.load('mission'))!.revision,actorId:'local-owner',command:{type:'steer',workId:'work',instruction:'Wait for me'}});
+  if(during){const read=f.own.read.bind(f.own);f.own.read=async(s,signal)=>{const value=await read(s,signal);await pause();return value;};}else await pause();
+  await assert.rejects(slots.read(secret));assert.equal((await f.store.load('mission'))!.value.works[0]!.execution,'waiting');
+ }
+});
+
+test('drain reports an unsettled provision while a fake vault write is still in flight',async t=>{
+ const f=await fixture(),root=await mkdtemp(join(tmpdir(),'massion-provision-drain-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ let reached!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{reached=r;}),held=new Promise<void>(r=>{release=r;}),set=f.own.set.bind(f.own);let written=false;
+ f.own.set=async(s,v)=>{reached();await held;await set(s,v);written=true;};
+ const server=createWorkbench(f.store,root,{secretSlots:f.own,scheduleIntervalMs:0});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ const answer=server.secretRequests.answer(f.answer);await started;const result=await server.drain();
+ try{assert.equal(result.status,'unsettled');assert.equal(written,false);assert.equal((await answer).status,'unavailable');assert.equal((await f.service.read('mission','work')).requests[0]!.state,'unavailable');}finally{release();await held;}
+});

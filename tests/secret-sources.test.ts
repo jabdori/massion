@@ -95,3 +95,15 @@ test('different sources cannot share a writable own slot grant, and late reads c
  const old=slots.read(secret);await ready;await assert.rejects(slots.read(secret),error('needs-owner-unlock'));release('old-value');assert.equal(await old,'old-value');assert.equal(slots.describe(secret).state,'needs-owner-unlock');
  slots.beginDrain();await assert.rejects(slots.read(secret),error('cancelled'));assert.equal(count,2);
 });
+
+test('a superseded import never returns a newer source value when the owner grants the original source again',async()=>{
+ for(const replacement of ['import','own'] as const){
+  const store=new InMemoryStore<any>(),permissions=new PermissionsService(store),own=new InMemorySecretSlots(),a={kind:'import' as const,vendor:'onepassword' as const,reference:'op://v/a/f'},b=replacement==='import'?{...a,reference:'op://v/b/f'}:{kind:'own' as const};
+  const make=(source:typeof a|typeof b)=>new SourceSecretSlots(own,[{secret,source}],permissions,consumer,purpose,{onepassword:{read:async reference=>reference===a.reference?'source-a-value':'source-b-value'}});
+  await grant(permissions,a,'grant-a');assert.equal(await make(a).read(secret),'source-a-value');
+  await permissions.act({commandId:'revoke-a',action:'revoke-secret',grantId:(await permissions.read()).secrets![0]!.id});await grant(permissions,b,'grant-b');
+  if(replacement==='own')await make(b).set(secret,'source-b-value');else assert.equal(await make(b).read(secret),'source-b-value');
+  await permissions.act({commandId:'revoke-b',action:'revoke-secret',grantId:(await permissions.read()).secrets![0]!.id});await grant(permissions,a,'grant-a-again');
+  await assert.rejects(make(a).read(secret),error('import-unavailable'));validateMissionJournalLineage(store.inspect());
+ }
+});
